@@ -309,6 +309,29 @@
             # customDotfiles.enable = true;
           };
         };
+        
+        # NixOS WSL configuration (standalone home-manager)
+        "tim@thinky-nixos" = mkHomeConfig {
+          system = "x86_64-linux";
+          username = "tim";
+          extraModules = [
+            ./profiles/wsl.nix  # Include WSL-specific profile
+          ];
+          homeConfig = {
+            username = "tim";
+            homeDirectory = "/home/tim";
+            environmentVariables = {
+              WSL_DISTRO = "nixos";
+              EDITOR = "nvim";
+            };
+            # WSL-specific shell aliases
+            shellAliases = {
+              explorer = "explorer.exe .";
+              code = "code.exe";
+              code-insiders = "code-insiders.exe";
+            };
+          };
+        };
       };
       
       # Development shells and packages
