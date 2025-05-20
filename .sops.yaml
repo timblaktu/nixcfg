@@ -1,0 +1,42 @@
+# This file specifies which SOPS keys are used for encrypting/decrypting secrets
+# See https://github.com/Mic92/sops-nix for more information
+
+keys:
+  # Users (replace with your own public key)
+  - &user_tim age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  # Hosts (these will be generated for each host)
+  - &host_mbp age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - &host_potato age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - &host_thinky age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+creation_rules:
+  # Shared secrets accessible by all hosts and users
+  - path_regex: secrets/common/[^/]+\.(yaml|json|env)$
+    key_groups:
+    - age:
+      - *user_tim
+      - *host_mbp
+      - *host_potato
+      - *host_thinky
+
+  # MacBook Pro specific secrets
+  - path_regex: secrets/mbp/[^/]+\.(yaml|json|env)$
+    key_groups:
+    - age:
+      - *user_tim
+      - *host_mbp
+
+  # Potato specific secrets
+  - path_regex: secrets/potato/[^/]+\.(yaml|json|env)$
+    key_groups:
+    - age:
+      - *user_tim
+      - *host_potato
+
+  # WSL specific secrets
+  - path_regex: secrets/thinky-nixos/[^/]+\.(yaml|json|env)$
+    key_groups:
+    - age:
+      - *user_tim
+      - *host_thinky
