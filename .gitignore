@@ -1,0 +1,22 @@
+# Nix build outputs
+result
+result-*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.envrc
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.log
+*.tmp
