@@ -24,6 +24,10 @@
         colorMoved = "default";
         tool = "vimdiff";
       };
+      credential = {
+        # Cache credentials for 1 hour to avoid frequent prompts
+        helper = "cache --timeout=3600";
+      };
     };
     
     aliases = {
