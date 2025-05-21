@@ -30,9 +30,15 @@
       url = "github:notashelf/nvf";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    
+    # ESP32-C5 development tools - specify branch in the URL
+    nixpkgs-esp-dev = {
+      url = "github:timblaktu/nixpkgs-esp-dev/c5";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = inputs @ { self, nixpkgs, nixpkgs-stable, home-manager, darwin, nixos-wsl, sops-nix, flake-utils, nvf, ... }:
+  outputs = inputs @ { self, nixpkgs, nixpkgs-stable, home-manager, darwin, nixos-wsl, sops-nix, flake-utils, nvf, nixpkgs-esp-dev, ... }:
     let
       # System types to support
       supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
@@ -342,6 +348,7 @@
           username = "tim";
           extraModules = [
             ./profiles/wsl.nix  # Include WSL-specific profile
+            ./profiles/esp32-dev.nix  # Include ESP32-C5 development profile
           ];
           homeConfig = {
             username = "tim";
@@ -355,6 +362,8 @@
               explorer = "explorer.exe .";
               code = "code.exe";
               code-insiders = "code-insiders.exe";
+              # ESP32-C5 specific aliases
+              esp32c5 = "nix develop .#esp32c5";
             };
           };
         };
@@ -374,7 +383,12 @@
       
       # Development shells and packages
       devShells = forAllSystems (system:
-        let pkgs = nixpkgsFor.${system}; in {
+        let 
+          pkgs = nixpkgsFor.${system};
+          
+          # Import esp-dev packages with our nixpkgs
+          esp-dev = (import nixpkgs-esp-dev { inherit pkgs; });
+        in {
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
               nix
@@ -383,6 +397,31 @@
               nil # Nix language server
               sops # For secrets
             ];
+          };
+          
+          # ESP32-C5 development shell
+          esp32c5 = pkgs.mkShell {
+            name = "esp32c5-development";
+            
+            buildInputs = with pkgs; [
+              # Use esp-idf-esp32c5 from nixpkgs-esp-dev
+              esp-dev.esp-idf-esp32c5
+              
+              # Additional useful tools for embedded development
+              picocom
+              minicom
+              cmake
+              ninja
+              python3
+              python3Packages.pyserial
+              usbutils
+            ];
+            
+            shellHook = ''
+              echo "ESP32-C5 development environment activated!"
+              echo "IDF_PATH: $IDF_PATH"
+              echo "Available commands: idf.py build, idf.py flash, idf.py monitor"
+            '';
           };
         }
       );

@@ -11,6 +11,7 @@ in {
     ../common/git.nix
     ../common/tmux.nix
     ../common/neovim.nix
+    ../common/zsh.nix
   ];
   
   options.homeBase = {
