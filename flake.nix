@@ -243,7 +243,8 @@
           hostname = "thinky-nixos";
           system = "x86_64-linux";
           isWSL = true;
-          sshPort = 2222;  # Must bind to unique port since sharing winHost with another WSL guest
+          sshPort = 2223;  # Must bind to unique port since sharing winHost with another WSL guest
+                           # in this case, thinky-ubuntu happens to be using 2222
           baseConfig = {
             # WSL-specific configuration
             requireWheelPassword = false;
