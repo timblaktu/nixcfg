@@ -56,6 +56,7 @@
         hostname,
         extraModules ? [],
         isWSL ? false,
+        sshPort ? 22,
         # Base module parameters
         baseConfig ? {},
         homeConfig ? {},
@@ -74,6 +75,14 @@
             
             # Apply base module configuration
             { base = baseConfig; }
+            
+            # Configure SSH port explicitly
+            {
+                services.openssh = {
+                    enable = true;
+                    ports = [ sshPort ];
+                };
+            }            
             
             # Home-manager module
             home-manager.nixosModules.home-manager
@@ -234,6 +243,7 @@
           hostname = "thinky-nixos";
           system = "x86_64-linux";
           isWSL = true;
+          sshPort = 2222;  # Must bind to unique port since sharing winHost with another WSL guest
           baseConfig = {
             # WSL-specific configuration
             requireWheelPassword = false;
@@ -268,9 +278,26 @@
         };
       };
       
-      # Standalone home-manager configurations (for non-NixOS systems)
+      # Standalone home-manager configurations
+      #
+      # These configurations can be applied in two ways:
+      #
+      # 1. For NixOS systems:
+      #    - Primary: These configurations are already integrated into NixOS through
+      #      the home-manager.nixosModules.home-manager module in mkNixosSystem
+      #    - Optional: Can be applied separately with:
+      #      nix run home-manager -- switch --flake .#user@hostname
+      #    - Benefit: Allows testing home-manager changes without rebuilding the system
+      #
+      # 2. For non-NixOS systems (Ubuntu, macOS):
+      #    - Required: These are the only way to apply home-manager on non-NixOS systems
+      #    - Applied with: nix run home-manager -- switch --flake .#user@hostname
+      #    - Works on any system with Nix installed (Linux, macOS, WSL)
+      #
+      # Using standalone configurations for all hosts provides deployment flexibility 
+      # and consistent user environments across different systems.
+      #
       homeConfigurations = {
-        # For MacBook Pro (based on existing config)
         "tim@mbp" = mkHomeConfig {
           system = "x86_64-linux";
           username = "tim";
@@ -280,7 +307,6 @@
           };
         };
         
-        # Ubuntu WSL configuration
         "tim@thinky-ubuntu" = mkHomeConfig {
           system = "x86_64-linux";
           username = "tim";
@@ -310,7 +336,6 @@
           };
         };
         
-        # NixOS WSL configuration (standalone home-manager)
         "tim@thinky-nixos" = mkHomeConfig {
           system = "x86_64-linux";
           username = "tim";
@@ -329,6 +354,18 @@
               explorer = "explorer.exe .";
               code = "code.exe";
               code-insiders = "code-insiders.exe";
+            };
+          };
+        };
+        
+        "tim@potato" = mkHomeConfig {
+          system = "aarch64-linux";
+          username = "tim";
+          homeConfig = {
+            username = "tim";
+            homeDirectory = "/home/tim";
+            environmentVariables = {
+              EDITOR = "nvim";
             };
           };
         };
