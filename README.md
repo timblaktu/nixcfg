@@ -33,20 +33,22 @@ nixcfg/
 
 ### NixOS Systems
 
+Note: we quote flake ref as convention for compatibilithy with shells like zsh where # is special
+
 ```bash
-sudo nixos-rebuild switch --flake .#hostname
+sudo nixos-rebuild switch --flake '.#hostname'
 ```
 
 ### Home Manager (Standalone)
 
 ```bash
-home-manager switch --flake .#username@hostname
+home-manager switch --flake '.#username@hostname'
 ```
 
 ### MacOS (Darwin)
 
 ```bash
-darwin-rebuild switch --flake .#hostname
+darwin-rebuild switch --flake '.#hostname'
 ```
 
 ## Development
