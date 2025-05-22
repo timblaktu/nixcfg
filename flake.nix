@@ -271,6 +271,30 @@
             };
           };
         };
+        tblack-t14-nixos = mkNixosSystem {
+          hostname = "tblack-t14-nixos";
+          system = "x86_64-linux";
+          isWSL = true;
+          baseConfig = {
+            # WSL-specific configuration
+            requireWheelPassword = false;
+            userGroups = [ "wheel" ];
+            additionalShellAliases = {
+              explorer = "explorer.exe .";
+              code = "code.exe";
+              code-insiders = "code-insiders.exe";
+            };
+            additionalPackages = with nixpkgs.legacyPackages.x86_64-linux; [
+              # wslu is already provided by the WSL profile
+            ];
+          };
+          homeConfig = {
+            environmentVariables = {
+              EDITOR = "nvim";
+              WSL_DISTRO = "nixos";
+            };
+          };
+        };
       };
       
       # macOS configurations (if any)

@@ -159,6 +159,7 @@ in
       wget
       curl
       git
+      home-manager
       htop
       tmux
       ripgrep
