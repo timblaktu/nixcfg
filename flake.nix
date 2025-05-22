@@ -344,6 +344,7 @@
           extraModules = [
             ./hosts/thinky-ubuntu
             ./profiles/wsl.nix  # Include WSL-specific profile
+            ./profiles/esp32-dev.nix  # Include ESP32-C5 development profile
             # ./home/modules/dotfiles  # Commented out: Include personal dotfiles
           ];
           homeConfig = {
@@ -368,6 +369,31 @@
         };
         
         "tim@thinky-nixos" = mkHomeConfig {
+          system = "x86_64-linux";
+          username = "tim";
+          extraModules = [
+            ./profiles/wsl.nix  # Include WSL-specific profile
+            ./profiles/esp32-dev.nix  # Include ESP32-C5 development profile
+          ];
+          homeConfig = {
+            username = "tim";
+            homeDirectory = "/home/tim";
+            environmentVariables = {
+              WSL_DISTRO = "nixos";
+              EDITOR = "nvim";
+            };
+            # WSL-specific shell aliases
+            shellAliases = {
+              explorer = "explorer.exe .";
+              code = "code.exe";
+              code-insiders = "code-insiders.exe";
+              # ESP32-C5 specific aliases
+              esp32c5 = "nix develop .#esp32c5";
+            };
+          };
+        };
+        
+        "tim@tblack-t14-nixos" = mkHomeConfig {
           system = "x86_64-linux";
           username = "tim";
           extraModules = [
