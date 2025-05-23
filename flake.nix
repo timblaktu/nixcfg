@@ -449,31 +449,20 @@
             ];
           };
           
-          # ESP32-C5 development shell
-          esp32c5 = pkgs.mkShell {
-            name = "esp32c5-development";
+          # ESP32-C5 development shell from upstream nixpkgs-esp-dev, with mods/additions
+          esp32c5 = nixpkgs-esp-dev.devShells.${system}.esp32c5-idf.overrideAttrs (oldAttrs: {
+            buildInputs = (oldAttrs.buildInputs or []) ++ (with pkgs; [
+              tio
+            ]);
             
-            buildInputs = with pkgs; [
-              # Use esp-idf-esp32c5 from nixpkgs-esp-dev
-              esp-dev.esp-idf-esp32c5
-              
-              # Additional useful tools for embedded development
-              picocom
-              minicom
-              cmake
-              ninja
-              python3
-              python3Packages.pyserial
-              usbutils
-            ];
-            
-            shellHook = ''
-              echo "ESP32-C5 development environment activated!"
-              echo "IDF_PATH: $IDF_PATH"
-              echo "Available commands: idf.py build, idf.py flash, idf.py monitor"
+            shellHook = (oldAttrs.shellHook or "") + ''
+              export SWT_COMMON_PATH=$HOME/src/dev_swt_common
+              export SWT_RLTK_PATH=$HOME/src/dev_swt_rltk
+              export SDK_RLTK_PATH=$HOME/src/dev_sdk_rltk
+              export WISA_CONNECT_PATH=$HOME/src/wisa_server/wisa_server
+              echo "WiSA ESP32-C5 development environment activated!"
             '';
-          };
-        }
-      );
+          });
+        });
     };
 }
