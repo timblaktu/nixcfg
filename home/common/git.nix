@@ -28,6 +28,11 @@
         # Cache credentials for 1 hour to avoid frequent prompts
         helper = "cache --timeout=3600";
       };
+      safe = {
+        directory = [
+          "/nix/store/*-esp-idf-*"  # trust any ESP-IDF in store
+        ];
+      };
     };
     
     aliases = {

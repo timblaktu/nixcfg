@@ -12,7 +12,7 @@ in {
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
       
-      initExtraBeforeCompInit = ''
+      initContent = ''
         # Nix development shell indicator function
         function nix_shell_indicator() {
           if [[ -n "$IN_NIX_SHELL" ]]; then
@@ -23,9 +23,7 @@ in {
             fi
           fi
         }
-      '';
-      
-      initExtra = ''
+        
         # Set the prompt with Nix shell indicator
         PROMPT='$(nix_shell_indicator)%F{green}%n@%m%f:%F{blue}%~%f$ '
         

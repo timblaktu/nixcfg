@@ -344,7 +344,6 @@
           extraModules = [
             ./hosts/thinky-ubuntu
             ./profiles/wsl.nix  # Include WSL-specific profile
-            ./profiles/esp32-dev.nix  # Include ESP32-C5 development profile
             # ./home/modules/dotfiles  # Commented out: Include personal dotfiles
           ];
           homeConfig = {
@@ -373,7 +372,6 @@
           username = "tim";
           extraModules = [
             ./profiles/wsl.nix  # Include WSL-specific profile
-            ./profiles/esp32-dev.nix  # Include ESP32-C5 development profile
           ];
           homeConfig = {
             username = "tim";
@@ -387,8 +385,6 @@
               explorer = "explorer.exe .";
               code = "code.exe";
               code-insiders = "code-insiders.exe";
-              # ESP32-C5 specific aliases
-              esp32c5 = "nix develop .#esp32c5";
             };
           };
         };
@@ -398,7 +394,6 @@
           username = "tim";
           extraModules = [
             ./profiles/wsl.nix  # Include WSL-specific profile
-            ./profiles/esp32-dev.nix  # Include ESP32-C5 development profile
           ];
           homeConfig = {
             username = "tim";
@@ -412,7 +407,6 @@
               explorer = "explorer.exe .";
               code = "code.exe";
               code-insiders = "code-insiders.exe";
-              # ESP32-C5 specific aliases
               esp32c5 = "nix develop .#esp32c5";
             };
           };
@@ -433,11 +427,8 @@
       
       # Development shells and packages
       devShells = forAllSystems (system:
-        let 
+        let
           pkgs = nixpkgsFor.${system};
-          
-          # Import esp-dev packages with our nixpkgs
-          esp-dev = (import nixpkgs-esp-dev { inherit pkgs; });
         in {
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
@@ -460,9 +451,14 @@
               export SWT_RLTK_PATH=$HOME/src/dev_swt_rltk
               export SDK_RLTK_PATH=$HOME/src/dev_sdk_rltk
               export WISA_CONNECT_PATH=$HOME/src/wisa_server/wisa_server
+              cd $SWT_RLKT_PATH
+              
+              echo "Trusting ESP-IDF directory in nix store to prevent dubious ownership errors.."
+              git config --local --add safe.directory "$IDF_PATH" 2>/dev/null || true
+              
               echo "WiSA ESP32-C5 development environment activated!"
             '';
           });
-        });
-    };
+      });
+  };
 }
