@@ -1,0 +1,26 @@
+# Claude Code Runtime Data - SENSITIVE FILES
+# These files contain credentials, session data, and personal information
+
+# Credentials and auth tokens (NEVER COMMIT)
+**/.credentials.json
+**/.claude.json
+**/.claude.json.backup
+
+# Runtime session data
+**/projects/
+**/todos/
+**/shell-snapshots/
+**/logs/
+**/statsig/
+
+# Plugin state
+**/plugins/
+
+# Allow Nix-managed templates
+!**/settings.json
+!**/mcp.json
+!**/CLAUDE.md
+
+# Allow directory structure
+!**/agents/
+!**/commands/

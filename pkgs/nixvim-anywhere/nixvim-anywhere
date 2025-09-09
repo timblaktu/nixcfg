@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# nixvim-anywhere: Convert any system to use nixvim via home-manager
+# Safely installs Nix and home-manager for isolated neovim management
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+
+# Source all library modules
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/system.sh"
+source "$SCRIPT_DIR/lib/backup.sh"
+source "$SCRIPT_DIR/lib/nix.sh"
+source "$SCRIPT_DIR/lib/validation.sh"
+
+# Main command processing
+main() {
+    local command="${1:-help}"
+    shift || true
+    
+    # Parse global options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --backup)
+                BACKUP_ENABLED="true"
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN="true"
+                shift
+                ;;
+            --target)
+                CONFIG_TARGET="$2"
+                shift 2
+                ;;
+            --detect-conflicts)
+                DETECT_CONFLICTS="true"
+                shift
+                ;;
+            --force)
+                FORCE="true"
+                shift
+                ;;
+            --minimal)
+                MINIMAL_INSTALL="true"
+                shift
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+    
+    case "$command" in
+        install)
+            print_header
+            log_info "Starting nixvim-anywhere installation"
+            echo
+            
+            # Check system requirements
+            if ! check_requirements; then
+                exit 1
+            fi
+            
+            # Detect conflicts if requested
+            if [[ "${DETECT_CONFLICTS:-false}" == "true" ]]; then
+                if ! detect_conflicts && [[ "${FORCE:-false}" != "true" ]]; then
+                    log_error "Conflicts detected. Use --force to proceed anyway."
+                    exit 1
+                fi
+            fi
+            
+            # Create backup if requested
+            if [[ "${BACKUP_ENABLED:-false}" == "true" ]]; then
+                if ! create_backup; then
+                    log_error "Backup creation failed"
+                    exit 1
+                fi
+            fi
+            
+            # Install Nix
+            if ! install_nix; then
+                log_error "Nix installation failed"
+                exit 1
+            fi
+            
+            # Configure Nix settings (experimental features)
+            if ! configure_nix_settings; then
+                log_error "Nix configuration failed"
+                exit 1
+            fi
+            
+            # Install home-manager (unless minimal install)
+            if [[ "${MINIMAL_INSTALL:-false}" != "true" ]]; then
+                if ! install_home_manager; then
+                    log_error "home-manager installation failed"
+                    exit 1
+                fi
+                
+                if ! create_home_manager_config; then
+                    log_error "home-manager configuration creation failed"
+                    exit 1
+                fi
+                
+                if ! apply_home_manager_config; then
+                    log_error "home-manager configuration application failed"
+                    exit 1
+                fi
+            fi
+            
+            # Validate installation
+            if ! validate_installation; then
+                log_error "Installation validation failed"
+                exit 1
+            fi
+            ;;
+        validate)
+            print_header
+            validate_installation
+            ;;
+        status)
+            show_status
+            ;;
+        backup)
+            print_header
+            create_backup
+            ;;
+        rollback)
+            print_header
+            perform_rollback
+            ;;
+        uninstall)
+            print_header
+            perform_uninstall
+            ;;
+        help|--help|-h)
+            print_header
+            print_usage
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            echo
+            print_usage
+            exit 1
+            ;;
+    esac
+}
+
+# Execute main function with all arguments
+main "$@"

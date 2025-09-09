@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+CLAUDE_DIR="/home/tim/claude"
+SCRIPT_TO_RUN="$CLAUDE_DIR"/restart_claude
+
+cd "$CLAUDE_DIR"
+until ! nvim -S; do
+    "$SCRIPT_TO_RUN"
+    echo "Hit <Enter> to resume devloop, <Ctrl-c> to exit now, also exiting nvim later with :cq will exit devloop script"
+    read sel
+done
+cd -

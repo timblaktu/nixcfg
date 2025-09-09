@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Parse arguments
+CONFIG_NAME="${1:-nixos-wsl-minimal}"
+TIMESTAMP_OUTPUT="${2:-no}"
+
+# Show usage
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+  echo "Usage: $0 [CONFIG_NAME] [timestamp]"
+  echo ""
+  echo "Arguments:"
+  echo "  CONFIG_NAME    Name of nixosConfiguration to build (default: nixos-wsl-minimal)"
+  echo "  timestamp      If 'timestamp', rename output with timestamp"
+  echo ""
+  echo "Available configurations:"
+  if [ -f "flake.nix" ]; then
+    nix eval '.#nixosConfigurations' --apply 'configs: builtins.attrNames configs' 2>/dev/null | tr -d '[]"' | tr ' ' '\n' | sed 's/^/  - /'
+  fi
+  echo ""
+  echo "Examples:"
+  echo "  $0                              # Build nixos-wsl-minimal"
+  echo "  $0 tblack-t14-nixos             # Build personal config"
+  echo "  $0 nixos-wsl-minimal timestamp  # Build with timestamp"
+  exit 0
+fi
+
+echo -e "${BLUE}Building NixOS-WSL tarball for: ${CONFIG_NAME}${NC}"
+echo ""
+
+# Check if we're in the nixcfg directory
+if [ ! -f "flake.nix" ]; then
+  echo -e "${YELLOW}Warning: Not in nixcfg directory. Searching for it...${NC}"
+  
+  # Try common locations
+  for dir in ~/src/nixcfg /home/*/src/nixcfg; do
+    if [ -f "$dir/flake.nix" ]; then
+      echo -e "${GREEN}Found nixcfg at: $dir${NC}"
+      cd "$dir"
+      break
+    fi
+  done
+  
+  if [ ! -f "flake.nix" ]; then
+    echo "Error: Could not find nixcfg repository"
+    echo "Please run this command from the nixcfg directory"
+    exit 1
+  fi
+fi
+
+# Verify the configuration exists
+if ! nix eval ".#nixosConfigurations.${CONFIG_NAME}" --apply 'c: "exists"' &>/dev/null; then
+  echo -e "${RED}Error: Configuration '${CONFIG_NAME}' not found${NC}"
+  echo ""
+  echo "Available configurations:"
+  nix eval '.#nixosConfigurations' --apply 'configs: builtins.attrNames configs' 2>/dev/null | tr -d '[]"' | tr ' ' '\n' | sed 's/^/  - /'
+  exit 1
+fi
+
+# Check if configuration has tarballBuilder
+if ! nix eval ".#nixosConfigurations.${CONFIG_NAME}.config.system.build.tarballBuilder" --apply 'b: "exists"' &>/dev/null; then
+  echo -e "${RED}Error: Configuration '${CONFIG_NAME}' doesn't have a tarballBuilder${NC}"
+  echo "This configuration may not be a WSL configuration."
+  exit 1
+fi
+
+# Run security checks first (if available)
+if nix eval ".#nixosConfigurations.${CONFIG_NAME}.config.system.build.tarballSecurityCheck" --apply 'b: "exists"' &>/dev/null; then
+  echo "Running security checks..."
+  if ! nix run ".#nixosConfigurations.${CONFIG_NAME}.config.system.build.tarballSecurityCheck" -- "$CONFIG_NAME"; then
+    if [ "${WSL_TARBALL_SKIP_CHECKS:-0}" != "1" ]; then
+      echo ""
+      echo -e "${RED}Build aborted due to security concerns.${NC}"
+      echo "Fix the issues above or use WSL_TARBALL_SKIP_CHECKS=1 to bypass (not recommended)"
+      exit 1
+    fi
+  fi
+  echo ""
+fi
+
+# Run the build command
+echo "Building tarball (requires sudo)..."
+if sudo nix run ".#nixosConfigurations.${CONFIG_NAME}.config.system.build.tarballBuilder"; then
+  echo -e "${GREEN}✅ Build complete!${NC}"
+  
+  if [ -f "nixos.wsl" ]; then
+    SIZE=$(du -h nixos.wsl | cut -f1)
+    
+    # Rename with timestamp if requested
+    if [ "$TIMESTAMP_OUTPUT" = "timestamp" ]; then
+      NEW_NAME="${CONFIG_NAME}-$(date +%Y%m%d-%H%M%S).tar.gz"
+      mv nixos.wsl "$NEW_NAME"
+      echo -e "${GREEN}Created: ${NEW_NAME} (${SIZE})${NC}"
+      echo ""
+      echo "Import with: wsl --import ${CONFIG_NAME} <location> ${NEW_NAME}"
+    else
+      echo -e "${GREEN}Created: nixos.wsl (${SIZE})${NC}"
+      echo ""
+      echo "Import with: wsl --import ${CONFIG_NAME} <location> nixos.wsl"
+    fi
+  fi
+else
+  echo "Build failed. Check the error messages above."
+  exit 1
+fi

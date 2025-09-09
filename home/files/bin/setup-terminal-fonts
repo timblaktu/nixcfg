@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+# WSL Terminal Font Setup Script
+# Wrapper to run the PowerShell font installer with user confirmation
+
+set -euo pipefail
+
+# Check if in WSL
+if [[ -z "${WSL_DISTRO_NAME:-}" ]]; then
+    echo "❌ This script is designed for WSL environments only."
+    exit 1
+fi
+
+# Check if PowerShell is available
+if ! command -v powershell.exe >/dev/null 2>&1; then
+    echo "❌ PowerShell not available. This script requires Windows PowerShell access from WSL."
+    exit 1
+fi
+
+# Check if the PowerShell script exists
+SCRIPT_PATH="$HOME/bin/install-terminal-fonts.ps1"
+if [[ ! -f "$SCRIPT_PATH" ]]; then
+    echo "❌ PowerShell script not found: $SCRIPT_PATH"
+    echo "   Make sure home-manager configuration is applied."
+    exit 1
+fi
+
+echo "🔍 Analyzing current font configuration..."
+
+# Check Windows fonts silently
+check_windows_font() {
+    local font_name="$1"
+    powershell.exe -Command "
+        try {
+            Add-Type -AssemblyName System.Drawing;
+            \$family = [System.Drawing.FontFamily]::new('$font_name');
+            if (\$family.IsStyleAvailable([System.Drawing.FontStyle]::Regular)) {
+                Write-Host 'installed'
+            } else {
+                Write-Host 'missing'
+            };
+            \$family.Dispose()
+        } catch {
+            Write-Host 'missing'
+        }
+    " 2>/dev/null
+}
+
+# Check NixOS fonts silently  
+check_nixos_font() {
+    local pattern="$1"
+    local count=$(fc-list 2>/dev/null | grep -iE "$pattern" | wc -l)
+    if [[ "$count" -gt 0 ]]; then
+        echo "installed ($count variants)"
+    else
+        echo "missing"
+    fi
+}
+
+# Check Windows Terminal settings
+check_wt_config() {
+    # Get Windows username from environment or PowerShell
+    local win_user=""
+    if [[ -n "${WINDOWS_USERNAME:-}" ]]; then
+        win_user="$WINDOWS_USERNAME"
+    elif command -v powershell.exe >/dev/null 2>&1; then
+        win_user=$(powershell.exe -Command 'Write-Host $env:USERNAME' 2>/dev/null | tr -d '\r\n')
+    fi
+    
+    # Try common Windows Terminal settings paths
+    local settings_paths=()
+    
+    # Add path with detected Windows username if available
+    if [[ -n "$win_user" ]]; then
+        # Check both regular and Preview versions
+        settings_paths+=("/mnt/c/Users/$win_user/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json")
+        settings_paths+=("/mnt/c/Users/$win_user/AppData/Local/Packages/Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe/LocalState/settings.json")
+    fi
+    
+    # Add fallback paths - try to find any Windows Terminal installation
+    # Also check for all users by scanning the Users directory
+    for user_dir in /mnt/c/Users/*/; do
+        if [[ -d "$user_dir" ]]; then
+            local username=$(basename "$user_dir")
+            settings_paths+=(
+                "${user_dir}AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json"
+                "${user_dir}AppData/Local/Packages/Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe/LocalState/settings.json"
+            )
+        fi
+    done
+    
+    local settings_path=""
+    for path in "${settings_paths[@]}"; do
+        if [[ -f "$path" ]]; then
+            settings_path="$path"
+            break
+        fi
+    done
+    
+    if [[ -n "$settings_path" && -f "$settings_path" ]]; then
+        local font_face=$(jq -r '.profiles.defaults.font.face // "not configured"' "$settings_path" 2>/dev/null)
+        local intense_style=$(jq -r '.profiles.defaults.intenseTextStyle // "bright"' "$settings_path" 2>/dev/null)
+        echo "$font_face|$intense_style"
+    else
+        echo "not found|unknown"
+    fi
+}
+
+# Perform checks
+CASCADIA_STATUS=$(check_windows_font "CaskaydiaMono NF")
+NOTO_STATUS=$(check_windows_font "Noto Color Emoji")
+NIXOS_CASCADIA=$(check_nixos_font "(caskaydia|cascadia)")
+NIXOS_EMOJI=$(check_nixos_font "(emoji|color)")
+WT_CONFIG=$(check_wt_config)
+WT_FONT=$(echo "$WT_CONFIG" | cut -d'|' -f1)
+WT_BOLD=$(echo "$WT_CONFIG" | cut -d'|' -f2)
+
+echo ""
+echo "📊 Font Configuration Analysis:"
+echo ""
+echo "🪟 Windows Fonts:"
+echo "  CaskaydiaMono NF:       $(if [[ "$CASCADIA_STATUS" == "installed" ]]; then echo "✅ Installed"; else echo "❌ Missing"; fi)"
+echo "  Noto Color Emoji:       $(if [[ "$NOTO_STATUS" == "installed" ]]; then echo "✅ Installed"; else echo "❌ Missing"; fi)"
+echo ""
+echo "🐧 NixOS/WSL Fonts:"
+echo "  Cascadia variants:      $(if [[ "$NIXOS_CASCADIA" == "missing" ]]; then echo "❌ Missing"; else echo "✅ $NIXOS_CASCADIA"; fi)"
+echo "  Emoji fonts:            $(if [[ "$NIXOS_EMOJI" == "missing" ]]; then echo "❌ Missing"; else echo "✅ $NIXOS_EMOJI"; fi)"
+echo ""
+echo "⚙️  Windows Terminal:"
+echo "  Font configured:        $(if [[ "$WT_FONT" == "not configured" ]]; then echo "❌ Not configured"; else echo "🔤 $WT_FONT"; fi)"
+echo "  Bold rendering:         $(if [[ "$WT_BOLD" == "all" ]]; then echo "✅ Properly configured"; elif [[ "$WT_BOLD" == "bright" ]]; then echo "⚠️  Needs fix (bright → all)"; else echo "❓ $WT_BOLD"; fi)"
+
+# Determine what needs to be done
+NEEDS_WINDOWS_FONTS=false
+NEEDS_WT_CONFIG=false
+
+if [[ "$CASCADIA_STATUS" != "installed" ]] || [[ "$NOTO_STATUS" != "installed" ]]; then
+    NEEDS_WINDOWS_FONTS=true
+fi
+
+if [[ "$WT_FONT" == "not configured" ]] || [[ "$WT_BOLD" != "all" ]] || [[ "$WT_FONT" != *"CaskaydiaMono Nerd Font"* && "$WT_FONT" != *"CaskaydiaMono NF"* && "$WT_FONT" != *"Noto Color Emoji"* ]]; then
+    NEEDS_WT_CONFIG=true
+fi
+
+echo ""
+
+# If everything is already configured correctly
+if [[ "$NEEDS_WINDOWS_FONTS" == "false" ]] && [[ "$NEEDS_WT_CONFIG" == "false" ]]; then
+    echo "🎉 All fonts and configuration are already optimal!"
+    echo ""
+    echo "💡 Test emoji rendering: ⚠️ ✅ ❌ 🔥"
+    echo "   If you see squares, restart Windows Terminal completely."
+    exit 0
+fi
+
+# Show what will be changed
+echo "🔧 Configuration changes needed:"
+if [[ "$NEEDS_WINDOWS_FONTS" == "true" ]]; then
+    echo "  • Install missing Windows fonts"
+    if [[ "$CASCADIA_STATUS" != "installed" ]]; then
+        echo "    - Download & install CascadiaMono Nerd Font"
+    fi
+    if [[ "$NOTO_STATUS" != "installed" ]]; then
+        echo "    - Download & install Noto Color Emoji"
+    fi
+fi
+
+if [[ "$NEEDS_WT_CONFIG" == "true" ]]; then
+    echo "  • Update Windows Terminal configuration"
+    if [[ "$WT_FONT" != *"CaskaydiaMono Nerd Font Mono"* && "$WT_FONT" != *"Cascadia Code, Noto Color Emoji, CaskaydiaMono Nerd Font Mono"* ]]; then
+        echo "    - Set font to: CaskaydiaMono Nerd Font Mono, Noto Color Emoji, Segoe UI Emoji"
+    fi
+    if [[ "$WT_BOLD" != "all" ]]; then
+        echo "    - Fix bold rendering: intenseTextStyle = 'all'"
+    fi
+fi
+
+echo ""
+echo "📋 The automated installer will:"
+echo "  • Download fonts from official sources (GitHub/Google)"
+echo "  • Install font files (system-wide if admin, user-only otherwise)"  
+echo "  • Update Windows Terminal settings.json (with backup)"
+echo "  • Configure proper emoji fallback chain"
+echo ""
+
+# Prompt for confirmation
+read -p "Proceed with font installation and configuration? [Y/n] " -n 1 -r
+echo ""
+
+if [[ $REPLY =~ ^[Nn]$ ]]; then
+    echo "❌ Installation cancelled."
+    exit 0
+fi
+
+echo ""
+echo "🚀 Starting automated font installation..."
+
+# Convert WSL path to Windows path for PowerShell
+WINDOWS_SCRIPT_PATH=$(wslpath -w "$SCRIPT_PATH" 2>/dev/null || echo "$SCRIPT_PATH")
+echo "   Running: powershell.exe -ExecutionPolicy Bypass -File \"$WINDOWS_SCRIPT_PATH\""
+echo ""
+
+# Run the PowerShell script
+if powershell.exe -ExecutionPolicy Bypass -File "$WINDOWS_SCRIPT_PATH"; then
+    echo ""
+    echo "🎉 Font installation completed successfully!"
+    
+    # Check if we can restart Windows Terminal
+    if command -v wt.exe >/dev/null 2>&1 && [[ -n "$WT_SESSION" ]]; then
+        echo ""
+        echo "🔄 Would you like to restart Windows Terminal now?"
+        echo "   This will close all tabs and restart with new settings."
+        read -p "   Restart Windows Terminal? [Y/n]: " restart_choice
+        
+        if [[ "${restart_choice,,}" =~ ^(y|yes|)$ ]]; then
+            echo "   Restarting Windows Terminal in 3 seconds..."
+            echo "   Press Ctrl+C to cancel"
+            sleep 3
+            
+            # Save current directory
+            CURRENT_DIR=$(pwd)
+            
+            # Open new Terminal window with current directory
+            wt.exe -d "$CURRENT_DIR" &
+            sleep 1
+            
+            # Try to close current Terminal window using PowerShell
+            # Windows Terminal sets WT_SESSION environment variable
+            powershell.exe -Command "
+                \$sessions = Get-Process WindowsTerminal -ErrorAction SilentlyContinue
+                if (\$sessions) {
+                    # Give the new window time to open
+                    Start-Sleep -Seconds 1
+                    # Close the current Terminal
+                    Stop-Process -Id \$PID -Force
+                }
+            " 2>/dev/null || true
+            
+            echo "   If Terminal didn't restart automatically, please restart it manually."
+        else
+            echo ""
+            echo "📋 Next steps:"
+            echo "  1. Restart Windows Terminal manually"
+            echo "  2. Run 'check-terminal-setup' to verify configuration"
+            echo "  3. Test emoji rendering: ⚠️ ✅ ❌ 🔥"
+        fi
+    else
+        echo ""
+        echo "📋 Next steps:"
+        echo "  1. Restart Windows Terminal"
+        echo "  2. Run 'check-terminal-setup' to verify configuration"
+        echo "  3. Test emoji rendering: ⚠️ ✅ ❌ 🔥"
+    fi
+    
+    echo ""
+    echo "💡 If you still see squares instead of emoji, try:"
+    echo "   • Completely close and reopen Windows Terminal"
+    echo "   • Check Windows Terminal settings match the configuration"
+    echo "   • Run 'diagnose-emoji-rendering' for detailed diagnostics"
+else
+    echo ""
+    echo "❌ Font installation failed."
+    echo "   Check the PowerShell output above for error details."
+    echo "   You may need to run PowerShell as Administrator for system-wide installation."
+    echo ""
+    echo "💡 Alternative options:"
+    echo "   • Run 'diagnose-emoji-rendering' for manual installation instructions"
+    echo "   • Install fonts manually and update Windows Terminal settings"
+    exit 1
+fi

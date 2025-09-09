@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(home-manager switch:*)",
+      "Bash(nix build:*)",
+      "Bash(nix flake:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(ln:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)"
+    ],
+    "deny": []
+  }
+}

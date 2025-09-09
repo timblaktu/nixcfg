@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+
+# tmux-session-picker-v2: Clean tmux resurrect session picker with adaptive column layout
+# Uses direct text processing for performance and maintainability
+
+set -euo pipefail
+
+RESURRECT_DIR="${HOME}/.local/share/tmux/resurrect"
+SCRIPT_PATH="$0"
+
+# ANSI color codes
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+YELLOW='\033[33m'
+CYAN='\033[36m'
+BLUE='\033[34m'
+GREEN='\033[32m'
+MAGENTA='\033[35m'
+
+# Function to abbreviate common paths
+abbreviate_path() {
+    local path="$1"
+    # Common abbreviations
+    path="${path/#$HOME\//~/}"
+    path="${path/#\/home\/$USER\//~/}"
+    
+    # Abbreviate common directories
+    path=$(echo "$path" | sed \
+        -e 's|~/projects/|~/p/|' \
+        -e 's|~/Projects/|~/P/|' \
+        -e 's|~/src/|~/s/|' \
+        -e 's|~/Documents/|~/D/|' \
+        -e 's|~/Downloads/|~/dl/|' \
+        -e 's|~/Desktop/|~/dt/|' \
+        -e 's|/usr/local/|/u/l/|' \
+        -e 's|/var/log/|/v/l/|')
+    
+    # If still too long, show last two segments
+    if [[ ${#path} -gt 20 ]]; then
+        local segments=(${path//\// })
+        local count=${#segments[@]}
+        if [[ $count -gt 2 ]]; then
+            path=".../${segments[$count-2]}/${segments[$count-1]}"
+        fi
+    fi
+    
+    echo "$path"
+}
+
+# Function to get the primary non-shell command for a window
+get_primary_command() {
+    local file="$1"
+    local session="$2"
+    local window="$3"
+    
+    # Get all commands for this window's panes, excluding shells
+    local commands=$(grep "^pane" "$file" | \
+        awk -F'\t' -v s="$session" -v w="$window" \
+        '$2==s && $3==w && $10!="" && $10!="zsh" && $10!="bash" && $10!="sh" && $10!="fish" {print $10}' | \
+        sort -u | head -1)
+    
+    echo "$commands"
+}
+
+# Function to format a single session
+format_session() {
+    local file="$1"
+    local current_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
+    
+    # Check if file is valid
+    if ! grep -q "^window\|^pane" "$file" 2>/dev/null; then
+        return 1
+    fi
+    
+    # Extract timestamp and format date
+    local basename=$(basename "$file" .txt)
+    local timestamp=$(echo "$basename" | sed 's/tmux_resurrect_//')
+    local formatted_date="${timestamp:0:4}-${timestamp:4:2}-${timestamp:6:2} ${timestamp:9:2}:${timestamp:11:2}"
+    
+    # Determine if this is the current session
+    local mark=" "
+    local mark_color=""
+    if [[ "$file" == "$current_file" ]]; then
+        mark="★"
+        mark_color="${YELLOW}${BOLD}"
+    fi
+    
+    # Get session name and stats
+    local session=$(grep "^window" "$file" | head -1 | cut -f2)
+    local window_count=$(grep "^window" "$file" | wc -l)
+    local pane_count=$(grep "^pane" "$file" | wc -l)
+    
+    # Print session header with colors
+    printf "${mark_color}%s${RESET} ${CYAN}${BOLD}%-12s${RESET}  ${BLUE}%s${RESET}  ${GREEN}%dW %dP${RESET}\n" \
+        "$mark" "$session" "$formatted_date" "$window_count" "$pane_count"
+    
+    # Calculate column layout based on terminal width
+    local term_width=${COLUMNS:-$(tput cols)}
+    local columns
+    local col_width
+    
+    if [[ $term_width -lt 80 ]]; then
+        columns=1
+        col_width=$((term_width - 4))
+    elif [[ $term_width -lt 120 ]]; then
+        columns=2
+        col_width=50
+    elif [[ $term_width -lt 160 ]]; then
+        columns=3
+        col_width=45
+    else
+        columns=4
+        col_width=38
+    fi
+    
+    # Collect window information
+    local windows=()
+    while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+        # Clean window name
+        window_name="${window_name#:}"
+        
+        # Count panes for this window
+        local pane_cnt=$(grep "^pane" "$file" | awk -F'\t' -v s="$session_name" -v w="$window_idx" '$2==s && $3==w' | wc -l)
+        
+        # Get primary path for this window (most common or first)
+        local window_path=$(grep "^pane" "$file" | \
+            awk -F'\t' -v s="$session_name" -v w="$window_idx" '$2==s && $3==w {print $8}' | \
+            head -1)
+        window_path=$(abbreviate_path "$window_path")
+        
+        # Get primary non-shell command
+        local primary_cmd=$(get_primary_command "$file" "$session_name" "$window_idx")
+        
+        # Format window entry
+        local window_entry
+        if [[ -n "$primary_cmd" ]]; then
+            window_entry=$(printf "${CYAN}%-10s${RESET}${DIM}:${RESET} ${GREEN}%dp${RESET} ${DIM}•${RESET} %s ${MAGENTA}(%s)${RESET}" \
+                "$window_name" "$pane_cnt" "$window_path" "$primary_cmd")
+        else
+            window_entry=$(printf "${CYAN}%-10s${RESET}${DIM}:${RESET} ${GREEN}%dp${RESET} ${DIM}•${RESET} %s" \
+                "$window_name" "$pane_cnt" "$window_path")
+        fi
+        
+        windows+=("$window_entry")
+    done < <(grep "^window" "$file")
+    
+    # Display windows in columns
+    local i
+    for ((i=0; i<${#windows[@]}; i+=columns)); do
+        printf "  "
+        local j
+        for ((j=0; j<columns && i+j<${#windows[@]}; j++)); do
+            if [[ $j -gt 0 ]]; then
+                printf "    "  # Space between columns
+            fi
+            # Trim to column width to prevent overflow
+            local entry="${windows[i+j]}"
+            # Remove ANSI codes for length calculation
+            local plain_entry=$(echo -e "$entry" | sed 's/\x1b\[[0-9;]*m//g')
+            if [[ ${#plain_entry} -gt $col_width ]]; then
+                # Truncate the path part if too long
+                entry=$(echo -e "$entry" | sed "s/\(.\{$((col_width-3))\}\).*/\1.../")
+            fi
+            printf "%b" "$entry"
+        done
+        printf "\n"
+    done
+    
+    # Add hidden metadata for searching
+    local all_sessions=$(grep "^window" "$file" | cut -f2 | sort -u | tr '\n' ' ')
+    local all_windows=$(grep "^window" "$file" | cut -f4 | sed 's/^://' | tr '\n' ' ')
+    local all_pane_titles=$(grep "^pane" "$file" | cut -f7 | sed 's/^://' | grep -v '^$' | tr '\n' ' ')
+    local all_commands=$(grep "^pane" "$file" | cut -f10 | grep -v '^$' | tr '\n' ' ')
+    local all_paths=$(grep "^pane" "$file" | cut -f8 | tr '\n' ' ')
+    
+    printf "##METADATA:%s %s %s %s %s ##FILE:%s\n" \
+        "$all_sessions" "$all_windows" "$all_pane_titles" "$all_commands" "$all_paths" "$file"
+    
+    # Add separator for readability
+    printf "\0"
+}
+
+# Function to generate preview
+generate_preview() {
+    local file="$1"
+    
+    # Check if file is valid
+    if ! grep -q "^window\|^pane" "$file" 2>/dev/null; then
+        echo "╔══════════════════════════════════════════════╗"
+        echo "║         CORRUPTED SESSION FILE               ║"
+        echo "╚══════════════════════════════════════════════╝"
+        echo
+        echo "File: $(basename "$file")"
+        echo "This session file cannot be parsed or restored."
+        return
+    fi
+    
+    # Format the same as the list but without metadata
+    local basename=$(basename "$file" .txt)
+    local timestamp=$(echo "$basename" | sed 's/tmux_resurrect_//')
+    local formatted_date="${timestamp:0:4}-${timestamp:4:2}-${timestamp:6:2} ${timestamp:9:2}:${timestamp:11:2}"
+    local current_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
+    
+    # Get session info
+    local session=$(grep "^window" "$file" | head -1 | cut -f2)
+    local window_count=$(grep "^window" "$file" | wc -l)
+    local pane_count=$(grep "^pane" "$file" | wc -l)
+    
+    # Print header
+    echo -e "${CYAN}${BOLD}${session}${RESET}  ${BLUE}${formatted_date}${RESET}  ${GREEN}${window_count}W ${pane_count}P${RESET}"
+    echo "────────────────────────────────────────────────────────────────"
+    
+    if [[ "$file" == "$current_file" ]]; then
+        echo -e "${YELLOW}${BOLD}⭐ CURRENTLY ACTIVE SESSION${RESET}"
+    fi
+    
+    # Show detailed window and pane information
+    echo -e "\n${BOLD}Windows and Panes:${RESET}"
+    
+    while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+        window_name="${window_name#:}"
+        local marker="○"
+        [[ "$active" == "1" ]] && marker="●"
+        
+        echo -e "\n  ${marker} ${CYAN}${BOLD}Window ${window_idx}: ${window_name}${RESET}"
+        
+        # Show panes for this window
+        grep "^pane" "$file" | while IFS=$'\t' read -r ptype psession pwindow pane_idx pwindow_name pane_id title path focused command args; do
+            if [[ "$psession" == "$session_name" && "$pwindow" == "$window_idx" ]]; then
+                local pmarker=" "
+                [[ "$focused" == "1" ]] && pmarker="▸"
+                
+                title="${title#:}"
+                [[ -z "$title" || "$title" == ":" ]] && title="pane${pane_idx}"
+                
+                command="${command:-shell}"
+                path=$(abbreviate_path "$path")
+                
+                printf "    %s ${MAGENTA}%-20s${RESET} ${DIM}│${RESET} ${BLUE}%-12s${RESET} ${DIM}│${RESET} %s\n" \
+                    "$pmarker" "${title:0:20}" "${command:0:12}" "$path"
+            fi
+        done
+    done < <(grep "^window" "$file")
+}
+
+# Function to get session list
+get_session_list() {
+    local session_files=()
+    
+    # Find all valid resurrect files (sorted newest first)
+    while IFS= read -r file; do
+        if [[ -f "$file" ]] && grep -q "^window\|^pane" "$file" 2>/dev/null; then
+            session_files+=("$file")
+        fi
+    done < <(find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -type f | sort -r)
+    
+    # Process each file
+    for file in "${session_files[@]}"; do
+        format_session "$file"
+    done
+}
+
+# Main execution
+main() {
+    # Check prerequisites
+    if ! command -v fzf >/dev/null 2>&1; then
+        echo "Error: fzf is required but not installed"
+        echo "Install with: nix-env -iA nixpkgs.fzf"
+        exit 1
+    fi
+    
+    if [[ ! -d "$RESURRECT_DIR" ]]; then
+        echo "Error: tmux-resurrect directory not found at $RESURRECT_DIR"
+        exit 1
+    fi
+    
+    # Get terminal dimensions
+    local term_height=$(tput lines)
+    local fzf_height=$((term_height * 90 / 100))
+    
+    # Use fzf with multi-line support
+    local selected
+    selected=$(get_session_list | fzf \
+        --read0 \
+        --height="${fzf_height}" \
+        --layout=reverse \
+        --border=rounded \
+        --header="🔍 Search: sessions, windows, panes, commands, paths | ★=active | ↵=select | Ctrl-R=refresh" \
+        --ansi \
+        --no-separator \
+        --bind='ctrl-r:reload('"$SCRIPT_PATH"' --list)' \
+        --prompt="Search> " \
+        --pointer="▶" \
+        --marker="✓" \
+        --color="header:bold,prompt:cyan,pointer:yellow,marker:green,info:dim,hl:bold:yellow,hl+:bold:bright-yellow" \
+        --info=inline) || {
+        echo "No session selected"
+        exit 0
+    }
+    
+    # Extract the file path using ##FILE: marker
+    local selected_file=$(echo "$selected" | grep -o '##FILE:[^[:space:]]*' | sed 's/##FILE://')
+    
+    if [[ ! -f "$selected_file" ]]; then
+        echo "Error: Selected file does not exist: $selected_file"
+        exit 1
+    fi
+    
+    # Update the 'last' symlink
+    echo "Setting '$(basename "$selected_file")' as the session to restore..."
+    ln -sf "$(basename "$selected_file")" "$RESURRECT_DIR/last"
+    
+    # Restore session
+    if [[ -n "${TMUX:-}" ]]; then
+        echo "Restoring session in current tmux environment..."
+        tmux run-shell "~/.tmux/plugins/tmux-resurrect/scripts/restore.sh"
+    else
+        echo "Starting new tmux session with restored layout..."
+        tmux new-session -d
+        tmux run-shell "~/.tmux/plugins/tmux-resurrect/scripts/restore.sh"
+        tmux attach-session
+    fi
+}
+
+# Handle command line arguments
+case "${1:-}" in
+    --preview)
+        if [[ -n "${2:-}" ]]; then
+            # Extract file path using ##FILE: marker
+            file_path=$(echo "$2" | grep -o '##FILE:[^[:space:]]*' | sed 's/##FILE://')
+            
+            if [[ -n "$file_path" && -f "$file_path" ]]; then
+                generate_preview "$file_path"
+            else
+                echo "Error: Could not extract valid file path from: $2"
+                echo "Extracted: '$file_path'"
+            fi
+        fi
+        ;;
+    --list)
+        get_session_list
+        ;;
+    *)
+        main "$@"
+        ;;
+esac

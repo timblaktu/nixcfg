@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+user_app_data_dir="$(wslpath "$(cmd.exe /c echo %APPDATA% 2> /dev/null | tr -d '\r')")"
+claude_app_data_dir="$user_app_data_dir/Claude"
+config_file_path="$claude_app_data_dir/claude_desktop_config.json"
+
+wsl_exe_win_path="$(powershell.exe '(Get-Command wsl).Source' 2>/dev/null | tr -d '\r' | sed 's/\\/\\\\/g')"
+
+mkdir -p "$claude_app_data_dir"
+cat << EOF > "$config_file_path"
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "$wsl_exe_win_path",
+      "args": [
+          "-e",
+          "bash",
+          "-lc",
+          "npx -y @modelcontextprotocol/server-filesystem /home/tim"
+      ],
+      "env": {
+          "DEBUG": "*"
+      }
+    }
+  }
+}
+EOF
+echo "wrote claude config to file $config_file_path"
+cat "$config_file_path"
+jq . "$config_file_path"

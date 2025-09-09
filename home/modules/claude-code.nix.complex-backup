@@ -1,0 +1,803 @@
+{ config, lib, pkgs, nixmcp ? null, ... }:
+
+with lib;
+
+{
+  imports = [
+    ./claude-code/mcp-servers.nix
+    ./claude-code/hooks.nix
+    ./claude-code/sub-agents.nix
+    ./claude-code/slash-commands.nix
+  ];
+
+  options.programs.claude-code = {
+    enable = mkEnableOption "Claude Code with advanced MCP, hooks, and command integration";
+    
+    debug = mkEnableOption "debug output for all components";
+    
+    defaultModel = mkOption {
+      type = types.enum ["sonnet" "opus" "haiku"];
+      default = "sonnet";
+      description = "Default Claude model";
+    };
+
+    aiGuidance = mkOption {
+      type = types.lines;
+      default = ''
+        * After receiving tool results, carefully reflect on their quality and determine optimal next steps
+        * For maximum efficiency, invoke multiple independent tools simultaneously rather than sequentially
+        * Before finishing, verify your solution addresses all requirements
+        * Do what has been asked; nothing more, nothing less
+        * NEVER create files unless absolutely necessary
+        * ALWAYS prefer editing existing files to creating new ones
+        * NEVER proactively create documentation unless explicitly requested
+        
+        ## Git Commit Rules
+        
+        * NEVER include Claude's identity or involvement in commit messages
+        * Do NOT add "Generated with Claude Code" or "Co-Authored-By: Claude" footers
+        * Write commit messages as if authored by the human user
+        * Keep commit messages concise and focused on the technical changes
+      '';
+      description = "Core AI guidance principles";
+    };
+
+    enableProjectOverrides = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Allow project-specific configuration overrides";
+    };
+    
+    projectOverridePaths = mkOption {
+      type = types.listOf types.str;
+      default = [ ".claude/settings.json" ".claude.json" "claude.config.json" ];
+      description = "Paths to search for project-specific settings";
+    };
+    
+    permissions = mkOption {
+      type = types.attrs;
+      default = {
+        allow = [ "Bash(npm run test:*)" "Bash(nix flake check:*)" "Read(~/.config/*)" ];
+        deny = [ "Bash(rm -rf /*)" "Read(.env)" "Write(/etc/passwd)" ];
+      };
+      description = "Permission rules";
+    };
+    
+    environmentVariables = mkOption {
+      type = types.attrsOf types.str;
+      default = { CLAUDE_CODE_ENABLE_TELEMETRY = "0"; };
+      description = "Environment variables";
+    };
+    
+    experimental = mkOption {
+      type = types.attrs;
+      default = {};
+      description = "Experimental features";
+    };
+    
+    claudeMdContent = mkOption {
+      type = types.lines;
+      default = "";
+      description = "Additional CLAUDE.md content";
+    };
+
+    # Multi-account support options
+    accounts = mkOption {
+      type = types.attrsOf (types.submodule {
+        options = {
+          enable = mkEnableOption "this Claude Code account profile";
+          
+          displayName = mkOption {
+            type = types.str;
+            description = "Display name for this account profile";
+            example = "Work Account";
+          };
+          
+          configDir = mkOption {
+            type = types.str;
+            default = "";
+            description = "Custom config directory path. If empty, uses ~/.claude-<name>";
+          };
+          
+          apiKey = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "API key for this account (optional, can login interactively)";
+          };
+          
+          model = mkOption {
+            type = types.nullOr (types.enum ["sonnet" "opus" "haiku"]);
+            default = null;
+            description = "Default model for this account (null means use global default)";
+          };
+          
+          aliases = mkOption {
+            type = types.listOf types.str;
+            default = [];
+            description = "Additional command aliases for this account";
+            example = ["claudework" "cw"];
+          };
+        };
+      });
+      default = {};
+      description = "Multiple Claude Code account profiles";
+      example = literalExpression ''
+        {
+          pro = {
+            enable = true;
+            displayName = "Claude Pro Account";
+            aliases = ["claudepro" "cp"];
+          };
+          max = {
+            enable = true;
+            displayName = "Claude Max Account";
+            aliases = ["claudemax" "cm"];
+          };
+        }
+      '';
+    };
+
+    defaultAccount = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Default account to use when running 'claude' without profile";
+    };
+
+    # Internal options for module communication
+    _internal = {
+      mcpServers = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+      hooks = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+      subAgentFiles = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+      slashCommandDefs = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+    };
+  };
+  
+  config = let
+    cfg = config.programs.claude-code;
+    
+    # Path to the source user-global memory file in nixcfg (runtime path)
+    userGlobalMemorySource = "${config.home.homeDirectory}/src/nixcfg/home/modules/claude-code-user-global-memory.md";
+    
+    # Read the memory file content at build time
+    userGlobalMemoryContent = builtins.readFile ./claude-code-user-global-memory.md;
+    
+    # Script to handle memory updates and rebuild
+    memoryUpdateScript = pkgs.writeScriptBin "claude-memory-update" ''
+      #!${pkgs.bash}/bin/bash
+      set -euo pipefail
+      
+      echo "Memory updated, rebuilding claude-code configuration..."
+      cd ${config.home.homeDirectory}/src/nixcfg
+      
+      # Commit the memory change
+      ${pkgs.git}/bin/git add home/modules/claude-code-user-global-memory.md
+      ${pkgs.git}/bin/git commit -m "Update Claude Code user-global memory" || true
+      
+      # Rebuild home-manager configuration
+      ${pkgs.home-manager}/bin/home-manager switch --flake .
+      
+      echo "✅ Memory updated and propagated to all accounts"
+    '';
+    
+    # WSL environment detection for Claude Desktop
+    isWSLEnabled = config.targets.wsl.enable or false;
+    wslDistroName = if isWSLEnabled then 
+      config.targets.wsl.wslDistroName or "NixOS"
+    else 
+      "NixOS";
+    
+    # Convert MCP server configs to WSL-compatible format for Claude Desktop
+    mkClaudeDesktopServer = name: serverCfg: 
+      let
+        # Build environment variable prefix for WSL command
+        envVars = serverCfg.env or {};
+        envPrefix = if isWSLEnabled && envVars != {} then
+          lib.concatStringsSep " " (lib.mapAttrsToList (k: v: "${k}=${lib.escapeShellArg (toString v)}") envVars)
+        else "";
+        
+        # For WSL, we need to set env vars in the command since JSON env doesn't pass through
+        wslCommand = if envPrefix != "" then
+          "sh -c '${envPrefix} exec ${lib.escapeShellArg serverCfg.command} ${lib.concatStringsSep " " (map lib.escapeShellArg serverCfg.args)}'"
+        else
+          "${serverCfg.command} ${lib.concatStringsSep " " (map lib.escapeShellArg serverCfg.args)}";
+      in {
+        command = if isWSLEnabled then "C:\\WINDOWS\\system32\\wsl.exe" else serverCfg.command;
+        args = if isWSLEnabled then 
+          [ "-d" wslDistroName "-e" "sh" "-c" wslCommand ]
+        else 
+          serverCfg.args;
+        env = if isWSLEnabled then {} else (serverCfg.env or {});
+      } // (lib.optionalAttrs (serverCfg ? timeout) { inherit (serverCfg) timeout; })
+        // (lib.optionalAttrs (serverCfg ? retries) { inherit (serverCfg) retries; });
+    
+    # Generate Claude Desktop configuration with WSL wrapper
+    claudeDesktopMcpServers = lib.mapAttrs mkClaudeDesktopServer cfg._internal.mcpServers;
+    
+    # Settings configuration
+    settingsConfig = let
+      hasHooks = cfg._internal.hooks.PreToolUse != null || cfg._internal.hooks.PostToolUse != null || 
+                 cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
+      cleanHooks = filterAttrs (n: v: v != null) cfg._internal.hooks;
+    in {
+      model = cfg.defaultModel;
+    } // optionalAttrs (cfg.permissions != {}) { permissions = cfg.permissions; }
+      // optionalAttrs (cfg.environmentVariables != {}) { env = cfg.environmentVariables; }
+      // optionalAttrs hasHooks { hooks = cleanHooks; }
+      // optionalAttrs (cfg.experimental != {}) { experimental = cfg.experimental; }
+      // optionalAttrs cfg.enableProjectOverrides { 
+        projectOverrides = {
+          enabled = true;
+          searchPaths = cfg.projectOverridePaths;
+        };
+      };
+
+    # Generate CLAUDE.md content
+    claudeMdContent = ''
+      # Claude Code Configuration
+      
+      ## AI Guidance
+      
+      ${cfg.aiGuidance}
+      
+      ## Active Configuration
+      
+      ### Model
+      - Default: ${cfg.defaultModel}
+      - Debug mode: ${if cfg.debug then "enabled" else "disabled"}
+      
+      ### MCP Servers
+      ${optionalString (nixmcp != null && cfg.mcpServers.nixos.enable) "- **mcp-nixos**: NixOS package/option search"}
+      ${optionalString cfg.mcpServers.sequentialThinking.enable "- **sequential-thinking**: Enhanced reasoning"}
+      ${optionalString cfg.mcpServers.context7.enable "- **context7**: Context management"}
+      ${optionalString cfg.mcpServers.mcpFilesystem.enable "- **mcp-filesystem**: Filesystem operations"}
+      ${optionalString cfg.mcpServers.cliMcpServer.enable "- **cli-mcp-server**: CLI command execution"}
+      ${optionalString (cfg.mcpServers.brave.apiKey != null) "- **brave-search**: Web search"}
+      ${optionalString cfg.mcpServers.puppeteer.enable "- **puppeteer**: Web automation"}
+      ${optionalString (cfg.mcpServers.github.token != null) "- **github**: GitHub integration"}
+      ${optionalString cfg.mcpServers.gitlab.enable "- **gitlab**: GitLab integration"}
+      ${concatStringsSep "\n" (mapAttrsToList (name: _: "- **${name}**: Custom server") cfg.mcpServers.custom)}
+      
+      ### Sub-Agents
+      ${optionalString cfg.subAgents.codeSearcher.enable "- code-searcher"}
+      ${optionalString cfg.subAgents.memoryBank.enable "- memory-bank"}
+      ${optionalString cfg.subAgents.architect.enable "- architect"}
+      ${concatStringsSep "\n" (mapAttrsToList (name: _: "- ${name}") cfg.subAgents.custom)}
+      
+      ### Slash Commands
+      ${optionalString cfg.slashCommands.documentation.enable "- /documentation generate-readme\n    - /documentation api-docs"}
+      ${optionalString cfg.slashCommands.security.enable "- /security audit\n    - /security secrets-scan"}
+      ${optionalString cfg.slashCommands.refactoring.enable "- /refactor extract-function\n    - /refactor rename-symbol"}
+      ${optionalString cfg.slashCommands.context.enable "- /context cleanup\n    - /context save\n    - /context load"}
+      ${concatStringsSep "\n" (mapAttrsToList (name: _: "- /custom ${name}") cfg.slashCommands.custom)}
+      
+      ### Active Hooks
+      - Security checks: ${if cfg.hooks.security.enable then "✔" else "✗"}
+      - Auto-formatting: ${if cfg.hooks.formatting.enable then "✔" else "✗"}
+      - Linting: ${if cfg.hooks.linting.enable then "✔" else "✗"}
+      - Git integration: ${if cfg.hooks.git.enable then "✔" else "✗"}
+      - Testing: ${if cfg.hooks.testing.enable then "✔" else "✗"}
+      - Logging: ${if cfg.hooks.logging.enable then "✔" else "✗"}
+      - Notifications: ${if cfg.hooks.notifications.enable then "✔" else "✗"}
+      
+      ## Project-Specific Configuration
+      
+      ${cfg.claudeMdContent}
+      
+      ## Performance Tips
+      
+      - Use sub-agents for specialized tasks to reduce token usage
+      - Leverage slash commands for common operations
+      - Enable caching where appropriate
+      - Use project overrides for context-specific settings
+      
+      ## Troubleshooting
+      
+      - Check logs at: ${cfg.hooks.logging.logPath}
+      - Debug mode: Set `programs.claude-code.debug = true`
+      - MCP server issues: Check `claude doctor`
+      - Hook failures: Review hook timeout settings
+    '';
+
+    # Generate shell aliases for each account
+    accountAliases = lib.flatten (lib.mapAttrsToList (name: account:
+      let
+        configDir = if account.configDir != "" 
+          then account.configDir 
+          else "$HOME/.claude-${name}";
+        
+        # Main command for this account
+        mainCmd = ''
+          claude-${name}() {
+            export CLAUDE_CONFIG_DIR="${configDir}"
+            echo "🤖 Switching to Claude ${account.displayName}..."
+            command claude "$@"
+            unset CLAUDE_CONFIG_DIR
+          }
+        '';
+        
+        # Additional aliases
+        aliasCmds = map (alias: ''
+          ${alias}() {
+            claude-${name} "$@"
+          }
+        '') account.aliases;
+      in
+      if account.enable then [mainCmd] ++ aliasCmds else []
+    ) cfg.accounts);
+    
+    # Default claude command override if defaultAccount is set
+    defaultAccountOverride = if cfg.defaultAccount != null then
+      let
+        configDir = if cfg.accounts.${cfg.defaultAccount}.configDir != ""
+          then cfg.accounts.${cfg.defaultAccount}.configDir
+          else "$HOME/.claude-${cfg.defaultAccount}";
+      in ''
+        claude() {
+          export CLAUDE_CONFIG_DIR="${configDir}"
+          command claude "$@"
+          unset CLAUDE_CONFIG_DIR
+        }
+      ''
+    else "";
+
+  in mkIf cfg.enable {
+    # Install required packages
+    home.packages = with pkgs; [
+      nodejs_22 git ripgrep fd jq
+      memoryUpdateScript  # Add the memory update script
+    ] ++ optionals cfg.hooks.formatting.enable [
+      nixpkgs-fmt black nodePackages.prettier rustfmt go shfmt
+    ] ++ optionals cfg.hooks.linting.enable [
+      python3Packages.pylint nodePackages.eslint shellcheck
+    ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
+      libnotify
+    ];
+    
+    # Add shell initialization for accounts
+    programs.bash.initExtra = mkIf (cfg.accounts != {}) (mkAfter ''
+      # Claude Code Multi-Account Support
+      ${lib.concatStringsSep "\n" accountAliases}
+      ${defaultAccountOverride}
+    '');
+    
+    programs.zsh.initContent = mkIf (cfg.accounts != {}) (mkAfter ''
+      # Claude Code Multi-Account Support
+      ${lib.concatStringsSep "\n" accountAliases}
+      ${defaultAccountOverride}
+    '');
+    
+    programs.fish.shellInit = mkIf (cfg.accounts != {}) (mkAfter (
+      let
+        # Convert bash functions to fish syntax
+        bashToFish = bashCmd: 
+          let
+            lines = lib.splitString "\n" bashCmd;
+            funcLine = builtins.head lines;
+            funcName = lib.head (lib.splitString "(" funcLine);
+            bodyLines = builtins.tail lines;
+            body = lib.concatStringsSep "\n" (lib.init bodyLines); # Remove closing }
+            fishBody = lib.replaceStrings 
+              ["export " "unset " "command " "$@" "echo "]
+              ["set -gx " "set -e " "" "$argv" "echo "]
+              body;
+          in ''
+            function ${funcName}
+              ${fishBody}
+            end
+          '';
+      in ''
+        # Claude Code Multi-Account Support
+        ${lib.concatStringsSep "\n" (map bashToFish (accountAliases ++ lib.optional (defaultAccountOverride != "") defaultAccountOverride))}
+      ''
+    ));
+    
+    # Generate configuration files
+    home.file = mkMerge [
+      # Base configuration (for default setup without accounts)
+      (mkIf (cfg._internal.mcpServers != {} && cfg.accounts == {}) {
+        ".claude/mcp.json".text = builtins.toJSON { 
+          mcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
+        };
+      })
+      
+      # Claude Desktop configuration (always generated if MCP servers exist)
+      (mkIf (cfg._internal.mcpServers != {}) {
+        "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
+      })
+      
+      # Settings (for default setup without accounts)
+      (mkIf (cfg.accounts == {}) {
+        ".claude/settings.json".text = builtins.toJSON settingsConfig;
+      })
+      
+      # Sub-agents
+      cfg._internal.subAgentFiles
+      
+      # Slash commands
+      (listToAttrs (flatten (mapAttrsToList (category: commands: 
+        mapAttrsToList (cmdName: cmdDef: 
+          nameValuePair ".claude/commands/${category}/${cmdName}.json" {
+            text = builtins.toJSON cmdDef;
+          }
+        ) commands
+      ) cfg._internal.slashCommandDefs)))
+      
+      # Log directory (for default setup without accounts)
+      (mkIf (cfg.hooks.logging.enable && cfg.accounts == {}) {
+        ".claude/logs/.keep".text = "";
+      })
+      
+      # Custom memory management commands (global for all accounts)
+      {
+        ".claude/commands/nixmemory.md" = {
+          text = ''
+            ---
+            description: Open user-global memory file in editor (Nix-managed version of /memory)
+            ---
+            
+            Opens the Nix-managed user-global memory file in your default editor.
+            
+            This command:
+            1. If in tmux: Opens editor in a horizontal pane below
+            2. Otherwise: Shows file location for manual editing
+            3. After editing, run claude-memory-update to propagate changes
+            
+            Usage: `/nixmemory`
+            
+            Features:
+            - Tmux integration: Automatically splits pane when in tmux session
+            - Fallback modes: Provides instructions when tmux isn't available
+            - EDITOR support: Uses your configured $EDITOR environment variable
+            
+            Note: Unlike /memory, this always opens the user-scoped file (no project scope selection).
+            Note: This command requires permission to execute as it runs a shell script.
+          '';
+        };
+
+        ".claude/commands/nixremember.md" = {
+          text = ''
+            ---
+            description: Add content to user-global memory (Nix-managed version of # command)
+            argument-hint: [content to remember]
+            ---
+            
+            Appends content to the Nix-managed user-global memory file.
+            
+            This command:
+            1. Appends the provided content to the source memory file
+            2. Commits the change to git
+            3. Rebuilds home-manager configuration
+            4. Propagates to all account-specific configs
+            
+            Usage: `/nixremember Use TypeScript for all new files`
+            
+            This is equivalent to the built-in # command but for Nix-managed memory.
+          '';
+        };
+
+        # Command implementations
+        ".claude/commands/nixmemory.sh" = {
+          executable = true;
+          text = ''
+            #!/bin/bash
+            set -euo pipefail
+            
+            MEMORY_FILE="${userGlobalMemorySource}"
+            
+            # Check if EDITOR is set
+            if [ -z "''${EDITOR:-}" ]; then
+              echo "❌ Error: EDITOR environment variable is not set"
+              echo "Please set your EDITOR environment variable first:"
+              echo "  export EDITOR=vim"
+              echo "  export EDITOR=nano"
+              echo "  export EDITOR=nvim"
+              exit 1
+            fi
+            
+            # Check if we're in a tmux session
+            if [ -n "''${TMUX:-}" ]; then
+              echo "📝 Opening user-global memory file in tmux pane..."
+              echo "File: $MEMORY_FILE"
+              
+              # Open editor in a new horizontal pane below
+              # -d keeps focus on current pane, -p 30 makes it 30% height
+              tmux split-window -d -v -p 30 "$EDITOR '$MEMORY_FILE'"
+              
+              echo "✅ Opened $EDITOR in tmux pane below"
+              echo "💡 Tips:"
+              echo "  • Switch panes: Ctrl-b then arrow keys"
+              echo "  • Close pane: Exit editor normally"
+              echo "  • After saving, run: claude-memory-update"
+              
+            # Check if tmux is available but we're not in a session
+            elif command -v tmux >/dev/null 2>&1; then
+              echo "📝 Memory file location: $MEMORY_FILE"
+              echo ""
+              echo "You're not in a tmux session. Options:"
+              echo "1. Start tmux first: tmux new -s claude"
+              echo "2. Edit directly: $EDITOR $MEMORY_FILE"
+              echo "3. Use /nixremember to append content"
+              echo ""
+              echo "After editing, run: claude-memory-update"
+              
+            else
+              echo "📝 Memory file location: $MEMORY_FILE"
+              echo ""
+              echo "Since terminal editors can't open from Claude Code commands,"
+              echo "please edit this file directly in your terminal:"
+              echo ""
+              echo "  $EDITOR $MEMORY_FILE"
+              echo ""
+              echo "After editing, run: claude-memory-update"
+              echo "Or use /nixremember to append content"
+            fi
+          '';
+        };
+
+        ".claude/commands/nixremember.sh" = {
+          executable = true;
+          text = ''
+            #!/bin/bash
+            set -euo pipefail
+            
+            MEMORY_FILE="${userGlobalMemorySource}"
+            CONTENT="$*"
+            
+            if [ -z "$CONTENT" ]; then
+              echo "❌ Usage: /nixremember <content to remember>"
+              exit 1
+            fi
+            
+            # Ensure file exists
+            if [ ! -f "$MEMORY_FILE" ]; then
+              echo "# Claude Code User-Global Memory" > "$MEMORY_FILE"
+              echo "" >> "$MEMORY_FILE"
+            fi
+            
+            # Append content with timestamp (similar to built-in # command)
+            echo "" >> "$MEMORY_FILE"
+            echo "$(date '+%Y-%m-%d %H:%M:%S'): $CONTENT" >> "$MEMORY_FILE"
+            
+            # Trigger rebuild
+            claude-memory-update
+            
+            echo "✅ Added to user-global memory: $CONTENT"
+          '';
+        };
+        
+        # Aliases for memory commands
+        ".claude/commands/usermemory.md".text = config.home.file.".claude/commands/nixmemory.md".text;
+        ".claude/commands/usermemory.sh" = {
+          executable = true;
+          text = config.home.file.".claude/commands/nixmemory.sh".text;
+        };
+        ".claude/commands/globalmemory.md".text = config.home.file.".claude/commands/nixmemory.md".text;
+        ".claude/commands/globalmemory.sh" = {
+          executable = true;
+          text = config.home.file.".claude/commands/nixmemory.sh".text;
+        };
+        
+        ".claude/commands/userremember.md".text = config.home.file.".claude/commands/nixremember.md".text;
+        ".claude/commands/userremember.sh" = {
+          executable = true;
+          text = config.home.file.".claude/commands/nixremember.sh".text;
+        };
+        ".claude/commands/globalremember.md".text = config.home.file.".claude/commands/nixremember.md".text;
+        ".claude/commands/globalremember.sh" = {
+          executable = true;
+          text = config.home.file.".claude/commands/nixremember.sh".text;
+        };
+      }
+      
+      # Per-account configurations
+      (lib.mkMerge (lib.mapAttrsToList (name: account:
+        let
+          configDir = if account.configDir != ""
+            then account.configDir
+            else ".claude-${name}";
+          
+          # Account-specific settings
+          accountSettings = settingsConfig // {
+            model = if account.model != null then account.model else cfg.defaultModel;
+          };
+        in mkIf account.enable (mkMerge [
+          # Account settings
+          {
+            "${configDir}/settings.json".text = builtins.toJSON accountSettings;
+          }
+          
+          # Copy MCP config if exists
+          (mkIf (cfg._internal.mcpServers != {}) {
+            "${configDir}/mcp.json".text = builtins.toJSON { 
+              mcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
+            };
+          })
+          
+          # Create sub-agents in account directory
+          (mkMerge (mapAttrsToList (path: content: {
+            "${configDir}/agents/${lib.removePrefix ".claude/agents/" path}".text = content.text or content;
+          }) (filterAttrs (path: _: lib.hasPrefix ".claude/agents/" path) cfg._internal.subAgentFiles)))
+          
+          # Create slash commands in account directory
+          (mkMerge (flatten (mapAttrsToList (category: commands: 
+            mapAttrsToList (cmdName: cmdDef: {
+              "${configDir}/commands/${category}/${cmdName}.json".text = builtins.toJSON cmdDef;
+            }) commands
+          ) cfg._internal.slashCommandDefs)))
+          
+          # Copy custom memory commands to account directory
+          {
+            "${configDir}/commands/nixmemory.md".text = config.home.file.".claude/commands/nixmemory.md".text;
+            "${configDir}/commands/nixremember.md".text = config.home.file.".claude/commands/nixremember.md".text;
+            "${configDir}/commands/nixmemory.sh" = {
+              executable = true;
+              text = config.home.file.".claude/commands/nixmemory.sh".text;
+            };
+            "${configDir}/commands/nixremember.sh" = {
+              executable = true;
+              text = config.home.file.".claude/commands/nixremember.sh".text;
+            };
+            
+            # Aliases - just duplicate the content for now (symlinks would be cleaner but harder in Nix)
+            "${configDir}/commands/usermemory.md".text = config.home.file.".claude/commands/nixmemory.md".text;
+            "${configDir}/commands/usermemory.sh" = {
+              executable = true;
+              text = config.home.file.".claude/commands/nixmemory.sh".text;
+            };
+            "${configDir}/commands/globalmemory.md".text = config.home.file.".claude/commands/nixmemory.md".text;
+            "${configDir}/commands/globalmemory.sh" = {
+              executable = true;
+              text = config.home.file.".claude/commands/nixmemory.sh".text;
+            };
+            
+            "${configDir}/commands/userremember.md".text = config.home.file.".claude/commands/nixremember.md".text;
+            "${configDir}/commands/userremember.sh" = {
+              executable = true;
+              text = config.home.file.".claude/commands/nixremember.sh".text;
+            };
+            "${configDir}/commands/globalremember.md".text = config.home.file.".claude/commands/nixremember.md".text;
+            "${configDir}/commands/globalremember.sh" = {
+              executable = true;
+              text = config.home.file.".claude/commands/nixremember.sh".text;
+            };
+          }
+          
+          # Create logs directory
+          (mkIf cfg.hooks.logging.enable {
+            "${configDir}/logs/.keep".text = "";
+          })
+          
+          # Account-specific CLAUDE.md (read from user-global memory file)
+          {
+            "${configDir}/CLAUDE.md".text = userGlobalMemoryContent;
+          }
+        ])
+      ) cfg.accounts))
+    ];
+
+      # home.file = mkMerge [
+      #   # Base configuration (for default setup without accounts)
+      #   (mkIf (cfg._internal.mcpServers != {} && cfg.accounts == {}) {
+      #     ".claude/mcp.json".text = builtins.toJSON { 
+      #       mcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
+      #     };
+      #   })
+      #   
+      #   # Claude Desktop configuration (always generated if MCP servers exist)
+      #   (mkIf (cfg._internal.mcpServers != {}) {
+      #     "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
+      #   })
+      #   
+      #   # Settings (for default setup without accounts)
+      #   (mkIf (cfg.accounts == {}) {
+      #     ".claude/settings.json".text = builtins.toJSON settingsConfig;
+      #   })
+      #   
+      #   # Sub-agents
+      #   cfg._internal.subAgentFiles
+      #   
+      #   # Slash commands
+      #   (listToAttrs (flatten (mapAttrsToList (category: commands: 
+      #     mapAttrsToList (cmdName: cmdDef: 
+      #       nameValuePair ".claude/commands/${category}/${cmdName}.json" {
+      #         text = builtins.toJSON cmdDef;
+      #       }
+      #     ) commands
+      #   ) cfg._internal.slashCommandDefs)))
+      #   
+      #   # Log directory (for default setup without accounts)
+      #   (mkIf (cfg.hooks.logging.enable && cfg.accounts == {}) {
+      #     ".claude/logs/.keep".text = "";
+      #   })
+      #   
+      #   # Per-account configurations
+      #   (lib.mkMerge (lib.mapAttrsToList (name: account:
+      #     let
+      #       configDir = if account.configDir != ""
+      #         then account.configDir
+      #         else ".claude-${name}";
+      #       
+      #       # Account-specific settings
+      #       accountSettings = settingsConfig // {
+      #         model = if account.model != null then account.model else cfg.defaultModel;
+      #       };
+      #     in mkIf account.enable {
+      #       # Account settings
+      #       "${configDir}/settings.json".text = builtins.toJSON accountSettings;
+      #       
+      #       # Copy MCP config if exists
+      #       "${configDir}/mcp.json" = mkIf (cfg._internal.mcpServers != {}) {
+      #         text = builtins.toJSON { 
+      #           mcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
+      #         };
+      #       };
+      #       
+      #       # Copy sub-agents to account directory
+      #       "${configDir}/agents" = mkIf (cfg._internal.subAgentFiles != {}) {
+      #         source = "${config.home.homeDirectory}/.claude/agents";
+      #         recursive = true;
+      #       };
+      #       
+      #       # Copy slash commands to account directory
+      #       "${configDir}/commands" = mkIf (cfg._internal.slashCommandDefs != {}) {
+      #         source = "${config.home.homeDirectory}/.claude/commands";
+      #         recursive = true;
+      #       };
+      #       
+      #       # Create logs directory
+      #       "${configDir}/logs/.keep" = mkIf cfg.hooks.logging.enable {
+      #         text = "";
+      #       };
+      #       
+      #       # Account-specific CLAUDE.md
+      #       "${configDir}/CLAUDE.md".text = ''
+      #         # Claude Code Configuration - ${account.displayName}
+      #         
+      #         **Active Account**: ${name}
+      #         **Config Directory**: ~/${configDir}
+      #         **Model Override**: ${if account.model != null then account.model else "Using default (${cfg.defaultModel})"}
+      #         
+      #         ## Available Commands
+      #         - `claude-${name}`: Primary command for this account
+      #         ${lib.concatMapStrings (alias: "- `${alias}`: Alias for this account\n") account.aliases}
+      #         
+      #         ${claudeMdContent}
+      #       '';
+      #     }
+      #   ) cfg.accounts))
+      # ];
+    
+    # Assertions
+    assertions = [
+      {
+        assertion = cfg.hooks.notifications.enable -> 
+          (pkgs.stdenv.isDarwin || config.home.packages or [] != []);
+        message = "Notifications require either macOS or a Linux notification daemon";
+      }
+      {
+        assertion = cfg.defaultAccount != null -> cfg.accounts ? ${cfg.defaultAccount};
+        message = "Default account '${cfg.defaultAccount}' must be defined in accounts";
+      }
+      {
+        assertion = cfg.defaultAccount != null -> cfg.accounts.${cfg.defaultAccount}.enable;
+        message = "Default account '${cfg.defaultAccount}' must be enabled";
+      }
+    ];
+  };
+}
