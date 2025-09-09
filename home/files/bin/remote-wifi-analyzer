@@ -1,0 +1,1918 @@
+#!/usr/bin/env bash
+# remote-wifi-analyzer - Setup, deploy, and remotely execute wifi-analyzer on OpenWrt routers
+
+set -e
+
+# Default configuration
+ROUTER_IP="${ROUTER_IP:-192.168.1.1}"
+REMOTE_USER="${REMOTE_USER:-root}"
+VERBOSE=false
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+NC='\033[0m'
+
+# Logging functions with timestamp and emoji
+log_info() { echo -e "$(date +%H:%M:%S.%3N) ℹ️ $1" >&2; }
+log_success() { echo -e "$(date +%H:%M:%S.%3N) ✅ $1" >&2; }
+log_warn() { echo -e "$(date +%H:%M:%S.%3N) ⚠️ $1" >&2; }
+log_error() { echo -e "$(date +%H:%M:%S.%3N) ❌ $1" >&2; }
+log_fatal() { echo -e "$(date +%H:%M:%S.%3N) 💀 $1" >&2; }
+log_debug() { [ "$VERBOSE" = true ] && echo -e "$(date +%H:%M:%S.%3N) 🐞 $1" >&2; }
+
+# Usage information
+show_usage() {
+    cat << EOF
+Remote WiFi Analyzer - Manage and execute wifi-analyzer on OpenWrt routers
+
+USAGE:
+    remote-wifi-analyzer COMMAND [OPTIONS]
+
+COMMANDS:
+    setup       Configure router for WiFi analysis
+    deploy      Deploy wifi-analyzer script to router
+    run         Execute wifi-analyzer remotely
+    scan-rank   Perform WiFi channel analysis and ranking
+    help        Show this help message
+
+GLOBAL OPTIONS:
+    -r IP       Router IP address (default: 192.168.1.1)
+    -u USER     Remote user (default: root)
+    -v          Verbose output
+
+EXAMPLES:
+    # Initial setup with auto-detection
+    remote-wifi-analyzer setup -m auto -b
+    
+    # Deploy updated analyzer script
+    remote-wifi-analyzer deploy
+    
+    # Run captures
+    remote-wifi-analyzer run -m hop -c auto -t 5 -o capture.pcap
+    remote-wifi-analyzer run -m check
+    remote-wifi-analyzer run -m diag
+    
+    # Custom router
+    remote-wifi-analyzer -r 10.0.0.1 run -c "36 40" -p 50 -o test.pcap
+    
+    # Channel analysis and ranking
+    remote-wifi-analyzer scan-rank -c auto -f json
+    remote-wifi-analyzer scan-rank -b 5g -w "util:3,ap:2,noise:1"
+
+Run 'remote-wifi-analyzer COMMAND -h' for command-specific help.
+EOF
+}
+
+# Setup command usage
+show_setup_usage() {
+    cat << EOF
+Configure router for WiFi analysis
+
+USAGE:
+    remote-wifi-analyzer setup [OPTIONS]
+
+OPTIONS:
+    -m MODE     Mode: 5g, 2g, dual, auto (default: auto)
+    -b          Reboot router before configuration
+    -w SECONDS  Wait time after reboot (default: 60)
+    -c          Configure only (don't deploy script)
+    -h          Show this help
+
+EXAMPLES:
+    remote-wifi-analyzer setup -m auto -b    # Full setup with reboot
+    remote-wifi-analyzer setup -m 5g         # Configure for 5GHz only
+EOF
+}
+
+# Deploy command usage
+show_deploy_usage() {
+    cat << EOF
+Deploy wifi-analyzer script to router
+
+USAGE:
+    remote-wifi-analyzer deploy [OPTIONS]
+
+OPTIONS:
+    -h          Show this help
+
+EXAMPLE:
+    remote-wifi-analyzer deploy
+EOF
+}
+
+# Run command usage
+show_run_usage() {
+    cat << EOF
+Execute wifi-analyzer remotely
+
+USAGE:
+    remote-wifi-analyzer run [WIFI-ANALYZER-OPTIONS]
+
+WIFI-ANALYZER OPTIONS:
+    -m MODE     Mode: hop, single, scan, check, diag
+    -c CHANNELS Channel list or 'auto'
+    -t SECONDS  Time per channel
+    -p PACKETS  Packets per channel
+    -f FILE     Save output to local file (default: capture.pcap)
+    -i IFACE    Monitor interface
+    -F FILTER   Capture filter
+    -v          Verbose output
+    -h          Show wifi-analyzer help
+
+EXAMPLES:
+    remote-wifi-analyzer run -m hop -c auto -t 5
+    remote-wifi-analyzer run -m hop -c auto -t 5 -f myfile.pcap
+    remote-wifi-analyzer run -m check
+    remote-wifi-analyzer run -c "36 40 44 48" -p 50 -v
+EOF
+}
+
+# Scan-rank command usage
+show_scan_rank_usage() {
+    cat << EOF
+Perform WiFi channel analysis and ranking
+
+USAGE:
+    remote-wifi-analyzer scan-rank [OPTIONS]
+
+OPTIONS:
+    -c CHANNELS Channel list or 'auto' (default: auto)
+    -b BAND     Band filter: 2g, 5g, or both (default: both)
+    -w WEIGHTS  Scoring weights: "metric:weight,..." 
+                Available metrics: ap, util, noise, signal
+                Example: "util:3,ap:2,noise:1,signal:1"
+    -f FORMAT   Output format: table, json, simple (default: table)
+    -o FILE     Save results to file
+    -s SCANS    Number of scan iterations (default: 3)
+    -d DELAY    Delay between scans in seconds (default: 5)
+    -v          Verbose output
+    -h          Show this help
+
+EXAMPLES:
+    # Basic channel ranking
+    remote-wifi-analyzer scan-rank
+    
+    # 5GHz analysis with custom weights
+    remote-wifi-analyzer scan-rank -b 5g -w "util:4,ap:2,noise:2"
+    
+    # JSON output for automation
+    remote-wifi-analyzer scan-rank -f json -o channel-report.json
+    
+    # Quick scan with fewer iterations
+    remote-wifi-analyzer scan-rank -s 1 -d 2 -f simple
+EOF
+}
+
+# Parse global options
+parse_global_opts() {
+    while [[ $1 == -* ]]; do
+        case $1 in
+            -r)
+                ROUTER_IP="$2"
+                shift 2
+                ;;
+            -u)
+                REMOTE_USER="$2"
+                shift 2
+                ;;
+            -v)
+                VERBOSE=true
+                shift
+                ;;
+            *)
+                return 0
+                ;;
+        esac
+    done
+}
+
+# SSH helper
+ssh_exec() {
+    ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$REMOTE_USER@$ROUTER_IP" "$@"
+}
+
+# Check router connectivity
+check_connectivity() {
+    if ! ping -c 1 -W 2 "$ROUTER_IP" >/dev/null 2>&1; then
+        log_error "Cannot reach router at $ROUTER_IP"
+        return 1
+    fi
+    return 0
+}
+
+# Setup command
+cmd_setup() {
+    local mode="auto"
+    local reboot=false
+    local wait_time=60
+    local config_only=false
+    
+    while getopts "m:w:bch" opt; do
+        case $opt in
+            m) mode="$OPTARG" ;;
+            b) reboot=true ;;
+            w) wait_time="$OPTARG" ;;
+            c) config_only=true ;;
+            h) show_setup_usage; exit 0 ;;
+            *) show_setup_usage; exit 1 ;;
+        esac
+    done
+    
+    log_info "Setting up router at $ROUTER_IP for $mode monitoring"
+    
+    if ! check_connectivity; then
+        exit 1
+    fi
+    
+    if [ "$reboot" = true ]; then
+        log_warn "Rebooting router..."
+        ssh_exec "reboot" >/dev/null 2>&1 &
+        sleep 3
+        
+        log_info "Waiting ${wait_time}s for router to come back..."
+        local elapsed=0
+        while [ $elapsed -lt $wait_time ]; do
+            if check_connectivity && ssh_exec "echo ready" >/dev/null 2>&1; then
+                log_success "Router is back online"
+                sleep 10
+                break
+            fi
+            sleep 5
+            elapsed=$((elapsed + 5))
+            echo -ne "\rWaiting... ${elapsed}/${wait_time}s"
+        done
+        echo
+    fi
+    
+    # Detect hardware and configure
+    log_info "Detecting hardware capabilities..."
+    local channels=$(detect_and_configure "$mode")
+    
+    if [ "$config_only" = false ]; then
+        deploy_analyzer
+    fi
+    
+    show_examples "$channels"
+}
+
+# Detect hardware and configure router
+detect_and_configure() {
+    local mode=$1
+    
+    # Get PHY information
+    local phy_info=$(ssh_exec '
+        for phy in $(ls /sys/class/ieee80211/ 2>/dev/null | sort); do
+            echo "PHY:$phy"
+            radio=$(uci show wireless 2>/dev/null | grep ".phy='\''$phy'\''" | cut -d. -f2 | head -1)
+            [ -z "$radio" ] && radio="radio${phy#phy}"
+            echo "  RADIO:$radio"
+            
+            # 5GHz channels
+            ch_5g=$(iw phy $phy channels 2>/dev/null | grep -E "\\* 5[0-9][0-9][0-9] MHz \\[[0-9]+\\]" | grep -v disabled | awk "{print \$4}" | tr -d "[]" | tr "\n" " ")
+            [ -n "$ch_5g" ] && echo "  5G:$ch_5g"
+            
+            # 2.4GHz channels  
+            ch_2g=$(iw phy $phy channels 2>/dev/null | grep -E "\\* 24[0-9][0-9] MHz \\[[0-9]+\\]" | grep -v disabled | awk "{print \$4}" | tr -d "[]" | tr "\n" " ")
+            [ -n "$ch_2g" ] && echo "  2G:$ch_2g"
+        done
+    ')
+    
+    # Parse and select radio
+    local radio_5g="" channels_5g=""
+    local radio_2g="" channels_2g=""
+    
+    while IFS= read -r line; do
+        case $line in
+            PHY:*) current_phy=${line#PHY:} ;;
+            *RADIO:*) current_radio=${line#*RADIO:} ;;
+            *5G:*) 
+                [ -z "$radio_5g" ] && radio_5g=$current_radio
+                channels_5g=${line#*5G:}
+                ;;
+            *2G:*)
+                [ -z "$radio_2g" ] && radio_2g=$current_radio
+                channels_2g=${line#*2G:}
+                ;;
+        esac
+    done <<< "$phy_info"
+    
+    # Auto-detect mode if needed
+    if [ "$mode" = "auto" ]; then
+        if [ -n "$channels_5g" ]; then
+            mode="5g"
+        elif [ -n "$channels_2g" ]; then
+            mode="2g"
+        else
+            log_error "No wireless channels detected"
+            exit 1
+        fi
+        log_info "Auto-detected: $mode mode"
+    fi
+    
+    # Configure based on mode
+    local primary_radio channels
+    case $mode in
+        5g)
+            [ -z "$channels_5g" ] && { log_error "No 5GHz channels available"; exit 1; }
+            primary_radio=$radio_5g
+            channels=$channels_5g
+            configure_radio "$radio_5g" 36 "VHT80" "$radio_2g"
+            ;;
+        2g)
+            [ -z "$channels_2g" ] && { log_error "No 2.4GHz channels available"; exit 1; }
+            primary_radio=$radio_2g
+            channels=$channels_2g
+            configure_radio "$radio_2g" 6 "HT40" "$radio_5g"
+            ;;
+        dual)
+            [ -z "$channels_5g" ] || [ -z "$channels_2g" ] && { log_error "Dual mode requires both bands"; exit 1; }
+            primary_radio=$radio_5g
+            channels="$channels_5g $channels_2g"
+            configure_radio "$radio_5g" 36 "VHT80" ""
+            configure_radio "$radio_2g" 6 "HT40" "" "secondary"
+            ;;
+    esac
+    
+    log_success "Configured for $mode monitoring"
+    echo "$channels"
+}
+
+# Configure a radio for monitoring
+configure_radio() {
+    local radio=$1 channel=$2 htmode=$3 disable_radio=$4 suffix=${5:-primary}
+    
+    ssh_exec "
+        # Disable non-monitor interfaces on this radio
+        for section in \$(uci show wireless | grep \"device='$radio'\" | cut -d. -f1-2 | uniq); do
+            mode=\$(uci get \${section}.mode 2>/dev/null)
+            [ \"\$mode\" != \"monitor\" ] && uci set \${section}.disabled='1'
+        done
+        
+        # Configure radio
+        uci batch << EOF
+set wireless.${radio}.disabled=0
+set wireless.${radio}.channel=$channel
+set wireless.${radio}.htmode=$htmode
+set wireless.${radio}.country=US
+$([ -n "$disable_radio" ] && echo "set wireless.${disable_radio}.disabled=1")
+
+delete wireless.monitor_$suffix 2>/dev/null || true
+set wireless.monitor_$suffix=wifi-iface
+set wireless.monitor_$suffix.device=$radio
+set wireless.monitor_$suffix.mode=monitor
+set wireless.monitor_$suffix.ifname=mon${suffix#primary}
+set wireless.monitor_$suffix.disabled=0
+commit wireless
+EOF
+        
+        # Reload wireless
+        wifi reload
+        sleep 5
+        
+        # Bring up interface
+        ip link set mon${suffix#primary} up 2>/dev/null || true
+    "
+}
+
+# Deploy analyzer script
+deploy_analyzer() {
+    log_info "Deploying wifi-analyzer script..."
+    
+    ssh_exec 'cat > /usr/bin/wifi-analyzer && chmod +x /usr/bin/wifi-analyzer' << 'ANALYZER_SCRIPT'
+#!/bin/sh
+# WiFi Analyzer Script for OpenWrt
+# Compatible with BusyBox ash shell
+
+# Default configuration
+DEFAULT_CHANNELS=""
+DEFAULT_HOP_TIME=10
+DEFAULT_INTERFACE="mon0"
+DEFAULT_FILTER="not port 22"
+MODE="hop"
+OUTPUT_FORMAT="stream"
+CAPTURE_FILE=""
+RADIOTAP=""
+SNAPLEN=""
+DURATION=""
+VERBOSE=false
+PACKET_COUNT=""
+PACKET_TIMEOUT=30
+
+# Display usage
+show_usage() {
+    cat << EOF
+WiFi Analyzer - Wireless Packet Capture Tool
+
+USAGE:
+    wifi-analyzer [OPTIONS]
+
+CAPTURE MODES:
+    -m hop      Channel hopping (default)
+    -m single   Single channel capture
+    -m scan     Quick scan (5s per channel)
+    -m check    Quick diagnostic check
+    -m diag     Full diagnostic report
+
+CHANNEL OPTIONS:
+    -c CHANNELS Space-separated list or 'auto'
+    -c all-2g   All 2.4GHz channels
+    -c all-5g   All 5GHz channels
+    -c non-dfs  Non-DFS 5GHz channels
+    -c dfs      DFS channels only
+
+TIMING OPTIONS:
+    -t SECONDS  Time per channel (default: 10)
+    -d SECONDS  Total duration (single mode)
+    -p PACKETS  Packets per channel (30s timeout)
+
+OUTPUT OPTIONS:
+    -o stream   Stream to stdout (default)
+    -o file     Save locally on router
+    -f FILE     Output filename
+    -v          Verbose output
+
+ANALYSIS OPTIONS:
+    -i IFACE    Interface (default: mon0)
+    -r          Include radiotap headers
+    -s SIZE     Snap length
+    -F FILTER   tcpdump filter (default: "not port 22")
+
+EXAMPLES:
+    wifi-analyzer -m check
+    wifi-analyzer -c "36 40 44 48" -p 50
+    wifi-analyzer -c auto -t 10 -v
+EOF
+}
+
+# Auto-detect channels
+auto_detect_channels() {
+    local interface=$1
+    local phy=$(iw dev $interface info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    if [ -n "$phy" ]; then
+        iw phy $phy channels 2>/dev/null | \
+            grep -E "\\* [0-9]+ MHz \\[[0-9]+\\]" | \
+            grep -v disabled | \
+            awk '{gsub(/\[|\]/, "", $4); print $4}' | \
+            tr '\n' ' '
+    else
+        echo "1 6 11 36 40 44 48"
+    fi
+}
+
+# Parse arguments
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case $1 in
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            -m)
+                MODE="$2"
+                shift 2
+                ;;
+            -c)
+                case "$2" in
+                    auto) CHANNELS="" ;;
+                    all-2g) CHANNELS="1 2 3 4 5 6 7 8 9 10 11" ;;
+                    all-5g)
+                        CHANNELS=$(auto_detect_channels $DEFAULT_INTERFACE | tr ' ' '\n' | \
+                                  awk '$1 >= 36' | tr '\n' ' ')
+                        ;;
+                    non-dfs)
+                        all_5g=$(auto_detect_channels $DEFAULT_INTERFACE | tr ' ' '\n' | \
+                                awk '$1 >= 36' | tr '\n' ' ')
+                        CHANNELS=""
+                        for ch in $all_5g; do
+                            if [ $ch -le 48 ] || [ $ch -ge 149 ]; then
+                                CHANNELS="$CHANNELS $ch"
+                            fi
+                        done
+                        ;;
+                    dfs)
+                        all_5g=$(auto_detect_channels $DEFAULT_INTERFACE | tr ' ' '\n' | \
+                                awk '$1 >= 36' | tr '\n' ' ')
+                        CHANNELS=""
+                        for ch in $all_5g; do
+                            if [ $ch -ge 52 ] && [ $ch -le 144 ]; then
+                                CHANNELS="$CHANNELS $ch"
+                            fi
+                        done
+                        ;;
+                    *)
+                        CHANNELS="$2"
+                        ;;
+                esac
+                shift 2
+                ;;
+            -t) HOP_TIME="$2"; shift 2 ;;
+            -d) DURATION="$2"; shift 2 ;;
+            -p) PACKET_COUNT="$2"; shift 2 ;;
+            -o) OUTPUT_FORMAT="$2"; shift 2 ;;
+            -f) CAPTURE_FILE="$2"; shift 2 ;;
+            -i) INTERFACE="$2"; shift 2 ;;
+            -r) RADIOTAP="-y IEEE802_11_RADIO"; shift ;;
+            -s) SNAPLEN="-s $2"; shift 2 ;;
+            -F) CAPTURE_FILTER="$2"; shift 2 ;;
+            -v) VERBOSE=true; shift ;;
+            *)
+                echo "Unknown option: $1" >&2
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Set defaults
+    [ -z "$HOP_TIME" ] && HOP_TIME="$DEFAULT_HOP_TIME"
+    [ -z "$INTERFACE" ] && INTERFACE="$DEFAULT_INTERFACE"
+    [ -z "$CAPTURE_FILTER" ] && CAPTURE_FILTER="$DEFAULT_FILTER"
+    
+    # Auto-detect channels if needed
+    if [ -z "$CHANNELS" ] && [ "$MODE" != "check" ] && [ "$MODE" != "diag" ]; then
+        CHANNELS=$(auto_detect_channels $INTERFACE)
+        [ "$VERBOSE" = true ] && echo "Auto-detected channels: $CHANNELS" >&2
+    fi
+}
+
+# Prepare interface
+prepare_interface() {
+    # Skip for diagnostic modes
+    if [ "$MODE" = "check" ] || [ "$MODE" = "diag" ]; then
+        return 0
+    fi
+    
+    [ "$VERBOSE" = true ] && {
+        echo "=== WiFi Analyzer Starting ===" >&2
+        echo "Interface: $INTERFACE" >&2
+        echo "Mode: $MODE" >&2
+        echo "Channels: $CHANNELS" >&2
+        echo "" >&2
+    }
+    
+    # Auto-detect monitor interface
+    if ! ip link show $INTERFACE >/dev/null 2>&1; then
+        for iface in mon0 mon1 wlan0mon wlan1mon; do
+            if ip link show $iface >/dev/null 2>&1; then
+                INTERFACE=$iface
+                [ "$VERBOSE" = true ] && echo "Auto-detected: $INTERFACE" >&2
+                break
+            fi
+        done
+    fi
+    
+    # Verify interface
+    if ! ip link show $INTERFACE >/dev/null 2>&1; then
+        echo "ERROR: No monitor interface found" >&2
+        iw dev >&2
+        exit 1
+    fi
+    
+    ip link set $INTERFACE up
+    [ "$VERBOSE" = true ] && echo "Interface $INTERFACE ready" >&2
+}
+
+# Channel hopping mode
+mode_hop() {
+    [ "$VERBOSE" = true ] && {
+        echo "Starting channel hopping..." >&2
+        echo "Channels: $CHANNELS" >&2
+        if [ -n "$PACKET_COUNT" ]; then
+            echo "Packets per channel: $PACKET_COUNT" >&2
+        else
+            echo "Time per channel: ${HOP_TIME}s" >&2
+        fi
+    }
+    
+    # Get PHY for this interface
+    local phy=$(iw dev $INTERFACE info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    # Start single tcpdump for entire session
+    tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
+    TCPDUMP_PID=$!
+    
+    trap "kill $TCPDUMP_PID 2>/dev/null; wait $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    
+    # Hop channels while tcpdump runs
+    for channel in $CHANNELS; do
+        echo "📡 Switching $INTERFACE ($phy) to channel $channel" >&2
+        
+        if ! iw dev $INTERFACE set channel $channel 2>/dev/null; then
+            echo "⚠️  Failed to set channel $channel on $INTERFACE" >&2
+            continue
+        fi
+        
+        # Dwell on channel
+        if [ -n "$PACKET_COUNT" ]; then
+            # Estimate time based on packet count
+            local dwell_time=$((PACKET_COUNT / 10))
+            [ $dwell_time -lt 3 ] && dwell_time=3
+            [ $dwell_time -gt $PACKET_TIMEOUT ] && dwell_time=$PACKET_TIMEOUT
+            sleep $dwell_time
+        else
+            sleep $HOP_TIME
+        fi
+    done
+    
+    kill $TCPDUMP_PID 2>/dev/null
+    wait $TCPDUMP_PID 2>/dev/null
+    trap - EXIT INT TERM
+    
+    [ "$VERBOSE" = true ] && echo "Channel hopping complete" >&2
+}
+
+# Single channel mode
+mode_single() {
+    set -- $CHANNELS
+    CHANNEL=$1
+    [ -z "$DURATION" ] && DURATION=300
+    
+    # Get PHY for this interface
+    local phy=$(iw dev $INTERFACE info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    [ "$VERBOSE" = true ] && {
+        echo "Single channel capture" >&2
+        echo "Channel: $CHANNEL" >&2
+        if [ -n "$PACKET_COUNT" ]; then
+            echo "Packets: $PACKET_COUNT" >&2
+        else
+            echo "Duration: ${DURATION}s" >&2
+        fi
+    }
+    
+    echo "📡 Setting $INTERFACE ($phy) to channel $CHANNEL" >&2
+    
+    if ! iw dev $INTERFACE set channel $CHANNEL 2>/dev/null; then
+        echo "❌ Failed to set channel $CHANNEL on $INTERFACE" >&2
+        exit 1
+    fi
+    
+    if [ -n "$PACKET_COUNT" ]; then
+        tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - -c $PACKET_COUNT "$CAPTURE_FILTER" 2>/dev/null &
+        PID=$!
+        
+        # Timeout handling
+        count=0
+        while [ $count -lt $PACKET_TIMEOUT ]; do
+            kill -0 $PID 2>/dev/null || break
+            sleep 1
+            count=$((count + 1))
+        done
+        
+        kill -0 $PID 2>/dev/null && kill $PID 2>/dev/null
+        wait $PID 2>/dev/null
+    else
+        tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
+        PID=$!
+        sleep $DURATION
+        kill $PID 2>/dev/null
+        wait $PID 2>/dev/null
+    fi
+    
+    [ "$VERBOSE" = true ] && echo "Capture complete" >&2
+}
+
+# Quick scan mode
+mode_scan() {
+    [ "$VERBOSE" = true ] && {
+        echo "Quick scan mode" >&2
+        echo "Channels: $CHANNELS" >&2
+    }
+    
+    # Get PHY for this interface
+    local phy=$(iw dev $INTERFACE info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
+    TCPDUMP_PID=$!
+    
+    trap "kill $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    
+    for channel in $CHANNELS; do
+        echo "📡 Scanning $INTERFACE ($phy) on channel $channel" >&2
+        iw dev $INTERFACE set channel $channel 2>/dev/null || continue
+        sleep 5
+    done
+    
+    kill $TCPDUMP_PID 2>/dev/null
+    wait $TCPDUMP_PID 2>/dev/null
+    trap - EXIT INT TERM
+    
+    [ "$VERBOSE" = true ] && echo "Scan complete" >&2
+}
+
+# Quick check mode
+mode_check() {
+    echo "=== WiFi Analyzer Quick Check ===" >&2
+    echo "" >&2
+    
+    echo "Regulatory Domain:" >&2
+    iw reg get | grep country >&2
+    echo "" >&2
+    
+    echo "Monitor Interface:" >&2
+    iw dev $INTERFACE info 2>&1 >&2 || echo "$INTERFACE not found" >&2
+    echo "" >&2
+    
+    echo "Available 5GHz Channels:" >&2
+    channels=""
+    for phy in $(ls /sys/class/ieee80211/ 2>/dev/null); do
+        new=$(iw phy $phy channels 2>/dev/null | \
+              grep -E "\\* [0-9]+ MHz \\[[0-9]+\\]" | \
+              grep -v disabled | \
+              awk '$4 >= 36 {gsub(/\[|\]/, "", $4); print $4}')
+        channels="$channels $new"
+    done
+    
+    channels=$(echo $channels | tr " " "\n" | sort -n | uniq | tr "\n" " ")
+    
+    if [ -z "$channels" ]; then
+        echo "None found" >&2
+    else
+        echo "$channels" >&2
+        echo "" >&2
+        
+        # Test representative channels
+        echo "Channel Test:" >&2
+        for ch in 36 149; do
+            printf "  Channel %3d: " $ch >&2
+            if iw dev $INTERFACE set channel $ch 2>/dev/null; then
+                echo "OK" >&2
+            else
+                echo "FAILED" >&2
+            fi
+        done
+    fi
+    
+    exit 0
+}
+
+# Full diagnostic mode
+mode_diag() {
+    echo "========================================" >&2
+    echo "WiFi Analyzer Diagnostic Report" >&2
+    echo "========================================" >&2
+    echo "" >&2
+    
+    echo "System Info:" >&2
+    cat /etc/openwrt_release 2>/dev/null | head -3 >&2
+    uname -r >&2
+    echo "" >&2
+    
+    echo "Regulatory Domain:" >&2
+    iw reg get >&2
+    echo "" >&2
+    
+    echo "Wireless Devices:" >&2
+    iw dev >&2
+    echo "" >&2
+    
+    echo "PHY Capabilities:" >&2
+    iw phy | grep -E '(Wiphy|Band|Frequencies:|HT|VHT)' | head -50 >&2
+    echo "" >&2
+    
+    echo "UCI Wireless Config:" >&2
+    uci show wireless | grep -E '(channel|htmode|country|disabled|mode)' | head -20 >&2
+    echo "" >&2
+    
+    echo "Channel Test Results:" >&2
+    TEST_CHANNELS="36 40 44 48 52 100 149 153 157 161"
+    for ch in $TEST_CHANNELS; do
+        if iw dev $INTERFACE set channel $ch 2>/dev/null; then
+            echo "  $ch: OK" >&2
+        else
+            echo "  $ch: FAILED" >&2
+        fi
+    done
+    
+    exit 0
+}
+
+# Setup output
+setup_output() {
+    if [ "$OUTPUT_FORMAT" = "file" ]; then
+        [ -z "$CAPTURE_FILE" ] && CAPTURE_FILE="wifi-capture-$(date +%Y%m%d-%H%M%S).pcap"
+        [ "$VERBOSE" = true ] && echo "Saving to: /tmp/$CAPTURE_FILE" >&2
+        exec > "/tmp/$CAPTURE_FILE"
+    fi
+}
+
+# Main
+main() {
+    parse_args "$@"
+    
+    case $MODE in
+        check) mode_check ;;
+        diag) mode_diag ;;
+    esac
+    
+    prepare_interface
+    setup_output
+    
+    case $MODE in
+        hop) mode_hop ;;
+        single) mode_single ;;
+        scan) mode_scan ;;
+        *)
+            echo "ERROR: Unknown mode: $MODE" >&2
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
+ANALYZER_SCRIPT
+    
+    log_success "WiFi analyzer script deployed"
+}
+
+# Deploy command  
+cmd_deploy() {
+    while getopts "h" opt; do
+        case $opt in
+            h) show_deploy_usage; exit 0 ;;
+            *) show_deploy_usage; exit 1 ;;
+        esac
+    done
+    
+    log_info "Deploying wifi-analyzer to $ROUTER_IP"
+    
+    if ! check_connectivity; then
+        exit 1
+    fi
+    
+    deploy_analyzer
+}
+
+# Run command
+cmd_run() {
+    local output_file="capture.pcap"  # Default output file
+    local remote_args=""
+    
+    # Parse arguments for run command
+    while [ $# -gt 0 ]; do
+        case $1 in
+            -f)
+                output_file="$2"
+                shift 2
+                ;;
+            -o)
+                # Skip -o argument from being passed to remote
+                shift 2
+                ;;
+            -h)
+                if [ -z "$remote_args" ]; then
+                    show_run_usage
+                    exit 0
+                fi
+                remote_args="$remote_args $1"
+                shift
+                ;;
+            *)
+                remote_args="$remote_args $1"
+                shift
+                ;;
+        esac
+    done
+    
+    # Always use stream output from remote
+    remote_args="$remote_args -o stream"
+    
+    log_info "Starting remote capture on $ROUTER_IP"
+    [ "$VERBOSE" = true ] && log_info "Command: wifi-analyzer$remote_args"
+    log_info "Saving to: $output_file"
+    
+    # Parse mode from remote_args for better user feedback
+    local mode="hop"
+    if echo "$remote_args" | grep -q -- "-m check"; then
+        mode="check"
+    elif echo "$remote_args" | grep -q -- "-m diag"; then
+        mode="diagnostic"
+    elif echo "$remote_args" | grep -q -- "-m scan"; then
+        mode="scan"
+    elif echo "$remote_args" | grep -q -- "-m single"; then
+        mode="single channel"
+    fi
+    
+    if [ "$mode" != "check" ] && [ "$mode" != "diagnostic" ]; then
+        log_info "Capture mode: $mode"
+        log_info "Streaming packets... (Ctrl+C to stop)"
+    fi
+    
+    # Set up trap for cleanup
+    trap 'log_warn "Interrupted - stopping capture"; exit 130' INT TERM
+    
+    # Execute remotely and save to file
+    # For diagnostic modes, run in foreground
+    if [ "$mode" = "check" ] || [ "$mode" = "diagnostic" ]; then
+        ssh_exec "wifi-analyzer$remote_args" > "$output_file" 2>&1
+        local exit_code=$?
+    else
+        # For capture modes, monitor progress
+        # Create a temp file for stderr
+        local stderr_file=$(mktemp /tmp/wifi-analyzer-stderr.XXXXXX)
+        trap "rm -f $stderr_file" EXIT INT TERM
+        
+        # Start SSH with stderr redirected to temp file
+        ssh_exec "wifi-analyzer$remote_args" > "$output_file" 2>"$stderr_file" &
+        local ssh_pid=$!
+        
+        # Monitor both file growth and stderr output
+        local last_size=0
+        local no_growth_count=0
+        local update_count=0
+        local last_stderr_pos=0
+        
+        while kill -0 $ssh_pid 2>/dev/null; do
+            # Check for new stderr output and timestamp it
+            if [ -f "$stderr_file" ]; then
+                local current_stderr_size=$(stat -c %s "$stderr_file" 2>/dev/null || stat -f %z "$stderr_file" 2>/dev/null || echo 0)
+                if [ "$current_stderr_size" -gt "$last_stderr_pos" ]; then
+                    tail -c +$((last_stderr_pos + 1)) "$stderr_file" | while IFS= read -r line; do
+                        if [ -n "$line" ]; then
+                            # Channel change messages already have emoji, just timestamp them
+                            echo -e "$(date +%H:%M:%S.%3N) $line" >&2
+                        fi
+                    done
+                    last_stderr_pos=$current_stderr_size
+                fi
+            fi
+            
+            # Check capture file growth
+            if [ -f "$output_file" ]; then
+                local current_size=$(stat -c %s "$output_file" 2>/dev/null || stat -f %z "$output_file" 2>/dev/null || echo 0)
+                if [ "$current_size" -gt "$last_size" ]; then
+                    # Only show size updates every 3 seconds to reduce noise
+                    update_count=$((update_count + 1))
+                    if [ $((update_count % 3)) -eq 0 ]; then
+                        log_info "Captured: $(numfmt --to=iec-i --suffix=B $current_size 2>/dev/null || echo "${current_size} bytes")"
+                    fi
+                    no_growth_count=0
+                else
+                    no_growth_count=$((no_growth_count + 1))
+                    if [ $no_growth_count -gt 15 ]; then
+                        log_warn "No new packets in 15 seconds - channel hopping may have completed"
+                        no_growth_count=0
+                    fi
+                fi
+                last_size=$current_size
+            fi
+            sleep 1
+        done
+        
+        # Get any remaining stderr output
+        if [ -f "$stderr_file" ]; then
+            tail -c +$((last_stderr_pos + 1)) "$stderr_file" 2>/dev/null | while IFS= read -r line; do
+                if [ -n "$line" ]; then
+                    echo -e "$(date +%H:%M:%S.%3N) $line" >&2
+                fi
+            done
+        fi
+        
+        wait $ssh_pid
+        local exit_code=$?
+        rm -f "$stderr_file"
+    fi
+    
+    # Clean up trap
+    trap - INT TERM
+    
+    if [ $exit_code -eq 0 ] || [ $exit_code -eq 130 ]; then
+        if [ -f "$output_file" ]; then
+            local final_size=$(stat -c %s "$output_file" 2>/dev/null || stat -f %z "$output_file" 2>/dev/null || echo 0)
+            if [ $final_size -gt 0 ]; then
+                log_success "Capture saved: $(numfmt --to=iec-i --suffix=B $final_size 2>/dev/null || echo "${final_size} bytes") in $output_file"
+            else
+                log_warn "Output file is empty: $output_file"
+            fi
+        else
+            log_success "Command completed"
+        fi
+    elif [ $exit_code -ne 130 ]; then
+        log_error "Capture failed with exit code $exit_code"
+    fi
+    
+    return $exit_code
+}
+
+# Scan-rank command
+cmd_scan_rank() {
+    local channels="auto"
+    local band="both"
+    local weights="util:3,ap:2,noise:1,signal:1"
+    local format="table"
+    local output_file=""
+    local scan_count=3
+    local scan_delay=5
+    
+    while getopts "c:b:w:f:o:s:d:vh" opt; do
+        case $opt in
+            c) channels="$OPTARG" ;;
+            b) band="$OPTARG" ;;
+            w) weights="$OPTARG" ;;
+            f) format="$OPTARG" ;;
+            o) output_file="$OPTARG" ;;
+            s) scan_count="$OPTARG" ;;
+            d) scan_delay="$OPTARG" ;;
+            v) VERBOSE=true ;;
+            h) show_scan_rank_usage; exit 0 ;;
+            *) show_scan_rank_usage; exit 1 ;;
+        esac
+    done
+    
+    log_info "Starting WiFi channel analysis on $ROUTER_IP"
+    [ "$VERBOSE" = true ] && log_info "Parameters: channels=$channels, band=$band, scans=$scan_count"
+    
+    if ! check_connectivity; then
+        exit 1
+    fi
+    
+    # Deploy enhanced analyzer with scan-rank capability
+    deploy_enhanced_analyzer
+    
+    # Build command arguments
+    local scan_args=""
+    [ "$channels" != "auto" ] && scan_args="$scan_args -c '$channels'"
+    [ "$band" != "both" ] && scan_args="$scan_args -b $band"
+    [ "$weights" != "util:3,ap:2,noise:1,signal:1" ] && scan_args="$scan_args -w '$weights'"
+    [ "$format" != "table" ] && scan_args="$scan_args -f $format"
+    [ -n "$output_file" ] && scan_args="$scan_args -o /tmp/$output_file"
+    [ "$scan_count" != "3" ] && scan_args="$scan_args -s $scan_count"
+    [ "$scan_delay" != "5" ] && scan_args="$scan_args -d $scan_delay"
+    [ "$VERBOSE" = true ] && scan_args="$scan_args -v"
+    
+    log_info "Executing channel analysis..."
+    [ "$VERBOSE" = true ] && log_info "Command: wifi-analyzer -m scan-rank$scan_args"
+    
+    # Execute scan-rank remotely
+    local result
+    if [ -n "$output_file" ]; then
+        # Remote execution saves to file, then transfer
+        ssh_exec "wifi-analyzer -m scan-rank$scan_args" 2>&1
+        local exit_code=$?
+        
+        if [ $exit_code -eq 0 ]; then
+            log_info "Downloading results from router..."
+            
+            # Try scp first, fallback to ssh cat
+            if scp -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o LogLevel=quiet "$REMOTE_USER@$ROUTER_IP:/tmp/$output_file" "$output_file" 2>/dev/null; then
+                log_success "Channel analysis saved to: $output_file (via scp)"
+            elif ssh_exec "cat /tmp/$output_file" > "$output_file" 2>/dev/null; then
+                log_success "Channel analysis saved to: $output_file (via ssh)"
+            else
+                log_error "Failed to download results file"
+                exit 1
+            fi
+            
+            # Also display results if table format
+            [ "$format" = "table" ] && cat "$output_file"
+        else
+            log_error "Channel analysis failed with exit code $exit_code"
+            exit $exit_code
+        fi
+    else
+        # Direct output to terminal
+        result=$(ssh_exec "wifi-analyzer -m scan-rank$scan_args" 2>&1)
+        local exit_code=$?
+        
+        if [ $exit_code -eq 0 ]; then
+            echo "$result"
+            log_success "Channel analysis completed"
+        else
+            log_error "Channel analysis failed with exit code $exit_code"
+            echo "$result" >&2
+            exit $exit_code
+        fi
+    fi
+}
+
+# Deploy enhanced analyzer with scan-rank capability
+deploy_enhanced_analyzer() {
+    log_info "Deploying enhanced wifi-analyzer with scan-rank capability..."
+    
+    ssh_exec 'cat > /usr/bin/wifi-analyzer && chmod +x /usr/bin/wifi-analyzer' << 'ENHANCED_ANALYZER_SCRIPT'
+#!/bin/sh
+# Enhanced WiFi Analyzer Script for OpenWrt with Channel Ranking
+# Compatible with BusyBox ash shell
+
+# Default configuration
+DEFAULT_CHANNELS=""
+DEFAULT_HOP_TIME=10
+DEFAULT_INTERFACE="mon0"
+DEFAULT_FILTER="not port 22"
+MODE="hop"
+OUTPUT_FORMAT="stream"
+CAPTURE_FILE=""
+RADIOTAP=""
+SNAPLEN=""
+DURATION=""
+VERBOSE=false
+PACKET_COUNT=""
+PACKET_TIMEOUT=30
+
+# Scan-rank specific defaults
+SCAN_BAND="both"
+SCAN_WEIGHTS="util:3,ap:2,noise:1,signal:1"
+SCAN_FORMAT="table"
+SCAN_OUTPUT=""
+SCAN_COUNT=3
+SCAN_DELAY=5
+
+# Display usage
+show_usage() {
+    cat << EOF
+WiFi Analyzer - Wireless Packet Capture and Channel Analysis Tool
+
+USAGE:
+    wifi-analyzer [OPTIONS]
+
+CAPTURE MODES:
+    -m hop      Channel hopping (default)
+    -m single   Single channel capture
+    -m scan     Quick scan (5s per channel)
+    -m check    Quick diagnostic check
+    -m diag     Full diagnostic report
+    -m scan-rank Channel analysis and ranking
+
+CHANNEL OPTIONS:
+    -c CHANNELS Space-separated list or 'auto'
+    -c all-2g   All 2.4GHz channels
+    -c all-5g   All 5GHz channels
+    -c non-dfs  Non-DFS 5GHz channels
+    -c dfs      DFS channels only
+
+TIMING OPTIONS:
+    -t SECONDS  Time per channel (default: 10)
+    -d SECONDS  Total duration (single mode)
+    -p PACKETS  Packets per channel (30s timeout)
+
+OUTPUT OPTIONS:
+    -o stream   Stream to stdout (default)
+    -o file     Save locally on router
+    -f FILE     Output filename
+    -v          Verbose output
+
+ANALYSIS OPTIONS:
+    -i IFACE    Interface (default: mon0)
+    -r          Include radiotap headers
+    -s SIZE     Snap length
+    -F FILTER   tcpdump filter (default: "not port 22")
+
+SCAN-RANK OPTIONS:
+    -b BAND     Band filter: 2g, 5g, or both (default: both)
+    -w WEIGHTS  Scoring weights (default: "util:3,ap:2,noise:1,signal:1")
+
+EXAMPLES:
+    wifi-analyzer -m check
+    wifi-analyzer -c "36 40 44 48" -p 50
+    wifi-analyzer -c auto -t 10 -v
+    wifi-analyzer -m scan-rank -b 5g -f json
+EOF
+}
+
+# Auto-detect channels
+auto_detect_channels() {
+    local interface=$1
+    local phy=$(iw dev $interface info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    if [ -n "$phy" ]; then
+        iw phy $phy channels 2>/dev/null | \
+            grep -E "\\* [0-9]+ MHz \\[[0-9]+\\]" | \
+            grep -v disabled | \
+            awk '{gsub(/\[|\]/, "", $4); print $4}' | \
+            tr '\n' ' '
+    else
+        echo "1 6 11 36 40 44 48"
+    fi
+}
+
+# Parse scan-rank arguments
+parse_scan_rank_args() {
+    while [ $# -gt 0 ]; do
+        case $1 in
+            -c) CHANNELS="$2"; shift 2 ;;
+            -b) SCAN_BAND="$2"; shift 2 ;;
+            -w) SCAN_WEIGHTS="$2"; shift 2 ;;
+            -f) SCAN_FORMAT="$2"; shift 2 ;;
+            -o) SCAN_OUTPUT="$2"; shift 2 ;;
+            -s) SCAN_COUNT="$2"; shift 2 ;;
+            -d) SCAN_DELAY="$2"; shift 2 ;;
+            -v) VERBOSE=true; shift ;;
+            *) shift ;;
+        esac
+    done
+}
+
+# Parse arguments
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case $1 in
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            -m)
+                MODE="$2"
+                if [ "$MODE" = "scan-rank" ]; then
+                    shift 2
+                    parse_scan_rank_args "$@"
+                    return
+                fi
+                shift 2
+                ;;
+            -c)
+                case "$2" in
+                    auto) CHANNELS="" ;;
+                    all-2g) CHANNELS="1 2 3 4 5 6 7 8 9 10 11" ;;
+                    all-5g)
+                        CHANNELS=$(auto_detect_channels $DEFAULT_INTERFACE | tr ' ' '\n' | \
+                                  awk '$1 >= 36' | tr '\n' ' ')
+                        ;;
+                    non-dfs)
+                        all_5g=$(auto_detect_channels $DEFAULT_INTERFACE | tr ' ' '\n' | \
+                                awk '$1 >= 36' | tr '\n' ' ')
+                        CHANNELS=""
+                        for ch in $all_5g; do
+                            if [ $ch -le 48 ] || [ $ch -ge 149 ]; then
+                                CHANNELS="$CHANNELS $ch"
+                            fi
+                        done
+                        ;;
+                    dfs)
+                        all_5g=$(auto_detect_channels $DEFAULT_INTERFACE | tr ' ' '\n' | \
+                                awk '$1 >= 36' | tr '\n' ' ')
+                        CHANNELS=""
+                        for ch in $all_5g; do
+                            if [ $ch -ge 52 ] && [ $ch -le 144 ]; then
+                                CHANNELS="$CHANNELS $ch"
+                            fi
+                        done
+                        ;;
+                    *)
+                        CHANNELS="$2"
+                        ;;
+                esac
+                shift 2
+                ;;
+            -t) HOP_TIME="$2"; shift 2 ;;
+            -d) DURATION="$2"; shift 2 ;;
+            -p) PACKET_COUNT="$2"; shift 2 ;;
+            -o) OUTPUT_FORMAT="$2"; shift 2 ;;
+            -f) CAPTURE_FILE="$2"; shift 2 ;;
+            -i) INTERFACE="$2"; shift 2 ;;
+            -r) RADIOTAP="-y IEEE802_11_RADIO"; shift ;;
+            -s) SNAPLEN="-s $2"; shift 2 ;;
+            -F) CAPTURE_FILTER="$2"; shift 2 ;;
+            -v) VERBOSE=true; shift ;;
+            *)
+                echo "Unknown option: $1" >&2
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Set defaults
+    [ -z "$HOP_TIME" ] && HOP_TIME="$DEFAULT_HOP_TIME"
+    [ -z "$INTERFACE" ] && INTERFACE="$DEFAULT_INTERFACE"
+    [ -z "$CAPTURE_FILTER" ] && CAPTURE_FILTER="$DEFAULT_FILTER"
+    
+    # Auto-detect channels if needed
+    if [ -z "$CHANNELS" ] && [ "$MODE" != "check" ] && [ "$MODE" != "diag" ] && [ "$MODE" != "scan-rank" ]; then
+        CHANNELS=$(auto_detect_channels $INTERFACE)
+        [ "$VERBOSE" = true ] && echo "Auto-detected channels: $CHANNELS" >&2
+    fi
+}
+
+# Channel analysis and ranking mode
+mode_scan_rank() {
+    [ "$VERBOSE" = true ] && {
+        echo "=== WiFi Channel Analysis Starting ===" >&2
+        echo "Band filter: $SCAN_BAND" >&2
+        echo "Scan iterations: $SCAN_COUNT" >&2
+        echo "Output format: $SCAN_FORMAT" >&2
+        echo "" >&2
+    }
+    
+    # Install required packages if needed
+    which iwinfo >/dev/null 2>&1 || {
+        echo "Installing iwinfo package..." >&2
+        opkg update >/dev/null 2>&1
+        opkg install iwinfo >/dev/null 2>&1
+    }
+    
+    # Auto-detect monitor interface
+    local monitor_iface=""
+    for iface in mon0 mon1 wlan0mon wlan1mon; do
+        if ip link show $iface >/dev/null 2>&1; then
+            monitor_iface=$iface
+            break
+        fi
+    done
+    
+    # Get all available channels
+    local all_channels=""
+    if [ -n "$CHANNELS" ] && [ "$CHANNELS" != "auto" ]; then
+        all_channels="$CHANNELS"
+    else
+        # Auto-detect from all PHYs
+        for phy in $(ls /sys/class/ieee80211/ 2>/dev/null); do
+            local phy_channels=$(iw phy $phy channels 2>/dev/null | \
+                grep -E "\\* [0-9]+ MHz \\[[0-9]+\\]" | \
+                grep -v disabled | \
+                awk '{gsub(/\[|\]/, "", $4); print $4}')
+            all_channels="$all_channels $phy_channels"
+        done
+    fi
+    
+    # Filter by band
+    local channels_to_scan=""
+    for ch in $all_channels; do
+        case $SCAN_BAND in
+            2g) [ $ch -le 14 ] && channels_to_scan="$channels_to_scan $ch" ;;
+            5g) [ $ch -ge 36 ] && channels_to_scan="$channels_to_scan $ch" ;;
+            both) channels_to_scan="$channels_to_scan $ch" ;;
+        esac
+    done
+    
+    # Remove duplicates and sort
+    channels_to_scan=$(echo $channels_to_scan | tr ' ' '\n' | sort -n | uniq | tr '\n' ' ')
+    
+    [ "$VERBOSE" = true ] && echo "Scanning channels: $channels_to_scan" >&2
+    
+    # Parse weights (BusyBox ash compatible)
+    local w_util=3 w_ap=2 w_noise=1 w_signal=1
+    local old_ifs="$IFS"
+    IFS=','
+    for pair in $SCAN_WEIGHTS; do
+        case "$pair" in
+            util:*) w_util=${pair#util:} ;;
+            ap:*) w_ap=${pair#ap:} ;;
+            noise:*) w_noise=${pair#noise:} ;;
+            signal:*) w_signal=${pair#signal:} ;;
+        esac
+    done
+    IFS="$old_ifs"
+    
+    # Perform channel analysis
+    local results_file="/tmp/channel_analysis_$$"
+    echo "# Channel Analysis Results" > "$results_file"
+    echo "# Channel,AP_Count,Avg_Signal,Utilization,Noise_Floor,Score" >> "$results_file"
+    
+    # Use ash-compatible iteration
+    iteration=1
+    while [ $iteration -le $SCAN_COUNT ]; do
+        [ "$VERBOSE" = true ] && echo "Scan iteration $iteration/$SCAN_COUNT..." >&2
+        
+        for channel in $channels_to_scan; do
+            [ "$VERBOSE" = true ] && echo "  Analyzing channel $channel..." >&2
+            
+            # Collect metrics for this channel
+            local ap_count=0
+            local total_signal=0
+            local utilization=0
+            local noise_floor=-100
+            
+            # Scan for APs on this channel
+            local scan_result=""
+            if which iwinfo >/dev/null 2>&1; then
+                scan_result=$(iwinfo wlan0 scan 2>/dev/null | grep -A5 -B5 "Channel: $channel")
+            else
+                # Fallback to iw scan - calculate frequency properly
+                local freq
+                if [ $channel -le 14 ]; then
+                    # 2.4GHz: channels 1-14
+                    freq=$((2407 + channel * 5))
+                else
+                    # 5GHz: channels 36+
+                    freq=$((5000 + channel * 5))
+                fi
+                scan_result=$(iw dev wlan0 scan 2>/dev/null | grep -A10 -B10 "freq: $freq")
+            fi
+            
+            # Count APs and calculate average signal
+            if [ -n "$scan_result" ]; then
+                ap_count=$(echo "$scan_result" | grep -c "ESSID\|SSID" 2>/dev/null || echo 0)
+                if [ $ap_count -gt 0 ]; then
+                    # Extract signal values (ash-compatible)
+                    echo "$scan_result" | grep -E "Signal:|signal:" > "/tmp/signal_lines_$$"
+                    
+                    local signal_sum=0
+                    local signal_count=0
+                    while IFS= read -r line; do
+                        if [ -n "$line" ]; then
+                            # Extract numeric value from signal line
+                            sig=$(echo "$line" | awk '{print $2}' | sed 's/[^0-9-]//g')
+                            if [ -n "$sig" ] && [ "$sig" != "-" ]; then
+                                # Handle negative values properly
+                                case "$sig" in
+                                    -*)  sig=$(echo "$sig" | tr -d '-'); sig=-$sig ;;
+                                esac
+                                signal_sum=$((signal_sum + sig))
+                                signal_count=$((signal_count + 1))
+                            fi
+                        fi
+                    done < "/tmp/signal_lines_$$"
+                    rm -f "/tmp/signal_lines_$$"
+                    [ $signal_count -gt 0 ] && total_signal=$((signal_sum / signal_count))
+                fi
+            fi
+            
+            # Get channel utilization from survey if available
+            if [ -n "$monitor_iface" ]; then
+                # Calculate frequency for survey lookup
+                local freq
+                if [ $channel -le 14 ]; then
+                    freq=$((2407 + channel * 5))
+                else
+                    freq=$((5000 + channel * 5))
+                fi
+                
+                local survey_data=$(iw dev $monitor_iface survey dump 2>/dev/null | grep -A10 "frequency: $freq")
+                if [ -n "$survey_data" ]; then
+                    local active_time=$(echo "$survey_data" | grep "channel active time:" | awk '{print $4}')
+                    local busy_time=$(echo "$survey_data" | grep "channel busy time:" | awk '{print $4}')
+                    if [ -n "$active_time" ] && [ -n "$busy_time" ] && [ $active_time -gt 0 ]; then
+                        utilization=$((busy_time * 100 / active_time))
+                    fi
+                    noise_floor=$(echo "$survey_data" | grep "noise:" | awk '{print $2}' | head -1)
+                    [ -z "$noise_floor" ] && noise_floor=-100
+                fi
+            fi
+            
+            # Calculate composite score (lower is better)
+            local score=$((ap_count * w_ap + utilization * w_util + (100 + noise_floor) * w_noise + (100 + total_signal) * w_signal))
+            
+            # Store results
+            echo "$channel,$ap_count,$total_signal,$utilization,$noise_floor,$score" >> "$results_file"
+            
+            sleep 1  # Brief pause between channels
+        done
+        
+        # Delay between iterations
+        [ $iteration -lt $SCAN_COUNT ] && sleep $SCAN_DELAY
+        iteration=$((iteration + 1))
+    done
+    
+    # Process and output results
+    generate_output() {
+        case $SCAN_FORMAT in
+        json)
+            echo "{"
+            echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+            echo "  \"scan_parameters\": {"
+            echo "    \"band\": \"$SCAN_BAND\","
+            echo "    \"iterations\": $SCAN_COUNT,"
+            echo "    \"weights\": \"$SCAN_WEIGHTS\""
+            echo "  },"
+            echo "  \"channels\": ["
+            # Create temp file for JSON processing
+            tail -n +3 "$results_file" > "/tmp/json_data_$$"
+            local first=true
+            while IFS=',' read -r ch ap_count avg_signal util noise score; do
+                [ "$first" = true ] && first=false || echo ","
+                echo "    {"
+                echo "      \"channel\": $ch,"
+                echo "      \"ap_count\": $ap_count,"
+                echo "      \"avg_signal_dbm\": $avg_signal,"
+                echo "      \"utilization_percent\": $util,"
+                echo "      \"noise_floor_dbm\": $noise,"
+                echo "      \"score\": $score"
+                echo -n "    }"
+                first=false
+            done < "/tmp/json_data_$$"
+            rm -f "/tmp/json_data_$$"
+            echo ""
+            echo "  ]"
+            echo "}"
+            ;;
+        simple)
+            echo "Channel Ranking (Best to Worst):"
+            # Create temp sorted file for ash compatibility
+            tail -n +3 "$results_file" | sort -t',' -k6 -n > "/tmp/sorted_results_$$"
+            while IFS=',' read -r ch ap_count avg_signal util noise score; do
+                echo "Channel $ch (Score: $score, APs: $ap_count, Util: $util%)"
+            done < "/tmp/sorted_results_$$"
+            rm -f "/tmp/sorted_results_$$"
+            ;;
+        table|*)
+            printf "%-8s %-8s %-12s %-12s %-12s %-8s\n" "Channel" "APs" "Avg Signal" "Utilization" "Noise Floor" "Score"
+            printf "%-8s %-8s %-12s %-12s %-12s %-8s\n" "-------" "---" "-----------" "-----------" "-----------" "-----"
+            # Create temp sorted file for ash compatibility
+            tail -n +3 "$results_file" | sort -t',' -k6 -n > "/tmp/sorted_results_$$"
+            while IFS=',' read -r ch ap_count avg_signal util noise score; do
+                printf "%-8s %-8s %-12s %-12s %-12s %-8s\n" "$ch" "$ap_count" "${avg_signal}dBm" "${util}%" "${noise}dBm" "$score"
+            done < "/tmp/sorted_results_$$"
+            rm -f "/tmp/sorted_results_$$"
+            ;;
+        esac
+    }
+    
+    # Output results - either to file or stdout
+    if [ -n "$SCAN_OUTPUT" ]; then
+        generate_output > "$SCAN_OUTPUT"
+    else
+        generate_output
+    fi
+    
+    rm -f "$results_file"
+    
+    exit 0
+}
+
+# [Rest of the original functions remain the same...]
+ENHANCED_ANALYZER_SCRIPT
+
+    # Continue with the rest of the original analyzer script
+    ssh_exec 'cat >> /usr/bin/wifi-analyzer' << 'ORIGINAL_FUNCTIONS'
+# Prepare interface
+prepare_interface() {
+    # Skip for diagnostic modes
+    if [ "$MODE" = "check" ] || [ "$MODE" = "diag" ] || [ "$MODE" = "scan-rank" ]; then
+        return 0
+    fi
+    
+    [ "$VERBOSE" = true ] && {
+        echo "=== WiFi Analyzer Starting ===" >&2
+        echo "Interface: $INTERFACE" >&2
+        echo "Mode: $MODE" >&2
+        echo "Channels: $CHANNELS" >&2
+        echo "" >&2
+    }
+    
+    # Auto-detect monitor interface
+    if ! ip link show $INTERFACE >/dev/null 2>&1; then
+        for iface in mon0 mon1 wlan0mon wlan1mon; do
+            if ip link show $iface >/dev/null 2>&1; then
+                INTERFACE=$iface
+                [ "$VERBOSE" = true ] && echo "Auto-detected: $INTERFACE" >&2
+                break
+            fi
+        done
+    fi
+    
+    # Verify interface
+    if ! ip link show $INTERFACE >/dev/null 2>&1; then
+        echo "ERROR: No monitor interface found" >&2
+        iw dev >&2
+        exit 1
+    fi
+    
+    ip link set $INTERFACE up
+    [ "$VERBOSE" = true ] && echo "Interface $INTERFACE ready" >&2
+}
+
+# Channel hopping mode
+mode_hop() {
+    [ "$VERBOSE" = true ] && {
+        echo "Starting channel hopping..." >&2
+        echo "Channels: $CHANNELS" >&2
+        if [ -n "$PACKET_COUNT" ]; then
+            echo "Packets per channel: $PACKET_COUNT" >&2
+        else
+            echo "Time per channel: ${HOP_TIME}s" >&2
+        fi
+    }
+    
+    # Get PHY for this interface
+    local phy=$(iw dev $INTERFACE info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    # Start single tcpdump for entire session
+    tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
+    TCPDUMP_PID=$!
+    
+    trap "kill $TCPDUMP_PID 2>/dev/null; wait $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    
+    # Hop channels while tcpdump runs
+    for channel in $CHANNELS; do
+        echo "📡 Switching $INTERFACE ($phy) to channel $channel" >&2
+        
+        if ! iw dev $INTERFACE set channel $channel 2>/dev/null; then
+            echo "⚠️  Failed to set channel $channel on $INTERFACE" >&2
+            continue
+        fi
+        
+        # Dwell on channel
+        if [ -n "$PACKET_COUNT" ]; then
+            # Estimate time based on packet count
+            local dwell_time=$((PACKET_COUNT / 10))
+            [ $dwell_time -lt 3 ] && dwell_time=3
+            [ $dwell_time -gt $PACKET_TIMEOUT ] && dwell_time=$PACKET_TIMEOUT
+            sleep $dwell_time
+        else
+            sleep $HOP_TIME
+        fi
+    done
+    
+    kill $TCPDUMP_PID 2>/dev/null
+    wait $TCPDUMP_PID 2>/dev/null
+    trap - EXIT INT TERM
+    
+    [ "$VERBOSE" = true ] && echo "Channel hopping complete" >&2
+}
+
+# Single channel mode
+mode_single() {
+    set -- $CHANNELS
+    CHANNEL=$1
+    [ -z "$DURATION" ] && DURATION=300
+    
+    # Get PHY for this interface
+    local phy=$(iw dev $INTERFACE info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    [ "$VERBOSE" = true ] && {
+        echo "Single channel capture" >&2
+        echo "Channel: $CHANNEL" >&2
+        if [ -n "$PACKET_COUNT" ]; then
+            echo "Packets: $PACKET_COUNT" >&2
+        else
+            echo "Duration: ${DURATION}s" >&2
+        fi
+    }
+    
+    echo "📡 Setting $INTERFACE ($phy) to channel $CHANNEL" >&2
+    
+    if ! iw dev $INTERFACE set channel $CHANNEL 2>/dev/null; then
+        echo "❌ Failed to set channel $CHANNEL on $INTERFACE" >&2
+        exit 1
+    fi
+    
+    if [ -n "$PACKET_COUNT" ]; then
+        tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - -c $PACKET_COUNT "$CAPTURE_FILTER" 2>/dev/null &
+        PID=$!
+        
+        # Timeout handling
+        count=0
+        while [ $count -lt $PACKET_TIMEOUT ]; do
+            kill -0 $PID 2>/dev/null || break
+            sleep 1
+            count=$((count + 1))
+        done
+        
+        kill -0 $PID 2>/dev/null && kill $PID 2>/dev/null
+        wait $PID 2>/dev/null
+    else
+        tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
+        PID=$!
+        sleep $DURATION
+        kill $PID 2>/dev/null
+        wait $PID 2>/dev/null
+    fi
+    
+    [ "$VERBOSE" = true ] && echo "Capture complete" >&2
+}
+
+# Quick scan mode
+mode_scan() {
+    [ "$VERBOSE" = true ] && {
+        echo "Quick scan mode" >&2
+        echo "Channels: $CHANNELS" >&2
+    }
+    
+    # Get PHY for this interface
+    local phy=$(iw dev $INTERFACE info 2>/dev/null | grep wiphy | awk '{print "phy"$2}')
+    
+    tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
+    TCPDUMP_PID=$!
+    
+    trap "kill $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    
+    for channel in $CHANNELS; do
+        echo "📡 Scanning $INTERFACE ($phy) on channel $channel" >&2
+        iw dev $INTERFACE set channel $channel 2>/dev/null || continue
+        sleep 5
+    done
+    
+    kill $TCPDUMP_PID 2>/dev/null
+    wait $TCPDUMP_PID 2>/dev/null
+    trap - EXIT INT TERM
+    
+    [ "$VERBOSE" = true ] && echo "Scan complete" >&2
+}
+
+# Quick check mode
+mode_check() {
+    echo "=== WiFi Analyzer Quick Check ===" >&2
+    echo "" >&2
+    
+    echo "Regulatory Domain:" >&2
+    iw reg get | grep country >&2
+    echo "" >&2
+    
+    echo "Monitor Interface:" >&2
+    iw dev $INTERFACE info 2>&1 >&2 || echo "$INTERFACE not found" >&2
+    echo "" >&2
+    
+    echo "Available 5GHz Channels:" >&2
+    channels=""
+    for phy in $(ls /sys/class/ieee80211/ 2>/dev/null); do
+        new=$(iw phy $phy channels 2>/dev/null | \
+              grep -E "\\* [0-9]+ MHz \\[[0-9]+\\]" | \
+              grep -v disabled | \
+              awk '$4 >= 36 {gsub(/\[|\]/, "", $4); print $4}')
+        channels="$channels $new"
+    done
+    
+    channels=$(echo $channels | tr " " "\n" | sort -n | uniq | tr "\n" " ")
+    
+    if [ -z "$channels" ]; then
+        echo "None found" >&2
+    else
+        echo "$channels" >&2
+        echo "" >&2
+        
+        # Test representative channels
+        echo "Channel Test:" >&2
+        for ch in 36 149; do
+            printf "  Channel %3d: " $ch >&2
+            if iw dev $INTERFACE set channel $ch 2>/dev/null; then
+                echo "OK" >&2
+            else
+                echo "FAILED" >&2
+            fi
+        done
+    fi
+    
+    exit 0
+}
+
+# Full diagnostic mode
+mode_diag() {
+    echo "========================================" >&2
+    echo "WiFi Analyzer Diagnostic Report" >&2
+    echo "========================================" >&2
+    echo "" >&2
+    
+    echo "System Info:" >&2
+    cat /etc/openwrt_release 2>/dev/null | head -3 >&2
+    uname -r >&2
+    echo "" >&2
+    
+    echo "Regulatory Domain:" >&2
+    iw reg get >&2
+    echo "" >&2
+    
+    echo "Wireless Devices:" >&2
+    iw dev >&2
+    echo "" >&2
+    
+    echo "PHY Capabilities:" >&2
+    iw phy | grep -E '(Wiphy|Band|Frequencies:|HT|VHT)' | head -50 >&2
+    echo "" >&2
+    
+    echo "UCI Wireless Config:" >&2
+    uci show wireless | grep -E '(channel|htmode|country|disabled|mode)' | head -20 >&2
+    echo "" >&2
+    
+    echo "Channel Test Results:" >&2
+    TEST_CHANNELS="36 40 44 48 52 100 149 153 157 161"
+    for ch in $TEST_CHANNELS; do
+        if iw dev $INTERFACE set channel $ch 2>/dev/null; then
+            echo "  $ch: OK" >&2
+        else
+            echo "  $ch: FAILED" >&2
+        fi
+    done
+    
+    exit 0
+}
+
+# Setup output
+setup_output() {
+    if [ "$OUTPUT_FORMAT" = "file" ]; then
+        [ -z "$CAPTURE_FILE" ] && CAPTURE_FILE="wifi-capture-$(date +%Y%m%d-%H%M%S).pcap"
+        [ "$VERBOSE" = true ] && echo "Saving to: /tmp/$CAPTURE_FILE" >&2
+        exec > "/tmp/$CAPTURE_FILE"
+    fi
+}
+
+# Main
+main() {
+    parse_args "$@"
+    
+    case $MODE in
+        check) mode_check ;;
+        diag) mode_diag ;;
+        scan-rank) mode_scan_rank ;;
+    esac
+    
+    prepare_interface
+    setup_output
+    
+    case $MODE in
+        hop) mode_hop ;;
+        single) mode_single ;;
+        scan) mode_scan ;;
+        *)
+            echo "ERROR: Unknown mode: $MODE" >&2
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
+ORIGINAL_FUNCTIONS
+    
+    log_success "Enhanced WiFi analyzer with scan-rank capability deployed"
+}
+
+# Show examples after setup
+show_examples() {
+    local channels="$1"
+    
+    echo ""
+    echo "========================================"
+    echo -e "${GREEN}Setup Complete!${NC}"
+    echo "========================================"
+    echo ""
+    echo "Available channels: $channels"
+    echo ""
+    echo -e "${BLUE}Ready-to-use commands:${NC}"
+    echo ""
+    
+    # Quick diagnostics
+    echo "# Quick check:"
+    echo -e "${YELLOW}remote-wifi-analyzer run -m check${NC}"
+    echo ""
+    
+    # Channel captures
+    local ch_5g="" ch_dfs="" ch_2g=""
+    for ch in $channels; do
+        [ -z "$ch" ] || ! echo "$ch" | grep -qE '^[0-9]+$' && continue
+        
+        if [ "$ch" -le 14 ]; then
+            ch_2g="$ch_2g $ch"
+        elif [ "$ch" -le 48 ] || [ "$ch" -ge 149 ]; then
+            ch_5g="$ch_5g $ch"
+        else
+            ch_dfs="$ch_dfs $ch"
+        fi
+    done
+    
+    if [ -n "$ch_5g" ]; then
+        echo "# Non-DFS 5GHz capture:"
+        echo -e "${YELLOW}remote-wifi-analyzer run -c '$(echo $ch_5g | xargs)' -p 50 -f capture.pcap${NC}"
+        echo ""
+    fi
+    
+    if [ -n "$ch_dfs" ]; then
+        echo "# DFS channels:"
+        echo -e "${YELLOW}remote-wifi-analyzer run -c '$(echo $ch_dfs | xargs)' -p 50 -f capture-dfs.pcap${NC}"
+        echo ""
+    fi
+    
+    echo "# Auto-detect all channels:"
+    echo -e "${YELLOW}remote-wifi-analyzer run -c auto -t 10 -v -f capture-all.pcap${NC}"
+    echo ""
+    
+    echo "# Stream to Wireshark:"
+    echo -e "${YELLOW}remote-wifi-analyzer run -c auto -p 50 | wireshark -k -i -${NC}"
+    echo ""
+    
+    echo "# Channel analysis and ranking:"
+    echo -e "${YELLOW}remote-wifi-analyzer scan-rank -b 5g -f table${NC}"
+    echo -e "${YELLOW}remote-wifi-analyzer scan-rank -c auto -f json -o channel-report.json${NC}"
+}
+
+# Main entry point
+main() {
+    # Parse global options first
+    parse_global_opts "$@"
+    shift $((OPTIND - 1))
+    
+    # Get command
+    local command=${1:-help}
+    shift
+    
+    # Execute command
+    case $command in
+        setup)
+            cmd_setup "$@"
+            ;;
+        deploy)
+            cmd_deploy "$@"
+            ;;
+        run)
+            cmd_run "$@"
+            ;;
+        scan-rank)
+            cmd_scan_rank "$@"
+            ;;
+        help|--help|-h)
+            show_usage
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

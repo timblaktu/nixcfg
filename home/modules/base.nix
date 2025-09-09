@@ -1,5 +1,5 @@
 # Parameterized Home Manager base module
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs ? null, ... }:
 
 with lib;
 
@@ -7,10 +7,22 @@ let
   cfg = config.homeBase;
 in {
   imports = [
-    # Always import these common modules
     ../common/git.nix
     ../common/tmux.nix
-    ../common/neovim.nix
+    ../common/nixvim.nix
+    ../common/zsh.nix
+    ../common/environment.nix
+    ../common/aliases.nix
+    ./files
+    ../common/development.nix
+    ./terminal-verification.nix  # WSL Windows Terminal verification
+    ./claude-code.nix  # Claude Code MCP servers configuration
+    # Enhanced nix-writers based script management  
+    (if inputs != null && inputs ? nix-writers 
+     then inputs.nix-writers.homeManagerModules.default
+     else ./validated-scripts)  # fallback to local if inputs unavailable
+    # Import ESP-IDF development module
+    # ../common/esp-idf.nix
   ];
   
   options.homeBase = {
@@ -27,20 +39,34 @@ in {
       description = "Home directory path";
     };
     
-    # Basic packages common to all environments
+    # Basic utilities common to all environments
+    # More specific packages are provided in separate modules
     basePackages = mkOption {
       type = types.listOf types.package;
       default = with pkgs; [
-        ripgrep
+        coreutils-full
+        curl
         fd
+        glow
         jq
         htop
-        curl
-        wget
-        unzip
+        inotify-tools
+        lbzip2
+        nixfmt-rfc-style
+        parallel
+        ripgrep
+        speedtest
+        stress-ng
         tree
+        unzip
+        # Primary font with excellent emoji support
+        nerd-fonts.caskaydia-mono  # Cascadia Code Nerd Font - Microsoft's font with great emoji support
+        cascadia-code  # Include original Cascadia Code as well
+        # Emoji fonts for additional coverage
+        noto-fonts-emoji
+        twemoji-color-font  # Twitter emoji for broader compatibility
       ];
-      description = "Base packages for all environments";
+      description = "Base packages for all home environments";
     };
     
     # Additional packages specific to this configuration
@@ -83,6 +109,30 @@ in {
       description = "Enable Neovim configuration";
     };
     
+    enableDevelopment = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable development packages and tools";
+    };
+    
+    enableEspIdf = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable ESP-IDF development environment with FHS compatibility";
+    };
+    
+    enableValidatedScripts = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable nix-writers based validated script management";
+    };
+    
+    enableClaudeCode = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable Claude Code configuration with MCP servers";
+    };
+    
     # Environment variables
     environmentVariables = mkOption {
       type = types.attrsOf types.str;
@@ -95,6 +145,31 @@ in {
       type = types.str;
       default = "24.11";
       description = "Home Manager state version";
+    };
+    
+    # Terminal verification options (WSL-specific)
+    terminalVerification = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Enable automatic Windows Terminal verification on WSL systems";
+          };
+          verbose = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Show verification messages on startup";
+          };
+          warnOnMisconfiguration = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Show warning if Windows Terminal bold rendering is not configured optimally";
+          };
+        };
+      };
+      default = {};
+      description = "Windows Terminal verification settings for WSL systems";
     };
   };
 
@@ -113,23 +188,105 @@ in {
         # State version for Home Manager
         stateVersion = cfg.stateVersion;
         
+        # Add $HOME/bin to PATH for our drop-in scripts
+        sessionPath = [ "$HOME/bin" ];
+        
         # Set environment variables
         sessionVariables = {
           EDITOR = cfg.defaultEditor;
         } // cfg.environmentVariables;
+        
+        # THis isn't working. For now just run exec $SHELL manually
+        # auto-exec $SHELL after a home-manager switch
+        #         activation.reloadShell = lib.hm.dag.entryAfter ["writeBoundary"] ''
+        # if [[ "$SHELL" == *zsh && -n "''${ZSH_VERSION:-}" ]]; then
+        #   exec zsh
+        # elif [[ "$SHELL" == *bash && -n "''${BASH_VERSION:-}" ]]; then
+        #   exec bash
+        # fi
+        # '';
       };
 
+      nix = {
+        package = lib.mkDefault pkgs.nix;
+        settings = {
+          max-jobs = 2;
+          warn-dirty = false;
+          experimental-features = [ "nix-command" "flakes" ];
+        };
+      };
+      
       # Configure shell aliases
-      programs.bash.shellAliases = lib.mkDefault cfg.shellAliases;
-      programs.zsh.shellAliases = lib.mkDefault cfg.shellAliases;
+      programs.bash.shellAliases = lib.mkDefault (cfg.shellAliases // 
+        lib.optionalAttrs (config.targets.wsl.enable or false) {
+          "od-sync" = "onedrive-force-sync";
+          "od-status" = "onedrive-status"; 
+          "force-onedrive" = "onedrive-force-sync";
+        });
+      programs.zsh.shellAliases = lib.mkDefault (cfg.shellAliases // 
+        lib.optionalAttrs (config.targets.wsl.enable or false) {
+          "od-sync" = "onedrive-force-sync";
+          "od-status" = "onedrive-status";
+          "force-onedrive" = "onedrive-force-sync";
+        });
 
       # Let Home Manager install and manage itself
       programs.home-manager.enable = true;
 
+      # Enable profile management for standalone mode
+      targets.genericLinux.enable = mkDefault true;
+      
+      # Font configuration for proper emoji and Nerd Font rendering
+      fonts.fontconfig.enable = mkForce true;
+
       # Enable/disable modules based on configuration
       programs.git.enable = cfg.enableGit;
       programs.tmux.enable = cfg.enableTmux;
-      programs.neovim.enable = cfg.enableNeovim;
+      
+      # Pass terminal verification configuration to the module
+      terminalVerification = {
+        enable = cfg.terminalVerification.enable;
+        verbose = cfg.terminalVerification.verbose;  
+        warnOnMisconfiguration = cfg.terminalVerification.warnOnMisconfiguration;
+      };
+      
+      # Pass validated scripts configuration to the module
+      validatedScripts = {
+        enable = cfg.enableValidatedScripts;
+        enableBashScripts = cfg.enableValidatedScripts;  # Ensure bash scripts are enabled
+        # Enable PowerShell scripts on WSL systems where they can coordinate with Windows
+        enablePowerShellScripts = config.targets.wsl.enable or false;
+      };
+      
+      programs.claude-code = {
+        enable = cfg.enableClaudeCode;
+        defaultModel = "opus";
+        defaultAccount = "max";
+        accounts = {
+          max = {
+            enable = true;
+            displayName = "Claude Max Account";
+          };
+          pro = {
+            enable = true;
+            displayName = "Claude Pro Account";
+            model = "sonnet";
+          };
+        };
+        statusline = {
+          enable = true;
+          style = "powerline";  # Enable colored statusline with powerline symbols
+          enableAllStyles = true;  # Install all styles for testing
+          testMode = true;  # Enable test mode for validation
+        };
+        mcpServers = {
+          context7.enable = true;
+          sequentialThinking.enable = true;  # Now using TypeScript version via npx
+          nixos.enable = true;  # Using uvx to run mcp-nixos Python package
+          # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
+          # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
+        };
+      };
     }
   ];
 }

@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# restart-usb - Wrapper script to run PowerShell USB reset script from WSL
+
+set -euo pipefail
+
+# Get the script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PS1_SCRIPT="$SCRIPT_DIR/restart-usb-v4.ps1"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}=== USB/WSL Reset Script Wrapper ===${NC}"
+
+# Check if we're in WSL
+if ! grep -iq Microsoft /proc/version; then
+    echo -e "${RED}[!] This script must be run from within WSL${NC}"
+    exit 1
+fi
+
+# Check if the PowerShell script exists
+if [ ! -f "$PS1_SCRIPT" ]; then
+    echo -e "${RED}[!] PowerShell script not found: $PS1_SCRIPT${NC}"
+    exit 1
+fi
+
+# Check if we're running inside Windows Terminal
+is_windows_terminal() {
+    # Check if WT_SESSION environment variable exists (indicates Windows Terminal)
+    if [ -n "${WT_SESSION:-}" ]; then
+        return 0
+    fi
+    # Additional check for ConEmu or other terminals that might not set WT_SESSION
+    if [ -n "${ConEmuBuild:-}" ]; then
+        return 1  # ConEmu - not Windows Terminal
+    fi
+    # Check if parent process is WindowsTerminal
+    if pgrep -f "WindowsTerminal.exe" > /dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+# Method 1: Using Windows Terminal in same window (preferred when available)
+run_with_windows_terminal_same_window() {
+    echo -e "${YELLOW}[*] Running with Windows Terminal in current window as Administrator...${NC}"
+    
+    # Convert WSL path to Windows path
+    WIN_PATH=$(wslpath -w "$PS1_SCRIPT")
+    
+    # Launch in same terminal window with elevated privileges
+    wt.exe --window 0 new-tab --title "USB Reset (Admin)" --profile "Windows PowerShell" --elevated PowerShell -ExecutionPolicy Bypass -File "$WIN_PATH"
+}
+
+# Method 2: Using Windows Terminal new window (fallback)
+run_with_windows_terminal_new_window() {
+    echo -e "${YELLOW}[*] Running with Windows Terminal in new window as Administrator...${NC}"
+    
+    # Convert WSL path to Windows path
+    WIN_PATH=$(wslpath -w "$PS1_SCRIPT")
+    
+    # Launch in new terminal window
+    wt.exe new-tab --title "USB Reset (Admin)" --profile "Windows PowerShell" --elevated PowerShell -ExecutionPolicy Bypass -File "$WIN_PATH"
+}
+
+# Method 3: Using powershell.exe with Administrator privileges (legacy fallback)
+run_with_powershell() {
+    echo -e "${YELLOW}[*] Running with PowerShell as Administrator (new window)...${NC}"
+    
+    # Convert WSL path to Windows path
+    WIN_PATH=$(wslpath -w "$PS1_SCRIPT")
+    
+    # Create a temporary batch file to launch PowerShell as admin
+    TEMP_BAT="/tmp/restart-usb-launcher.bat"
+    cat > "$TEMP_BAT" << EOF
+@echo off
+powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"$WIN_PATH\"' -Verb RunAs"
+EOF
+    
+    # Convert batch file path and execute
+    WIN_BAT=$(wslpath -w "$TEMP_BAT")
+    cmd.exe /c "$WIN_BAT"
+    
+    # Clean up
+    rm -f "$TEMP_BAT"
+}
+
+# Method 4: Direct PowerShell execution (requires already running as admin)
+run_direct() {
+    echo -e "${YELLOW}[*] Attempting direct PowerShell execution...${NC}"
+    echo -e "${YELLOW}[!] This only works if WSL is already running with admin privileges${NC}"
+    
+    # Convert WSL path to Windows path
+    WIN_PATH=$(wslpath -w "$PS1_SCRIPT")
+    
+    powershell.exe -ExecutionPolicy Bypass -File "$WIN_PATH"
+}
+
+# Smart execution: automatically choose best method
+run_smart() {
+    echo -e "${YELLOW}[*] Auto-selecting best execution method...${NC}"
+    
+    if is_windows_terminal; then
+        echo -e "${GREEN}[*] Detected Windows Terminal - using same window${NC}"
+        if ! run_with_windows_terminal_same_window 2>/dev/null; then
+            echo -e "${YELLOW}[!] Same-window method failed, trying new window...${NC}"
+            if ! run_with_windows_terminal_new_window 2>/dev/null; then
+                echo -e "${YELLOW}[!] Windows Terminal methods failed, falling back to PowerShell...${NC}"
+                run_with_powershell
+            fi
+        fi
+    else
+        echo -e "${YELLOW}[*] Not in Windows Terminal - checking if WT is available...${NC}"
+        if command -v wt.exe >/dev/null 2>&1; then
+            echo -e "${GREEN}[*] Windows Terminal available - using new window${NC}"
+            if ! run_with_windows_terminal_new_window 2>/dev/null; then
+                echo -e "${YELLOW}[!] Windows Terminal failed, falling back to PowerShell...${NC}"
+                run_with_powershell
+            fi
+        else
+            echo -e "${YELLOW}[*] Windows Terminal not found - using PowerShell${NC}"
+            run_with_powershell
+        fi
+    fi
+}
+
+# Show instructions
+echo -e "${YELLOW}"
+echo "This script needs Administrator privileges to:"
+echo "  - Stop/start the usbipd service"
+echo "  - Reset USB controllers"
+echo "  - Bind USB devices for WSL"
+echo ""
+echo "Choose execution method:"
+echo "  1) Smart selection (recommended - auto-detects best method)"
+echo "  2) Windows Terminal in same window (if available)"
+echo "  3) Windows Terminal in new window"
+echo "  4) PowerShell as Administrator (legacy)"
+echo "  5) Direct execution (only if WSL already has admin rights)"
+echo "  6) Show manual instructions"
+echo -e "${NC}"
+
+# Auto-detect and suggest default
+if is_windows_terminal; then
+    echo -e "${GREEN}[*] Running in Windows Terminal - option 1 (smart) recommended${NC}"
+else
+    echo -e "${YELLOW}[*] Not in Windows Terminal - option 1 (smart) will use best available method${NC}"
+fi
+
+read -p "Select option [1-6] (Enter for smart selection): " choice
+
+# Default to smart selection if no input
+choice=${choice:-1}
+
+case $choice in
+    1)
+        run_smart
+        ;;
+    2)
+        if is_windows_terminal; then
+            run_with_windows_terminal_same_window
+        else
+            echo -e "${RED}[!] Not running in Windows Terminal${NC}"
+            echo -e "${YELLOW}[*] Falling back to smart selection...${NC}"
+            run_smart
+        fi
+        ;;
+    3)
+        if ! run_with_windows_terminal_new_window; then
+            echo -e "${RED}[!] Windows Terminal not found or failed to launch${NC}"
+            echo -e "${YELLOW}[*] Falling back to PowerShell method...${NC}"
+            run_with_powershell
+        fi
+        ;;
+    4)
+        run_with_powershell
+        ;;
+    5)
+        run_direct
+        ;;
+    6)
+        echo -e "${GREEN}Manual Instructions:${NC}"
+        echo "1. Open PowerShell as Administrator on Windows"
+        echo "2. Navigate to the script location:"
+        echo "   cd $(wslpath -w "$(dirname "$PS1_SCRIPT")")"
+        echo "3. Run the script:"
+        echo "   .\\restart-usb-v4.ps1"
+        echo ""
+        echo "Or in one command:"
+        echo "   powershell -ExecutionPolicy Bypass -File \"$(wslpath -w "$PS1_SCRIPT")\""
+        ;;
+    *)
+        echo -e "${RED}[!] Invalid option${NC}"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo -e "${GREEN}[*] After the script completes, check your USB devices with:${NC}"
+echo "   ls /dev/ttyUSB*"
+echo "   dmesg | grep -i usb | tail -20"
