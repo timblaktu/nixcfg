@@ -8,6 +8,7 @@ result-*
 *.swp
 *.swo
 *~
+*.vim
 
 # Environment variables
 .env
@@ -20,3 +21,13 @@ Thumbs.db
 # Temp files
 *.log
 *.tmp
+
+*.bak
+*.orig
+*.pcap
+*.wsl
+CLAUDE.md
+.claude/
+.serena/
+build-profiles/
+CLAUDE.md

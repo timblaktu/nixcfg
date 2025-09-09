@@ -1,0 +1,1 @@
+{"mcpServers":{"context7":{"args":["-y","@upstash/context7-mcp"],"command":"npx","env":{"DEBUG":"","NODE_ENV":"production"},"retries":3,"timeout":300},"sequential-thinking":{"args":[],"command":"/nix/store/qrnxh0qmmdwnnqxcilnqh6nzycnhw1n4-sequential-thinking-mcp-env/bin/sequential-thinking-mcp","env":{"DEBUG":"","NODE_ENV":"production"},"retries":3,"timeout":600}}}

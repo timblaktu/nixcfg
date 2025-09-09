@@ -1,0 +1,287 @@
+{ config, lib, pkgs, nixmcp ? null, ... }:
+
+with lib;
+
+{
+  imports = [
+    ./claude-code/mcp-servers.nix
+    ./claude-code/hooks.nix
+    ./claude-code/sub-agents.nix
+    ./claude-code/slash-commands.nix
+  ];
+
+  options.programs.claude-code = {
+    enable = mkEnableOption "Claude Code with advanced MCP, hooks, and command integration";
+    
+    debug = mkEnableOption "debug output for all components";
+    
+    defaultModel = mkOption {
+      type = types.enum ["sonnet" "opus" "haiku"];
+      default = "sonnet";
+      description = "Default Claude model";
+    };
+
+    aiGuidance = mkOption {
+      type = types.lines;
+      default = ''
+        * After receiving tool results, carefully reflect on their quality and determine optimal next steps
+        * For maximum efficiency, invoke multiple independent tools simultaneously rather than sequentially
+        * Before finishing, verify your solution addresses all requirements
+        * Do what has been asked; nothing more, nothing less
+        * NEVER create files unless absolutely necessary
+        * ALWAYS prefer editing existing files to creating new ones
+        * NEVER proactively create documentation unless explicitly requested
+        
+        ## Git Commit Rules
+        
+        * NEVER include Claude's identity or involvement in commit messages
+        * Do NOT add "Generated with Claude Code" or "Co-Authored-By: Claude" footers
+        * Write commit messages as if authored by the human user
+        * Keep commit messages concise and focused on the technical changes
+      '';
+      description = "Core AI guidance principles";
+    };
+
+    enableProjectOverrides = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Allow project-specific configuration overrides";
+    };
+    
+    projectOverridePaths = mkOption {
+      type = types.listOf types.str;
+      default = [ ".claude/settings.json" ".claude.json" "claude.config.json" ];
+      description = "Paths to search for project-specific settings";
+    };
+    
+    permissions = mkOption {
+      type = types.attrs;
+      default = {
+        allow = [ "Bash(npm run test:*)" "Bash(nix flake check:*)" "Read(~/.config/*)" ];
+        deny = [ "Bash(rm -rf /*)" "Read(.env)" "Write(/etc/passwd)" ];
+      };
+      description = "Permission rules";
+    };
+    
+    environmentVariables = mkOption {
+      type = types.attrsOf types.str;
+      default = { CLAUDE_CODE_ENABLE_TELEMETRY = "0"; };
+      description = "Environment variables";
+    };
+    
+    experimental = mkOption {
+      type = types.attrs;
+      default = {};
+      description = "Experimental features";
+    };
+    
+    claudeMdContent = mkOption {
+      type = types.lines;
+      default = "";
+      description = "Additional CLAUDE.md content";
+    };
+
+    # Internal options for module communication
+    _internal = {
+      mcpServers = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+      hooks = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+      subAgentFiles = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+      slashCommandDefs = mkOption {
+        type = types.attrs;
+        default = {};
+        internal = true;
+      };
+    };
+  };
+  
+  config = let
+    cfg = config.programs.claude-code;
+    
+    # WSL environment detection for Claude Desktop
+    isWSLEnabled = config.targets.wsl.enable or false;
+    wslDistroName = if isWSLEnabled then 
+      config.targets.wsl.wslDistroName or "NixOS"
+    else 
+      "NixOS";
+    
+    # Convert MCP server configs to WSL-compatible format for Claude Desktop
+    mkClaudeDesktopServer = name: serverCfg: 
+      let
+        # Build environment variable prefix for WSL command
+        envVars = serverCfg.env or {};
+        envPrefix = if isWSLEnabled && envVars != {} then
+          lib.concatStringsSep " " (lib.mapAttrsToList (k: v: "${k}=${lib.escapeShellArg (toString v)}") envVars)
+        else "";
+        
+        # For WSL, we need to set env vars in the command since JSON env doesn't pass through
+        wslCommand = if envPrefix != "" then
+          "sh -c '${envPrefix} exec ${lib.escapeShellArg serverCfg.command} ${lib.concatStringsSep " " (map lib.escapeShellArg serverCfg.args)}'"
+        else
+          "${serverCfg.command} ${lib.concatStringsSep " " (map lib.escapeShellArg serverCfg.args)}";
+      in {
+        command = if isWSLEnabled then "C:\\WINDOWS\\system32\\wsl.exe" else serverCfg.command;
+        args = if isWSLEnabled then 
+          [ "-d" wslDistroName "-e" "sh" "-c" wslCommand ]
+        else 
+          serverCfg.args;
+        env = if isWSLEnabled then {} else (serverCfg.env or {});
+      } // (lib.optionalAttrs (serverCfg ? timeout) { inherit (serverCfg) timeout; })
+        // (lib.optionalAttrs (serverCfg ? retries) { inherit (serverCfg) retries; });
+    
+    # Generate Claude Desktop configuration with WSL wrapper
+    claudeDesktopMcpServers = lib.mapAttrs mkClaudeDesktopServer cfg._internal.mcpServers;
+    
+    # Settings configuration
+    settingsConfig = let
+      hasHooks = cfg._internal.hooks.PreToolUse != null || cfg._internal.hooks.PostToolUse != null || 
+                 cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
+      cleanHooks = filterAttrs (n: v: v != null) cfg._internal.hooks;
+    in {
+      model = cfg.defaultModel;
+    } // optionalAttrs (cfg.permissions != {}) { permissions = cfg.permissions; }
+      // optionalAttrs (cfg.environmentVariables != {}) { env = cfg.environmentVariables; }
+      // optionalAttrs hasHooks { hooks = cleanHooks; }
+      // optionalAttrs (cfg.experimental != {}) { experimental = cfg.experimental; }
+      // optionalAttrs cfg.enableProjectOverrides { 
+        projectOverrides = {
+          enabled = true;
+          searchPaths = cfg.projectOverridePaths;
+        };
+      };
+
+    # Generate CLAUDE.md content
+    claudeMdContent = ''
+      # Claude Code Configuration
+      
+      ## AI Guidance
+      
+      ${cfg.aiGuidance}
+      
+      ## Active Configuration
+      
+      ### Model
+      - Default: ${cfg.defaultModel}
+      - Debug mode: ${if cfg.debug then "enabled" else "disabled"}
+      
+      ### MCP Servers
+      ${optionalString (nixmcp != null && cfg.mcpServers.nixos.enable) "- **mcp-nixos**: NixOS package/option search"}
+      ${optionalString cfg.mcpServers.sequentialThinking.enable "- **sequential-thinking**: Enhanced reasoning"}
+      ${optionalString cfg.mcpServers.context7.enable "- **context7**: Context management"}
+      ${optionalString cfg.mcpServers.mcpFilesystem.enable "- **mcp-filesystem**: Filesystem operations"}
+      ${optionalString cfg.mcpServers.cliMcpServer.enable "- **cli-mcp-server**: CLI command execution"}
+      ${optionalString (cfg.mcpServers.brave.apiKey != null) "- **brave-search**: Web search"}
+      ${optionalString cfg.mcpServers.puppeteer.enable "- **puppeteer**: Web automation"}
+      ${optionalString (cfg.mcpServers.github.token != null) "- **github**: GitHub integration"}
+      ${optionalString cfg.mcpServers.gitlab.enable "- **gitlab**: GitLab integration"}
+      ${concatStringsSep "\n" (mapAttrsToList (name: _: "- **${name}**: Custom server") cfg.mcpServers.custom)}
+      
+      ### Sub-Agents
+      ${optionalString cfg.subAgents.codeSearcher.enable "- code-searcher"}
+      ${optionalString cfg.subAgents.memoryBank.enable "- memory-bank"}
+      ${optionalString cfg.subAgents.architect.enable "- architect"}
+      ${concatStringsSep "\n" (mapAttrsToList (name: _: "- ${name}") cfg.subAgents.custom)}
+      
+      ### Slash Commands
+      ${optionalString cfg.slashCommands.documentation.enable "- /documentation generate-readme\n    - /documentation api-docs"}
+      ${optionalString cfg.slashCommands.security.enable "- /security audit\n    - /security secrets-scan"}
+      ${optionalString cfg.slashCommands.refactoring.enable "- /refactor extract-function\n    - /refactor rename-symbol"}
+      ${optionalString cfg.slashCommands.context.enable "- /context cleanup\n    - /context save\n    - /context load"}
+      ${concatStringsSep "\n" (mapAttrsToList (name: _: "- /custom ${name}") cfg.slashCommands.custom)}
+      
+      ### Active Hooks
+      - Security checks: ${if cfg.hooks.security.enable then "✓" else "✗"}
+      - Auto-formatting: ${if cfg.hooks.formatting.enable then "✓" else "✗"}
+      - Linting: ${if cfg.hooks.linting.enable then "✓" else "✗"}
+      - Git integration: ${if cfg.hooks.git.enable then "✓" else "✗"}
+      - Testing: ${if cfg.hooks.testing.enable then "✓" else "✗"}
+      - Logging: ${if cfg.hooks.logging.enable then "✓" else "✗"}
+      - Notifications: ${if cfg.hooks.notifications.enable then "✓" else "✗"}
+      
+      ## Project-Specific Configuration
+      
+      ${cfg.claudeMdContent}
+      
+      ## Performance Tips
+      
+      - Use sub-agents for specialized tasks to reduce token usage
+      - Leverage slash commands for common operations
+      - Enable caching where appropriate
+      - Use project overrides for context-specific settings
+      
+      ## Troubleshooting
+      
+      - Check logs at: ${cfg.hooks.logging.logPath}
+      - Debug mode: Set `programs.claude-code.debug = true`
+      - MCP server issues: Check `claude doctor`
+      - Hook failures: Review hook timeout settings
+    '';
+
+  in mkIf cfg.enable {
+    # Install required packages
+    home.packages = with pkgs; [
+      nodejs_22 git ripgrep fd jq
+    ] ++ optionals cfg.hooks.formatting.enable [
+      nixpkgs-fmt black nodePackages.prettier rustfmt go shfmt
+    ] ++ optionals cfg.hooks.linting.enable [
+      python3Packages.pylint nodePackages.eslint shellcheck
+    ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
+      libnotify
+    ];
+    
+    # Generate configuration files
+    home.file = mkMerge [
+      # MCP configuration for claude-code (excludes filesystem/CLI servers - they're redundant)
+      (mkIf (cfg._internal.mcpServers != {}) {
+        ".claude/mcp.json".text = builtins.toJSON { 
+          mcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
+        };
+      })
+      
+      # Claude Desktop configuration (includes all servers including filesystem/CLI, WSL-wrapped)
+      (mkIf (cfg._internal.mcpServers != {}) {
+        "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
+      })
+      
+      # Settings
+      { ".claude/settings.json".text = builtins.toJSON settingsConfig; }
+      
+      # Sub-agents
+      cfg._internal.subAgentFiles
+      
+      # Slash commands
+      (listToAttrs (flatten (mapAttrsToList (category: commands: 
+        mapAttrsToList (cmdName: cmdDef: 
+          nameValuePair ".claude/commands/${category}/${cmdName}.json" {
+            text = builtins.toJSON cmdDef;
+          }
+        ) commands
+      ) cfg._internal.slashCommandDefs)))
+      
+      # Log directory
+      (mkIf cfg.hooks.logging.enable {
+        ".claude/logs/.keep".text = "";
+      })
+    ];
+    
+    # Assertions
+    assertions = [
+      {
+        assertion = cfg.hooks.notifications.enable -> 
+          (pkgs.stdenv.isDarwin || config.home.packages or [] != []);
+        message = "Notifications require either macOS or a Linux notification daemon";
+      }
+    ];
+  };
+}

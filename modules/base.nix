@@ -126,6 +126,45 @@ in
       default = {};
       description = "Additional shell aliases";
     };
+
+    # System environment variables
+    systemEnvironmentVariables = mkOption {
+      type = types.attrsOf types.str;
+      default = {};
+      description = "System-wide environment variables";
+    };
+
+    # Nix performance options
+    nixMaxJobs = mkOption {
+      type = types.int;
+      default = 8;
+      description = "Maximum number of build jobs";
+    };
+    
+    nixCores = mkOption {
+      type = types.int;
+      default = 0;
+      description = "Number of cores per job (0 = all available)";
+    };
+    
+    enableBinaryCache = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable binary cache optimizations";
+    };
+    
+    cacheTimeout = mkOption {
+      type = types.int;
+      default = 10;
+      description = "Connection timeout for cache in seconds";
+    };
+
+    # Claude Code enterprise settings
+    enableClaudeCodeEnterprise = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable Claude Code enterprise managed settings";
+    };
   };
 
   # Actual configuration based on the options
@@ -159,6 +198,7 @@ in
       wget
       curl
       git
+      home-manager
       htop
       tmux
       ripgrep
@@ -176,13 +216,40 @@ in
     programs.zsh.enable = true;
     users.defaultUserShell = cfg.userShell;
 
+    # System environment variables
+    environment.variables = lib.mkMerge [
+      { EDITOR = "nvim"; }
+      cfg.systemEnvironmentVariables
+    ];
+
     # System-level nix settings
     nix = {
+      package = pkgs.nixVersions.stable;
       settings = {
         auto-optimise-store = true;
         experimental-features = [ "nix-command" "flakes" ];
         trusted-users = [ "root" cfg.userName ];
-      };
+        warn-dirty = false;
+        # Increase download buffer size to prevent warnings during large downloads
+        download-buffer-size = 134217728; # 128 MB (default is typically 64 MB)
+        
+        # Performance settings
+        max-jobs = lib.mkDefault cfg.nixMaxJobs;
+        cores = lib.mkDefault cfg.nixCores;
+      } // (lib.optionalAttrs cfg.enableBinaryCache {
+        # Network optimizations
+        substituters = [
+          "https://cache.nixos.org/"
+          "https://nix-community.cachix.org"
+        ];
+        trusted-public-keys = [
+          "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+          "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+        ];
+        # Cache optimizations
+        narinfo-cache-positive-ttl = 86400;  # Cache binary info for 24h
+        connect-timeout = cfg.cacheTimeout;
+      });
       gc = {
         automatic = true;
         dates = cfg.gcDates;
@@ -190,11 +257,63 @@ in
       };
     };
 
+    # Claude Code Enterprise Settings (conditional)
+    environment.etc."claude-code/managed-settings.json" = lib.mkIf cfg.enableClaudeCodeEnterprise {
+      text = builtins.toJSON {
+        # Top-precedence settings that cannot be overridden by users
+        model = "opus";
+        
+        # Security and permissions (organization-wide enforcement)
+        permissions = {
+          allow = [
+            "Bash"
+            "mcp__context7"
+            "mcp__mcp-nixos"
+            "mcp__sequential-thinking"
+            "Read"
+            "Write"
+            "Edit"
+            "WebFetch"
+          ];
+          deny = [
+            "Search"
+            "Find"
+            "Bash(rm -rf /*)"
+            "Read(.env)"
+            "Write(/etc/passwd)"
+          ];
+        };
+        
+        # Environment variables
+        env = {
+          CLAUDE_CODE_ENABLE_TELEMETRY = "0";
+        };
+        
+        # Statusline configuration (consistent across all accounts)
+        statusLine = {
+          type = "command";
+          command = "claude-statusline-powerline";
+          padding = 0;
+        };
+        
+        # Project overrides
+        projectOverrides = {
+          enabled = true;
+          searchPaths = [
+            ".claude/settings.json"
+            ".claude.json"
+            "claude.config.json"
+          ];
+        };
+      };
+      mode = "0644";
+    };
+
     # Default user configuration
     users.users.${cfg.userName} = {
       isNormalUser = lib.mkDefault true;
       extraGroups = lib.mkDefault cfg.userGroups;
-      shell = lib.mkDefault cfg.userShell;
+      shell = lib.mkForce cfg.userShell;
       packages = lib.mkDefault cfg.userPackages;
       openssh.authorizedKeys.keys = lib.mkDefault cfg.sshKeys;
     };

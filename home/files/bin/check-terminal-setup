@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Manual terminal verification command for comprehensive diagnostics
+# This script provides detailed Windows Terminal alignment checking
+
+echo "=== Windows Terminal Alignment Check ==="
+echo "System: WSL ${WSL_DISTRO_NAME:-NixOS}"
+
+# Force re-detection of all terminal settings
+# Unset any inherited values that might be stale or have wrong paths
+unset WT_SETTINGS_PATH WT_ALIGNMENT_OK WT_FONT_OK WT_INTENSE_OK WT_NEEDS_FIX
+
+# Dynamically find Windows Terminal settings path
+if [[ -z "${WT_SETTINGS_PATH}" ]]; then
+  # Try to get Windows username via PowerShell
+  if command -v powershell.exe >/dev/null 2>&1; then
+    WIN_USER=$(powershell.exe -NoProfile -Command 'Write-Host $env:USERNAME' 2>/dev/null | tr -d '\r\n')
+    if [[ -n "$WIN_USER" ]]; then
+      # Check for both regular and Preview versions of Windows Terminal
+      for terminal_dir in "Microsoft.WindowsTerminal_8wekyb3d8bbwe" "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe"; do
+        test_path="/mnt/c/Users/$WIN_USER/AppData/Local/Packages/$terminal_dir/LocalState/settings.json"
+        if [[ -f "$test_path" ]]; then
+          WT_SETTINGS_PATH="$test_path"
+          break
+        fi
+      done
+    fi
+  fi
+  
+  # If still not found, try common locations
+  if [[ -z "${WT_SETTINGS_PATH}" ]] || [[ ! -f "${WT_SETTINGS_PATH}" ]]; then
+    for user_dir in /mnt/c/Users/*; do
+      if [[ -d "$user_dir" ]]; then
+        # Check both regular and Preview versions
+        for terminal_dir in "Microsoft.WindowsTerminal_8wekyb3d8bbwe" "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe"; do
+          test_path="$user_dir/AppData/Local/Packages/$terminal_dir/LocalState/settings.json"
+          if [[ -f "$test_path" ]]; then
+            WT_SETTINGS_PATH="$test_path"
+            break 2
+          fi
+        done
+      fi
+    done
+  fi
+fi
+
+echo "Settings: ${WT_SETTINGS_PATH:-Not found}"
+echo
+
+# Define expected font configuration - use environment variable or default
+WT_EXPECTED_FONT="${WT_EXPECTED_FONT:-CaskaydiaMono Nerd Font}"
+
+# Run verification (reuse the silent verification logic)
+# This would source the verification script - for now simplified
+if [[ -n "$WSL_DISTRO_NAME" ]] || [[ -n "$WSLENV" ]]; then
+  if [[ -n "${WT_SETTINGS_PATH}" ]] && [[ -f "${WT_SETTINGS_PATH}" ]]; then
+    INTENSE_STYLE=$(jq -r '.profiles.defaults.intenseTextStyle // "default"' "${WT_SETTINGS_PATH}" 2>/dev/null)
+    CURRENT_FONT=$(jq -r '.profiles.defaults.font.face // "not configured"' "${WT_SETTINGS_PATH}" 2>/dev/null)
+    
+    WT_ALIGNMENT_OK=1
+    [[ "$INTENSE_STYLE" != "all" ]] && WT_ALIGNMENT_OK=0
+    [[ "$CURRENT_FONT" != "${WT_EXPECTED_FONT}" ]] && WT_ALIGNMENT_OK=0
+    
+    echo "Alignment Status:"
+    if [[ "$WT_ALIGNMENT_OK" == "1" ]]; then
+      echo "  ✅ Windows Terminal is properly aligned with WSL NixOS"
+    else
+      echo "  ❌ Misalignment detected - run 'setup-terminal-fonts' to fix"
+    fi
+    
+    echo
+    echo "Configuration Details:"
+    echo "  Font: $CURRENT_FONT"
+    echo "  Intense Style: $INTENSE_STYLE"
+    echo "  Expected Font: ${WT_EXPECTED_FONT}"
+    echo "  Expected Style: all"
+  else
+    echo "  ⚠️  Cannot verify - Windows Terminal settings not found"
+  fi
+else
+  echo "  ℹ️  Not running in WSL environment"
+fi
+
+echo
+echo "=== Visual Tests ==="
+printf "Normal text vs "
+printf "\033[1mBOLD TEXT\033[0m\n"
+echo "If bold text looks heavier/thicker, bold rendering works!"
+
+echo
+echo "Emoji test: WARNING[⚠️] SUCCESS[✅] ERROR[❌]" 
+echo "If you see actual icons (not squares/question marks), emoji rendering works!"
+
+echo
+echo "For detailed diagnostics, run: diagnose-emoji-rendering"

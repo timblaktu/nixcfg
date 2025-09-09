@@ -1,0 +1,16 @@
+[extend]
+# Ignore sops encrypted files
+useDefault = true
+
+[[rules]]
+description = "Ignore sops encrypted files"
+regex = '''age1[a-z0-9]{58}'''
+path = '''\.sops\.ya?ml$'''
+
+[[rules]]
+description = "Ignore age public keys"
+regex = '''age1[a-z0-9]{58}'''
+allowlist.paths = [
+    '''.sops.yaml''',
+    '''secrets/''',
+]

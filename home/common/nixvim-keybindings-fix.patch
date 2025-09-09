@@ -1,0 +1,78 @@
+# Proposed Nixvim Keybinding Changes to Fix Conflicts
+# 
+# This patch resolves the following conflicts:
+# 1. <leader>f conflict between LSP format and Telescope find commands
+# 2. <leader>d conflict between LSP diagnostics and diff commands
+#
+# New keybinding scheme:
+# - <leader>l* for LSP operations (Language Server)
+# - <leader>f* for Find/Telescope operations (unchanged)
+# - <leader>g* for Git/diff operations (git)
+# - <leader>d* for Diagnostics (moved from single <leader>d)
+
+# Changes to make in /home/tim/src/nixcfg/home/common/nixvim.nix:
+
+## 1. Update LSP keymaps section (around line 718-735):
+```nix
+        keymaps = {
+          silent = true;
+          lspBuf = {
+            gd = "definition";
+            gD = "declaration";
+            gr = "references";
+            gi = "implementation";
+            gt = "type_definition";
+            K = "hover";
+            "<leader>lc" = "code_action";      # was: <leader>ca
+            "<leader>lr" = "rename";           # was: <leader>rn
+            "<leader>lf" = "format";           # was: <leader>f (THE KEY CHANGE!)
+          };
+          diagnostic = {
+            "[d" = "goto_prev";
+            "]d" = "goto_next";
+            "<leader>de" = "open_float";       # was: <leader>d (error float)
+            "<leader>dl" = "setloclist";       # was: <leader>q (diagnostic list)
+          };
+        };
+```
+
+## 2. Update diff/merge keybindings (around line 157-161):
+```nix
+      # Diff/merge keybindings - moved to <leader>g* (git)
+      { mode = "n"; key = "<leader>gl"; action = ":diffget LOCAL<CR>"; options.silent = true; }    # was: <leader>dgl
+      { mode = "n"; key = "<leader>gb"; action = ":diffget BASE<CR>"; options.silent = true; }     # was: <leader>dgb
+      { mode = "n"; key = "<leader>gr"; action = ":diffget REMOTE<CR>"; options.silent = true; }   # was: <leader>dgr
+      { mode = "n"; key = "<leader>gu"; action = ":diffupdate<CR>"; options.silent = true; }       # was: <leader>du
+```
+
+## 3. Update which-key group descriptions (around line 198-199):
+```nix
+                { "<leader>l", group = "LSP/Language" },       # new
+                { "<leader>f", group = "Find/Telescope" },     # unchanged
+                { "<leader>g", group = "Git/Diff" },           # was: <leader>d
+                { "<leader>d", group = "Diagnostics" },        # new dedicated group
+```
+
+## 4. Update extraConfigLua LSP attach keymaps (around line 890):
+```nix
+          -- Additional LSP keymaps not covered by the main config
+          vim.keymap.set('n', '<leader>lw', vim.lsp.buf.add_workspace_folder, opts)     # was: <leader>wa
+          vim.keymap.set('n', '<leader>lW', vim.lsp.buf.remove_workspace_folder, opts)  # was: <leader>wr
+          vim.keymap.set('n', '<leader>ll', function()                                  # was: <leader>wl
+            print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
+          end, opts)
+```
+
+# Alternative simpler fix (if you prefer minimal changes):
+# Just change the LSP format from <leader>f to <leader>lf:
+#   "<leader>lf" = "format";
+# This single change would resolve the main issue while keeping everything else the same.
+
+# Summary of new keybinding convention:
+# <leader>l* - LSP operations (format, code action, rename, workspace)
+# <leader>f* - Find/Telescope operations (files, grep, buffers)
+# <leader>g* - Git/Diff operations (diffget, diffupdate)
+# <leader>d* - Diagnostics (errors, warnings, float, list)
+# <leader>c* - Colorschemes (unchanged)
+# <leader>/  - Comments (unchanged)
+# <leader>q  - Quit commands (can add more quit variants here)
