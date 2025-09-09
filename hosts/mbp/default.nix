@@ -14,15 +14,30 @@
     wireless = {
       enable = true;
       networks = {
-        # Add your wireless networks here
-        # "NetworkName" = {
-        #   psk = "password";
-        # };
+        "SUMMIT-VIS" = {
+          psk = "summ1tv1s1t0r";
+        };
+        "zarf" = {
+          psk = "c0rnp177a";
+        };
       };
     };
   };
 
   systemd.network.enable = true;
+
+  # Configure systemd-networkd to send hostname in DHCP requests
+  systemd.network.networks."40-ethernet" = {
+    matchConfig.Name = "enp0s10";
+    networkConfig = {
+      DHCP = "yes";
+      IPv6PrivacyExtensions = "kernel";
+    };
+    dhcpV4Config = {
+      SendHostname = true;
+      Hostname = "mbp";
+    };
+  };
 
   # Console configuration
   console = {
@@ -53,7 +68,7 @@
   users.users.tim = {
     isNormalUser = true;
     shell = lib.mkForce pkgs.zsh;
-    extraGroups = ["wheel" "networkmanager" "audio" "video"];
+    extraGroups = ["wheel" "users" "audio" "video"];
     packages = with pkgs; [
       inputs.home-manager.packages.${pkgs.system}.default
     ];
@@ -130,5 +145,12 @@
   };
 
   # Enable touchpad support
+  # Memory management optimizations
+  boot.kernel.sysctl."vm.swappiness" = 10;
+  zramSwap = {
+    enable = true;
+    memoryPercent = 25;
+  };
+
   services.libinput.enable = true;
 }

@@ -29,9 +29,11 @@ nixcfg/
 
 ### NixOS Systems
 
+Note: we quote flake ref as convention for compatibilithy with shells like zsh where # is special
+
 ```bash
 # First time setup
-sudo nixos-rebuild switch --flake .#hostname
+sudo nixos-rebuild switch --flake '.\#hostname'
 
 # Subsequent updates
 sudo nixos-rebuild switch
@@ -41,7 +43,7 @@ sudo nixos-rebuild switch
 
 ```bash
 # First time setup
-home-manager switch --flake .#username@hostname
+home-manager switch --flake '.\#username@hostname'
 
 # Subsequent updates
 home-manager switch
@@ -51,7 +53,7 @@ home-manager switch
 
 ```bash
 # First time setup
-darwin-rebuild switch --flake .#hostname
+darwin-rebuild switch --flake '.\#hostname'
 
 # Subsequent updates
 darwin-rebuild switch

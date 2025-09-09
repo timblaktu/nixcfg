@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# Comprehensive diagnostic tool for Windows Terminal + WSL alignment
+# Checks font configuration, emoji rendering, and terminal capabilities
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "                Terminal/WSL Alignment Diagnostic                      "
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo
+
+# Check environment variables from terminal-verification module
+echo "=== Alignment Status ==="
+if [[ -n "$WT_ALIGNMENT_OK" ]]; then
+    if [[ "$WT_ALIGNMENT_OK" == "1" ]]; then
+        echo "✅ Windows Terminal is properly aligned with WSL NixOS"
+    elif [[ "$WT_ALIGNMENT_OK" == "0" ]]; then
+        echo "❌ Misalignment detected between Windows Terminal and WSL"
+        echo
+        echo "Issues:"
+        [[ "$WT_FONT_OK" == "0" ]] && echo "  ❌ Font: ${WT_CONFIGURED_FONT:-not configured}"
+        [[ "$WT_INTENSE_OK" == "0" ]] && echo "  ❌ Bold rendering: ${WT_INTENSE_STYLE:-not configured}"
+    else
+        echo "⚠️  Cannot verify alignment (Windows Terminal settings not found)"
+    fi
+else
+    echo "⚠️  Alignment check not available (run from a new shell or run 'check-terminal-setup')"
+fi
+
+echo
+echo "=== Current Configuration ==="
+echo "Windows Terminal:"
+if [[ -n "$WT_CONFIGURED_FONT" ]]; then
+    echo "  Font: $WT_CONFIGURED_FONT"
+    echo "  Bold rendering: ${WT_INTENSE_STYLE:-unknown}"
+else
+    echo "  Font: Unable to detect (run 'check-terminal-setup' first)"
+fi
+
+echo
+echo "Expected (for proper alignment):"
+echo "  Font: ${WT_EXPECTED_FONT:-CaskaydiaMono Nerd Font Mono, Noto Color Emoji, Segoe UI Emoji}"
+echo "  Bold rendering: ${WT_EXPECTED_INTENSE:-all}"
+
+echo
+echo "=== WSL Font Configuration ==="
+echo "Checking NixOS fontconfig..."
+if command -v fc-list >/dev/null 2>&1; then
+    CASCADIA_COUNT=$(fc-list | grep -iE "caskaydia.*mono.*nerd" | wc -l)
+    EMOJI_COUNT=$(fc-list | grep -iE "(emoji|color)" | wc -l)
+    
+    if [[ "$CASCADIA_COUNT" -gt 0 ]]; then
+        echo "  ✅ CascadiaMono Nerd Font: $CASCADIA_COUNT variants found"
+    else
+        echo "  ❌ CascadiaMono Nerd Font: Not found in WSL"
+        echo "     Run: nix run home-manager -- switch"
+    fi
+    
+    if [[ "$EMOJI_COUNT" -gt 0 ]]; then
+        echo "  ✅ Emoji fonts: $EMOJI_COUNT fonts available"
+    else
+        echo "  ⚠️  Emoji fonts: None found in WSL"
+    fi
+else
+    echo "  ⚠️  fontconfig not available"
+fi
+
+echo
+echo "=== Windows Font Availability ==="
+if command -v powershell.exe >/dev/null 2>&1; then
+    echo "Checking Windows font installation..."
+    powershell.exe -Command "
+        \$results = @{}
+        
+        # Check primary font
+        try {
+            \$family = [System.Drawing.FontFamily]::new('CaskaydiaMonoNerdFontMono')
+            \$results['CaskaydiaMonoNerdFontMono'] = 'installed'
+            \$family.Dispose()
+        } catch {
+            \$results['CaskaydiaMonoNerdFontMono'] = 'missing'
+        }
+        
+        # Check emoji fonts
+        @('Noto Color Emoji', 'Segoe UI Emoji').ForEach({
+            try {
+                \$family = [System.Drawing.FontFamily]::new(\$_)
+                \$results[\$_] = 'installed'
+                \$family.Dispose()
+            } catch {
+                \$results[\$_] = 'missing'
+            }
+        })
+        
+        # Output results
+        if (\$results['CaskaydiaMonoNerdFontMono'] -eq 'installed') {
+            Write-Host '  ✅ CaskaydiaMonoNerdFontMono: Installed'
+        } else {
+            Write-Host '  ❌ CaskaydiaMonoNerdFontMono: Not installed'
+        }
+        
+        if (\$results['Noto Color Emoji'] -eq 'installed') {
+            Write-Host '  ✅ Noto Color Emoji: Installed'
+        } else {
+            Write-Host '  ⚠️  Noto Color Emoji: Not installed (recommended for best emoji support)'
+        }
+        
+        if (\$results['Segoe UI Emoji'] -eq 'installed') {
+            Write-Host '  ✅ Segoe UI Emoji: Installed (Windows built-in)'
+        } else {
+            Write-Host '  ⚠️  Segoe UI Emoji: Not available'
+        }
+    " 2>/dev/null || echo "  ⚠️  PowerShell check failed"
+else
+    echo "  ⚠️  PowerShell not available for font checking"
+fi
+
+echo
+echo "=== Visual Rendering Tests ==="
+echo
+echo "Bold text test:"
+printf "  Normal: The quick brown fox\n"
+printf "  Bold:   \033[1mThe quick brown fox\033[0m\n"
+echo "  → Bold should appear heavier/thicker than normal"
+
+echo
+echo "Emoji rendering test:"
+echo "  Basic: ⚠️ ✅ ❌"
+echo "  Color: 🔥 👍 🌟 🚀"
+echo "  → You should see colorful emoji icons, not boxes or question marks"
+
+echo
+echo "Nerd Font symbols test:"
+echo "  Powerline:  "
+echo "  Icons:  󰊢   󰅂"
+echo "  → These should appear as distinct symbols, not boxes"
+
+echo
+echo "Box drawing test:"
+echo "  ┌────────────────┐"
+echo "  │ Box drawing OK │"
+echo "  └────────────────┘"
+echo "  → Lines should connect seamlessly"
+
+echo
+echo "=== Character Encoding Analysis ==="
+echo "UTF-8 encoding verification:"
+test_chars=("⚠️" "✅" "❌" "🔥")
+all_good=true
+for char in "${test_chars[@]}"; do
+    hex=$(printf "%s" "$char" | xxd -p | tr -d '\n')
+    printf "  %-4s → %s " "$char" "$hex"
+    
+    # Check if encoding is correct
+    case "$char" in
+        "⚠️") expected="e29aa0efb88f" ;;
+        "✅") expected="e29c85" ;;
+        "❌") expected="e29d8c" ;;
+        "🔥") expected="f09f9485" ;;
+    esac
+    
+    if [[ "$hex" == "$expected" ]]; then
+        echo "✓"
+    else
+        echo "✗ (expected: $expected)"
+        all_good=false
+    fi
+done
+
+if $all_good; then
+    echo "  → All characters encoded correctly"
+else
+    echo "  → Character encoding issues detected"
+fi
+
+echo
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "                           Recommendations                             "
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ "$WT_NEEDS_FIX" == "1" ]] || [[ "$WT_ALIGNMENT_OK" == "0" ]]; then
+    echo
+    echo "🔧 QUICK FIX AVAILABLE:"
+    echo
+    echo "   Run: setup-terminal-fonts"
+    echo
+    echo "   This will automatically:"
+    echo "   • Download and install required fonts"
+    echo "   • Update Windows Terminal settings"
+    echo "   • Configure proper font fallback chain"
+    echo
+elif [[ "$WT_ALIGNMENT_OK" == "1" ]]; then
+    echo
+    echo "✅ Your terminal is properly configured!"
+    echo
+    echo "   No action needed - fonts and settings are aligned."
+    echo
+else
+    echo
+    echo "⚠️  MANUAL SETUP REQUIRED:"
+    echo
+    echo "   1. Install Windows Terminal from Microsoft Store"
+    echo "   2. Run Windows Terminal to create initial settings"
+    echo "   3. Run 'setup-terminal-fonts' to configure"
+    echo
+fi
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

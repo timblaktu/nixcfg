@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Custom tmux window status format string generator
+#
+# In .tmux.conf, we can use this:
+#
+#     setw -g window-status-format '#(${config.home.homeDirectory}/bin/tmux-window-status-format
+#
+# instead of this:
+#
+#     setw -g window-status-format \
+#     '#{?#{<:#{client_width},#{@SMALL_TERM}},#[dim]#I:#[default]#{=/8/…:window_name},\
+#     #{?#{<:#{client_width},#{@MEDIUM_TERM}},#[dim]#I:#[default]#{=/12/…:window_name},\
+#     #[dim]#I:#[default]#{=/16/…:window_name}}}'
+
+# Source functions.sh for print_subscript function
+source "${HOME}/bin/functions.sh"
+
+client_width=$1
+one_based_window_index=$2
+window_name=$3
+
+tiny_one_based_window_index="$(print_superscript "$(( one_based_window_index ))")"
+
+if (( client_width < NIX_TMUX_SMALL_TERM )); then
+    printf "%b%b" "$tiny_one_based_window_index" "${window_name:0:8}"
+elif (( client_width < NIX_TMUX_MEDIUM_TERM )); then
+    printf "%b%b" "$tiny_one_based_window_index" "${window_name:0:12}"
+else
+    printf "%b%b" "$tiny_one_based_window_index" "${window_name:0:16}"
+fi
