@@ -17,6 +17,7 @@ in {
     ../common/development.nix
     ./terminal-verification.nix  # WSL Windows Terminal verification
     ./claude-code.nix  # Claude Code MCP servers configuration
+    ./secrets-management.nix  # RBW and SOPS configuration
     # Enhanced nix-writers based script management  
     (if inputs != null && inputs ? nix-writers 
      then inputs.nix-writers.homeManagerModules.default
@@ -59,6 +60,11 @@ in {
         stress-ng
         tree
         unzip
+        # Secrets management tools
+        rbw  # Rust Bitwarden CLI client
+        pinentry-curses  # Terminal-based pinentry for rbw/gpg
+        age  # Modern encryption tool for sops-nix
+        sops  # Secrets management tool
         # Primary font with excellent emoji support
         nerd-fonts.caskaydia-mono  # Cascadia Code Nerd Font - Microsoft's font with great emoji support
         cascadia-code  # Include original Cascadia Code as well

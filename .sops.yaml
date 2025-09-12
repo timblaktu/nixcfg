@@ -3,12 +3,12 @@
 
 keys:
   # Users (replace with your own public key)
-  - &user_tim age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - &user_tim age1s3w0vh40qtjzx677xdda7lv5sqnhrxg9ae306zrkx4deurcvx90sajtlsk
 
   # Hosts (these will be generated for each host)
-  - &host_mbp age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  - &host_potato age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  - &host_thinky age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - &host_mbp age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # TODO: Generate when setting up mbp
+  - &host_potato age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # TODO: Generate when setting up potato
+  - &host_thinky age1rz0k6055dsat660rs3y8jdypmjxdjwaya2w4v0x6q7646m6n8atszz0vzx
 
 creation_rules:
   # Shared secrets accessible by all hosts and users
@@ -16,9 +16,8 @@ creation_rules:
     key_groups:
     - age:
       - *user_tim
-      - *host_mbp
-      - *host_potato
       - *host_thinky
+      # Add other hosts here when they have real keys
 
   # MacBook Pro specific secrets
   - path_regex: secrets/mbp/[^/]+\.(yaml|json|env)$

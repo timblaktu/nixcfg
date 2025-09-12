@@ -7,6 +7,7 @@
     ../../modules/base.nix
     ../../modules/wsl-common.nix
     ../../modules/wsl-tarball-checks.nix
+    ../../modules/nixos/sops-nix.nix
   ];
   
   # Base module configuration
@@ -34,6 +35,28 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
     ];
     enableWindowsTools = true;
+  };
+
+  # SOPS-NiX configuration for secrets management
+  sopsNix = {
+    enable = true;
+    hostKeyPath = "/etc/sops/age.key";
+    defaultSopsFile = ../../secrets/common/test-secret.yaml;
+  };
+  
+  # Define secrets to be decrypted at activation time
+  sops.secrets = {
+    # Test secret from our encrypted file
+    "example_password" = {
+      owner = "tim";
+      group = "users";
+      mode = "0400";
+    };
+    "api_key" = {
+      owner = "tim";
+      group = "users";
+      mode = "0400";
+    };
   };
 
   # This value determines the NixOS release with which your system is to be compatible
