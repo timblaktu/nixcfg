@@ -82,7 +82,7 @@ with lib;
     
     environmentVariables = mkOption {
       type = types.attrsOf types.str;
-      default = { CLAUDE_CODE_ENABLE_TELEMETRY = "0"; };
+      default = {};  # Empty by default - Claude doesn't persist env in .claude.json
       description = "Environment variables";
     };
     
@@ -342,10 +342,10 @@ with lib;
               ${pkgs.jq}/bin/jq \
                 --argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}' \
                 --argjson permissions '${builtins.toJSON cfg.permissions}' \
-                --argjson env '${builtins.toJSON cfg.environmentVariables}' \
+                ${optionalString (cfg.environmentVariables != {}) "--argjson env '${builtins.toJSON cfg.environmentVariables}'"} \
                 --argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}' \
                 --argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}' \
-                '{mcpServers: $mcpServers, permissions: $permissions, env: $env, statusLine: $statusLine, hooks: $hooks}' \
+                '{mcpServers: $mcpServers, permissions: $permissions${optionalString (cfg.environmentVariables != {}) ", env: $env"}, statusLine: $statusLine, hooks: $hooks}' \
                 > "$config_file.nix-managed"
               
               # Use mergejson to selectively merge only managed fields
@@ -421,10 +421,10 @@ with lib;
             ${pkgs.jq}/bin/jq \
               --argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}' \
               --argjson permissions '${builtins.toJSON cfg.permissions}' \
-              --argjson env '${builtins.toJSON cfg.environmentVariables}' \
+              ${optionalString (cfg.environmentVariables != {}) "--argjson env '${builtins.toJSON cfg.environmentVariables}'"} \
               --argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}' \
               --argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}' \
-              '{mcpServers: $mcpServers, permissions: $permissions, env: $env, statusLine: $statusLine, hooks: $hooks}' \
+              '{mcpServers: $mcpServers, permissions: $permissions${optionalString (cfg.environmentVariables != {}) ", env: $env"}, statusLine: $statusLine, hooks: $hooks}' \
               > "$config_file.nix-managed"
             
             # Use mergejson to selectively merge only managed fields
@@ -507,7 +507,8 @@ with lib;
             fi
           fi
           mv "$old_file.merged" "$old_file"
-          echo "Merged: $jq_query"
+          # Only show message if running interactively with --confirm
+          [[ "$confirm_flag" == "--confirm" ]] && echo "Merged: $jq_query"
         else
           rm -f "$old_file.merged"
         fi
@@ -541,23 +542,30 @@ with lib;
           echo 'null' | ${pkgs.jq}/bin/jq \
             --argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}' \
             --argjson permissions '${builtins.toJSON cfg.permissions}' \
-            --argjson env '${builtins.toJSON cfg.environmentVariables}' \
+            ${optionalString (cfg.environmentVariables != {}) "--argjson env '${builtins.toJSON cfg.environmentVariables}'"} \
             --argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}' \
             --argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}' \
-            '{mcpServers: $mcpServers, permissions: $permissions, env: $env, statusLine: $statusLine, hooks: $hooks}' \
+            '{mcpServers: $mcpServers, permissions: $permissions${optionalString (cfg.environmentVariables != {}) ", env: $env"}, statusLine: $statusLine, hooks: $hooks}' \
             > "$config_file.nix-managed"
           
-          # Use mergejson to selectively merge only managed fields
-          if mergejson "$config_file" "$config_file.nix-managed" '.' --confirm; then
-            echo "✅ Configuration synchronized"
+          # Use mergejson to selectively merge only managed fields (silent operation)
+          if mergejson "$config_file" "$config_file.nix-managed" '.'; then
+            # Silent merge - no output unless there's an error
+            :
           else
-            echo "⚠️  Configuration merge cancelled, continuing with existing config"
+            echo "⚠️  Configuration merge failed"
           fi
           rm -f "$config_file.nix-managed"
         fi
         
         # Launch Claude Code with proper PID tracking
         export CLAUDE_CONFIG_DIR="$config_dir"
+        
+        # Disable telemetry using documented environment variables
+        export DISABLE_TELEMETRY="1"                      # Disable Statsig telemetry (documented)
+        export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"  # Disable all non-essential traffic (documented)
+        export DISABLE_ERROR_REPORTING="1"                # Disable Sentry error reporting (documented)
+        
         echo "🤖 Launching Claude Max..."
         
         # Use trap to ensure cleanup even if interrupted
@@ -603,23 +611,30 @@ with lib;
           echo 'null' | ${pkgs.jq}/bin/jq \
             --argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}' \
             --argjson permissions '${builtins.toJSON cfg.permissions}' \
-            --argjson env '${builtins.toJSON cfg.environmentVariables}' \
+            ${optionalString (cfg.environmentVariables != {}) "--argjson env '${builtins.toJSON cfg.environmentVariables}'"} \
             --argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}' \
             --argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}' \
-            '{mcpServers: $mcpServers, permissions: $permissions, env: $env, statusLine: $statusLine, hooks: $hooks}' \
+            '{mcpServers: $mcpServers, permissions: $permissions${optionalString (cfg.environmentVariables != {}) ", env: $env"}, statusLine: $statusLine, hooks: $hooks}' \
             > "$config_file.nix-managed"
           
-          # Use mergejson to selectively merge only managed fields
-          if mergejson "$config_file" "$config_file.nix-managed" '.' --confirm; then
-            echo "✅ Configuration synchronized"
+          # Use mergejson to selectively merge only managed fields (silent operation)
+          if mergejson "$config_file" "$config_file.nix-managed" '.'; then
+            # Silent merge - no output unless there's an error
+            :
           else
-            echo "⚠️  Configuration merge cancelled, continuing with existing config"
+            echo "⚠️  Configuration merge failed"
           fi
           rm -f "$config_file.nix-managed"
         fi
         
         # Launch Claude Code with proper PID tracking
         export CLAUDE_CONFIG_DIR="$config_dir"
+        
+        # Disable telemetry using documented environment variables
+        export DISABLE_TELEMETRY="1"                      # Disable Statsig telemetry (documented)
+        export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"  # Disable all non-essential traffic (documented)
+        export DISABLE_ERROR_REPORTING="1"                # Disable Sentry error reporting (documented)
+        
         echo "🤖 Launching Claude Pro..."
         
         # Use trap to ensure cleanup even if interrupted
@@ -742,12 +757,14 @@ with lib;
             echo "🔧 Enforcing Nix-managed settings in .claude.json..."
             
             # Use jq with --argjson for safe JSON handling
-            $DRY_RUN_CMD ${pkgs.jq}/bin/jq \
-              --argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}' \
-              ${optionalString (cfg.permissions != {}) ''--argjson permissions '${builtins.toJSON cfg.permissions}' \''}
-              ${optionalString (cfg.environmentVariables != {}) ''--argjson env '${builtins.toJSON cfg.environmentVariables}' \''}
-              ${optionalString (cfg._internal.statuslineSettings != {}) ''--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}' \''}
-              ${optionalString (cfg._internal.hooks != {}) ''--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}' \''}
+            # Build jq arguments dynamically
+            local jq_args=(--argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}')
+            ${optionalString (cfg.permissions != {}) ''jq_args+=(--argjson permissions '${builtins.toJSON cfg.permissions}')''}
+            ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
+            ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
+            ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}')''}
+            
+            $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
               '. |
               .mcpServers = $mcpServers
               ${optionalString (cfg.permissions != {}) ''| .permissions = $permissions''}
@@ -796,12 +813,14 @@ with lib;
         echo "🔧 Enforcing Nix-managed settings in .claude.json..."
         
         # Use jq with --argjson for safe JSON handling
-        $DRY_RUN_CMD ${pkgs.jq}/bin/jq \
-          --argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}' \
-          ${optionalString (cfg.permissions != {}) ''--argjson permissions '${builtins.toJSON cfg.permissions}' \''}
-          ${optionalString (cfg.environmentVariables != {}) ''--argjson env '${builtins.toJSON cfg.environmentVariables}' \''}
-          ${optionalString (cfg._internal.statuslineSettings != {}) ''--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}' \''}
-          ${optionalString (cfg._internal.hooks != {}) ''--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}' \''}
+        # Build jq arguments dynamically
+        jq_args=(--argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}')
+        ${optionalString (cfg.permissions != {}) ''jq_args+=(--argjson permissions '${builtins.toJSON cfg.permissions}')''}
+        ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
+        ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
+        ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}')''}
+        
+        $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
           '. |
           .mcpServers = $mcpServers
           ${optionalString (cfg.permissions != {}) ''| .permissions = $permissions''}
