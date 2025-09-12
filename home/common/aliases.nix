@@ -40,6 +40,20 @@ in {
       
       # Poetry shortcut from ~/.profile
       poetryshell = "eval $(poetry env activate)";
+      
+      # RBW (Rust Bitwarden) aliases for secrets management
+      rbwl = "rbw login";  # Login to Bitwarden
+      rbwu = "rbw unlock";  # Unlock vault
+      rbws = "rbw sync";  # Sync with Bitwarden server
+      rbwg = "rbw get";  # Get a password
+      rbwgn = "rbw get -f notes";  # Get notes field
+      rbwls = "rbw list";  # List all entries
+      rbwlock = "rbw lock";  # Lock the vault
+      rbwstop = "rbw stop-agent";  # Stop rbw agent
+      
+      # SOPS aliases for secrets management
+      sopse = "sops";  # Edit encrypted file
+      sopsd = "sops -d";  # Decrypt and display file
     };
     
     programs.zsh.shellAliases = lib.mkAfter {
@@ -70,6 +84,20 @@ in {
       
       # Poetry shortcut
       poetryshell = "eval $(poetry env activate)";
+      
+      # RBW (Rust Bitwarden) aliases for secrets management
+      rbwl = "rbw login";  # Login to Bitwarden
+      rbwu = "rbw unlock";  # Unlock vault
+      rbws = "rbw sync";  # Sync with Bitwarden server
+      rbwg = "rbw get";  # Get a password
+      rbwgn = "rbw get -f notes";  # Get notes field
+      rbwls = "rbw list";  # List all entries
+      rbwlock = "rbw lock";  # Lock the vault
+      rbwstop = "rbw stop-agent";  # Stop rbw agent
+      
+      # SOPS aliases for secrets management
+      sopse = "sops";  # Edit encrypted file
+      sopsd = "sops -d";  # Decrypt and display file
     };
     
     # Custom shell functions from existing ~/.profile

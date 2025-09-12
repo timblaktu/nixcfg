@@ -477,3 +477,6 @@ The fundamental constraint that 'nix develop -c' cannot enter FHS namespaces was
 ### Key Technical Insight
 Configuration persistence requires careful consideration of git metadata lifecycle. Worktree-specific configuration (`.git/config` files) gets destroyed when worktrees are removed, requiring superproject-level storage for data that should survive workspace recreation cycles.
 
+
+## Memory Entry - 2025-09-12 16:38:13
+SOPS-NiX successfully integrated into thinky-nixos. Keys generated and stored in Bitwarden. Test secrets decrypting at /run/secrets.d/1/. SSH host key auto-imported as age key. Next: Create production secrets structure and integrate with actual services.
