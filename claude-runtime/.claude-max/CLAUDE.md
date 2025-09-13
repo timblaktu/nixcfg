@@ -480,3 +480,38 @@ Configuration persistence requires careful consideration of git metadata lifecyc
 
 ## Memory Entry - 2025-09-12 16:38:13
 SOPS-NiX successfully integrated into thinky-nixos. Keys generated and stored in Bitwarden. Test secrets decrypting at /run/secrets.d/1/. SSH host key auto-imported as age key. Next: Create production secrets structure and integrate with actual services.
+
+## SOPS-NiX Integration Complete - 2025-09-12
+
+### Phase 3 Production Setup Completed
+- **Test Infrastructure Removed**: Deleted test-secret.yaml and all test references
+- **Production Templates Created**: Comprehensive example.yaml.template with various secret structures
+- **Example Module Added**: wifi-secrets-example.nix demonstrating real NetworkManager integration
+- **Repository Clean**: No plaintext secrets found in security audit
+- **Documentation Updated**: SECRETS-MANAGEMENT.md contains complete implementation guide
+
+### Current Status
+- **SOPS-NiX**: ✅ Fully operational on thinky-nixos host
+- **Age Keys**: Stored securely in Bitwarden (user and host keys)
+- **Production Ready**: Infrastructure complete, awaiting actual secrets
+- **Example Templates**: Available in secrets/common/example.yaml.template
+
+### Quick Reference for Creating Production Secrets
+```bash
+# Create new secrets file
+cd /home/tim/src/nixcfg/secrets/common
+cp example.yaml.template services.yaml
+sops services.yaml  # Edit and add actual secrets
+
+# Configure in NixOS (hosts/thinky-nixos/default.nix)
+sopsNix.defaultSopsFile = ../../secrets/common/services.yaml;
+sops.secrets."secret_name" = { owner = "tim"; mode = "0400"; };
+
+# Rebuild system
+sudo nixos-rebuild switch --flake '.#thinky-nixos'
+```
+
+### Next Steps When Needed
+- Create actual production secrets for real services
+- Generate age keys for other hosts (mbp, potato) when setting them up
+- Implement key rotation strategy
