@@ -41,23 +41,19 @@
   sopsNix = {
     enable = true;
     hostKeyPath = "/etc/sops/age.key";
-    defaultSopsFile = ../../secrets/common/test-secret.yaml;
+    # defaultSopsFile will be set when we have production secrets
   };
   
-  # Define secrets to be decrypted at activation time
-  sops.secrets = {
-    # Test secret from our encrypted file
-    "example_password" = {
-      owner = "tim";
-      group = "users";
-      mode = "0400";
-    };
-    "api_key" = {
-      owner = "tim";
-      group = "users";
-      mode = "0400";
-    };
-  };
+  # Production secrets will be defined here as needed
+  # Example:
+  # sops.secrets = {
+  #   "github_token" = {
+  #     owner = "tim";
+  #     group = "users";
+  #     mode = "0400";
+  #     sopsFile = ../../secrets/common/services.yaml;
+  #   };
+  # };
 
   # This value determines the NixOS release with which your system is to be compatible
   system.stateVersion = "24.11";

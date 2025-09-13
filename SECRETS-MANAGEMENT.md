@@ -179,24 +179,74 @@ nixcfg/
   - Private key: `/etc/sops/age.key`
   - Backed up in Bitwarden as: `age-key-thinky-nixos-host`
 
-## Next Steps (Phase 3: Production Usage)
+## Phase 3: Production Usage (IN PROGRESS - 2025-09-12)
 
-1. **Create production secrets structure**
-   - Remove test-secret.yaml
-   - Create structured secrets for services, SSH keys, API tokens
-   - Use proper naming conventions
+### ✅ Completed Tasks
+1. **Removed test infrastructure**
+   - Deleted test-secret.yaml
+   - Cleaned up test secret references from thinky-nixos configuration
+   - Configuration ready for production secrets
 
-2. **Integrate with services**
-   - Configure services to use decrypted secrets
-   - Set proper ownership and permissions
-   - Use systemd EnvironmentFile for service secrets
+2. **Created production templates**
+   - Updated example.yaml.template with comprehensive examples
+   - Created wifi-secrets-example.nix module showing real service integration
+   - Documented various secret structures (key-value, nested, multi-line)
 
-3. **Generate keys for other hosts**
+3. **Security audit**
+   - Scanned repository for plaintext secrets - none found
+   - Verified no committed SSH keys or credentials
+   - Repository is clean and ready for secure secret management
+
+### 🔄 Current Production Setup
+
+#### Creating Your First Production Secret
+```bash
+# 1. Create a new secrets file (e.g., for services)
+cd /home/tim/src/nixcfg/secrets/common
+cp example.yaml.template services.yaml
+
+# 2. Edit with SOPS (will encrypt on save)
+sops services.yaml
+
+# 3. Add your actual secrets following the template structure
+# 4. Save and exit - file will be encrypted automatically
+```
+
+#### Using Secrets in NixOS Configuration
+```nix
+# In your host configuration (e.g., hosts/thinky-nixos/default.nix)
+sopsNix = {
+  enable = true;
+  hostKeyPath = "/etc/sops/age.key";
+  defaultSopsFile = ../../secrets/common/services.yaml;
+};
+
+sops.secrets = {
+  "github_token" = {
+    owner = "tim";
+    group = "users";
+    mode = "0400";
+  };
+  "services.postgres.password" = {
+    owner = "postgres";
+    group = "postgres";
+  };
+};
+```
+
+### 📋 Remaining Tasks
+
+1. **Create actual production secrets**
+   - Identify real services needing secrets (GitHub, API tokens, etc.)
+   - Create and encrypt actual secret files
+   - Test decryption and access
+
+2. **Generate keys for other hosts**
    - MacBook Pro (mbp) - when setting up nix-darwin
    - Potato host - when configuring
    - Update .sops.yaml with their public keys
 
-4. **Implement key rotation strategy**
+3. **Implement key rotation strategy**
    - Document rotation procedures
    - Set up periodic reminders
    - Create rotation scripts
@@ -232,6 +282,12 @@ services.postgresql = {
   '';
 };
 ```
+
+### Example: WiFi Network Configuration
+See `modules/nixos/wifi-secrets-example.nix` for a complete example of using SOPS secrets with NetworkManager to configure WiFi networks. This demonstrates:
+- Defining nested YAML secrets (wirelessNetworks.home.ssid, etc.)
+- Creating a systemd service that reads decrypted secrets
+- Configuring NetworkManager connections programmatically
 
 ## Adding New Secrets
 
