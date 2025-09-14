@@ -21,9 +21,28 @@ Thumbs.db
 # Temp files
 *.log
 *.tmp
-
 *.bak
 *.orig
+
+# Security - Prevent accidental secret commits
+*.dec
+*.decrypted
+*.plaintext
+*.unencrypted
+*.key
+*.pem
+*.p12
+*.pfx
+keys.txt
+*_rsa
+*_dsa
+*_ed25519
+*_ecdsa
+.secrets/
+secrets.json
+secrets.yaml
+!secrets/**/*.yaml  # Allow encrypted secrets in secrets/ directory
+!*.template         # Allow template files
 *.pcap
 *.wsl
 CLAUDE.md

@@ -1,0 +1,120 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Mondays at 3 AM UTC
+    - cron: '0 3 * * 1'
+
+jobs:
+  gitleaks:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for scanning
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}  # Optional for enterprise features
+
+  trufflehog:
+    name: TruffleHog Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  semgrep:
+    name: Semgrep Security Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          auditOn: push
+          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}  # Optional for Semgrep App
+          publishDeployment: ${{ secrets.SEMGREP_DEPLOYMENT_ID }}  # Optional
+
+  verify-sops:
+    name: Verify SOPS Encryption
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for unencrypted secrets
+        run: |
+          # Check that all YAML files in secrets/ are encrypted
+          for file in $(find secrets -name "*.yaml" -o -name "*.yml" | grep -v template); do
+            if [ -f "$file" ]; then
+              # SOPS encrypted files contain "sops" and "encrypted_regex" keys
+              if ! grep -q '"sops":\|sops:' "$file" 2>/dev/null; then
+                echo "ERROR: $file appears to be unencrypted!"
+                exit 1
+              fi
+              echo "✓ $file is encrypted"
+            fi
+          done
+
+      - name: Check for common secret patterns
+        run: |
+          # Patterns that should not appear in plaintext
+          patterns=(
+            'password.*=.*[^"]'
+            'api[_-]?key.*=.*[^"]'
+            'token.*=.*[^"]'
+            'secret.*=.*[^"]'
+            'BEGIN.*PRIVATE KEY'
+            'ghp_[a-zA-Z0-9]{36}'  # GitHub personal access token
+            'github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}'  # GitHub fine-grained PAT
+            'sk-[a-zA-Z0-9]{48}'  # OpenAI API key
+            'npm_[a-zA-Z0-9]{36}'  # NPM token
+          )
+          
+          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive"
+          exclude_files="--exclude=*.md --exclude=*.template --exclude=security.yml"
+          
+          for pattern in "${patterns[@]}"; do
+            if grep -r -E "$pattern" . $exclude_dirs $exclude_files 2>/dev/null; then
+              echo "ERROR: Found potential secret matching pattern: $pattern"
+              exit 1
+            fi
+          done
+          echo "✓ No plaintext secrets detected"
+
+  audit-permissions:
+    name: Audit File Permissions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check sensitive file permissions
+        run: |
+          # Check that template files don't have secrets
+          for template in $(find . -name "*.template"); do
+            if grep -E 'password|secret|token|api[_-]?key' "$template" | grep -v -E 'example|placeholder|REDACTED|xxx' > /dev/null; then
+              echo "WARNING: Template $template may contain actual secrets"
+            fi
+          done

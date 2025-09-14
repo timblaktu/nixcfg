@@ -1,332 +1,528 @@
-# Secrets Management Architecture
+# SOPS-NiX Secrets Management System
 
-## Current State Analysis
+## Overview
 
-### Existing Infrastructure
+This document describes the production secrets management system for the nixcfg repository using SOPS-NiX with age encryption. The system provides secure, declarative secrets management integrated with NixOS configuration.
 
-1. **SOPS-NiX Integration**
-   - Already included in flake.nix as input
-   - Configuration stub exists at `modules/nixos/sops-integration.nix`
-   - `.sops.yaml` configuration file present with placeholder age keys
-   - Directory structure: `secrets/` with subdirectories for common and host-specific secrets
+## System Architecture
 
-2. **Bootstrap Script**
-   - `home/files/bin/bootstrap-secrets.sh` - Comprehensive script that:
-     - Uses rbw (Rust Bitwarden client) to fetch age keys from Bitwarden
-     - Configures rbw with email, pinentry, and API settings
-     - Manages age key storage in `~/.config/sops/age/`
-     - Supports both regular and enterprise Bitwarden instances
+### Component Relationships
 
-3. **Current Key Management**
-   - Age keys are stored in Bitwarden as secure notes
-   - Keys are fetched and placed in `~/.config/sops/age/keys.txt`
-   - Public keys are referenced in `.sops.yaml` for encryption rules
+```mermaid
+graph TB
+    subgraph "Secret Storage"
+        BW[Bitwarden Vault]
+        GIT[Git Repository<br/>Encrypted Secrets]
+    end
+    
+    subgraph "Encryption Layer"
+        SOPS[SOPS Tool]
+        AGE[Age Encryption]
+    end
+    
+    subgraph "Keys"
+        UK[User Key<br/>~/.config/sops/age/]
+        HK[Host Key<br/>/etc/sops/age.key]
+    end
+    
+    subgraph "NixOS Integration"
+        SOPSNIX[sops-nix Module]
+        NIXCFG[NixOS Configuration]
+        SYSTEMD[Systemd Services]
+    end
+    
+    subgraph "Runtime"
+        SECRETS[Decrypted Secrets<br/>/run/secrets.d/]
+        SERVICES[System Services]
+    end
+    
+    BW -->|Backup| UK
+    BW -->|Backup| HK
+    UK -->|Decrypt| SOPS
+    HK -->|Decrypt| SOPS
+    GIT -->|Encrypted Files| SOPS
+    SOPS -->|Uses| AGE
+    SOPS -->|Provides| SOPSNIX
+    SOPSNIX -->|Configures| NIXCFG
+    NIXCFG -->|Activates| SYSTEMD
+    SYSTEMD -->|Creates| SECRETS
+    SECRETS -->|Consumed by| SERVICES
+```
 
-### Technology Choices
-
-#### SOPS-NiX (Currently Selected)
-**Pros:**
-- Already integrated in flake
-- Uses age encryption (modern, simple)
-- Integrates well with NixOS modules
-- Secrets decrypted at activation time
-- Good documentation and community support
-
-**Cons:**
-- Requires manual key management
-- No built-in key rotation
-- Secrets stored in git (encrypted)
-
-#### Agenix (Alternative)
-**Pros:**
-- Similar to sops-nix but simpler
-- Pure Nix implementation
-- Also uses age encryption
-- Slightly easier configuration
-
-**Cons:**
-- Less feature-rich than sops-nix
-- Smaller community
-- Also stores secrets in git
-
-#### External Secret Stores (Alternative)
-**Options:** HashiCorp Vault, AWS Secrets Manager, Azure Key Vault
-**Pros:**
-- Centralized management
-- Audit logging
-- Dynamic secrets
-- Key rotation
-
-**Cons:**
-- Additional infrastructure
-- Network dependency
-- More complex setup
-
-## Recommended Architecture
-
-### Phase 1: Foundation (Immediate)
-1. **Activate SOPS-NiX** with existing configuration
-2. **Install rbw** and pinentry in home-manager
-3. **Generate host keys** for each system
-4. **Create initial secrets** structure
-
-### Phase 2: Enhancement (Short-term)
-1. **Implement secret categories:**
-   - System secrets (SSH host keys, machine-id)
-   - Service secrets (API keys, database passwords)
-   - User secrets (personal tokens, SSH keys)
-   
-2. **Establish naming conventions:**
-   - `secrets/common/` - Shared across all hosts
-   - `secrets/<hostname>/` - Host-specific
-   - `secrets/users/<username>/` - User-specific
-
-### Phase 3: Advanced (Long-term)
-1. **Key rotation strategy**
-2. **Backup and recovery procedures**
-3. **Consider external secret store integration**
-
-## Implementation Plan
-
-### 1. RBW Installation (Immediate Task)
-Add to home-manager configuration:
-- rbw package
-- pinentry program (pinentry-gtk2, pinentry-qt, or pinentry-curses)
-- Configuration for rbw settings
-- Shell aliases for common operations
-
-### 2. SOPS-NiX Activation
-- Update host configurations to import sops module
-- Configure defaultSopsFile per host
-- Define initial secrets
-
-### 3. Key Generation
-- Generate age keys for each host
-- Store public keys in `.sops.yaml`
-- Update Bitwarden with private keys
-
-### 4. Secret Migration
-- Identify existing plaintext secrets
-- Encrypt using sops
-- Update configurations to reference encrypted secrets
-
-## Security Considerations
-
-1. **Key Storage:**
-   - User keys: Bitwarden (already implemented)
-   - Host keys: Generated on first boot, stored locally
-   - Backup keys: Offline storage recommended
-
-2. **Access Control:**
-   - Use `.sops.yaml` creation rules for granular access
-   - Separate keys for users and hosts
-   - Principle of least privilege
-
-3. **Git Security:**
-   - Never commit plaintext secrets
-   - Use `.gitignore` for temporary files
-   - Regular audit of repository
-
-4. **Operational Security:**
-   - Regular key rotation schedule
-   - Audit log monitoring
-   - Incident response plan
-
-## Directory Structure
+### File Structure
 
 ```
 nixcfg/
-├── .sops.yaml                    # SOPS configuration and key assignments
+├── .sops.yaml                         # SOPS configuration & key mappings
+├── .pre-commit-config.yaml            # Gitleaks secret scanning
 ├── secrets/
-│   ├── README.md                 # Documentation
-│   ├── common/                   # Shared secrets
-│   │   ├── example.yaml.template # Template for new secrets
-│   │   └── services.yaml         # Service API keys, tokens
-│   ├── mbp/                      # MacBook Pro specific
-│   ├── potato/                   # Potato host specific
-│   └── thinky-nixos/            # WSL host specific
+│   ├── common/                        # Shared secrets across hosts
+│   │   ├── example.yaml.template      # Template for new secrets
+│   │   └── *.yaml                     # Encrypted secret files
+│   ├── thinky-nixos/                  # Host-specific secrets
+│   ├── mbp/                           # MacBook Pro secrets
+│   └── potato/                        # Potato host secrets
 ├── modules/
 │   └── nixos/
-│       └── sops-integration.nix  # NixOS SOPS module
-└── home/
-    └── files/
-        └── bin/
-            └── bootstrap-secrets.sh # Key bootstrap script
-
+│       ├── sops-nix.nix              # SOPS-NiX wrapper module
+│       └── wifi-secrets-example.nix   # Example service integration
+└── hosts/
+    └── */default.nix                  # Host configurations with secrets
 ```
 
-## Implementation Status
+## User Workflows
 
-### ✅ Phase 1: Foundation (COMPLETED - 2025-09-12)
-1. **RBW Installation** - Installed and configured with rbw-init
-2. **Age Key Generation** - Generated for user (tim) and host (thinky-nixos)
-3. **Bitwarden Storage** - Keys backed up to Bitwarden vault
-4. **SOPS Configuration** - Updated .sops.yaml with real public keys
-5. **First Secret Created** - Test secret encrypted at `secrets/common/test-secret.yaml`
+### Initial Setup Workflow
 
-### ✅ Phase 2: SOPS-NiX Activation (COMPLETED - 2025-09-12)
-1. **Created sops-nix.nix module** - Wrapper module for clean configuration
-2. **Activated in thinky-nixos** - Added to host imports and configured
-3. **Secrets decrypting successfully** - Verified at `/run/secrets.d/1/`
-4. **SSH host key imported** - SOPS automatically imported existing SSH key as age key
+```mermaid
+sequenceDiagram
+    participant User
+    participant RBW as Bitwarden CLI
+    participant System
+    participant Git
+    
+    User->>RBW: rbw-init (configure Bitwarden)
+    RBW->>RBW: Configure email, pinentry
+    
+    User->>System: Generate age keys
+    Note over System: age-keygen > keys.txt
+    System->>User: Public & Private keys
+    
+    User->>RBW: rbw add age-key-{user/host}
+    RBW->>RBW: Store private keys
+    
+    User->>System: Place keys in correct locations
+    Note over System: User: ~/.config/sops/age/keys.txt<br/>Host: /etc/sops/age.key
+    
+    User->>Git: Update .sops.yaml with public keys
+    Git->>Git: Commit configuration
+```
 
-### Generated Keys
-- **User Key (tim)**: `age1s3w0vh40qtjzx677xdda7lv5sqnhrxg9ae306zrkx4deurcvx90sajtlsk`
-  - Private key: `~/.config/sops/age/keys.txt`
-  - Backed up in Bitwarden as: `age-key-tim-user`
-  
-- **Host Key (thinky-nixos)**: `age1rz0k6055dsat660rs3y8jdypmjxdjwaya2w4v0x6q7646m6n8atszz0vzx`
-  - Private key: `/etc/sops/age.key`
-  - Backed up in Bitwarden as: `age-key-thinky-nixos-host`
+### Creating New Secrets Workflow
 
-## Phase 3: Production Usage (IN PROGRESS - 2025-09-12)
+```mermaid
+sequenceDiagram
+    participant User
+    participant SOPS
+    participant Editor
+    participant Git
+    participant NixOS
+    
+    User->>User: cd secrets/common/
+    User->>SOPS: sops services.yaml
+    SOPS->>Editor: Open decrypted view
+    User->>Editor: Add secrets in YAML format
+    Editor->>SOPS: Save & close
+    SOPS->>SOPS: Encrypt with age keys
+    SOPS->>Git: Create encrypted file
+    
+    User->>NixOS: Edit host configuration
+    Note over NixOS: Add sops.secrets definitions
+    User->>Git: git add & commit
+    User->>NixOS: nixos-rebuild switch
+    NixOS->>NixOS: Decrypt secrets to /run/secrets.d/
+```
 
-### ✅ Completed Tasks
-1. **Removed test infrastructure**
-   - Deleted test-secret.yaml
-   - Cleaned up test secret references from thinky-nixos configuration
-   - Configuration ready for production secrets
+### Using Secrets in Services Workflow
 
-2. **Created production templates**
-   - Updated example.yaml.template with comprehensive examples
-   - Created wifi-secrets-example.nix module showing real service integration
-   - Documented various secret structures (key-value, nested, multi-line)
+```mermaid
+sequenceDiagram
+    participant NixOS as NixOS Config
+    participant Build as nixos-rebuild
+    participant Systemd
+    participant SOPS as sops-nix
+    participant Service
+    
+    NixOS->>Build: Define sops.secrets."api_key"
+    Build->>Build: Evaluate configuration
+    Build->>Systemd: Create activation script
+    
+    Systemd->>SOPS: Trigger sops-nix.service
+    SOPS->>SOPS: Read encrypted secrets
+    SOPS->>SOPS: Decrypt with host key
+    SOPS->>Systemd: Write to /run/secrets.d/
+    
+    Systemd->>Service: Start service
+    Service->>Service: Read from secret path
+    Note over Service: cat /run/secrets.d/1/api_key
+```
 
-3. **Security audit**
-   - Scanned repository for plaintext secrets - none found
-   - Verified no committed SSH keys or credentials
-   - Repository is clean and ready for secure secret management
+## Quick Start Guide
 
-### 🔄 Current Production Setup
+### 1. Create Your First Secret
 
-#### Creating Your First Production Secret
 ```bash
-# 1. Create a new secrets file (e.g., for services)
+# Navigate to secrets directory
 cd /home/tim/src/nixcfg/secrets/common
+
+# Create new secrets file from template
 cp example.yaml.template services.yaml
 
-# 2. Edit with SOPS (will encrypt on save)
+# Edit with SOPS (will open your $EDITOR)
 sops services.yaml
 
-# 3. Add your actual secrets following the template structure
-# 4. Save and exit - file will be encrypted automatically
+# Add your secrets in YAML format:
+# github_token: ghp_xxxxxxxxxxxxx
+# api_key: sk-xxxxxxxxxxxxx
+
+# Save and exit - file encrypts automatically
 ```
 
-#### Using Secrets in NixOS Configuration
-```nix
-# In your host configuration (e.g., hosts/thinky-nixos/default.nix)
-sopsNix = {
-  enable = true;
-  hostKeyPath = "/etc/sops/age.key";
-  defaultSopsFile = ../../secrets/common/services.yaml;
-};
+### 2. Configure NixOS to Use Secrets
 
-sops.secrets = {
-  "github_token" = {
-    owner = "tim";
-    group = "users";
-    mode = "0400";
+Edit your host configuration (`hosts/{hostname}/default.nix`):
+
+```nix
+{
+  # Enable SOPS-NiX
+  sopsNix = {
+    enable = true;
+    hostKeyPath = "/etc/sops/age.key";
+    defaultSopsFile = ../../secrets/common/services.yaml;
   };
-  "services.postgres.password" = {
-    owner = "postgres";
-    group = "postgres";
+  
+  # Define specific secrets
+  sops.secrets = {
+    "github_token" = {
+      owner = "tim";
+      mode = "0400";
+    };
+    "api_key" = {
+      owner = "myservice";
+      group = "myservice";
+    };
   };
-};
+}
 ```
 
-### 📋 Remaining Tasks
+### 3. Use Secrets in Services
 
-1. **Create actual production secrets**
-   - Identify real services needing secrets (GitHub, API tokens, etc.)
-   - Create and encrypt actual secret files
-   - Test decryption and access
-
-2. **Generate keys for other hosts**
-   - MacBook Pro (mbp) - when setting up nix-darwin
-   - Potato host - when configuring
-   - Update .sops.yaml with their public keys
-
-3. **Implement key rotation strategy**
-   - Document rotation procedures
-   - Set up periodic reminders
-   - Create rotation scripts
-
-## How to Use Secrets in Services
-
-### Example: Using API Key in a Service
 ```nix
-# In your NixOS configuration:
-sops.secrets."github_token" = {
-  owner = "git";
-  group = "git";
-  mode = "0400";
-};
-
-systemd.services.my-service = {
+# Option 1: Environment variable pointing to secret file
+systemd.services.my-app = {
   serviceConfig = {
-    EnvironmentFile = config.sops.secrets.github_token.path;
+    Environment = "TOKEN_FILE=${config.sops.secrets.github_token.path}";
+  };
+  script = ''
+    TOKEN=$(cat $TOKEN_FILE)
+    # Use $TOKEN in your service
+  '';
+};
+
+# Option 2: Direct file reference
+services.myapp = {
+  secretFile = config.sops.secrets.api_key.path;
+};
+
+# Option 3: SystemD EnvironmentFile
+systemd.services.webapp = {
+  serviceConfig = {
+    EnvironmentFile = config.sops.secrets.api_key.path;
   };
 };
 ```
 
-### Example: Using Database Password
+### 4. Apply Configuration
+
+```bash
+# Rebuild NixOS with new secrets
+sudo nixos-rebuild switch --flake '.#thinky-nixos'
+
+# Verify secrets are decrypted
+sudo ls -la /run/secrets.d/1/
+sudo cat /run/secrets.d/1/github_token  # Should show decrypted value
+```
+
+## Security Safeguards
+
+### 1. Pre-commit Hook (Gitleaks)
+
+The repository includes a `.pre-commit-config.yaml` that uses Gitleaks to scan for secrets:
+
+```yaml
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+```
+
+**Setup:**
+```bash
+# Install pre-commit hooks
+nix-shell -p pre-commit
+pre-commit install
+
+# Manual scan
+pre-commit run --all-files
+```
+
+### 2. .gitignore Protection
+
+Critical paths are excluded from git to prevent accidental commits:
+
+```gitignore
+# Environment variables
+.env
+.envrc
+
+# Temporary decrypted files
+*.dec
+*.plaintext
+*.unencrypted
+
+# Key material (backup protection)
+*.key
+*.pem
+keys.txt
+```
+
+### 3. File Permissions
+
+All secrets are created with restrictive permissions:
+
+- User keys: `600` (owner read/write only)
+- Host keys: `600` (root only)
+- Decrypted secrets: Configurable per secret (default `400`)
+
+### 4. Runtime Security
+
+- Secrets only exist in `/run/secrets.d/` (tmpfs - RAM only)
+- Secrets are re-decrypted on every boot
+- No plaintext secrets persist on disk
+- Services read secrets at runtime, not build time
+
+### 5. Recommended GitHub Actions
+
+Add to `.github/workflows/security.yml`:
+
+```yaml
+name: Security Scan
+
+on: [push, pull_request]
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trufflehog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+```
+
+## Common Patterns
+
+### Database Credentials
+
 ```nix
-sops.secrets."db_password" = {
+sops.secrets."postgres_password" = {
   owner = "postgres";
   group = "postgres";
 };
 
 services.postgresql = {
+  enable = true;
   initialScript = pkgs.writeText "init.sql" ''
-    ALTER USER postgres PASSWORD '$(cat ${config.sops.secrets.db_password.path})';
+    ALTER USER postgres WITH PASSWORD '$(cat ${config.sops.secrets.postgres_password.path})';
   '';
 };
 ```
 
-### Example: WiFi Network Configuration
-See `modules/nixos/wifi-secrets-example.nix` for a complete example of using SOPS secrets with NetworkManager to configure WiFi networks. This demonstrates:
-- Defining nested YAML secrets (wirelessNetworks.home.ssid, etc.)
-- Creating a systemd service that reads decrypted secrets
-- Configuring NetworkManager connections programmatically
+### API Keys for User Services
 
-## Adding New Secrets
+```nix
+sops.secrets."openai_key" = {
+  owner = config.users.users.tim.name;
+  mode = "0400";
+};
 
-1. Create or edit encrypted file:
+home-manager.users.tim = {
+  home.sessionVariables = {
+    OPENAI_API_KEY_FILE = config.sops.secrets.openai_key.path;
+  };
+};
+```
+
+### WiFi Networks
+
+See `modules/nixos/wifi-secrets-example.nix` for complete implementation.
+
+### SSH Private Keys
+
+```yaml
+# In secrets file:
+ssh_keys:
+  github_deploy: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    [key content]
+    -----END OPENSSH PRIVATE KEY-----
+```
+
+```nix
+sops.secrets."ssh_keys.github_deploy" = {
+  owner = "git";
+  mode = "0600";
+  path = "/home/git/.ssh/deploy_key";
+};
+```
+
+## Key Management
+
+### Generating Keys
+
+```bash
+# Generate user key
+age-keygen -o ~/.config/sops/age/keys.txt
+
+# Generate host key (as root)
+sudo age-keygen -o /etc/sops/age.key
+```
+
+### Backing Up Keys
+
+1. **Primary Backup**: Bitwarden
    ```bash
-   sops secrets/common/services.yaml
+   # Store in Bitwarden
+   rbw add --folder "Infrastructure" age-key-{user|host}-{hostname}
+   # Paste private key as secure note
    ```
 
-2. Add secret definition in host config:
-   ```nix
-   sops.secrets."my_new_secret" = {
-     owner = "user";
-     group = "group";
-     mode = "0400";
-   };
-   ```
+2. **Offline Backup**: Encrypted USB/Paper
+   - Print QR codes of keys
+   - Store in secure physical location
 
-3. Rebuild system:
-   ```bash
-   sudo nixos-rebuild switch --flake '.#hostname'
-   ```
+### Key Rotation
 
-4. Access decrypted secret:
-   ```bash
-   cat /run/secrets.d/1/my_new_secret
-   ```
+```bash
+# 1. Generate new keys
+age-keygen -o ~/.config/sops/age/new-keys.txt
 
-## Questions for Decision Making
+# 2. Update .sops.yaml with new public key
 
-1. Do you want to stick with SOPS-NiX or consider alternatives?
-2. What types of secrets do you need to manage? (SSH keys, API tokens, passwords, certificates?)
-3. Do you have preference for pinentry program? (GTK, Qt, or terminal-based?)
-4. Should we implement host key generation in the NixOS configuration?
-5. Do you need secret sharing between specific host groups?
-6. What's your backup strategy for the age keys?
+# 3. Re-encrypt all secrets
+find secrets -name "*.yaml" -type f | while read file; do
+  sops rotate -i "$file"
+done
+
+# 4. Replace old keys with new keys
+mv ~/.config/sops/age/new-keys.txt ~/.config/sops/age/keys.txt
+
+# 5. Update Bitwarden backup
+```
+
+## Troubleshooting
+
+### Secret Not Decrypting
+
+```bash
+# Check key presence
+ls -la ~/.config/sops/age/keys.txt
+sudo ls -la /etc/sops/age.key
+
+# Test manual decryption
+sops -d secrets/common/services.yaml
+
+# Check sops-nix service
+systemctl status sops-nix
+
+# View logs
+journalctl -u sops-nix -n 50
+```
+
+### Permission Denied
+
+```bash
+# Check secret permissions
+sudo ls -la /run/secrets.d/1/
+
+# Verify ownership in config
+# sops.secrets."secret_name".owner = "correct-user";
+```
+
+### Secret Not Found
+
+```bash
+# Ensure secret is defined in both places:
+# 1. In the YAML file (sops secrets/common/file.yaml)
+# 2. In NixOS config (sops.secrets."secret_name" = { ... })
+
+# Verify path
+echo ${config.sops.secrets.secret_name.path}
+```
+
+### SOPS Can't Find Keys
+
+```bash
+# Check SOPS is using correct key file
+export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt
+sops -d secrets/common/services.yaml
+
+# For host key issues
+sudo SOPS_AGE_KEY_FILE=/etc/sops/age.key sops -d secrets/common/services.yaml
+```
+
+## Best Practices
+
+1. **Never commit plaintext secrets** - Always use SOPS to edit
+2. **Use descriptive secret names** - `github_token` not `token1`
+3. **Organize secrets logically** - Group related secrets in same file
+4. **Set appropriate ownership** - Match service user requirements
+5. **Use most restrictive permissions** - Default to `400` when possible
+6. **Backup keys immediately** - Before creating any secrets
+7. **Document secret dependencies** - Note which services use which secrets
+8. **Rotate keys periodically** - At least annually
+9. **Audit secret access** - Review service permissions regularly
+10. **Test disaster recovery** - Ensure you can restore from backups
+
+## Migration from Other Systems
+
+### From environment variables
+
+```bash
+# Before: .env file
+API_KEY=secret123
+
+# After: secrets/common/services.yaml
+api_key: secret123
+
+# In NixOS:
+systemd.services.myapp = {
+  serviceConfig.EnvironmentFile = config.sops.secrets.api_key.path;
+};
+```
+
+### From plaintext config files
+
+```bash
+# Before: config.json with embedded secrets
+{"api_key": "secret123"}
+
+# After: Template with secret reference
+{"api_key": "@@API_KEY@@"}
+
+# In service:
+preStart = ''
+  sed "s|@@API_KEY@@|$(cat ${config.sops.secrets.api_key.path})|g" \
+    ${./config.json.template} > /run/myapp/config.json
+'';
+```
 
 ## References
 
-- [SOPS-NiX Documentation](https://github.com/Mic92/sops-nix)
+- [SOPS Documentation](https://github.com/getsops/sops)
+- [SOPS-NiX Repository](https://github.com/Mic92/sops-nix)
 - [Age Encryption](https://github.com/FiloSottile/age)
-- [RBW - Rust Bitwarden Client](https://github.com/doy/rbw)
-- [NixOS Secrets Management Guide](https://nixos.wiki/wiki/Comparison_of_secret_managing_schemes)
+- [Gitleaks](https://github.com/gitleaks/gitleaks)
+- [RBW - Rust Bitwarden CLI](https://github.com/doy/rbw)
