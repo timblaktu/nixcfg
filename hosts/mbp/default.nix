@@ -4,15 +4,38 @@
 {
   imports = [
     ./hardware-configuration.nix
+    ../../modules/base.nix
+    inputs.sops-nix.nixosModules.sops
   ];
+
+  # Allow unfree packages
+  nixpkgs.config.allowUnfree = lib.mkDefault true;
+
+  # Base module configuration  
+  base = {
+    sshPasswordAuth = lib.mkDefault true;
+    requireWheelPassword = lib.mkDefault false;
+    userGroups = lib.mkDefault [ "wheel" "networkmanager" "audio" "video" ];
+    additionalPackages = lib.mkDefault (with pkgs; [
+      kbd
+      terminus_font
+      powerline-fonts
+    ]);
+    consolePackages = lib.mkDefault (with pkgs; [
+      kbd
+      terminus_font
+      powerline-fonts
+    ]);
+    additionalShellAliases = lib.mkDefault { };
+  };
 
   # Hostname
   networking = {
     hostName = "mbp";
-    useNetworkd = true;
-    firewall.enable = false;
+    useNetworkd = lib.mkDefault true;
+    firewall.enable = lib.mkDefault false;
     wireless = {
-      enable = true;
+      enable = lib.mkDefault true;
       networks = {
         "SUMMIT-VIS" = {
           psk = "summ1tv1s1t0r";
@@ -24,7 +47,7 @@
     };
   };
 
-  systemd.network.enable = true;
+  systemd.network.enable = lib.mkDefault true;
 
   # Configure systemd-networkd to send hostname in DHCP requests
   systemd.network.networks."40-ethernet" = {
@@ -66,16 +89,15 @@
 
   # User configuration (overrides common)
   users.users.tim = {
-    isNormalUser = true;
-    shell = lib.mkForce pkgs.zsh;
-    extraGroups = ["wheel" "users" "audio" "video"];
-    packages = with pkgs; [
+    isNormalUser = lib.mkDefault true;
+    extraGroups = lib.mkDefault ["wheel" "users" "audio" "video"];
+    packages = lib.mkDefault (with pkgs; [
       inputs.home-manager.packages.${pkgs.system}.default
-    ];
+    ]);
   };
 
   # Sudo without password for wheel group
-  security.sudo.wheelNeedsPassword = false;
+  security.sudo.wheelNeedsPassword = lib.mkDefault false;
 
   # Enable GnuPG agent
   programs.gnupg.agent = {
@@ -129,10 +151,11 @@
 
   # SSH service
   services.openssh = {
-    enable = true;
+    enable = lib.mkDefault true;
+    ports = lib.mkDefault [ 22 ];
     settings = {
-      PermitRootLogin = "no";
-      PasswordAuthentication = lib.mkForce true;
+      PermitRootLogin = lib.mkDefault "no";
+      PasswordAuthentication = lib.mkForce true;  # mkForce is intentional here
     };
   };
 
@@ -153,4 +176,13 @@
   };
 
   services.libinput.enable = true;
+
+  # System state version
+  # This value determines the NixOS release from which the default
+  # settings for stateful data, like file locations and database versions
+  # on your system were taken. It's perfectly fine and recommended to leave
+  # this value at the release version of the first install of this system.
+  # Before changing this value read the documentation for this option
+  # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
+  system.stateVersion = "24.11"; # Did you read the comment?
 }

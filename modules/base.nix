@@ -169,6 +169,29 @@ in
 
   # Actual configuration based on the options
   config = {
+    # Runtime assertions for configuration validation
+    assertions = [
+      {
+        assertion = cfg.userName != "";
+        message = "base.userName must not be empty";
+      }
+      {
+        assertion = cfg.nixCores >= 0;
+        message = "base.nixCores must be non-negative (0 for auto-detect)";
+      }
+      {
+        assertion = cfg.cacheTimeout > 0;
+        message = "base.cacheTimeout must be positive";
+      }
+      {
+        assertion = builtins.elem "wheel" cfg.userGroups || !cfg.requireWheelPassword;
+        message = "User must be in wheel group when requireWheelPassword is false";
+      }
+      {
+        assertion = cfg.sshRootLogin == "no" || cfg.sshRootLogin == "yes" || cfg.sshRootLogin == "prohibit-password" || cfg.sshRootLogin == "forced-commands-only";
+        message = "base.sshRootLogin must be one of: no, yes, prohibit-password, forced-commands-only";
+      }
+    ];
     # Time zone and internationalization
     time.timeZone = lib.mkDefault cfg.timeZone;
     i18n.defaultLocale = lib.mkDefault cfg.locale;

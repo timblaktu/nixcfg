@@ -133,51 +133,8 @@
         }
       );
       
-      "tim@tblack-t14-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
-        inputs.home-manager.lib.homeManagerConfiguration {
-          inherit pkgs;
-          modules = [
-            { nixpkgs.config.allowUnfree = true; }
-            ../home/modules/base.nix
-            {
-              homeBase = {
-                username = "tim";
-                homeDirectory = "/home/tim";
-                enableDevelopment = true;
-                enableEspIdf = true;
-                environmentVariables = {
-                  WSL_DISTRO = "nixos";
-                  EDITOR = "nvim";
-                };
-                shellAliases = {
-                  explorer = "explorer.exe .";
-                  code = "code.exe";
-                  code-insiders = "code-insiders.exe";
-                  esp32c5 = "esp-idf-shell";
-                };
-              };
-              targets.wsl = {
-                enable = true;
-                windowsUsername = "tblack";
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
-                };
-                # Disable bind mount - handled by NixOS-WSL module
-                bindMountRoot.enable = false;
-              };
-            }
-            ../home/modules/mcp-servers.nix
-          ];
-          extraSpecialArgs = {
-            inherit inputs;
-            inherit (inputs) nixpkgs-stable;
-            wslHostname = "tblack-t14-nixos";
-          };
-        }
-      );
+      # tim@tblack-t14-nixos configuration archived (work laptop no longer in use)
+      # See hosts/archived/tblack-t14-nixos/ for reference
       
       "tim@nixvim-minimal" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
@@ -209,49 +166,8 @@
         }
       );
       
-      "tim@tblack-t14-ubuntu" = withSystem "x86_64-linux" ({ pkgs, ... }:
-        inputs.home-manager.lib.homeManagerConfiguration {
-          inherit pkgs;
-          modules = [
-            { nixpkgs.config.allowUnfree = true; }
-            ../home/modules/base.nix
-            {
-              homeBase = {
-                username = "tim";
-                homeDirectory = "/home/tim";
-                enableDevelopment = false;
-                enableEspIdf = true;
-                environmentVariables = {
-                  WSL_DISTRO = "ubuntu";
-                  EDITOR = "nvim";
-                };
-                shellAliases = {
-                  explorer = "explorer.exe .";
-                  code = "code.exe";
-                  code-insiders = "code-insiders.exe";
-                };
-              };
-              targets.wsl = {
-                enable = true;
-                windowsUsername = "tblack";
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
-                };
-                bindMountRoot.enable = true;
-              };
-            }
-            ../home/modules/mcp-servers.nix
-          ];
-          extraSpecialArgs = {
-            inherit inputs;
-            inherit (inputs) nixpkgs-stable;
-            wslHostname = "tblack-t14-ubuntu";
-          };
-        }
-      );
+      # tim@tblack-t14-ubuntu configuration archived (work laptop no longer in use)
+      # See hosts/archived/ for reference
       
       "tim@potato" = withSystem "aarch64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
