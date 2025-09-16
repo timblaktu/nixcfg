@@ -239,6 +239,10 @@ in {
       # Let Home Manager install and manage itself
       programs.home-manager.enable = true;
 
+      # Disable input method entirely to avoid fcitx5 package issues
+      i18n.inputMethod.enable = false;
+      i18n.inputMethod.type = null;
+
       # Enable profile management for standalone mode
       targets.genericLinux.enable = mkDefault true;
       

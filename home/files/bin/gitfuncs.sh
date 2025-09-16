@@ -70,3 +70,105 @@ EOF
         fi
     done <<< "$changed_files_list"
 }
+git_remote_workflow() {
+  cat << EOF
+Best Practices for Multi-Remote Git Workflows
+
+1. Starting a Branch Workflow
+
+# Ensure you're on the main development branch from your fork
+git checkout master  # or main
+git pull fork master  # sync with your fork's master
+
+# Create and switch to new feature branch
+git checkout -b feature-name
+
+# OR create branch from specific upstream commit/branch
+git checkout -b feature-name upstream/master
+
+2. Setting Up Remote Tracking (Recommended)
+
+# When pushing for the first time, set upstream to your fork
+git push -u fork feature-name
+
+# This creates tracking: feature-name -> fork/feature-name
+# Future pushes can just use: git push
+
+3. Development Workflow Commands
+
+# Make changes, stage, commit
+git add .
+git commit -m "Descriptive commit message"
+
+# Push to your fork (if tracking is set up)
+git push
+
+# OR explicitly specify remote and branch
+git push fork feature-name
+
+4. Best Practices for Multi-Remote Setup
+
+Remote Naming Convention:
+- origin or fork: Your personal fork (where you push)
+- upstream: Original project repository (read-only for you)
+
+Branch Workflow:
+# Start work
+git checkout master
+git pull fork master                    # sync your fork
+git pull upstream master               # get latest from original project
+git push fork master                   # update your fork's master
+git checkout -b feature-fix-something  # create feature branch
+
+# Work and commit
+git add -A
+git commit -m "Fix something important"
+
+# Push to your fork with tracking
+git push -u fork feature-fix-something
+
+# Continue development
+git add .
+git commit -m "Address review feedback"
+git push  # uses tracking to push to fork/feature-fix-something
+
+5. Safety Considerations
+
+Never accidentally push to upstream:
+# Check where you're about to push
+git remote -v
+git branch -vv  # shows tracking relationships
+
+# Always be explicit on first push
+git push -u fork feature-name
+
+# If you accidentally set upstream tracking, fix it:
+git branch --set-upstream-to=fork/feature-name
+
+6. Example Workflow Summary for a nix home-manager configuration project/repo
+
+For the home-manager repository specifically:
+
+# Starting new work
+cd ~/src/home-manager
+git checkout master
+git pull fork master
+git checkout -b feature-new-fix
+
+# Make changes, commit
+git add .
+git commit -m "Fix new issue"
+
+# Push to fork with tracking
+git push -u fork feature-new-fix
+
+# Update flake.nix to point to new branch
+# In ~/src/nixcfg/flake.nix:
+# url = "git+file:///home/tim/src/home-manager?ref=feature-new-fix";
+
+# Test the fix
+nix flake lock --update-input home-manager
+sudo nixos-rebuild switch --flake '.#thinky-nixos'
+
+EOF
+}
