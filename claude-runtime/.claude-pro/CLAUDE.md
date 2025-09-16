@@ -32,6 +32,28 @@
 - This file is the single source of truth for all Claude Code account configurations
 
 ## AI Guidance
+
+### 🔥 CRITICAL: github.com/timblaktu Repository Ownership 🔥
+- **ALL github.com/timblaktu repositories are USER-OWNED**
+- When encountering issues with timblaktu repos, **NEVER work around the issue**
+- **ALWAYS locate the local working tree** and work there in an appropriate branch
+- **NEVER change flake inputs** to avoid timblaktu repos - we own them and should fix them
+
+**Known Local Repository Locations:**
+- home-manager: `~/src/home-manager` (work in fork remote branch)
+- NixOS-WSL: Location TBD (if needed)
+- Other timblaktu repos: Check ~/src/ directory
+
+**Workflow for timblaktu repo issues:**
+1. Identify the issue in the timblaktu repo
+2. Navigate to local working tree (e.g., `cd ~/src/home-manager`)
+3. Checkout appropriate branch (`git checkout fork/feature-test` or create new branch)
+4. Fix the issue directly in the codebase
+5. Test the fix
+6. Commit and push to fork
+7. Update flake.lock if needed
+
+### General AI Guidance
 - ALWAYS ensure any generated shell commands support both bash AND zsh syntaxes
 - ALWAYS properly escape or quote special shell characters when generating commands
 * After receiving tool results, carefully reflect on their quality and determine optimal next steps
@@ -403,3 +425,29 @@ All /nixmemory family commands (/usermemory, /globalmemory) now properly handle 
 - ✅ WSL tarball builds successfully with security checks
 - ✅ Git status shows no changes after home-manager rebuild
 - 🔄 Slash commands need testing in new Claude Code session
+
+## Memory Entry - 2025-09-16 - Flake Input Repository Branching Workflows Research Complete
+
+### Key Research Findings:
+- **Original git worktree approach** with environment variables in flake.nix conflicts with Nix purity model
+- **Refined approach** using AST-based manipulation maintains purity while achieving automation benefits
+- **rnix-parser** provides foundation for safe Nix code manipulation preserving formatting  
+- **nixfmt** is official formatter with rewrite capabilities
+- **Git worktree patterns** for parallel development actively used in 2024-2025 AI workflows
+
+### Technical Solutions Researched:
+- **--override-input**: Changes flake inputs at flake level (implies --no-write-lock-file)
+- **--redirect**: Redirects store paths to local directories at derivation level
+- **rnix-parser**: Rust AST parser works on incomplete/broken code, preserves 100% formatting
+- **Git metadata storage**: Use git config for workspace configuration (like git submodules pattern)
+
+### Recommended Implementation Strategy:
+1. **flake.nix always contains literal URLs** (no template variables)
+2. **Workspace script manages URLs** via AST manipulation using rnix-parser
+3. **Git config stores workspace metadata**: `git config workspace.feature.repo branch`
+4. **Import/export API** converts existing flake.nix to workspace config  
+5. **Maintains Nix purity** while eliminating URL switching friction
+
+### Documentation Updated: 
+- **FLAKE-SUPERPROJECT-WORKFLOW.md** with comprehensive refined approach section
+- **Research insights** on Nix code manipulation ecosystem and git worktree patterns

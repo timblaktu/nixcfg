@@ -14,7 +14,7 @@
     };
 
     home-manager = {
-      url = "github:timblaktu/home-manager/feature-test";
+      url = "git+file:///home/tim/src/home-manager?ref=feature-test-with-fcitx5-fix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     

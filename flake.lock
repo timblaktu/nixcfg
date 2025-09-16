@@ -173,18 +173,18 @@
         ]
       },
       "locked": {
-        "lastModified": 1750282904,
-        "narHash": "sha256-kGEhvsaIUD10PYjb5kZLPZhOXNzA+n+IiwQJzaiQiXY=",
-        "owner": "timblaktu",
-        "repo": "home-manager",
-        "rev": "7bbf28c7bc631d701b1b1ec84858d5561d7af6ec",
-        "type": "github"
+        "lastModified": 1758039242,
+        "narHash": "sha256-1Ucdt5m9AbGSgVdAZXONCvmgTU1i4HWkHlU2ij2cdBw=",
+        "ref": "feature-test-with-fcitx5-fix",
+        "rev": "436988ee26a1725d9f138618c594e82a8c8e0a41",
+        "revCount": 4864,
+        "type": "git",
+        "url": "file:///home/tim/src/home-manager"
       },
       "original": {
-        "owner": "timblaktu",
-        "ref": "feature-test",
-        "repo": "home-manager",
-        "type": "github"
+        "ref": "feature-test-with-fcitx5-fix",
+        "type": "git",
+        "url": "file:///home/tim/src/home-manager"
       }
     },
     "ixx": {
