@@ -1,0 +1,11 @@
+# Test SOPS configuration
+# Uses test age keys for integration testing
+keys:
+  - &test-user age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3lapwpqszqgpqyqszqg
+  - &test-host age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqsq0xn57
+creation_rules:
+  - path_regex: .*\.yaml$
+    key_groups:
+      - age:
+          - *test-user
+          - *test-host

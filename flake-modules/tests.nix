@@ -364,6 +364,40 @@
         echo "✅ Files module test passed"
         touch $out
       '';
+
+      # === SOPS-NIX TESTS ===
+      sops-simple-test = import ../tests/sops-simple.nix { inherit pkgs; lib = pkgs.lib; };
+      
+      # === INTEGRATION TESTS ===
+      # Full system integration tests using NixOS VMs
+      ssh-integration-test = import ../tests/integration/ssh-management.nix { inherit pkgs; lib = pkgs.lib; };
+      sops-integration-test = import ../tests/integration/sops-deployment.nix { inherit pkgs; lib = pkgs.lib; };
+      
+      # === SSH AUTHENTICATION TESTS ===
+      ssh-simple-test = pkgs.runCommand "test-ssh-simple" {
+        buildInputs = with pkgs; [ openssh ];
+      } ''
+        set -x  # Enable debugging
+        echo "=== Simple SSH Test ===" > $out
+        
+        # Test SSH keygen is available (note: ssh-keygen returns 1 when called with -?)
+        ${pkgs.openssh}/bin/ssh-keygen -? 2>&1 | head -1 || true
+        echo "✓ ssh-keygen is available" >> $out
+        
+        # Generate test key
+        KEY_FILE="$(mktemp -d)/test_key"
+        ${pkgs.openssh}/bin/ssh-keygen -t ed25519 -f "$KEY_FILE" -N "" >/dev/null 2>&1
+        
+        if [[ -f "$KEY_FILE" ]] && [[ -f "$KEY_FILE.pub" ]]; then
+          echo "✓ Successfully generated test SSH key" >> $out
+        else
+          echo "✗ Failed to generate SSH key" >> $out
+          exit 1
+        fi
+        
+        echo "" >> $out
+        echo "=== Test Completed ===" >> $out
+      '';
     };
 
     # Additional test runners and utilities
@@ -395,7 +429,9 @@
                       module-base-integration module-wsl-common-integration \
                       ssh-service-configured user-tim-configured \
                       build-thinky-nixos-dryrun build-nixos-wsl-minimal-dryrun \
-                      files-module-test; do
+                      files-module-test \
+                      sops-simple-test ssh-simple-test \
+                      ssh-integration-test sops-integration-test; do
             TOTAL=$((TOTAL + 1))
             echo -n "Running $test... "
             if nix build ".#checks.x86_64-linux.$test" >/dev/null 2>&1; then
@@ -447,6 +483,64 @@
           echo "  ls -la $SNAPSHOT_DIR/snapshot-$TIMESTAMP/"
           echo "  cat $SNAPSHOT_DIR/snapshot-$TIMESTAMP/*.json | jq"
         ''}/bin/snapshot";
+      };
+
+      # Run integration tests only
+      test-integration = {
+        type = "app";
+        meta.description = "Run only integration tests (VM-based tests)";
+        program = "${pkgs.writeShellScriptBin "test-integration" ''
+          #!/usr/bin/env bash
+          set -e
+          
+          echo "🔬 Running Integration Test Suite (VM-based)"
+          echo "============================================"
+          echo ""
+          echo "Note: These tests require KVM/virtualization support"
+          echo ""
+          
+          # Colors for output
+          RED='\033[0;31m'
+          GREEN='\033[0;32m'
+          YELLOW='\033[1;33m'
+          CYAN='\033[0;36m'
+          NC='\033[0m' # No Color
+          
+          TOTAL=0
+          PASSED=0
+          FAILED=0
+          
+          # Run integration tests
+          for test in ssh-integration-test sops-integration-test; do
+            TOTAL=$((TOTAL + 1))
+            echo -e "''${CYAN}Starting $test...''${NC}"
+            if nix build ".#checks.x86_64-linux.$test" -L --show-trace; then
+              echo -e "''${GREEN}✅ $test PASSED''${NC}"
+              PASSED=$((PASSED + 1))
+            else
+              echo -e "''${RED}❌ $test FAILED''${NC}"
+              FAILED=$((FAILED + 1))
+            fi
+            echo ""
+          done
+          
+          echo "================================="
+          echo "Integration Test Results:"
+          echo "---------------------------------"
+          echo -e "Total Tests: $TOTAL"
+          echo -e "Passed: ''${GREEN}$PASSED''${NC}"
+          echo -e "Failed: ''${RED}$FAILED''${NC}"
+          
+          if [ $FAILED -eq 0 ]; then
+            echo -e "\n''${GREEN}✅ All integration tests passed!''${NC}"
+            exit 0
+          else
+            echo -e "\n''${YELLOW}⚠️  Some integration tests failed.''${NC}"
+            echo "Run with -L flag for detailed output:"
+            echo "  nix build .#checks.x86_64-linux.ssh-integration-test -L"
+            exit 1
+          fi
+        ''}/bin/test-integration";
       };
 
       # Quick regression test before major changes
