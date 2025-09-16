@@ -6,7 +6,11 @@
   imports = [
     ./hardware-config.nix
     ../../modules/wsl-tarball-checks.nix
+    inputs.nixos-wsl.nixosModules.default
   ];
+  
+  # Keep it free for distribution
+  nixpkgs.config.allowUnfree = false;
 
   # WSL configuration
   wsl = {

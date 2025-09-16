@@ -72,6 +72,29 @@ in
   };
 
   config = mkIf cfg.enable {
+    # Runtime assertions for WSL configuration validation
+    assertions = [
+      {
+        assertion = cfg.hostname != "";
+        message = "wslCommon.hostname must not be empty";
+      }
+      {
+        assertion = cfg.defaultUser != "";
+        message = "wslCommon.defaultUser must not be empty";
+      }
+      {
+        assertion = cfg.sshPort > 0 && cfg.sshPort < 65536;
+        message = "wslCommon.sshPort must be a valid port number (1-65535)";
+      }
+      {
+        assertion = cfg.automountRoot != "";
+        message = "wslCommon.automountRoot must not be empty";
+      }
+      {
+        assertion = builtins.elem "wheel" cfg.userGroups;
+        message = "wslCommon.userGroups should include 'wheel' for sudo access";
+      }
+    ];
     # WSL configuration
     wsl = {
       enable = true;

@@ -52,7 +52,7 @@
         ./flake-modules/nixos-configurations.nix
         ./flake-modules/darwin-configurations.nix
         ./flake-modules/home-configurations.nix
-        ./flake-modules/checks.nix
+        ./flake-modules/tests.nix  # All checks and tests consolidated here
       ];
 
       # Support these systems across all modules

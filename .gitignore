@@ -51,3 +51,6 @@ CLAUDE.md
 build-profiles/
 .archive/
 claude-runtime/
+
+# Personal migration instructions (contains sensitive information)
+SECRETS-USER-INSTRUCTIONS.md

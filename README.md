@@ -33,11 +33,11 @@ nixcfg/
 ├── hosts/                       # Host-specific configurations
 │   ├── common/                  # Common configuration shared across hosts
 │   ├── mbp/                     # MacBook Pro configuration
-│   ├── potato/                  # ARM device configuration
-│   ├── thinky-nixos/           # WSL NixOS configuration
-│   ├── tblack-t14-nixos/       # Work laptop WSL configuration
+│   ├── potato/                  # ARM device (Le Potato SBC for Private CA)
+│   ├── thinky-nixos/           # Primary WSL NixOS development machine
 │   ├── thinky-ubuntu/          # Ubuntu WSL configuration
-│   └── macbook-air/            # macOS configuration
+│   ├── macbook-air/            # macOS configuration
+│   └── archived/               # Archived configurations (no longer in use)
 ├── home/                        # Home-manager configurations
 │   ├── common/                  # Common home-manager modules
 │   ├── modules/                 # Structured home modules
@@ -62,13 +62,13 @@ nixcfg/
 # Apply full system configuration (same as before)
 sudo nixos-rebuild switch --flake '.\\#hostname'
 
-# Examples:
-sudo nixos-rebuild switch --flake '.\\#tblack-t14-nixos'
-sudo nixos-rebuild switch --flake '.\\#thinky-nixos'  
-sudo nixos-rebuild switch --flake '.\\#potato'
+# Examples (in priority order):
+sudo nixos-rebuild switch --flake '.\\#thinky-nixos'   # Primary development machine
+sudo nixos-rebuild switch --flake '.\\#potato'        # Le Potato SBC (when configured)
+sudo nixos-rebuild switch --flake '.\\#mbp'           # MacBook Pro with NixOS
 
 # Dry run to test changes (recommended)
-sudo nixos-rebuild switch --flake '.\\#tblack-t14-nixos' --dry-run
+sudo nixos-rebuild switch --flake '.\\#thinky-nixos' --dry-run
 ```
 
 ### Home Manager (Standalone)
@@ -77,13 +77,14 @@ sudo nixos-rebuild switch --flake '.\\#tblack-t14-nixos' --dry-run
 # Apply user configuration (same as before)
 nix run home-manager -- switch --flake '.\\#username@hostname'
 
-# Examples:
-nix run home-manager -- switch --flake '.\\#tim@tblack-t14-nixos'
-nix run home-manager -- switch --flake '.\\#tim@thinky-ubuntu' 
-nix run home-manager -- switch --flake '.\\#tim@nixvim-minimal'
+# Examples (in priority order):
+nix run home-manager -- switch --flake '.\\#tim@thinky-nixos'    # Primary WSL NixOS
+nix run home-manager -- switch --flake '.\\#tim@potato'          # Le Potato SBC
+nix run home-manager -- switch --flake '.\\#tim@thinky-ubuntu'   # Ubuntu WSL
+nix run home-manager -- switch --flake '.\\#tim@nixvim-minimal'  # Minimal Neovim config
 
 # Dry run to test changes (recommended)
-nix run home-manager -- switch --flake '.\\#tim@tblack-t14-nixos' --dry-run
+nix run home-manager -- switch --flake '.\\#tim@thinky-nixos' --dry-run
 ```
 
 ### macOS (Darwin)
@@ -124,19 +125,17 @@ nix build '.\\#nixvim-anywhere'
 ## 🎯 Available Configurations
 
 ### NixOS Systems
-- **mbp**: MacBook Pro running NixOS
-- **potato**: ARM device (Raspberry Pi, etc.)
-- **thinky-nixos**: WSL NixOS instance
-- **tblack-t14-nixos**: Work laptop WSL NixOS
+- **thinky-nixos**: Primary WSL NixOS development machine
+- **potato**: Le Potato SBC (ARM64) for Private CA with Yubikey
+- **mbp**: Intel MacBook Pro with NixOS
+- **nixos-wsl-minimal**: Template for WSL distribution tarballs
 
 ### Home Manager Configurations  
-- **tim@mbp**: Full development environment
+- **tim@thinky-nixos**: Primary NixOS WSL with ESP-IDF development tools
+- **tim@potato**: Le Potato SBC home configuration
 - **tim@thinky-ubuntu**: Ubuntu WSL with full tools
-- **tim@thinky-nixos**: NixOS WSL home config
-- **tim@tblack-t14-nixos**: Work environment with ESP-IDF
+- **tim@mbp**: MacBook Pro home configuration
 - **tim@nixvim-minimal**: Minimal Neovim-only configuration
-- **tim@tblack-t14-ubuntu**: Minimal Ubuntu WSL setup
-- **tim@potato**: ARM device home configuration
 
 ### Darwin Systems
 - **macbook-air**: macOS configuration with homebrew integration
@@ -214,8 +213,8 @@ nix run '.\#update'    # Update all inputs
 
 | System Type | Command Pattern | Example |
 |-------------|----------------|----------|
-| **NixOS** | `sudo nixos-rebuild switch --flake '.\#hostname'` | `sudo nixos-rebuild switch --flake '.\#tblack-t14-nixos'` |
-| **Home Manager** | `nix run home-manager -- switch --flake '.\#user@host'` | `nix run home-manager -- switch --flake '.\#tim@tblack-t14-nixos'` |
+| **NixOS** | `sudo nixos-rebuild switch --flake '.\#hostname'` | `sudo nixos-rebuild switch --flake '.\#thinky-nixos'` |
+| **Home Manager** | `nix run home-manager -- switch --flake '.\#user@host'` | `nix run home-manager -- switch --flake '.\#tim@thinky-nixos'` |
 | **macOS** | `darwin-rebuild switch --flake '.\#hostname'` | `darwin-rebuild switch --flake '.\#macbook-air'` |
 
 ## 🤔 Potential Future Switching Improvements
@@ -224,13 +223,13 @@ While no new switching commands were added in this migration, here are some pote
 
 ```bash
 # Potential convenience scripts (not implemented yet)
-./scripts/switch-nixos tblack-t14-nixos
-./scripts/switch-home tim@tblack-t14-nixos  
-./scripts/update-and-switch tblack-t14-nixos
+./scripts/switch-nixos thinky-nixos
+./scripts/switch-home tim@thinky-nixos  
+./scripts/update-and-switch thinky-nixos
 
 # Or using nix apps (could be added)
-nix run '.\#switch-nixos' -- tblack-t14-nixos
-nix run '.\#switch-home' -- tim@tblack-t14-nixos
+nix run '.\#switch-nixos' -- thinky-nixos
+nix run '.\#switch-home' -- tim@thinky-nixos
 ```
 
 ## 📚 Documentation
@@ -275,8 +274,8 @@ bash verify-migration.sh  # or chmod +x first, then ./verify-migration.sh
 ### Debug Commands
 ```bash
 # Test specific configurations
-nix eval '.\#nixosConfigurations.tblack-t14-nixos.config.system.build.toplevel'
-nix eval '.\#homeConfigurations."tim@tblack-t14-nixos".config.home.homeDirectory'
+nix eval '.\#nixosConfigurations.thinky-nixos.config.system.build.toplevel'
+nix eval '.\#homeConfigurations."tim@thinky-nixos".config.home.homeDirectory'
 ```
 
 ### Shell Compatibility
