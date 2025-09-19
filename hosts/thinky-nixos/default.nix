@@ -8,6 +8,7 @@
     ../../modules/wsl-common.nix
     ../../modules/wsl-tarball-checks.nix
     ../../modules/nixos/sops-nix.nix
+    ../../modules/nixos/wsl-storage-mount.nix
     inputs.sops-nix.nixosModules.sops
     inputs.home-manager.nixosModules.home-manager
     inputs.nixos-wsl.nixosModules.default
@@ -156,6 +157,22 @@
   #     sopsFile = ../../secrets/common/services.yaml;
   #   };
   # };
+
+  # WSL Storage Mount Configuration
+  wslStorageMount = {
+    enable = true;
+    diskSerialNumber = "E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4.";
+    mountName = "internal-4tb-nvme";
+    deviceId = "scsi-SNVMe_WD_BLACK_SN850X_E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4.-part1";
+    mountPoint = "/mnt/wsl/storage";
+    fsType = "ext4";
+    mountOptions = [ "defaults" "noatime" "nodiratime" ];
+    instanceDirs = [ "nixos-wsl-main" "nixos-wsl-dev" "nixos-wsl-test" ];
+    defaultUser = "tim";
+    defaultGroup = "users";
+    bindMountNixStore = false;  # TODO: Enable after migrating /nix data
+    nixStoreSubdir = "nixos-wsl-main";
+  };
 
   # System state version
   system.stateVersion = "24.11";
