@@ -45,8 +45,10 @@ in {
     basePackages = mkOption {
       type = types.listOf types.package;
       default = with pkgs; [
+        age
         coreutils-full
         curl
+        dua
         fd
         glow
         jq
@@ -60,17 +62,13 @@ in {
         stress-ng
         tree
         unzip
-        # Secrets management tools
-        rbw  # Rust Bitwarden CLI client
-        pinentry-curses  # Terminal-based pinentry for rbw/gpg
-        age  # Modern encryption tool for sops-nix
-        sops  # Secrets management tool
-        # Primary font with excellent emoji support
-        nerd-fonts.caskaydia-mono  # Cascadia Code Nerd Font - Microsoft's font with great emoji support
-        cascadia-code  # Include original Cascadia Code as well
-        # Emoji fonts for additional coverage
+        rbw
+        pinentry-curses
+        sops
+        nerd-fonts.caskaydia-mono
+        cascadia-code
         noto-fonts-emoji
-        twemoji-color-font  # Twitter emoji for broader compatibility
+        twemoji-color-font
       ];
       description = "Base packages for all home environments";
     };
