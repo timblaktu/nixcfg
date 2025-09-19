@@ -195,6 +195,26 @@ sudo nixos-rebuild switch
 mount | grep /nix
 ```
 
+## Production Deployment Status
+
+### Successfully Deployed: thinky-nixos (2025-09-19)
+
+**Configuration Applied:**
+- 4TB WD BLACK SN850X NVMe (Serial: E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4)
+- Mount point: `/mnt/wsl/storage`
+- Service: `wsl-storage-mount.service` ✅ Active
+- Directories created: nixos-wsl-{main,dev,test}
+
+**Fixes Applied During Deployment:**
+1. Package name: `pkgs.pwsh` → `pkgs.powershell`
+2. PATH exports added for mount utilities
+3. PowerShell script installation made non-fatal
+
+**Current Status:**
+- ✅ Mount working and persistent
+- ✅ SystemD service operational
+- ⏳ Bind mount for /nix ready but not activated (requires 46GB migration)
+
 ## Troubleshooting
 
 ### Common Issues and Solutions
@@ -322,6 +342,31 @@ All mount operations are logged:
 - SystemD: `journalctl -u wsl-storage-mount`
 
 ## Migration Path
+
+### Phase 1: Mount External Storage (✅ COMPLETE)
+Successfully deployed on thinky-nixos with 4TB NVMe mounted at `/mnt/wsl/storage`.
+
+### Phase 2: Migrate Nix Store (PENDING)
+Steps to migrate existing 46GB /nix to external storage:
+
+```bash
+# 1. Stop all Nix operations
+sudo systemctl stop nix-daemon
+
+# 2. Copy existing Nix store (preserve all attributes)
+sudo rsync -aHAXxvP --numeric-ids \
+  --info=progress2 \
+  /nix/ /mnt/wsl/storage/nixos-wsl-main/
+
+# 3. Verify the copy
+sudo diff -rq /nix /mnt/wsl/storage/nixos-wsl-main
+
+# 4. Enable bind mount in configuration
+# Set bindMountNixStore = true in hosts/thinky-nixos/default.nix
+
+# 5. Rebuild and test
+sudo nixos-rebuild switch --flake '.#thinky-nixos'
+```
 
 ### From Existing VHDX Setup
 
