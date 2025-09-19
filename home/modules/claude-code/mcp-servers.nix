@@ -230,7 +230,7 @@ in {
     optionalAttrs cfg.mcpServers.cliMcpServer.enable {
       cli-mcp-server = mkMcpServer {
         command = "nix";
-        args = ["run" "/home/tim/src/cli-mcp-server" "--"];
+        args = ["run" "--accept-flake-config" "github:timblaktu/cli-mcp-server" "--"];
         env = {
           ALLOWED_DIR = cfg.mcpServers.cliMcpServer.allowedDir;
         };

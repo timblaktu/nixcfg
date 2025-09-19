@@ -47,6 +47,7 @@ let
 
   # Robust mount verification and retry script
   mountCheckScript = pkgs.writeShellScriptBin "wsl-mount-check" ''
+    export PATH="${pkgs.coreutils}/bin:${pkgs.util-linux}/bin:${pkgs.gnugrep}/bin:$PATH"
     set -euo pipefail
     
     MOUNT_NAME="${cfg.mountName}"
@@ -117,7 +118,7 @@ let
         if [[ $i -le 3 ]]; then
           log "Attempting to trigger Windows-side mount..."
           # Use PowerShell through interop to run mount script
-          ${pkgs.pwsh}/bin/pwsh -Command "& { C:\Users\timbl\wsl\mount-4tb-storage.ps1 }" || true
+          ${pkgs.powershell}/bin/pwsh -Command "& { C:\Users\timbl\wsl\mount-4tb-storage.ps1 }" || true
         fi
       fi
       
@@ -206,8 +207,8 @@ in {
       WIN_SCRIPT="/mnt/c/Users/timbl/wsl/mount-4tb-storage.ps1"
       if [[ ! -f "$WIN_SCRIPT" ]] || ! diff -q "${mountScript}" "$WIN_SCRIPT" >/dev/null 2>&1; then
         echo "Installing Windows mount script..."
-        mkdir -p "$(dirname "$WIN_SCRIPT")"
-        cp "${mountScript}" "$WIN_SCRIPT"
+        mkdir -p "$(dirname "$WIN_SCRIPT")" 2>/dev/null || true
+        cp "${mountScript}" "$WIN_SCRIPT" 2>/dev/null || echo "Note: Could not install Windows mount script (permission denied). This is OK if mount already works."
       fi
     '';
     
@@ -272,7 +273,7 @@ in {
     # Add mount utilities to system packages
     environment.systemPackages = [
       mountCheckScript
-      pkgs.pwsh  # PowerShell Core for interop
+      pkgs.powershell  # PowerShell Core for interop
     ];
   };
 }
