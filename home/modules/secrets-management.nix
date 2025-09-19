@@ -22,6 +22,30 @@ in {
         description = "Email address for Bitwarden account";
       };
       
+      baseUrl = mkOption {
+        type = types.str;
+        default = "https://vault.bitwarden.com";
+        description = "Base URL for Bitwarden server";
+      };
+      
+      identityUrl = mkOption {
+        type = types.str;
+        default = "https://identity.bitwarden.com";
+        description = "Identity/authentication server URL";
+      };
+      
+      uiUrl = mkOption {
+        type = types.str;
+        default = "https://vault.bitwarden.com";
+        description = "Web vault URL";
+      };
+      
+      notificationsUrl = mkOption {
+        type = types.str;
+        default = "https://notifications.bitwarden.com";
+        description = "Notifications server URL";
+      };
+      
       pinentry = mkOption {
         type = types.str;
         default = "pinentry-curses";
@@ -48,9 +72,15 @@ in {
     home.file.".config/rbw/config.json" = mkIf (cfg.rbw.email != null) {
       text = builtins.toJSON {
         email = cfg.rbw.email;
+        base_url = cfg.rbw.baseUrl;
+        identity_url = cfg.rbw.identityUrl;
+        ui_url = cfg.rbw.uiUrl;
+        notifications_url = cfg.rbw.notificationsUrl;
         pinentry = cfg.rbw.pinentry;
         lock_timeout = cfg.rbw.lockTimeout;
         sync_interval = cfg.rbw.syncInterval;
+        sso_id = null;
+        client_cert_path = null;
       };
     };
     
@@ -72,6 +102,10 @@ in {
           
           # Configure rbw
           rbw config set email "$RBW_EMAIL"
+          rbw config set base_url "''${RBW_BASE_URL:-${cfg.rbw.baseUrl}}"
+          rbw config set identity_url "''${RBW_IDENTITY_URL:-${cfg.rbw.identityUrl}}"
+          rbw config set ui_url "''${RBW_UI_URL:-${cfg.rbw.uiUrl}}"
+          rbw config set notifications_url "''${RBW_NOTIFICATIONS_URL:-${cfg.rbw.notificationsUrl}}"
           rbw config set pinentry "''${RBW_PINENTRY:-${cfg.rbw.pinentry}}"
           rbw config set lock_timeout ${toString cfg.rbw.lockTimeout}
           rbw config set sync_interval ${toString cfg.rbw.syncInterval}

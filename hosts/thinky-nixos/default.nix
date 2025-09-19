@@ -106,6 +106,19 @@
         esp32c5 = "esp-idf-shell";
       };
     };
+    
+    # Configure Bitwarden rbw CLI for secrets management
+    secretsManagement = {
+      enable = true;
+      rbw = {
+        email = "timblaktu@gmail.com";
+        # Explicitly set Bitwarden cloud service URLs (these are the defaults)
+        baseUrl = "https://vault.bitwarden.com";
+        identityUrl = "https://identity.bitwarden.com";
+        uiUrl = "https://vault.bitwarden.com";
+        notificationsUrl = "https://notifications.bitwarden.com";
+      };
+    };
     terminalVerification.terminalFont = "JetBrainsMono Nerd Font";
     targets.wsl = {
       enable = true;
@@ -124,6 +137,7 @@
     inherit (inputs) nixpkgs-stable;
     wslHostname = "tblack-t14-nixos";
   };
+  home-manager.backupFileExtension = "backup";
 
   # SOPS-NiX configuration for secrets management
   sopsNix = {

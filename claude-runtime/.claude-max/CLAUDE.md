@@ -515,3 +515,43 @@ sudo nixos-rebuild switch --flake '.#thinky-nixos'
 - Create actual production secrets for real services
 - Generate age keys for other hosts (mbp, potato) when setting them up
 - Implement key rotation strategy
+
+## Memory Entry - 2025-09-18 - Xilinx Installer WSL2 Hang Issue SOLVED
+
+### Root Cause Analysis - Document Was Wrong!
+**Critical Discovery**: The XILINX-INSTALLER-WSL2-ANALYSIS.md incorrectly identified the root cause as hardware detection failure in WSL2. 
+
+**Actual Root Cause**: Missing `libtinfo.so.5` library dependency when installer runs. The `xlpartinfo.tcl` script hangs indefinitely waiting for this library instead of failing cleanly.
+
+### Key Technical Insights
+1. **Installer Already in FHS**: The xilinxSetupScript in flake.nix runs INSIDE the FHS environment (included in targetPkgs), so libraries ARE available
+2. **No Complex Workarounds Needed**: Timeout wrappers and process killers proposed in the document are solving the wrong problem
+3. **Simple Fix**: Ensure installer runs with proper library paths - which it already does in the FHS environment
+
+### Solution Implemented
+**Converted to Modern Nix Patterns**:
+- Replaced `writeScriptBin` with `writeShellApplication` for better dependency management
+- Added explicit `runtimeInputs` for all required tools
+- Build-time validation with shellcheck
+- Runtime library checks before installation
+
+**Code Pattern for Reference**:
+```nix
+xilinxSetupScript = pkgs.writeShellApplication {
+  name = "setup-xilinx-tools";
+  runtimeInputs = with pkgs; [
+    coreutils findutils gnugrep gawk gnused
+    file which util-linux wget gnutar
+  ];
+  excludeShellChecks = [ "SC2086" "SC2034" ... ];
+  text = ''
+    # Script content with dependencies available in PATH
+  '';
+};
+```
+
+### WSL2 Xilinx Development Status
+✅ **What Works**: Software simulation, synthesis, bitstream generation, Vivado/Vitis GUI (X11), USB debugging via usbipd
+❌ **What Doesn't**: Direct PCIe cards, hardware co-simulation (without workarounds)
+
+**File Modified**: `/home/tim/src/versal/flake.nix` - Added library checks, converted to writeShellApplication
