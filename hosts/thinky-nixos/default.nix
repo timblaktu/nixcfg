@@ -160,7 +160,7 @@
 
   # WSL Storage Mount Configuration
   wslStorageMount = {
-    enable = true;
+    enable = false;  # DISABLED: Causing systemd user session timeout on boot
     diskSerialNumber = "E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4.";
     mountName = "internal-4tb-nvme";
     deviceId = "scsi-SNVMe_WD_BLACK_SN850X_E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4.-part1";

@@ -555,3 +555,40 @@ xilinxSetupScript = pkgs.writeShellApplication {
 ❌ **What Doesn't**: Direct PCIe cards, hardware co-simulation (without workarounds)
 
 **File Modified**: `/home/tim/src/versal/flake.nix` - Added library checks, converted to writeShellApplication
+
+## Memory Entry - 2025-09-20 21:36:59
+## Memory Entry - 2025-09-20 - WSL Bare Mount Feature Clarifications
+
+### Corrected Understanding of WSL Storage Architecture
+
+**Previous Misconception**: That WSL normally accesses Windows filesystem (/mnt/c) causing performance issues.
+
+**Actual Architecture**:
+- WSL2 root filesystem (/) runs on ext4 inside a .vhdx file on Windows storage
+- This .vhdx can be on any Windows drive (C:, D:, etc.), not just C:
+- Normal WSL operations use this Linux filesystem with reasonable performance
+- The /mnt/c performance penalty only applies when explicitly accessing Windows drives
+
+**True Motivation for Bare Mounts**:
+1. **Bypass .vhdx virtualization layer** - Direct block device access
+2. **Distribute I/O across multiple disks** - General storage performance optimization
+3. **Avoid .vhdx constraints** - Size limitations, growth management
+4. **Dedicated storage for workloads** - Isolate I/O-intensive operations
+
+This is a general storage performance pattern, not WSL-specific.
+
+### NixOS Module Testing Without Rebuilding Tarballs
+
+**Key Insight**: NixOS-WSL tarballs are only needed for initial instance creation.
+
+**How Module Testing Works**:
+1. Import new modules from any filesystem path in your configuration
+2. Run `nixos-rebuild switch` to apply changes
+3. No need to rebuild/reimport the entire WSL distribution
+
+The module system composes all imports at build time, allowing live testing of changes.
+
+### Bare Mount Feature Status
+- Not specific to external drives or NVMe - works with any disk type
+- Performance gains from I/O distribution, not escaping Windows FS
+- Module ready for testing via local import, no tarball rebuild needed

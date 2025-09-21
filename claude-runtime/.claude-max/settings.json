@@ -20,7 +20,7 @@
       "Write(/etc/passwd)"
     ]
   },
-  "model": "opus",
+  "model": "sonnet",
   "statusLine": {
     "type": "command",
     "command": "claude-statusline-powerline",
