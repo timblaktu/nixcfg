@@ -83,9 +83,8 @@ Add to your host configuration (e.g., `hosts/thinky-nixos/default.nix`):
     disks = [{
       name = "internal-4tb-nvme";
       serialNumber = "E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4.";
-      devicePattern = "nvme-Samsung_SSD_990_PRO_4TB_*";
       filesystem = {
-        mountPoint = "/mnt/wsl/storage";
+        mountPoint = "/mnt/wsl/${name}";
         fsType = "ext4";
         options = [ "defaults" "noatime" ];
       };

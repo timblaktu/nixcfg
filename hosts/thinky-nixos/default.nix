@@ -8,7 +8,6 @@
     ../../modules/wsl-common.nix
     ../../modules/wsl-tarball-checks.nix
     ../../modules/nixos/sops-nix.nix
-    ../../modules/nixos/wsl-storage-mount.nix
     inputs.sops-nix.nixosModules.sops
     inputs.home-manager.nixosModules.home-manager
     inputs.nixos-wsl.nixosModules.default
@@ -58,6 +57,42 @@
   wsl.usbip.autoAttach = [ "3-1" "3-2" ];  # .. the last on new sabrent hub is 8-4
   wsl.usbip.snippetIpAddress = "localhost";  # Fix for auto-attach
 
+  # For disk id and UUIDs, use: `lsblk -o NAME,SIZE,TYPE,FSTYPE,RO,MOUNTPOINTS,UUID`
+  wsl.bareMounts = {
+    enable = true;
+    mounts = [
+      {
+        diskUuid = "e030a5d0-fd70-4823-8f51-e6ea8c145fe6";
+        mountPoint = "/mnt/wsl/internal-4tb-nvme";
+        fsType = "ext4";
+        options = [ "defaults" "noatime" ];
+      }
+      # {
+      #   diskUuid = "ANOTHER-UUID-HERE";
+      #   mountPoint = "/mnt/wsl/ext-tb4-4tb-nvme-1";
+      #   fsType = "ext4";
+      #   options = [ "defaults" "noatime" ];
+      # }
+    ];
+  };
+  
+  # Bind mount the Nix store from the bare-mounted disk
+  # NOTE: Before enabling this, copy existing store with:
+  # sudo rsync -avHAX /nix/ /mnt/wsl/internal-4tb-nvme/nix-thinky-nixos/
+  # fileSystems."/nix" = {
+  #   device = "/mnt/wsl/internal-4tb-nvme/nix-thinky-nixos";
+  #   fsType = "none";
+  #   options = [
+  #     "bind"
+  #     "x-systemd.automount"           # Mount on first access
+  #     "x-systemd.idle-timeout=60"     # Unmount after idle
+  #     "x-systemd.requires=mnt-wsl-internal\\x2d4tb\\x2dnvme.mount"
+  #     "x-systemd.after=mnt-wsl-internal\\x2d4tb\\x2dnvme.mount"
+  #     "_netdev"                        # Network device (for ordering)
+  #     "nofail"                         # Don't fail boot if unavailable
+  #   ];
+  # };
+  
   # SSH service configuration
   services.openssh = {
     enable = true;
@@ -157,22 +192,6 @@
   #     sopsFile = ../../secrets/common/services.yaml;
   #   };
   # };
-
-  # WSL Storage Mount Configuration
-  wslStorageMount = {
-    enable = false;  # DISABLED: Causing systemd user session timeout on boot
-    diskSerialNumber = "E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4.";
-    mountName = "internal-4tb-nvme";
-    deviceId = "scsi-SNVMe_WD_BLACK_SN850X_E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4.-part1";
-    mountPoint = "/mnt/wsl/storage";
-    fsType = "ext4";
-    mountOptions = [ "defaults" "noatime" "nodiratime" ];
-    instanceDirs = [ "nixos-wsl-main" "nixos-wsl-dev" "nixos-wsl-test" ];
-    defaultUser = "tim";
-    defaultGroup = "users";
-    bindMountNixStore = false;  # TODO: Enable after migrating /nix data
-    nixStoreSubdir = "nixos-wsl-main";
-  };
 
   # System state version
   system.stateVersion = "24.11";
