@@ -18,7 +18,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     
-    nixos-wsl.url = "github:timblaktu/NixOS-WSL/feature/combined-mounts";
+    nixos-wsl.url = "github:timblaktu/NixOS-WSL/feature/bare-mount-support";
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";

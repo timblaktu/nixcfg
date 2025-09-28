@@ -97,6 +97,7 @@
       tokyonight-nvim
       catppuccin-nvim
       gruvbox-nvim
+      overseer-nvim  # Task runner for compilation/build tasks
     ];
     
     # Core keymaps
@@ -167,6 +168,14 @@
       { mode = "n"; key = "<leader><leader>q"; action = ":qa<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader><leader>x"; action = ":xa<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader><leader>c"; action = ":cq<CR>"; options.silent = true; }
+      
+      # Overseer task runner keymaps
+      { mode = "n"; key = "<leader>tr"; action = "<cmd>OverseerRun<CR>"; options = { silent = true; desc = "Run task"; }; }
+      { mode = "n"; key = "<leader>tt"; action = "<cmd>OverseerToggle<CR>"; options = { silent = true; desc = "Toggle task list"; }; }
+      { mode = "n"; key = "<leader>ta"; action = "<cmd>OverseerTaskAction<CR>"; options = { silent = true; desc = "Task action"; }; }
+      { mode = "n"; key = "<leader>tb"; action = "<cmd>OverseerBuild<CR>"; options = { silent = true; desc = "Build task"; }; }
+      { mode = "n"; key = "<leader>tq"; action = "<cmd>OverseerQuickAction<CR>"; options = { silent = true; desc = "Quick action"; }; }
+      { mode = "n"; key = "<leader>tc"; action = "<cmd>OverseerClearCache<CR>"; options = { silent = true; desc = "Clear cache"; }; }
     ];
     
     # Basic plugins
@@ -187,6 +196,7 @@
                 { "<leader>c", group = "Colorschemes" },
                 { "<leader>f", group = "Find/Telescope" },
                 { "<leader>d", group = "Diff/Git" },
+                { "<leader>t", group = "Tasks/Overseer" },
                 { "<leader>/", desc = "Toggle line comment" },
                 { "<leader>?", desc = "Toggle block comment" },
                 { "gc", desc = "Comment (motion)" },
@@ -356,6 +366,56 @@
             ];
             # Right sections
             lualine_x = [
+              {
+                __raw = ''
+                  {
+                    -- Build status indicator (minimal, 1-3 chars)
+                    function()
+                      local ok, overseer = pcall(require, 'overseer')
+                      if not ok then return "" end
+                      
+                      local tasks = overseer.list_tasks({ recent_first = true })
+                      if #tasks == 0 then return "" end
+                      
+                      local task = tasks[1]
+                      -- Only show for recent tasks (within last 30 seconds)
+                      local elapsed = vim.loop.hrtime() / 1e9 - (task.metadata.started_at or 0)
+                      if task.status == "SUCCESS" or task.status == "FAILURE" then
+                        if elapsed > 30 then return "" end
+                      end
+                      
+                      local icons = {
+                        RUNNING = "⟳",  -- Or use: ⟲ ↻ ⏳ 🔄
+                        SUCCESS = "✓",  -- Or use: ✅ ✔ 
+                        FAILURE = "✗",  -- Or use: ❌ ✖ ⚠
+                        CANCELED = "■", -- Or use: ⏹ ▪ 
+                        PENDING = "⏸",  -- Or use: ⌛ ◉
+                      }
+                      return icons[task.status] or ""
+                    end,
+                    color = function()
+                      local ok, overseer = pcall(require, 'overseer')
+                      if not ok then return {} end
+                      
+                      local tasks = overseer.list_tasks({ recent_first = true })
+                      if #tasks == 0 then return {} end
+                      
+                      local colors = {
+                        RUNNING = { fg = '#7aa2f7', gui = 'bold' },  -- Blue
+                        SUCCESS = { fg = '#9ece6a', gui = 'bold' },  -- Green
+                        FAILURE = { fg = '#f7768e', gui = 'bold' },  -- Red
+                        CANCELED = { fg = '#e0af68', gui = 'bold' }, -- Yellow
+                        PENDING = { fg = '#bb9af7', gui = 'bold' },  -- Purple
+                      }
+                      return colors[tasks[1].status] or {}
+                    end,
+                    -- Optional: click to open task list
+                    on_click = function()
+                      vim.cmd('OverseerToggle')
+                    end,
+                  }
+                '';
+              }
               {
                 __raw = ''
                   {
@@ -793,7 +853,12 @@
       autocmd filetype help set relativenumber
       autocmd filetype help noremap <buffer> q :q<cr>
       
-      " Quickfix window mappings
+      " Quickfix window customization
+      autocmd FileType qf setlocal nonumber norelativenumber
+      " Hide the || prefix - leaves natural indentation for non-valid entries
+      autocmd FileType qf syntax match qfSeparator /^||/ conceal
+      autocmd FileType qf setlocal conceallevel=3 concealcursor=nvic
+      " Mappings
       autocmd FileType qf nnoremap <buffer> <CR> <CR>
       autocmd FileType qf nnoremap <buffer> j j<CR>
       autocmd FileType qf nnoremap <buffer> k k<CR>
@@ -846,6 +911,26 @@
       -- Completely disable netrw to prevent FileExplorer autocommand conflicts
       vim.g.loaded_netrw = 1
       vim.g.loaded_netrwPlugin = 1
+      
+      -- WSL clipboard configuration
+      -- WSLg sets DISPLAY=:0 which makes Neovim try X11 clipboard tools
+      -- We detect WSL via environment variable (more reliable than has('wsl'))
+      -- and force Windows native clipboard tools
+      local is_wsl = vim.fn.getenv('WSL_DISTRO_NAME') ~= vim.NIL
+      if is_wsl then
+        vim.g.clipboard = {
+          name = 'WslClipboard',
+          copy = {
+            ['+'] = 'clip.exe',
+            ['*'] = 'clip.exe',
+          },
+          paste = {
+            ['+'] = 'powershell.exe -NoLogo -NoProfile -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
+            ['*'] = 'powershell.exe -NoLogo -NoProfile -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
+          },
+          cache_enabled = 0,
+        }
+      end
       
       -- Set up proper keymaps for LSP
       vim.api.nvim_create_autocmd('LspAttach', {
@@ -1039,6 +1124,302 @@
         -- Match highlighting in results
         vim.api.nvim_set_hl(0, 'TelescopeMatching', { fg = '#ff9e64', bg = 'NONE', bold = true })
       end)
+      
+      -- Overseer.nvim configuration
+      require('overseer').setup({
+        strategy = "terminal",
+        templates = { "builtin" },
+        task_list = {
+          direction = "bottom",
+          height = 25,
+          bindings = {
+            ["?"] = "ShowHelp",
+            ["<CR>"] = "RunAction",
+            ["<C-e>"] = "Edit",
+            ["o"] = "Open",
+            ["<C-v>"] = "OpenVsplit",
+            ["<C-s>"] = "OpenSplit",
+            ["<C-f>"] = "OpenFloat",
+            ["p"] = "TogglePreview",
+            ["<C-l>"] = "IncreaseDetail",
+            ["<C-h>"] = "DecreaseDetail",
+            ["L"] = "IncreaseAllDetail",
+            ["H"] = "DecreaseAllDetail",
+            ["["] = "DecreaseWidth",
+            ["]"] = "IncreaseWidth",
+            ["{"] = "PrevTask",
+            ["}"] = "NextTask",
+            ["<C-k>"] = "ScrollOutputUp",
+            ["<C-j>"] = "ScrollOutputDown",
+            ["q"] = "Close",
+          },
+        },
+        -- Configure component aliases - these are reusable component bundles
+        component_aliases = {
+          -- Keep the default as is (no quickfix by default for non-build tasks)
+          default = {
+            { "display_duration", detail_level = 2 },
+            "on_output_summarize",
+            "on_exit_set_status",
+            { "on_complete_notify", 
+              on_change = false,  -- Don't notify on every status change
+              statuses = { "SUCCESS", "FAILURE" }  -- Only notify on completion
+            },
+            { "on_complete_dispose", require_view = { "SUCCESS", "FAILURE" } },
+          },
+          -- Enhanced configuration for build tasks with quickfix
+          default_with_quickfix = {
+            { "display_duration", detail_level = 2 },
+            "on_output_summarize",
+            { "on_output_quickfix", 
+              open_on_match = true,     -- Auto-open quickfix when errors/warnings found
+              open_height = 10,          -- Height of quickfix window
+              close = false,             -- Keep quickfix open after completion
+              items_only = false,        -- Show all output, not just error lines
+              set_diagnostics = true,    -- Populate vim diagnostics
+              tail = false,              -- Don't tail in real-time to avoid blocking
+            },
+            "on_exit_set_status",
+            { "on_complete_notify", 
+              on_change = false,  -- Don't notify on every status change
+              statuses = { "SUCCESS", "FAILURE" }  -- Only notify on completion
+            },
+            { "on_complete_dispose", require_view = { "SUCCESS", "FAILURE" } },
+          },
+        },
+        dap = false,  -- Disable DAP integration if not using it
+      })
+      
+      -- Set proper errorformat for C/C++ compilers (GCC/Clang)
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = {"c", "cpp"},
+        callback = function()
+          -- This errorformat handles GCC/Clang output including warnings and notes
+          vim.bo.errorformat = table.concat({
+            "%f:%l:%c: %trror: %m",     -- filename:line:col: error: message
+            "%f:%l:%c: %tarning: %m",   -- filename:line:col: warning: message
+            "%f:%l:%c: %tote: %m",       -- filename:line:col: note: message
+            "%f:%l:%c: %m",              -- filename:line:col: message
+            "%f:%l: %trror: %m",         -- filename:line: error: message
+            "%f:%l: %tarning: %m",       -- filename:line: warning: message
+            "%f:%l: %tote: %m",          -- filename:line: note: message
+            "%f:%l: %m",                 -- filename:line: message
+            "%f: %trror: %m",            -- filename: error: message
+            "%f: %tarning: %m",          -- filename: warning: message
+            "%f: %m",                    -- filename: message
+            "make: *** %m",              -- make errors
+            "In file included from %f:%l:",  -- Include traces
+            "%*[ ]from %f:%l:",          -- Continuation of include traces
+          }, ",")
+        end,
+      })
+      
+      -- Hook into overseer's make template to add quickfix support
+      local overseer = require('overseer')
+      overseer.add_template_hook({ name = "^make$" }, function(task_defn, util)
+        -- Replace default components with our quickfix-enabled version
+        task_defn.components = vim.tbl_deep_extend("force", task_defn.components or {}, {
+          "default_with_quickfix"
+        })
+        
+        -- Ensure the task opens in a vertical split immediately
+        task_defn.strategy = {
+          "terminal",
+          direction = "vertical",
+          open_on_start = true,
+        }
+      end)
+      
+      -- Add protection for quickfix operations to prevent keyboard interrupt issues
+      local orig_setqflist = vim.fn.setqflist
+      vim.fn.setqflist = function(list, action, what)
+        local ok, result = pcall(orig_setqflist, list, action, what)
+        if not ok then
+          -- Silently handle errors during setqflist
+          return 0
+        end
+        return result
+      end
+      
+      -- COMMENTED QUICKFIXTEXTFUNC EXAMPLE FOR FUTURE CUSTOMIZATION
+      -- Uncomment this section if you want full control over quickfix formatting
+      --[[
+      function _G.custom_qf_text(info)
+        local items = vim.fn.getqflist({id = info.id, items = 0}).items
+        local result = {}
+        for i = info.start_idx, info.end_idx do
+          local item = items[i]
+          if item.valid == 1 then
+            -- Valid entry with file/line info
+            local fname = vim.fn.bufname(item.bufnr)
+            if fname ~= '''''' then
+              fname = vim.fn.fnamemodify(fname, ':~:.')  -- Make relative
+            end
+            table.insert(result, string.format("%s:%d: %s", fname, item.lnum, item.text))
+          else
+            -- Non-valid entry (general messages) - use 4-space indent
+            table.insert(result, "    " .. item.text)
+          end
+        end
+        return result
+      end
+      vim.o.quickfixtextfunc = 'v:lua.custom_qf_text'
+      --]]
+      
+      -- COMMENTED NVIM-NOTIFY SETUP FOR FUTURE USE
+      -- Uncomment this section if you want rich notifications with nvim-notify plugin
+      -- Note: You'll need to add nvim-notify to your plugins first
+      --[[
+      local notify = require("notify")
+      notify.setup({
+        stages = "slide",       -- Animation style: fade_in_slide_out, fade, slide, static
+        timeout = 3000,         -- Default timeout for notifications
+        render = "minimal",     -- Render style: default, minimal, compact
+        max_width = 50,
+        max_height = 10,
+        on_open = function(win)
+          vim.api.nvim_win_set_config(win, { focusable = false })
+        end,
+      })
+      vim.notify = notify
+      
+      -- Custom highlights for notification levels
+      vim.api.nvim_set_hl(0, 'NotifyINFOTitle', { fg = '#9ece6a' })
+      vim.api.nvim_set_hl(0, 'NotifyERRORTitle', { fg = '#f7768e' })
+      vim.api.nvim_set_hl(0, 'NotifyWARNTitle', { fg = '#e0af68' })
+      --]]
+      
+      -- Set up overseer status change callbacks to refresh lualine
+      local function refresh_lualine()
+        -- Force lualine to refresh
+        pcall(function()
+          require('lualine').refresh()
+        end)
+      end
+      
+      -- Hook into overseer task status changes
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "OverseerTaskUpdate",
+        callback = function()
+          refresh_lualine()
+        end,
+      })
+      
+      -- Create a timer-based refresh for running tasks to ensure live updates
+      local refresh_timer = nil
+      local function start_refresh_timer()
+        if refresh_timer then
+          refresh_timer:stop()
+        end
+        refresh_timer = vim.loop.new_timer()
+        refresh_timer:start(0, 200, vim.schedule_wrap(function()
+          local ok, overseer = pcall(require, 'overseer')
+          if ok then
+            local tasks = overseer.list_tasks({ recent_first = true })
+            if #tasks > 0 and tasks[1].status == "RUNNING" then
+              refresh_lualine()
+            else
+              -- Stop timer when no tasks are running
+              if refresh_timer then
+                refresh_timer:stop()
+                refresh_timer = nil
+              end
+            end
+          end
+        end))
+      end
+      
+      -- Auto-run make on C/C++ file save using overseer's builtin template
+      vim.api.nvim_create_autocmd("BufWritePost", {
+        pattern = {"*.c", "*.cpp", "*.cc", "*.h", "*.hpp"},
+        callback = function()
+          local file_dir = vim.fn.expand('%:p:h')
+          
+          -- Check if Makefile exists
+          if vim.fn.filereadable(file_dir .. '/Makefile') == 1 or 
+             vim.fn.filereadable(file_dir .. '/makefile') == 1 then
+            
+            -- Use overseer's run_template to leverage the builtin make template
+            -- Silent execution - statusline will show build progress
+            overseer.run_template({ name = "make" }, function(task)
+              if task then
+                -- Start the refresh timer when a build starts
+                start_refresh_timer()
+                
+                -- Subscribe to task status changes for immediate updates
+                task:subscribe("on_status", function(_, status)
+                  refresh_lualine()
+                  -- Stop timer when task completes
+                  if status ~= "RUNNING" and status ~= "PENDING" then
+                    if refresh_timer then
+                      refresh_timer:stop()
+                      refresh_timer = nil
+                    end
+                  end
+                end)
+              end
+            end)
+          end
+        end,
+      })
+      
+      -- Manual make command that also uses the template
+      vim.api.nvim_create_user_command('Make', function(opts)
+        local args = opts.args ~= "" and vim.split(opts.args, " ") or {}
+        overseer.run_template({ name = "make", params = { args = args } }, function(task)
+          if task then
+            -- Start the refresh timer when a build starts
+            start_refresh_timer()
+            
+            -- Subscribe to task status changes for immediate updates
+            task:subscribe("on_status", function(_, status)
+              refresh_lualine()
+              -- Stop timer when task completes
+              if status ~= "RUNNING" and status ~= "PENDING" then
+                if refresh_timer then
+                  refresh_timer:stop()
+                  refresh_timer = nil
+                end
+              end
+            end)
+          end
+        end)
+      end, { nargs = '*', desc = 'Run make with optional arguments' })
+      
+      -- Quickfix window highlighting improvements for better contrast with Solarized
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "qf",
+        callback = function()
+          -- Set better highlighting for quickfix current line
+          -- Default: Solarized base02 (#073642) - best contrast
+          vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#073642', bold = true })
+          
+          -- Alternative background colors for quickfix line highlighting:
+          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#094959', bold = true })  -- Blue-tinted
+          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#0a4d4d', bold = true })  -- Cyan-tinted  
+          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#2d3149', bold = true })  -- Purple-tinted
+          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#3e4452', bold = true })  -- Grey (OneDark-style)
+          
+          -- Remove line numbers and relative numbers
+          vim.wo.number = false
+          vim.wo.relativenumber = false
+          
+          -- Format quickfix text to replace "|| " prefix with indentation
+          -- This provides cleaner visual hierarchy
+          local function format_quickfix()
+            local qflist = vim.fn.getqflist()
+            for i, item in ipairs(qflist) do
+              if item.text and item.text:match("^|| ") then
+                item.text = "    " .. item.text:sub(4)
+              end
+            end
+            vim.fn.setqflist(qflist, 'r')
+          end
+          
+          -- Apply formatting after quickfix is populated
+          vim.defer_fn(format_quickfix, 10)
+        end,
+      })
       
     '';
     

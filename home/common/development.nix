@@ -9,6 +9,9 @@ in {
   config = mkIf cfg.enableDevelopment {
     # Development-specific packages
     home.packages = with pkgs; [
+      cmake
+      doxygen
+      entr
       gcc
       gnumake
       binutils
