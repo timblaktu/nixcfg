@@ -369,47 +369,38 @@
               {
                 __raw = ''
                   {
-                    -- Build status indicator (minimal, 1-3 chars)
+                    -- Build status indicator with proper state management
                     function()
-                      local ok, overseer = pcall(require, 'overseer')
-                      if not ok then return "" end
+                      -- Access our build state machine
+                      if not vim.g.build_state then return "" end
+                      local state = vim.g.build_state
                       
-                      local tasks = overseer.list_tasks({ recent_first = true })
-                      if #tasks == 0 then return "" end
-                      
-                      local task = tasks[1]
-                      -- Only show for recent tasks (within last 30 seconds)
-                      local elapsed = vim.loop.hrtime() / 1e9 - (task.metadata.started_at or 0)
-                      if task.status == "SUCCESS" or task.status == "FAILURE" then
-                        if elapsed > 30 then return "" end
+                      -- Hide if expired (30 seconds after completion)
+                      if state.hide_after and vim.loop.hrtime() / 1e9 > state.hide_after then
+                        return ""
                       end
                       
                       local icons = {
-                        RUNNING = "⟳",  -- Or use: ⟲ ↻ ⏳ 🔄
-                        SUCCESS = "✓",  -- Or use: ✅ ✔ 
-                        FAILURE = "✗",  -- Or use: ❌ ✖ ⚠
-                        CANCELED = "■", -- Or use: ⏹ ▪ 
-                        PENDING = "⏸",  -- Or use: ⌛ ◉
+                        RUNNING = "⟳",
+                        SUCCESS = "✓",
+                        FAILURE = "✗",
+                        CANCELED = "■",
+                        PENDING = "⏸",
                       }
-                      return icons[task.status] or ""
+                      return icons[state.status] or ""
                     end,
                     color = function()
-                      local ok, overseer = pcall(require, 'overseer')
-                      if not ok then return {} end
-                      
-                      local tasks = overseer.list_tasks({ recent_first = true })
-                      if #tasks == 0 then return {} end
+                      if not vim.g.build_state then return {} end
                       
                       local colors = {
-                        RUNNING = { fg = '#7aa2f7', gui = 'bold' },  -- Blue
-                        SUCCESS = { fg = '#9ece6a', gui = 'bold' },  -- Green
-                        FAILURE = { fg = '#f7768e', gui = 'bold' },  -- Red
-                        CANCELED = { fg = '#e0af68', gui = 'bold' }, -- Yellow
-                        PENDING = { fg = '#bb9af7', gui = 'bold' },  -- Purple
+                        RUNNING = { fg = '#7aa2f7', gui = 'bold' },
+                        SUCCESS = { fg = '#9ece6a', gui = 'bold' },
+                        FAILURE = { fg = '#f7768e', gui = 'bold' },
+                        CANCELED = { fg = '#e0af68', gui = 'bold' },
+                        PENDING = { fg = '#bb9af7', gui = 'bold' },
                       }
-                      return colors[tasks[1].status] or {}
+                      return colors[vim.g.build_state.status] or {}
                     end,
-                    -- Optional: click to open task list
                     on_click = function()
                       vim.cmd('OverseerToggle')
                     end,
@@ -1172,12 +1163,14 @@
             { "display_duration", detail_level = 2 },
             "on_output_summarize",
             { "on_output_quickfix", 
-              open_on_match = true,     -- Auto-open quickfix when errors/warnings found
+              open = true,               -- Always open quickfix window
+              open_on_match = true,      -- Auto-open when errors/warnings found
               open_height = 10,          -- Height of quickfix window
               close = false,             -- Keep quickfix open after completion
               items_only = false,        -- Show all output, not just error lines
               set_diagnostics = true,    -- Populate vim diagnostics
               tail = false,              -- Don't tail in real-time to avoid blocking
+              parser = "native",         -- Use native errorformat parsing
             },
             "on_exit_set_status",
             { "on_complete_notify", 
@@ -1289,102 +1282,109 @@
       vim.api.nvim_set_hl(0, 'NotifyWARNTitle', { fg = '#e0af68' })
       --]]
       
-      -- Set up overseer status change callbacks to refresh lualine
-      local function refresh_lualine()
-        -- Force lualine to refresh
-        pcall(function()
-          require('lualine').refresh()
+      -- Build State Machine for statusline updates
+      -- Single source of truth for build status
+      local overseer = require('overseer')
+      vim.g.build_state = nil
+      local refresh_timer = nil
+      
+      -- Update build state and refresh lualine
+      local function set_build_state(status, task_id)
+        vim.g.build_state = {
+          status = status,
+          task_id = task_id,
+          hide_after = nil
+        }
+        
+        -- For completed states, set expiration time (30 seconds from now)
+        if status == "SUCCESS" or status == "FAILURE" or status == "CANCELED" then
+          vim.g.build_state.hide_after = vim.loop.hrtime() / 1e9 + 30
+          
+          -- Stop the refresh timer for completed builds
+          if refresh_timer then
+            refresh_timer:stop()
+            refresh_timer = nil
+          end
+        elseif status == "RUNNING" then
+          -- Start refresh timer for running builds
+          if not refresh_timer then
+            refresh_timer = vim.loop.new_timer()
+            refresh_timer:start(0, 200, vim.schedule_wrap(function()
+              require('lualine').refresh()
+            end))
+          end
+        end
+        
+        -- Always refresh lualine when state changes
+        require('lualine').refresh()
+      end
+      
+      -- Clear expired build states periodically
+      local cleanup_timer = vim.loop.new_timer()
+      cleanup_timer:start(0, 5000, vim.schedule_wrap(function()
+        if vim.g.build_state and vim.g.build_state.hide_after then
+          if vim.loop.hrtime() / 1e9 > vim.g.build_state.hide_after then
+            vim.g.build_state = nil
+            require('lualine').refresh()
+          end
+        end
+      end))
+      
+      -- Single function to handle all build task launches
+      local function run_build_task(template_opts, callback_opts)
+        overseer.run_template(template_opts, function(task)
+          if task then
+            -- Set initial state
+            set_build_state("PENDING", task.id)
+            
+            -- Subscribe to status changes
+            task:subscribe("on_status", function(_, status)
+              set_build_state(status, task.id)
+            end)
+            
+            -- Call any additional callback
+            if callback_opts and callback_opts.callback then
+              callback_opts.callback(task)
+            end
+          end
         end)
       end
       
-      -- Hook into overseer task status changes
-      vim.api.nvim_create_autocmd("User", {
-        pattern = "OverseerTaskUpdate",
-        callback = function()
-          refresh_lualine()
-        end,
-      })
-      
-      -- Create a timer-based refresh for running tasks to ensure live updates
-      local refresh_timer = nil
-      local function start_refresh_timer()
-        if refresh_timer then
-          refresh_timer:stop()
-        end
-        refresh_timer = vim.loop.new_timer()
-        refresh_timer:start(0, 200, vim.schedule_wrap(function()
-          local ok, overseer = pcall(require, 'overseer')
-          if ok then
-            local tasks = overseer.list_tasks({ recent_first = true })
-            if #tasks > 0 and tasks[1].status == "RUNNING" then
-              refresh_lualine()
-            else
-              -- Stop timer when no tasks are running
-              if refresh_timer then
-                refresh_timer:stop()
-                refresh_timer = nil
-              end
-            end
-          end
-        end))
-      end
-      
-      -- Auto-run make on C/C++ file save using overseer's builtin template
+      -- Auto-run make on C/C++ file save
       vim.api.nvim_create_autocmd("BufWritePost", {
         pattern = {"*.c", "*.cpp", "*.cc", "*.h", "*.hpp"},
         callback = function()
           local file_dir = vim.fn.expand('%:p:h')
           
-          -- Check if Makefile exists
           if vim.fn.filereadable(file_dir .. '/Makefile') == 1 or 
              vim.fn.filereadable(file_dir .. '/makefile') == 1 then
-            
-            -- Use overseer's run_template to leverage the builtin make template
-            -- Silent execution - statusline will show build progress
-            overseer.run_template({ name = "make" }, function(task)
-              if task then
-                -- Start the refresh timer when a build starts
-                start_refresh_timer()
-                
-                -- Subscribe to task status changes for immediate updates
-                task:subscribe("on_status", function(_, status)
-                  refresh_lualine()
-                  -- Stop timer when task completes
-                  if status ~= "RUNNING" and status ~= "PENDING" then
-                    if refresh_timer then
-                      refresh_timer:stop()
-                      refresh_timer = nil
-                    end
-                  end
-                end)
-              end
-            end)
+            run_build_task({ name = "make" })
           end
         end,
       })
       
-      -- Manual make command that also uses the template
+      -- Manual make command
       vim.api.nvim_create_user_command('Make', function(opts)
         local args = opts.args ~= "" and vim.split(opts.args, " ") or {}
-        overseer.run_template({ name = "make", params = { args = args } }, function(task)
-          if task then
-            -- Start the refresh timer when a build starts
-            start_refresh_timer()
-            
-            -- Subscribe to task status changes for immediate updates
-            task:subscribe("on_status", function(_, status)
-              refresh_lualine()
-              -- Stop timer when task completes
-              if status ~= "RUNNING" and status ~= "PENDING" then
-                if refresh_timer then
-                  refresh_timer:stop()
-                  refresh_timer = nil
-                end
-              end
-            end)
-          end
-        end)
+        run_build_task({ name = "make", params = { args = args } })
       end, { nargs = '*', desc = 'Run make with optional arguments' })
+      
+      -- Debug command to check build state
+      vim.api.nvim_create_user_command('BuildStatus', function()
+        if vim.g.build_state then
+          local state = vim.g.build_state
+          local status_msg = string.format(
+            "Build State:\n  Status: %s\n  Task ID: %s\n  Hide After: %s\n  Current Time: %s",
+            state.status or "none",
+            state.task_id or "none",
+            state.hide_after and string.format("%.2f", state.hide_after) or "never",
+            string.format("%.2f", vim.loop.hrtime() / 1e9)
+          )
+          print(status_msg)
+        else
+          print("No build state")
+        end
+      end, { desc = 'Show current build state for debugging' })
       
       -- Quickfix window highlighting improvements for better contrast with Solarized
       vim.api.nvim_create_autocmd("FileType", {
