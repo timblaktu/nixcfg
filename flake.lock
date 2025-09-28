@@ -251,32 +251,32 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1758432355,
-        "narHash": "sha256-H67aV6MINJDoesqf5kQLcLJ5UAZy9X7pH1JHsIicsjo=",
+        "lastModified": 1758568641,
+        "narHash": "sha256-kwzgK5x10euubdVSCHk6ObC/3L8P9aocvarS2AmTEkc=",
         "owner": "timblaktu",
         "repo": "NixOS-WSL",
-        "rev": "b9650d3fda72503596500143e79e467cff2aeb44",
+        "rev": "e77dd6bacb710dccca6cc65ee5ecd5ffdf761ba4",
         "type": "github"
       },
       "original": {
         "owner": "timblaktu",
-        "ref": "feature/combined-mounts",
+        "ref": "feature/bare-mount-support",
         "repo": "NixOS-WSL",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1749173751,
-        "narHash": "sha256-ENY3y3v6S9ZmLDDLI3LUT8MXmfXg/fSt2eA4GCnMVCE=",
+        "lastModified": 1757745802,
+        "narHash": "sha256-hLEO2TPj55KcUFUU1vgtHE9UEIOjRcH/4QbmfHNF820=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "ed29f002b6d6e5e7e32590deb065c34a31dc3e91",
+        "rev": "c23193b943c6c689d70ee98ce3128239ed9e32d1",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixos-24.11",
+        "ref": "nixos-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }

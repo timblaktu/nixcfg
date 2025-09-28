@@ -556,6 +556,33 @@ xilinxSetupScript = pkgs.writeShellApplication {
 
 **File Modified**: `/home/tim/src/versal/flake.nix` - Added library checks, converted to writeShellApplication
 
+## CRITICAL RULE: NO SUDO WITH TIMEOUTS (Added 2025-09-21)
+
+**NEVER run sudo commands with timeout parameters**. This causes Claude Code to crash with EPERM errors when trying to kill privileged processes.
+
+**What fails**: 
+- `sudo rsync ... ` with timeout=30s crashes Claude Code
+- Any `sudo` command with explicit timeout will fail during cleanup
+- Claude Code (unprivileged) cannot kill sudo-owned processes
+
+**What to do instead**:
+1. For long-running sudo operations: Run WITHOUT timeout
+2. For very long operations (like rsync of large directories): Provide the command for user to run manually
+3. For quick sudo commands: Run without timeout (they'll complete quickly anyway)
+
+**Example**:
+```bash
+# ❌ BAD - Will crash:
+Bash("sudo rsync -avHAX /source/ /dest/", timeout=30000)
+
+# ✅ GOOD - No timeout:
+Bash("sudo rsync -avHAX /source/ /dest/")
+
+# ✅ BETTER - For very long operations:
+"Please run this command manually in another terminal:
+ sudo rsync -avHAX --info=progress2 /source/ /dest/"
+```
+
 ## Memory Entry - 2025-09-20 21:36:59
 ## Memory Entry - 2025-09-20 - WSL Bare Mount Feature Clarifications
 
@@ -592,3 +619,30 @@ The module system composes all imports at build time, allowing live testing of c
 - Not specific to external drives or NVMe - works with any disk type
 - Performance gains from I/O distribution, not escaping Windows FS
 - Module ready for testing via local import, no tarball rebuild needed
+
+## Memory Entry - 2025-09-21 - WSL Bare Mount Setup Prepared
+
+### Completed Tasks:
+1. **Nix store copied**: Successfully copied 31GB from `/nix/` to `/mnt/wsl/internal-4tb-nvme/nix-thinky-nixos/`
+   - Used rsync with -avHAX flags to preserve all attributes
+   - Exit code 23 (some attrs not transferred) is normal for system files
+   
+2. **Naming convention updated**: Removed "-store" from mountpoint names
+   - Old: `/mnt/wsl/internal-4tb-nvme/nix-store-thinky-nixos/`
+   - New: `/mnt/wsl/internal-4tb-nvme/nix-thinky-nixos/`
+   
+3. **Configuration prepared**: Updated `hosts/thinky-nixos/default.nix` with new paths (still commented out)
+   - Bind mount ready at lines 90-102
+   - Will mount `/mnt/wsl/internal-4tb-nvme/nix-thinky-nixos` to `/nix`
+   
+4. **Structure validated**: Confirmed correct directory hierarchy
+   - `/nix/store/` and `/nix/var/` will be preserved after bind mount
+
+### Next Steps (for next chat session):
+1. Uncomment bind mount configuration in `hosts/thinky-nixos/default.nix`
+2. Run `nixos-rebuild switch`  
+3. Reboot to activate bare mount
+4. Verify `/nix` is served from internal NVMe
+
+### Critical Rules Added:
+- **NO SUDO WITH TIMEOUTS**: Never run sudo commands with timeout parameters (causes Claude Code crash)

@@ -62,6 +62,10 @@ in {
         stress-ng
         tree
         unzip
+        yazi
+        # yaziPlugins.glow
+        # yaziPlugins.miller
+        # yaziPlugins.ouch
         rbw
         pinentry-curses
         sops
