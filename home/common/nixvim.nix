@@ -369,14 +369,14 @@
               {
                 __raw = ''
                   {
-                    -- Build status indicator with proper state management
+                    -- Build status indicator with blinking for in-progress
                     function()
                       -- Access our build state machine
                       if not vim.g.build_state then return "" end
                       local state = vim.g.build_state
                       
-                      -- Hide if expired (30 seconds after completion)
-                      if state.hide_after and vim.loop.hrtime() / 1e9 > state.hide_after then
+                      -- Blink while running (toggle every other refresh)
+                      if state.status == "RUNNING" and state.blink_off then
                         return ""
                       end
                       
@@ -1293,23 +1293,25 @@
         vim.g.build_state = {
           status = status,
           task_id = task_id,
-          hide_after = nil
+          blink_off = false
         }
         
-        -- For completed states, set expiration time (30 seconds from now)
+        -- Stop timer for completed states, start for running states
         if status == "SUCCESS" or status == "FAILURE" or status == "CANCELED" then
-          vim.g.build_state.hide_after = vim.loop.hrtime() / 1e9 + 30
-          
           -- Stop the refresh timer for completed builds
           if refresh_timer then
             refresh_timer:stop()
             refresh_timer = nil
           end
         elseif status == "RUNNING" then
-          -- Start refresh timer for running builds
+          -- Start refresh timer with blinking for running builds
           if not refresh_timer then
             refresh_timer = vim.loop.new_timer()
-            refresh_timer:start(0, 200, vim.schedule_wrap(function()
+            refresh_timer:start(0, 250, vim.schedule_wrap(function()
+              -- Toggle blink state
+              if vim.g.build_state and vim.g.build_state.status == "RUNNING" then
+                vim.g.build_state.blink_off = not vim.g.build_state.blink_off
+              end
               require('lualine').refresh()
             end))
           end
@@ -1318,17 +1320,6 @@
         -- Always refresh lualine when state changes
         require('lualine').refresh()
       end
-      
-      -- Clear expired build states periodically
-      local cleanup_timer = vim.loop.new_timer()
-      cleanup_timer:start(0, 5000, vim.schedule_wrap(function()
-        if vim.g.build_state and vim.g.build_state.hide_after then
-          if vim.loop.hrtime() / 1e9 > vim.g.build_state.hide_after then
-            vim.g.build_state = nil
-            require('lualine').refresh()
-          end
-        end
-      end))
       
       -- Single function to handle all build task launches
       local function run_build_task(template_opts, callback_opts)
@@ -1374,11 +1365,10 @@
         if vim.g.build_state then
           local state = vim.g.build_state
           local status_msg = string.format(
-            "Build State:\n  Status: %s\n  Task ID: %s\n  Hide After: %s\n  Current Time: %s",
+            "Build State:\n  Status: %s\n  Task ID: %s\n  Blink Off: %s",
             state.status or "none",
             state.task_id or "none",
-            state.hide_after and string.format("%.2f", state.hide_after) or "never",
-            string.format("%.2f", vim.loop.hrtime() / 1e9)
+            state.blink_off and "true" or "false"
           )
           print(status_msg)
         else
