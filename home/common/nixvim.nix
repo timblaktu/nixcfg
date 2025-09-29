@@ -1367,6 +1367,25 @@
           end)
         end
       end)
+      
+      -- Auto-run make on C/C++ file save
+      vim.api.nvim_create_autocmd("BufWritePost", {
+        pattern = {"*.c", "*.cpp", "*.cc", "*.h", "*.hpp"},
+        callback = function()
+          local file_dir = vim.fn.expand('%:p:h')
+          -- Check if Makefile exists in the current file's directory
+          if vim.fn.filereadable(file_dir .. '/Makefile') == 1 or 
+             vim.fn.filereadable(file_dir .. '/makefile') == 1 then
+            -- Run make using overseer
+            overseer.run_template({ name = "make" }, function(task)
+              if task then
+                -- Task started successfully (silent, statusline shows progress)
+              end
+            end)
+          end
+        end,
+      })
+      
       -- Simple make command using overseer
       vim.api.nvim_create_user_command('Make', function(opts)
         local args = opts.args ~= "" and vim.split(opts.args, " ") or {}
