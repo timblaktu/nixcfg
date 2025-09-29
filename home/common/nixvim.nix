@@ -83,22 +83,49 @@
       maplocalleader = " ";
     };
     
-    # Solarized as default with automatic light/dark switching
+    # Set default colorscheme explicitly to avoid conflicts
+    colorscheme = lib.mkForce "gruvbox";
+    
     colorschemes = {
       base16 = {
-        enable = true;
+        enable = false;  # Disabled to prevent conflicts with gruvbox
         colorscheme = "solarized-dark";
       };
+      solarized-osaka = {
+        enable = false;  # Disabled - enable only when using this theme
+        settings = {
+          transparent = false;
+          styles = {
+            comments = { italic = true; };
+            keywords = { italic = false; };
+            functions = { bold = true; };
+            variables = { };
+          };
+        };
+      };
+      tokyonight = {
+        enable = false;  # Disabled - enable only when using this theme
+        settings = {
+          style = "storm";
+          transparent = false;
+          terminal_colors = true;
+        };
+      };
+      catppuccin = {
+        enable = false;  # Disabled - enable only when using this theme
+        settings = {
+          flavour = "mocha";
+          transparent_background = false;
+        };
+      };
+      gruvbox = {
+        enable = true;  # This is the active colorscheme
+        settings = {
+          contrast = "medium";
+          transparent_mode = false;
+        };
+      };
     };
-    
-    # Additional colorschemes as plugins only
-    extraPlugins = with pkgs.vimPlugins; [
-      vim-repeat
-      tokyonight-nvim
-      catppuccin-nvim
-      gruvbox-nvim
-      overseer-nvim  # Task runner for compilation/build tasks
-    ];
     
     # Core keymaps
     keymaps = [
@@ -118,6 +145,7 @@
       { mode = "n"; key = "[q"; action = ":cprevious<CR>"; options.silent = true; }
       { mode = "n"; key = "]Q"; action = ":clast<CR>"; options.silent = true; }
       { mode = "n"; key = "[Q"; action = ":cfirst<CR>"; options.silent = true; }
+      { mode = "n"; key = "<leader>q"; action = ":copen<CR>"; options = { silent = true; desc = "Toggle quickfix window"; }; }
       
       # Help navigation
       { mode = "n"; key = "<Leader>K"; action = ":h expand(\"<cword>\")<cr>"; }
@@ -152,8 +180,9 @@
       { mode = "n"; key = "[x"; action = "?^\\(<\\{7\\}\\|=\\{7\\}\\|>\\{7\\}\\)<CR>"; options = { silent = true; desc = "Previous conflict marker"; }; }
 
       # Colorscheme group with which-key descriptions
-      { mode = "n"; key = "<leader>cd"; action = ":colorscheme base16-solarized-dark<CR>"; options = { silent = true; desc = "Solarized Dark"; }; }
-      { mode = "n"; key = "<leader>cl"; action = ":colorscheme base16-solarized-light<CR>"; options = { silent = true; desc = "Solarized Light"; }; }
+      { mode = "n"; key = "<leader>cd"; action = ":colorscheme base16-solarized-dark<CR>"; options = { silent = true; desc = "Solarized Dark (Base16)"; }; }
+      { mode = "n"; key = "<leader>cl"; action = ":colorscheme base16-solarized-light<CR>"; options = { silent = true; desc = "Solarized Light (Base16)"; }; }
+      { mode = "n"; key = "<leader>co"; action = ":colorscheme solarized-osaka<CR>"; options = { silent = true; desc = "Solarized Osaka"; }; }
       { mode = "n"; key = "<leader>ct"; action = ":colorscheme tokyonight<CR>"; options = { silent = true; desc = "Tokyo Night"; }; }
       { mode = "n"; key = "<leader>cc"; action = ":colorscheme catppuccin<CR>"; options = { silent = true; desc = "Catppuccin"; }; }
       { mode = "n"; key = "<leader>cg"; action = ":colorscheme gruvbox<CR>"; options = { silent = true; desc = "Gruvbox"; }; }
@@ -369,40 +398,139 @@
               {
                 __raw = ''
                   {
-                    -- Build status indicator with blinking for in-progress
+                    -- Custom overseer status with better display
                     function()
-                      -- Access our build state machine
-                      if not vim.g.build_state then return "" end
-                      local state = vim.g.build_state
-                      
-                      -- Blink while running (toggle every other refresh)
-                      if state.status == "RUNNING" and state.blink_off then
-                        return ""
+                      -- Use global build state if available, fallback to overseer
+                      if vim.g.build_state and vim.g.build_state.status then
+                        local state = vim.g.build_state
+                        local overseer = require('overseer')
+                        local STATUS = overseer.STATUS
+                        local status_symbols = {
+                          [STATUS.FAILURE] = "❌",
+                          [STATUS.CANCELED] = "⏹", 
+                          [STATUS.SUCCESS] = "✅",
+                          [STATUS.RUNNING] = state.blink_off and " " or "▶",
+                          [STATUS.PENDING] = "⏸",
+                        }
+                        local symbol = status_symbols[state.status] or "?"
+                        return symbol .. " Build"
                       end
                       
-                      local icons = {
-                        RUNNING = "⟳",
-                        SUCCESS = "✓",
-                        FAILURE = "✗",
-                        CANCELED = "■",
-                        PENDING = "⏸",
+                      -- Fallback to overseer if no build state
+                      local ok, overseer = pcall(require, "overseer")
+                      if not ok then return "" end
+                      
+                      local tasks = overseer.list_tasks({ recent_first = true })
+                      if #tasks == 0 then return "" end
+                      
+                      local task = tasks[1]
+                      if not task then return "" end
+                      
+                      local STATUS = overseer.STATUS
+                      local status_symbols = {
+                        [STATUS.FAILURE] = "❌",
+                        [STATUS.CANCELED] = "⏹",
+                        [STATUS.SUCCESS] = "✅", 
+                        [STATUS.RUNNING] = "▶",
+                        [STATUS.PENDING] = "⏸",
                       }
-                      return icons[state.status] or ""
+                      
+                      local symbol = status_symbols[task.status] or "?"
+                      return symbol .. " " .. task.name
                     end,
                     color = function()
-                      if not vim.g.build_state then return {} end
+                      -- Use build state colors if available
+                      if vim.g.build_state and vim.g.build_state.status then
+                        local overseer = require('overseer')
+                        local STATUS = overseer.STATUS
+                        local status_colors = {
+                          [STATUS.FAILURE] = { fg = '#f7768e', gui = 'bold' },
+                          [STATUS.CANCELED] = { fg = '#e0af68', gui = 'bold' },
+                          [STATUS.SUCCESS] = { fg = '#9ece6a', gui = 'bold' },
+                          [STATUS.RUNNING] = { fg = '#7aa2f7', gui = 'bold' },
+                          [STATUS.PENDING] = { fg = '#bb9af7', gui = 'bold' },
+                        }
+                        return status_colors[vim.g.build_state.status] or {}
+                      end
                       
-                      local colors = {
-                        RUNNING = { fg = '#7aa2f7', gui = 'bold' },
-                        SUCCESS = { fg = '#9ece6a', gui = 'bold' },
-                        FAILURE = { fg = '#f7768e', gui = 'bold' },
-                        CANCELED = { fg = '#e0af68', gui = 'bold' },
-                        PENDING = { fg = '#bb9af7', gui = 'bold' },
+                      -- Fallback to overseer colors
+                      local ok, overseer = pcall(require, "overseer")
+                      if not ok then return {} end
+                      
+                      local tasks = overseer.list_tasks({ recent_first = true })
+                      if #tasks == 0 then return {} end
+                      
+                      local task = tasks[1]
+                      if not task then return {} end
+                      
+                      local STATUS = overseer.STATUS
+                      local status_colors = {
+                        [STATUS.FAILURE] = { fg = '#f7768e', gui = 'bold' },
+                        [STATUS.CANCELED] = { fg = '#e0af68', gui = 'bold' },
+                        [STATUS.SUCCESS] = { fg = '#9ece6a', gui = 'bold' },
+                        [STATUS.RUNNING] = { fg = '#7aa2f7', gui = 'bold' },
+                        [STATUS.PENDING] = { fg = '#bb9af7', gui = 'bold' },
                       }
-                      return colors[vim.g.build_state.status] or {}
+                      
+                      return status_colors[task.status] or {}
                     end,
                     on_click = function()
                       vim.cmd('OverseerToggle')
+                    end,
+                  }
+                '';
+              }
+              {
+                __raw = ''
+                  {
+                    -- Quickfix error/warning counter (shows when quickfix has items)
+                    function()
+                      -- Use cached quickfix info if available for performance
+                      if vim.g.qf_summary and vim.g.qf_summary.timestamp and 
+                         (vim.fn.localtime() - vim.g.qf_summary.timestamp) < 1 then
+                        local summary = vim.g.qf_summary
+                        if summary.total == 0 then return "" end
+                        return '🔴 ' .. summary.display
+                      end
+                      
+                      local qflist = vim.fn.getqflist()
+                      if #qflist == 0 then 
+                        vim.g.qf_summary = { total = 0, display = "", timestamp = vim.fn.localtime() }
+                        return "" 
+                      end
+                      
+                      local errors, warnings, notes = 0, 0, 0
+                      for _, item in ipairs(qflist) do
+                        local t = (item.type or ""):lower()
+                        if t == 'e' then
+                          errors = errors + 1
+                        elseif t == 'w' then
+                          warnings = warnings + 1
+                        elseif t == 'n' or t == 'i' then
+                          notes = notes + 1
+                        end
+                      end
+                      
+                      local parts = {}
+                      if errors > 0 then table.insert(parts, errors .. 'E') end
+                      if warnings > 0 then table.insert(parts, warnings .. 'W') end
+                      if notes > 0 then table.insert(parts, notes .. 'N') end
+                      
+                      local display = #parts > 0 and table.concat(parts, ' ') or ""
+                      local total = #qflist
+                      
+                      -- Cache the result
+                      vim.g.qf_summary = { 
+                        total = total, 
+                        display = display, 
+                        timestamp = vim.fn.localtime() 
+                      }
+                      
+                      return total > 0 and ('🔴 ' .. display) or ""
+                    end,
+                    color = { fg = '#f7768e', gui = 'bold' },
+                    on_click = function()
+                      vim.cmd('copen')
                     end,
                   }
                 '';
@@ -820,6 +948,108 @@
       
       # Snippets
       luasnip.enable = true;
+      
+      # Task runner and quickfix enhancements
+      overseer = {
+        enable = true;
+        settings = {
+          # Use jobstart strategy without terminal to avoid truncation issues
+          # Terminal buffers in neovim truncate long lines at terminal width
+          strategy = { 
+            "__unkeyed-1" = "jobstart";
+            use_terminal = false;  # This prevents truncation but loses ANSI colors
+          };
+          templates = [ "builtin" ];
+          task_list = {
+            direction = "bottom";
+            height = 25;
+            bindings = {
+              "?" = "ShowHelp";
+              "<CR>" = "RunAction";
+              "<C-e>" = "Edit";
+              "o" = "Open";
+              "<C-v>" = "OpenVsplit";
+              "<C-s>" = "OpenSplit";
+              "<C-f>" = "OpenFloat";
+              "p" = "TogglePreview";
+              "<C-l>" = "IncreaseDetail";
+              "<C-h>" = "DecreaseDetail";
+              "L" = "IncreaseAllDetail";
+              "H" = "DecreaseAllDetail";
+              "[" = "DecreaseWidth";
+              "]" = "IncreaseWidth";
+              "{" = "PrevTask";
+              "}" = "NextTask";
+              "<C-k>" = "ScrollOutputUp";
+              "<C-j>" = "ScrollOutputDown";
+              "q" = "Close";
+            };
+          };
+          # Auto-populate quickfix from failed tasks
+          auto_detect_success_color = true;
+          component_aliases = {
+            default = [
+              "display_duration"
+              { "__unkeyed-1" = "on_output_quickfix"; open = true; items_only = true; open_height = 10; }
+              "on_exit_set_status"
+              "on_result_diagnostics"
+              "on_result_diagnostics_quickfix"
+              "on_complete_notify"
+              "on_complete_dispose"
+            ];
+          };
+        };
+      };
+      
+      quicker = {
+        enable = true;
+        settings = {
+          # Keys for expanding/collapsing context
+          keys = [
+            { 
+              __unkeyed-1 = ">";
+              __unkeyed-2.__raw = ''function() require("quicker").expand({ before = 2, after = 2, add_to_existing = true }) end'';
+              desc = "Expand quickfix context";
+            }
+            { 
+              __unkeyed-1 = "<";
+              __unkeyed-2.__raw = ''function() require("quicker").collapse() end'';
+              desc = "Collapse quickfix context";
+            }
+          ];
+          # Follow cursor to show current item
+          follow = {
+            enabled = true;
+          };
+          # Enhanced highlighting
+          highlight = {
+            lsp = true;
+            load = true;
+          };
+          # Display settings
+          borders = {
+            vert = "│";
+          };
+          # Type icons matching your current setup
+          type_icons = {
+            E = "E";
+            W = "W";
+            I = "I";
+            N = "N";
+            H = "H";
+          };
+          # Smart filename width
+          max_filename_width.__raw = ''function() return math.floor(math.min(50, vim.o.columns * 0.5)) end'';
+          # Enable editing capabilities
+          edit = {
+            enabled = true;
+            autosave = true;
+          };
+        };
+      };
+      
+      # Vim-repeat for enhanced dot command repetition
+      repeat.enable = true;
     };
 
     
@@ -846,17 +1076,18 @@
       
       " Quickfix window customization
       autocmd FileType qf setlocal nonumber norelativenumber
-      " Hide the || prefix - leaves natural indentation for non-valid entries
-      autocmd FileType qf syntax match qfSeparator /^||/ conceal
-      autocmd FileType qf setlocal conceallevel=3 concealcursor=nvic
-      " Mappings
+      " Quicker.nvim handles display formatting
+      " Useful mappings for quickfix navigation
       autocmd FileType qf nnoremap <buffer> <CR> <CR>
-      autocmd FileType qf nnoremap <buffer> j j<CR>
-      autocmd FileType qf nnoremap <buffer> k k<CR>
       autocmd FileType qf nnoremap <buffer> o <CR>
       autocmd FileType qf nnoremap <buffer> s <C-W><CR>
       autocmd FileType qf nnoremap <buffer> v <C-W><CR><C-W>L
       autocmd FileType qf nnoremap <buffer> t <C-W><CR><C-W>T
+      " Quicker.nvim context expansion/collapse
+      autocmd FileType qf nnoremap <buffer> > :lua require('quicker').expand({ before = 2, after = 2, add_to_existing = true })<CR>
+      autocmd FileType qf nnoremap <buffer> < :lua require('quicker').collapse()<CR>
+      
+      " Auto-jump to first error/warning when quickfix opens - moved to extraConfigLua
       
       " YAML-specific settings
       autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
@@ -964,22 +1195,7 @@
         },
       })
       
-      -- Configure additional colorschemes
-      require('tokyonight').setup({
-        style = 'storm',
-        transparent = false,
-        terminal_colors = true,
-      })
-      
-      require('catppuccin').setup({
-        flavour = 'mocha',
-        transparent_background = false,
-      })
-      
-      require('gruvbox').setup({
-        contrast = 'medium',
-        transparent_mode = false,
-      })
+      -- All colorschemes now configured via nixvim colorschemes option
       
       -- Reduce red highlighting for C/C++ files
       vim.api.nvim_create_autocmd("FileType", {
@@ -1116,79 +1332,13 @@
         vim.api.nvim_set_hl(0, 'TelescopeMatching', { fg = '#ff9e64', bg = 'NONE', bold = true })
       end)
       
-      -- Overseer.nvim configuration
-      require('overseer').setup({
-        strategy = "terminal",
-        templates = { "builtin" },
-        task_list = {
-          direction = "bottom",
-          height = 25,
-          bindings = {
-            ["?"] = "ShowHelp",
-            ["<CR>"] = "RunAction",
-            ["<C-e>"] = "Edit",
-            ["o"] = "Open",
-            ["<C-v>"] = "OpenVsplit",
-            ["<C-s>"] = "OpenSplit",
-            ["<C-f>"] = "OpenFloat",
-            ["p"] = "TogglePreview",
-            ["<C-l>"] = "IncreaseDetail",
-            ["<C-h>"] = "DecreaseDetail",
-            ["L"] = "IncreaseAllDetail",
-            ["H"] = "DecreaseAllDetail",
-            ["["] = "DecreaseWidth",
-            ["]"] = "IncreaseWidth",
-            ["{"] = "PrevTask",
-            ["}"] = "NextTask",
-            ["<C-k>"] = "ScrollOutputUp",
-            ["<C-j>"] = "ScrollOutputDown",
-            ["q"] = "Close",
-          },
-        },
-        -- Configure component aliases - these are reusable component bundles
-        component_aliases = {
-          -- Keep the default as is (no quickfix by default for non-build tasks)
-          default = {
-            { "display_duration", detail_level = 2 },
-            "on_output_summarize",
-            "on_exit_set_status",
-            { "on_complete_notify", 
-              on_change = false,  -- Don't notify on every status change
-              statuses = { "SUCCESS", "FAILURE" }  -- Only notify on completion
-            },
-            { "on_complete_dispose", require_view = { "SUCCESS", "FAILURE" } },
-          },
-          -- Enhanced configuration for build tasks with quickfix
-          default_with_quickfix = {
-            { "display_duration", detail_level = 2 },
-            "on_output_summarize",
-            { "on_output_quickfix", 
-              open = true,               -- Always open quickfix window
-              open_on_match = true,      -- Auto-open when errors/warnings found
-              open_height = 10,          -- Height of quickfix window
-              close = false,             -- Keep quickfix open after completion
-              items_only = false,        -- Show all output, not just error lines
-              set_diagnostics = true,    -- Populate vim diagnostics
-              tail = false,              -- Don't tail in real-time to avoid blocking
-              parser = "native",         -- Use native errorformat parsing
-            },
-            "on_exit_set_status",
-            { "on_complete_notify", 
-              on_change = false,  -- Don't notify on every status change
-              statuses = { "SUCCESS", "FAILURE" }  -- Only notify on completion
-            },
-            { "on_complete_dispose", require_view = { "SUCCESS", "FAILURE" } },
-          },
-        },
-        dap = false,  -- Disable DAP integration if not using it
-      })
-      
-      -- Set proper errorformat for C/C++ compilers (GCC/Clang)
+      -- Set proper errorformat for C/C++ compilers and build tools
       vim.api.nvim_create_autocmd("FileType", {
         pattern = {"c", "cpp"},
         callback = function()
-          -- This errorformat handles GCC/Clang output including warnings and notes
+          -- Enhanced errorformat for GCC/Clang/Ninja/CMake/Meson
           vim.bo.errorformat = table.concat({
+            -- GCC/Clang patterns
             "%f:%l:%c: %trror: %m",     -- filename:line:col: error: message
             "%f:%l:%c: %tarning: %m",   -- filename:line:col: warning: message
             "%f:%l:%c: %tote: %m",       -- filename:line:col: note: message
@@ -1200,28 +1350,34 @@
             "%f: %trror: %m",            -- filename: error: message
             "%f: %tarning: %m",          -- filename: warning: message
             "%f: %m",                    -- filename: message
+            -- Make patterns
             "make: *** %m",              -- make errors
+            "make[%*\d]: *** %m",        -- make recursive errors
+            "make: %m",                  -- make general messages
+            -- Ninja patterns
+            "ninja: %trror: %m",         -- ninja errors
+            "ninja: %m",                 -- ninja messages
+            "FAILED: %f:%l:%c: %m",      -- ninja compilation failures
+            "FAILED: %m",               -- ninja general failures
+            -- CMake patterns
+            "CMake %trror at %f:%l %m",  -- cmake errors with file:line
+            "CMake %trror: %m",          -- cmake general errors
+            "CMake %tarning at %f:%l %m", -- cmake warnings with file:line
+            "CMake %tarning: %m",        -- cmake general warnings
+            -- Meson patterns
+            "meson.build:%l:%c: %trror: %m", -- meson build file errors
+            "meson.build:%l:%c: %tarning: %m", -- meson build file warnings
+            "ERROR: %m",                 -- meson general errors
+            "WARNING: %m",               -- meson general warnings
+            -- Include file traces
             "In file included from %f:%l:",  -- Include traces
             "%*[ ]from %f:%l:",          -- Continuation of include traces
+            "In file included from %f:%l,%*\d:",  -- Include with column
+            "%*[ ]from %f:%l,%*\d:",      -- Continuation with column
           }, ",")
         end,
       })
       
-      -- Hook into overseer's make template to add quickfix support
-      local overseer = require('overseer')
-      overseer.add_template_hook({ name = "^make$" }, function(task_defn, util)
-        -- Replace default components with our quickfix-enabled version
-        task_defn.components = vim.tbl_deep_extend("force", task_defn.components or {}, {
-          "default_with_quickfix"
-        })
-        
-        -- Ensure the task opens in a vertical split immediately
-        task_defn.strategy = {
-          "terminal",
-          direction = "vertical",
-          open_on_start = true,
-        }
-      end)
       
       -- Add protection for quickfix operations to prevent keyboard interrupt issues
       local orig_setqflist = vim.fn.setqflist
@@ -1234,30 +1390,7 @@
         return result
       end
       
-      -- COMMENTED QUICKFIXTEXTFUNC EXAMPLE FOR FUTURE CUSTOMIZATION
-      -- Uncomment this section if you want full control over quickfix formatting
-      --[[
-      function _G.custom_qf_text(info)
-        local items = vim.fn.getqflist({id = info.id, items = 0}).items
-        local result = {}
-        for i = info.start_idx, info.end_idx do
-          local item = items[i]
-          if item.valid == 1 then
-            -- Valid entry with file/line info
-            local fname = vim.fn.bufname(item.bufnr)
-            if fname ~= '''''' then
-              fname = vim.fn.fnamemodify(fname, ':~:.')  -- Make relative
-            end
-            table.insert(result, string.format("%s:%d: %s", fname, item.lnum, item.text))
-          else
-            -- Non-valid entry (general messages) - use 4-space indent
-            table.insert(result, "    " .. item.text)
-          end
-        end
-        return result
-      end
-      vim.o.quickfixtextfunc = 'v:lua.custom_qf_text'
-      --]]
+      -- Quicker.nvim now handles quickfix formatting and highlighting
       
       -- COMMENTED NVIM-NOTIFY SETUP FOR FUTURE USE
       -- Uncomment this section if you want rich notifications with nvim-notify plugin
@@ -1283,10 +1416,12 @@
       --]]
       
       -- Build State Machine for statusline updates
-      -- Single source of truth for build status
+      -- Single source of truth for build status that hooks into ALL overseer tasks
       local overseer = require('overseer')
+      local STATUS = overseer.STATUS
       vim.g.build_state = nil
       local refresh_timer = nil
+      local current_task_id = nil
       
       -- Update build state and refresh lualine
       local function set_build_state(status, task_id)
@@ -1295,21 +1430,22 @@
           task_id = task_id,
           blink_off = false
         }
+        current_task_id = task_id
         
         -- Stop timer for completed states, start for running states
-        if status == "SUCCESS" or status == "FAILURE" or status == "CANCELED" then
+        if status == STATUS.SUCCESS or status == STATUS.FAILURE or status == STATUS.CANCELED then
           -- Stop the refresh timer for completed builds
           if refresh_timer then
             refresh_timer:stop()
             refresh_timer = nil
           end
-        elseif status == "RUNNING" then
+        elseif status == STATUS.RUNNING then
           -- Start refresh timer with blinking for running builds
           if not refresh_timer then
             refresh_timer = vim.loop.new_timer()
             refresh_timer:start(0, 250, vim.schedule_wrap(function()
               -- Toggle blink state
-              if vim.g.build_state and vim.g.build_state.status == "RUNNING" then
+              if vim.g.build_state and vim.g.build_state.status == STATUS.RUNNING then
                 vim.g.build_state.blink_off = not vim.g.build_state.blink_off
               end
               require('lualine').refresh()
@@ -1321,27 +1457,44 @@
         require('lualine').refresh()
       end
       
-      -- Single function to handle all build task launches
-      local function run_build_task(template_opts, callback_opts)
-        overseer.run_template(template_opts, function(task)
+      -- Hook into ALL overseer task events (not just our custom function)
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "OverseerTaskStart",
+        callback = function(event)
+          local task = event.data.task
           if task then
-            -- Set initial state
-            set_build_state("PENDING", task.id)
+            set_build_state(STATUS.PENDING, task.id)
             
-            -- Subscribe to status changes
+            -- Subscribe to status changes for any task
             task:subscribe("on_status", function(_, status)
-              set_build_state(status, task.id)
+              -- Only update if this is the current/most recent task
+              if task.id == current_task_id or current_task_id == nil then
+                set_build_state(status, task.id)
+                
+                -- Auto-open quickfix when task completes with items
+                if status == STATUS.SUCCESS or status == STATUS.FAILURE or status == STATUS.CANCELED then
+                  vim.schedule(function()
+                    local qflist = vim.fn.getqflist()
+                    if #qflist > 0 then
+                      -- Clear quickfix summary cache to force refresh
+                      vim.g.qf_summary = nil
+                      -- Open quickfix window
+                      vim.cmd('copen')
+                      -- Refresh lualine to show updated quickfix counter
+                      require('lualine').refresh()
+                    end
+                  end)
+                end
+              end
             end)
-            
-            -- Call any additional callback
-            if callback_opts and callback_opts.callback then
-              callback_opts.callback(task)
-            end
           end
-        end)
-      end
+        end,
+      })
       
-      -- Auto-run make on C/C++ file save
+      -- Auto-run make on C/C++ file save with debouncing and concurrency protection
+      local make_timer = nil
+      local make_running = false
+      
       vim.api.nvim_create_autocmd("BufWritePost", {
         pattern = {"*.c", "*.cpp", "*.cc", "*.h", "*.hpp"},
         callback = function()
@@ -1349,15 +1502,43 @@
           
           if vim.fn.filereadable(file_dir .. '/Makefile') == 1 or 
              vim.fn.filereadable(file_dir .. '/makefile') == 1 then
-            run_build_task({ name = "make" })
+            
+            -- Cancel any pending make
+            if make_timer then
+              make_timer:stop()
+              make_timer = nil
+            end
+            
+            -- Debounce: wait 500ms before running make
+            make_timer = vim.loop.new_timer()
+            make_timer:start(500, 0, vim.schedule_wrap(function()
+              -- Check if a make is already running
+              if not make_running then
+                make_running = true
+                
+                -- Use standard overseer.run_template to ensure events fire
+                local task = overseer.run_template({ name = "make" })
+                
+                -- Reset flag when task completes
+                if task then
+                  task:subscribe("on_complete", function()
+                    make_running = false
+                  end)
+                else
+                  make_running = false
+                end
+              end
+              
+              make_timer = nil
+            end))
           end
         end,
       })
       
-      -- Manual make command
+      -- Manual make command that integrates with the event system
       vim.api.nvim_create_user_command('Make', function(opts)
         local args = opts.args ~= "" and vim.split(opts.args, " ") or {}
-        run_build_task({ name = "make", params = { args = args } })
+        overseer.run_template({ name = "make", params = { args = args } })
       end, { nargs = '*', desc = 'Run make with optional arguments' })
       
       -- Debug command to check build state
@@ -1376,38 +1557,81 @@
         end
       end, { desc = 'Show current build state for debugging' })
       
-      -- Quickfix window highlighting improvements for better contrast with Solarized
+      
+      -- Quickfix window enhancements and refresh logic
       vim.api.nvim_create_autocmd("FileType", {
         pattern = "qf",
         callback = function()
-          -- Set better highlighting for quickfix current line
-          -- Default: Solarized base02 (#073642) - best contrast
-          vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#073642', bold = true })
-          
-          -- Alternative background colors for quickfix line highlighting:
-          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#094959', bold = true })  -- Blue-tinted
-          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#0a4d4d', bold = true })  -- Cyan-tinted  
-          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#2d3149', bold = true })  -- Purple-tinted
-          -- vim.api.nvim_set_hl(0, 'QuickFixLine', { bg = '#3e4452', bold = true })  -- Grey (OneDark-style)
+          local win = vim.api.nvim_get_current_win()
+          local buf = vim.api.nvim_get_current_buf()
           
           -- Remove line numbers and relative numbers
-          vim.wo.number = false
-          vim.wo.relativenumber = false
+          vim.wo[win].number = false
+          vim.wo[win].relativenumber = false
           
-          -- Format quickfix text to replace "|| " prefix with indentation
-          -- This provides cleaner visual hierarchy
-          local function format_quickfix()
+          -- Enable cursorline and set custom highlight for quickfix selection
+          vim.wo[win].cursorline = true
+          --[[ Create a custom highlight group for quickfix cursor line
+          vim.api.nvim_set_hl(0, 'QuickfixCursorLine', { bg = '#3a3d5c' })  -- Purple-ish gray
+          -- Apply it only to this quickfix window
+          vim.wo[win].winhighlight = 'CursorLine:QuickfixCursorLine'
+          --]]
+          
+          -- Create a function to generate the statusline
+          vim.b[buf].qf_statusline = function()
             local qflist = vim.fn.getqflist()
-            for i, item in ipairs(qflist) do
-              if item.text and item.text:match("^|| ") then
-                item.text = "    " .. item.text:sub(4)
+            local total = #qflist
+            local current = vim.fn.line('.')
+            
+            -- Count errors, warnings, notes
+            local errors, warnings, notes = 0, 0, 0
+            for _, item in ipairs(qflist) do
+              local t = (item.type or ""):lower()
+              if t == 'e' then
+                errors = errors + 1
+              elseif t == 'w' then
+                warnings = warnings + 1
+              elseif t == 'n' or t == 'i' then
+                notes = notes + 1
               end
             end
-            vim.fn.setqflist(qflist, 'r')
+            
+            -- Build status parts
+            local parts = {}
+            if errors > 0 then table.insert(parts, errors .. 'E') end
+            if warnings > 0 then table.insert(parts, warnings .. 'W') end
+            if notes > 0 then table.insert(parts, notes .. 'N') end
+            
+            local summary = #parts > 0 and table.concat(parts, ' ') or 'Empty'
+            return string.format('[Quickfix] %s │ %d/%d', summary, current, total)
           end
           
-          -- Apply formatting after quickfix is populated
-          vim.defer_fn(format_quickfix, 10)
+          -- Set the statusline using the function
+          vim.wo[win].statusline = '%!v:lua.vim.b[' .. buf .. '].qf_statusline()'
+        end,
+      })
+      
+      -- Refresh statusline when quickfix changes
+      vim.api.nvim_create_autocmd("QuickFixCmdPost", {
+        pattern = "*",
+        callback = function()
+          -- Clear quickfix summary cache
+          vim.g.qf_summary = nil
+          -- Refresh lualine
+          vim.schedule(function()
+            require('lualine').refresh()
+          end)
+        end,
+      })
+      
+      -- Additional refresh trigger for when quickfix is modified by external commands
+      vim.api.nvim_create_autocmd("BufReadPost", {
+        pattern = "quickfix",
+        callback = function()
+          vim.g.qf_summary = nil
+          vim.schedule(function()
+            require('lualine').refresh()
+          end)
         end,
       })
       

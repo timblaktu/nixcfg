@@ -53,10 +53,11 @@ in
       set -g default-command "exec ${if config.programs.zsh.enable then "${config.programs.zsh.package}/bin/zsh" else "${pkgs.bash}/bin/bash"}"
     '' + ''
       # ---- TERMINAL AND COLOR SETTINGS ----
-      # Optimized for Microsoft Terminal (Windows Terminal) in WSL
-      set -g default-terminal "screen-256color"
-      set -ga terminal-overrides ",screen-256color:Tc"
-      set -ga terminal-overrides ",xterm-256color:Tc"
+      # Optimized for Microsoft Terminal (Windows Terminal) in WSL with true color support
+      set -g default-terminal "tmux-256color"
+      set -ga terminal-overrides ",*256col*:Tc"
+      set -ga terminal-overrides ",alacritty:Tc"
+      set -ga terminal-overrides ",xterm-kitty:Tc"
       set -ga terminal-overrides ",*:bold=\\E[1m"
       set -ga terminal-overrides ",*:dim=\\E[2m"
       set -ga terminal-overrides ",*:smul=\\E[4m"
