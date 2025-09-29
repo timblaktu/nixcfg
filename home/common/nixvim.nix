@@ -1373,13 +1373,17 @@
         pattern = {"*.c", "*.cpp", "*.cc", "*.h", "*.hpp"},
         callback = function()
           local file_dir = vim.fn.expand('%:p:h')
+          
           -- Check if Makefile exists in the current file's directory
           if vim.fn.filereadable(file_dir .. '/Makefile') == 1 or 
              vim.fn.filereadable(file_dir .. '/makefile') == 1 then
-            -- Run make using overseer
-            overseer.run_template({ name = "make" }, function(task)
+            -- Run make using overseer (callback-based API, no return value)
+            overseer.run_template({ name = "make" }, function(task, err)
               if task then
-                -- Task started successfully (silent, statusline shows progress)
+                -- Task started successfully, statusline will show progress
+                vim.notify("Make task started", vim.log.levels.INFO)
+              else
+                vim.notify("Failed to start make task: " .. (err or "unknown error"), vim.log.levels.ERROR)
               end
             end)
           end
