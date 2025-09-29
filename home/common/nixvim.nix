@@ -398,25 +398,8 @@
               {
                 __raw = ''
                   {
-                    -- Custom overseer status with better display
+                    -- Simple overseer status display
                     function()
-                      -- Use global build state if available, fallback to overseer
-                      if vim.g.build_state and vim.g.build_state.status then
-                        local state = vim.g.build_state
-                        local overseer = require('overseer')
-                        local STATUS = overseer.STATUS
-                        local status_symbols = {
-                          [STATUS.FAILURE] = "❌",
-                          [STATUS.CANCELED] = "⏹", 
-                          [STATUS.SUCCESS] = "✅",
-                          [STATUS.RUNNING] = state.blink_off and " " or "▶",
-                          [STATUS.PENDING] = "⏸",
-                        }
-                        local symbol = status_symbols[state.status] or "?"
-                        return symbol .. " Build"
-                      end
-                      
-                      -- Fallback to overseer if no build state
                       local ok, overseer = pcall(require, "overseer")
                       if not ok then return "" end
                       
@@ -439,21 +422,6 @@
                       return symbol .. " " .. task.name
                     end,
                     color = function()
-                      -- Use build state colors if available
-                      if vim.g.build_state and vim.g.build_state.status then
-                        local overseer = require('overseer')
-                        local STATUS = overseer.STATUS
-                        local status_colors = {
-                          [STATUS.FAILURE] = { fg = '#f7768e', gui = 'bold' },
-                          [STATUS.CANCELED] = { fg = '#e0af68', gui = 'bold' },
-                          [STATUS.SUCCESS] = { fg = '#9ece6a', gui = 'bold' },
-                          [STATUS.RUNNING] = { fg = '#7aa2f7', gui = 'bold' },
-                          [STATUS.PENDING] = { fg = '#bb9af7', gui = 'bold' },
-                        }
-                        return status_colors[vim.g.build_state.status] or {}
-                      end
-                      
-                      -- Fallback to overseer colors
                       local ok, overseer = pcall(require, "overseer")
                       if not ok then return {} end
                       
@@ -483,50 +451,26 @@
               {
                 __raw = ''
                   {
-                    -- Quickfix error/warning counter (shows when quickfix has items)
+                    -- Simple quickfix counter
                     function()
-                      -- Use cached quickfix info if available for performance
-                      if vim.g.qf_summary and vim.g.qf_summary.timestamp and 
-                         (vim.fn.localtime() - vim.g.qf_summary.timestamp) < 1 then
-                        local summary = vim.g.qf_summary
-                        if summary.total == 0 then return "" end
-                        return '🔴 ' .. summary.display
-                      end
-                      
                       local qflist = vim.fn.getqflist()
-                      if #qflist == 0 then 
-                        vim.g.qf_summary = { total = 0, display = "", timestamp = vim.fn.localtime() }
-                        return "" 
-                      end
+                      if #qflist == 0 then return "" end
                       
-                      local errors, warnings, notes = 0, 0, 0
+                      local errors, warnings = 0, 0
                       for _, item in ipairs(qflist) do
                         local t = (item.type or ""):lower()
                         if t == 'e' then
                           errors = errors + 1
                         elseif t == 'w' then
                           warnings = warnings + 1
-                        elseif t == 'n' or t == 'i' then
-                          notes = notes + 1
                         end
                       end
                       
                       local parts = {}
                       if errors > 0 then table.insert(parts, errors .. 'E') end
                       if warnings > 0 then table.insert(parts, warnings .. 'W') end
-                      if notes > 0 then table.insert(parts, notes .. 'N') end
                       
-                      local display = #parts > 0 and table.concat(parts, ' ') or ""
-                      local total = #qflist
-                      
-                      -- Cache the result
-                      vim.g.qf_summary = { 
-                        total = total, 
-                        display = display, 
-                        timestamp = vim.fn.localtime() 
-                      }
-                      
-                      return total > 0 and ('🔴 ' .. display) or ""
+                      return #parts > 0 and ('🔴 ' .. table.concat(parts, ' ')) or '🔴 ' .. #qflist
                     end,
                     color = { fg = '#f7768e', gui = 'bold' },
                     on_click = function()
@@ -953,11 +897,9 @@
       overseer = {
         enable = true;
         settings = {
-          # Use jobstart strategy without terminal to avoid truncation issues
-          # Terminal buffers in neovim truncate long lines at terminal width
+          # Use terminal for better ANSI color support
           strategy = { 
-            "__unkeyed-1" = "jobstart";
-            use_terminal = false;  # This prevents truncation but loses ANSI colors
+            "__unkeyed-1" = "terminal";
           };
           templates = [ "builtin" ];
           task_list = {
@@ -985,17 +927,13 @@
               "q" = "Close";
             };
           };
-          # Auto-populate quickfix from failed tasks
-          auto_detect_success_color = true;
+          # Configure components to populate quickfix on output
           component_aliases = {
             default = [
               "display_duration"
-              { "__unkeyed-1" = "on_output_quickfix"; open = true; items_only = true; open_height = 10; }
+              { "__unkeyed-1" = "on_output_quickfix"; open_on_exit = "failure"; }
               "on_exit_set_status"
-              "on_result_diagnostics"
-              "on_result_diagnostics_quickfix"
               "on_complete_notify"
-              "on_complete_dispose"
             ];
           };
         };
@@ -1415,150 +1353,28 @@
       vim.api.nvim_set_hl(0, 'NotifyWARNTitle', { fg = '#e0af68' })
       --]]
       
-      -- Build State Machine for statusline updates
-      -- Single source of truth for build status that hooks into ALL overseer tasks
+      -- Simple overseer integration - auto-open quickfix on task completion with errors
       local overseer = require('overseer')
-      local STATUS = overseer.STATUS
-      vim.g.build_state = nil
-      local refresh_timer = nil
-      local current_task_id = nil
       
-      -- Update build state and refresh lualine
-      local function set_build_state(status, task_id)
-        vim.g.build_state = {
-          status = status,
-          task_id = task_id,
-          blink_off = false
-        }
-        current_task_id = task_id
-        
-        -- Stop timer for completed states, start for running states
-        if status == STATUS.SUCCESS or status == STATUS.FAILURE or status == STATUS.CANCELED then
-          -- Stop the refresh timer for completed builds
-          if refresh_timer then
-            refresh_timer:stop()
-            refresh_timer = nil
-          end
-        elseif status == STATUS.RUNNING then
-          -- Start refresh timer with blinking for running builds
-          if not refresh_timer then
-            refresh_timer = vim.loop.new_timer()
-            refresh_timer:start(0, 250, vim.schedule_wrap(function()
-              -- Toggle blink state
-              if vim.g.build_state and vim.g.build_state.status == STATUS.RUNNING then
-                vim.g.build_state.blink_off = not vim.g.build_state.blink_off
-              end
-              require('lualine').refresh()
-            end))
-          end
-        end
-        
-        -- Always refresh lualine when state changes
-        require('lualine').refresh()
-      end
-      
-      -- Hook into ALL overseer task events (not just our custom function)
-      vim.api.nvim_create_autocmd("User", {
-        pattern = "OverseerTaskStart",
-        callback = function(event)
-          local task = event.data.task
-          if task then
-            set_build_state(STATUS.PENDING, task.id)
-            
-            -- Subscribe to status changes for any task
-            task:subscribe("on_status", function(_, status)
-              -- Only update if this is the current/most recent task
-              if task.id == current_task_id or current_task_id == nil then
-                set_build_state(status, task.id)
-                
-                -- Auto-open quickfix when task completes with items
-                if status == STATUS.SUCCESS or status == STATUS.FAILURE or status == STATUS.CANCELED then
-                  vim.schedule(function()
-                    local qflist = vim.fn.getqflist()
-                    if #qflist > 0 then
-                      -- Clear quickfix summary cache to force refresh
-                      vim.g.qf_summary = nil
-                      -- Open quickfix window
-                      vim.cmd('copen')
-                      -- Refresh lualine to show updated quickfix counter
-                      require('lualine').refresh()
-                    end
-                  end)
-                end
-              end
-            end)
-          end
-        end,
-      })
-      
-      -- Auto-run make on C/C++ file save with debouncing and concurrency protection
-      local make_timer = nil
-      local make_running = false
-      
-      vim.api.nvim_create_autocmd("BufWritePost", {
-        pattern = {"*.c", "*.cpp", "*.cc", "*.h", "*.hpp"},
-        callback = function()
-          local file_dir = vim.fn.expand('%:p:h')
-          
-          if vim.fn.filereadable(file_dir .. '/Makefile') == 1 or 
-             vim.fn.filereadable(file_dir .. '/makefile') == 1 then
-            
-            -- Cancel any pending make
-            if make_timer then
-              make_timer:stop()
-              make_timer = nil
+      -- Subscribe to task completion to auto-open quickfix when there are errors
+      overseer.subscribe("on_task_complete", function(task, status)
+        if status == overseer.STATUS.FAILURE then
+          vim.schedule(function()
+            local qflist = vim.fn.getqflist()
+            if #qflist > 0 then
+              vim.cmd('copen')
             end
-            
-            -- Debounce: wait 500ms before running make
-            make_timer = vim.loop.new_timer()
-            make_timer:start(500, 0, vim.schedule_wrap(function()
-              -- Check if a make is already running
-              if not make_running then
-                make_running = true
-                
-                -- Use standard overseer.run_template to ensure events fire
-                local task = overseer.run_template({ name = "make" })
-                
-                -- Reset flag when task completes
-                if task then
-                  task:subscribe("on_complete", function()
-                    make_running = false
-                  end)
-                else
-                  make_running = false
-                end
-              end
-              
-              make_timer = nil
-            end))
-          end
-        end,
-      })
-      
-      -- Manual make command that integrates with the event system
+          end)
+        end
+      end)
+      -- Simple make command using overseer
       vim.api.nvim_create_user_command('Make', function(opts)
         local args = opts.args ~= "" and vim.split(opts.args, " ") or {}
         overseer.run_template({ name = "make", params = { args = args } })
       end, { nargs = '*', desc = 'Run make with optional arguments' })
       
-      -- Debug command to check build state
-      vim.api.nvim_create_user_command('BuildStatus', function()
-        if vim.g.build_state then
-          local state = vim.g.build_state
-          local status_msg = string.format(
-            "Build State:\n  Status: %s\n  Task ID: %s\n  Blink Off: %s",
-            state.status or "none",
-            state.task_id or "none",
-            state.blink_off and "true" or "false"
-          )
-          print(status_msg)
-        else
-          print("No build state")
-        end
-      end, { desc = 'Show current build state for debugging' })
       
-      
-      -- Quickfix window enhancements and refresh logic
+      -- Quickfix window enhancements
       vim.api.nvim_create_autocmd("FileType", {
         pattern = "qf",
         callback = function()
@@ -1569,13 +1385,8 @@
           vim.wo[win].number = false
           vim.wo[win].relativenumber = false
           
-          -- Enable cursorline and set custom highlight for quickfix selection
+          -- Enable cursorline for better visibility
           vim.wo[win].cursorline = true
-          --[[ Create a custom highlight group for quickfix cursor line
-          vim.api.nvim_set_hl(0, 'QuickfixCursorLine', { bg = '#3a3d5c' })  -- Purple-ish gray
-          -- Apply it only to this quickfix window
-          vim.wo[win].winhighlight = 'CursorLine:QuickfixCursorLine'
-          --]]
           
           -- Create a function to generate the statusline
           vim.b[buf].qf_statusline = function()
@@ -1611,29 +1422,6 @@
         end,
       })
       
-      -- Refresh statusline when quickfix changes
-      vim.api.nvim_create_autocmd("QuickFixCmdPost", {
-        pattern = "*",
-        callback = function()
-          -- Clear quickfix summary cache
-          vim.g.qf_summary = nil
-          -- Refresh lualine
-          vim.schedule(function()
-            require('lualine').refresh()
-          end)
-        end,
-      })
-      
-      -- Additional refresh trigger for when quickfix is modified by external commands
-      vim.api.nvim_create_autocmd("BufReadPost", {
-        pattern = "quickfix",
-        callback = function()
-          vim.g.qf_summary = nil
-          vim.schedule(function()
-            require('lualine').refresh()
-          end)
-        end,
-      })
       
     '';
     
