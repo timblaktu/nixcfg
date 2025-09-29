@@ -1353,20 +1353,11 @@
       vim.api.nvim_set_hl(0, 'NotifyWARNTitle', { fg = '#e0af68' })
       --]]
       
-      -- Simple overseer integration - auto-open quickfix on task completion with errors
+      -- Simple overseer integration
       local overseer = require('overseer')
       
-      -- Subscribe to task completion to auto-open quickfix when there are errors
-      overseer.subscribe("on_task_complete", function(task, status)
-        if status == overseer.STATUS.FAILURE then
-          vim.schedule(function()
-            local qflist = vim.fn.getqflist()
-            if #qflist > 0 then
-              vim.cmd('copen')
-            end
-          end)
-        end
-      end)
+      -- Note: Auto-opening quickfix on failure is handled by the on_output_quickfix component
+      -- configured with open_on_exit = "failure" in the overseer settings above
       
       -- Auto-run make on C/C++ file save
       vim.api.nvim_create_autocmd("BufWritePost", {
