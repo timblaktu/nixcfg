@@ -20,6 +20,8 @@ in {
       rust-analyzer
       rustc
       cargo
+      rustfmt
+      clippy
       nodejs
       yarn
       (python3.withPackages (ps: with ps; [
