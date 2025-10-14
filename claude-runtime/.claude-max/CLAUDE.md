@@ -646,3 +646,45 @@ The module system composes all imports at build time, allowing live testing of c
 
 ### Critical Rules Added:
 - **NO SUDO WITH TIMEOUTS**: Never run sudo commands with timeout parameters (causes Claude Code crash)
+
+## Memory Entry - 2025-10-13 - VisionFive 2 UEFI Development Environment
+
+### Project Location
+- **Path**: `/home/tim/src/hi5/uefi-dev/`
+- **Purpose**: UEFI firmware development for VisionFive 2 RISC-V board
+
+### Git Submodules Architecture Implemented
+Successfully converted from procedural clone script to git submodules approach:
+
+**Submodules Structure**:
+```
+vf2_uefi/
+├── edk2/            # StarFive EDK2 (branch: vf2_jh7110_devel-stable202303)
+├── edk2-platforms/  # Platform code (branch: vf2_jh7110_devel)
+├── opensbi/         # OpenSBI firmware (tag: v1.5.1)
+├── u-boot/          # U-Boot SPL (branch: JH7110_VisionFive2_devel)
+└── tools/           # StarFive tools (includes spl_tool)
+```
+
+**Key Benefits**:
+- Idempotent operations (git submodule update is safe to run multiple times)
+- Recovery from partial clones
+- Standard git workflow (no custom scripts needed)
+- Single command setup: `git clone --recursive`
+
+### Nix Flake Configuration
+- Complete development environment with all RISC-V toolchain dependencies
+- Includes critical U-Boot/OpenSBI dependencies (bison, flex, openssl, etc.)
+- Helper script `verify-vf2-env` to validate environment
+- Cross-compilation support for riscv64
+
+### Build Order (Critical)
+Must build in this sequence due to dependencies:
+1. OpenSBI (M-mode firmware)
+2. U-Boot SPL (Secondary Program Loader)
+3. EDK2 UEFI (or U-Boot proper)
+
+### VisionFive 2 Board Details
+- **Board**: Waveshare VisionFive 2 8GB Starter Kit
+- **SoC**: StarFive JH7110 with 4x SiFive U74 cores @ 1.5 GHz
+- **Boot modes**: QSPI (0,0), MicroSD (1,0), eMMC (0,1), UART recovery (1,1)

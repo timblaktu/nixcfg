@@ -45,27 +45,33 @@ in {
     basePackages = mkOption {
       type = types.listOf types.package;
       default = with pkgs; [
+        
         age
         coreutils-full
         curl
         dua
         fd
+        ffmpeg
+        file
+        fzf
         glow
         jq
         htop
+        imagemagick
         inotify-tools
         lbzip2
         nixfmt-rfc-style
         parallel
+        poppler
+        resvg
         ripgrep
         speedtest
         stress-ng
         tree
         unzip
-        yazi
-        # yaziPlugins.glow
-        # yaziPlugins.miller
-        # yaziPlugins.ouch
+        zoxide
+        p7zip
+        
         rbw
         pinentry-curses
         sops
@@ -297,6 +303,19 @@ in {
           nixos.enable = true;  # Using uvx to run mcp-nixos Python package
           # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
           # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
+        };
+      };
+      
+      # Yazi file manager configuration
+      programs.yazi = {
+        enable = true;
+        enableZshIntegration = true;
+        plugins = {
+          toggle-pane = pkgs.yaziPlugins.toggle-pane;
+          mediainfo = pkgs.yaziPlugins.mediainfo;
+          glow = pkgs.yaziPlugins.glow;
+          miller = pkgs.yaziPlugins.miller;
+          ouch = pkgs.yaziPlugins.ouch;
         };
       };
     }
