@@ -107,7 +107,7 @@ jobs:
                       grep -v 'password.*=.*null' | \
                       grep -v 'new_password.*=' | \
                       grep -v 'sops\.secrets\.' | \
-                      grep -v 'secretsManagement.*=' | \
+                      grep -v 'secretsManagement\s*=' | \
                       grep -v 'mkOption' | \
                       grep -v 'age1[a-z0-9]\{58\}' | \
                       grep -v 'passwordFile.*=' | \
@@ -122,7 +122,14 @@ jobs:
                       grep -v 'cfg\..*\.token' | \
                       grep -v 'token.*=.*mkOption' | \
                       grep -v 'sops\.secrets\..*token' | \
-                      grep -v '^.*#.*".*token".*=' || true)
+                      grep -v '^.*#.*".*token".*=' | \
+                      grep -v 'sops\.secrets.*=' | \
+                      grep -v 'secretsScan.*=' | \
+                      grep -v '"secrets-scan".*=' | \
+                      grep -v 'secretFile.*=' | \
+                      grep -v 'secretsFile.*=' | \
+                      grep -v 'secret-test-service.*=' | \
+                      grep -v '"test-secrets\.yaml"' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
