@@ -228,6 +228,9 @@ in
       fd
     ] ++ cfg.additionalPackages;
 
+    # common home-manager properties
+    home-manager.backupFileExtension = "backup";
+    
     # System-wide shell aliases
     environment.shellAliases = {
       ll = "ls -la";

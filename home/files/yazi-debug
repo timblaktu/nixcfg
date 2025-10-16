@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Enhanced Yazi debug wrapper - resilient debugging and error handling
+set -euo pipefail
+
+LOG_FILE="$HOME/.local/state/yazi/yazi.log"
+TEMP_LOG="/tmp/yazi-startup-$$.log"
+CONFIG_DIR="$HOME/.config/yazi"
+
+echo "🔍 Enhanced Yazi Debug Mode"
+echo "📁 Log file: $LOG_FILE"
+echo "📂 Config dir: $CONFIG_DIR"
+
+# Ensure directories exist
+mkdir -p "$(dirname "$LOG_FILE")" "$CONFIG_DIR"
+
+# Clear and initialize log
+echo "=== YAZI DEBUG STARTUP $(date) ===" > "$LOG_FILE"
+echo "Arguments: $*" >> "$LOG_FILE"
+
+# Show current init.lua status
+if [[ -L "$CONFIG_DIR/init.lua" ]]; then
+    echo "🔗 init.lua -> $(readlink "$CONFIG_DIR/init.lua")"
+    echo "INIT.LUA SYMLINK: $(readlink "$CONFIG_DIR/init.lua")" >> "$LOG_FILE"
+else
+    echo "📄 init.lua: $(ls -la "$CONFIG_DIR/init.lua" 2>/dev/null || echo "NOT FOUND")"
+fi
+
+# Pre-flight check for common issues
+if [[ ! -f "$CONFIG_DIR/init.lua" ]]; then
+    echo "⚠️  WARNING: init.lua not found - linemode may not work"
+fi
+
+echo ""
+echo "🚀 Starting yazi..."
+
+# Run yazi with comprehensive error capture
+if ! yazi --debug "$@" 2>"$TEMP_LOG"; then
+    echo ""
+    echo "❌ Yazi failed to start!"
+    echo "🔴 Startup errors:"
+    cat "$TEMP_LOG"
+    echo ""
+    echo "📋 Log entries from this session:"
+    grep "$(date '+%Y-%m-%d')" "$LOG_FILE" 2>/dev/null | tail -20 || echo "No log entries found"
+    echo ""
+    echo "💡 Debug tips:"
+    echo "   - Check init.lua syntax: lua -c \"dofile('$CONFIG_DIR/init.lua')\""
+    echo "   - Verify symlink: ls -la $CONFIG_DIR/init.lua"
+    echo "   - Full log: tail -f $LOG_FILE"
+    rm -f "$TEMP_LOG"
+    exit 1
+fi
+
+# Handle successful startup
+echo ""
+if [[ -s "$TEMP_LOG" ]]; then
+    echo "⚠️  Startup warnings:"
+    cat "$TEMP_LOG"
+    echo ""
+fi
+
+echo "✅ Yazi started successfully"
+echo "📋 Recent linemode debug entries:"
+grep "LINEMODE:" "$LOG_FILE" 2>/dev/null | tail -5 || echo "No linemode debug entries yet"
+
+echo ""
+echo "💡 To disable debug output:"
+echo "   - Edit init.lua and set DEBUG_ENABLED = false"
+echo "   - Or use regular 'yazi' command"
+echo ""
+echo "📊 Monitor logs: tail -f $LOG_FILE"
+
+rm -f "$TEMP_LOG"

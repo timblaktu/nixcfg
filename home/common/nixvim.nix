@@ -588,22 +588,24 @@
       
       nvim-tree = {
         enable = true;
-        disableNetrw = true;
-        hijackNetrw = true;
-        # Fix FileExplorer autocommand conflict
-        hijackUnnamedBufferWhenOpening = false;
-        view = {
-          width = 50;
-          side = "left";
-        };
-        renderer = {
-          highlightGit = true;
-          icons = {
-            show = {
-              git = true;
-              folder = true;
-              file = true;
-              folderArrow = true;
+        settings = {
+          disable_netrw = true;
+          hijack_netrw = true;
+          # Fix FileExplorer autocommand conflict
+          hijack_unnamed_buffer_when_opening = false;
+          view = {
+            width = 50;
+            side = "left";
+          };
+          renderer = {
+            highlight_git = true;
+            icons = {
+              show = {
+                git = true;
+                folder = true;
+                file = true;
+                folder_arrow = true;
+              };
             };
           };
         };

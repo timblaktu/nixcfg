@@ -688,3 +688,56 @@ Must build in this sequence due to dependencies:
 - **Board**: Waveshare VisionFive 2 8GB Starter Kit
 - **SoC**: StarFive JH7110 with 4x SiFive U74 cores @ 1.5 GHz
 - **Boot modes**: QSPI (0,0), MicroSD (1,0), eMMC (0,1), UART recovery (1,1)
+
+## Memory Entry - 2025-10-15 - Yazi Linemode Plugin Resolution & Debug Architecture
+
+### Critical Technical Resolution: Components vs Plugins Architecture + Silent Failure Prevention
+
+**Problem Solved**: Yazi linemode functions are **components**, not plugins - they must be defined in `init.lua`, not as separate *.yazi plugin files.
+
+**Root Cause**: Misunderstanding of yazi's dual extension architecture:
+1. **Plugins** (*.yazi directories): For previewers, seekers, external tools
+2. **Components**: Extensions to built-in objects via `init.lua`
+
+**Secondary Issue Discovered**: Yazi API compatibility changes causing silent failures:
+- `file:size()` → `file.cha.length`
+- `file.cha.mtime` → `file.cha.modified`  
+- `file.cha.perm` → `file.cha.permissions`
+
+**Critical Impact**: Silent init.lua failures break yazi's three-pane layout (only center pane visible) without error messages.
+
+### Multi-Layered Debug Solution Implemented
+
+**1. Debug Logging Enabled** (`home/modules/base.nix`):
+```nix
+programs.yazi.settings.log.enabled = true;  # Creates ~/.local/state/yazi/yazi.log
+```
+
+**2. Error Handling in init.lua** (`home/files/yazi-init.lua`):
+- Wrapped functions in `pcall()` for error catching
+- Added validation checks for file object existence
+- Debug traces with `ya.dbg()` and `ya.err()`
+- Fixed API compatibility issues
+
+**3. Debug Wrapper Script** (`home/files/yazi-debug`):
+- Captures startup errors and stderr output
+- Shows log file contents on failure
+- Provides clear success/failure indication
+
+### Technical Features
+- **Fixed-width output**: Exactly 20 characters for consistent alignment
+- **Smart size formatting**: Automatic K/M/G/T/P conversion with appropriate decimals
+- **Compact time**: MMDDHHMMSS format (1015143022 = Oct 15, 14:30:22)
+- **Octal permissions**: Standard 4-digit format (0755, 0644)
+- **Robust error handling**: Graceful degradation with error messages
+
+### Key Prevention Strategy: Fail Fast and Loud
+1. **Always enable debug logging** during yazi development
+2. **Wrap custom functions** in error handling (`pcall()`)
+3. **Validate object existence** before property access
+4. **Use diagnostic wrapper** for startup issue detection
+5. **Monitor API changes** between yazi versions
+
+**Architecture Insight**: Plugin system (*.yazi directories) handles external functionality, while component extensions modify built-in yazi objects through `init.lua`. Silent failures in init.lua require proactive debugging architecture.
+
+**Status**: ✅ Working - custom linemode active with comprehensive error handling and debug infrastructure

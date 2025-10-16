@@ -161,6 +161,7 @@ in {
       description = "Home Manager state version";
     };
     
+    
     # Terminal verification options (WSL-specific)
     terminalVerification = mkOption {
       type = types.submodule {
@@ -208,7 +209,11 @@ in {
         # Set environment variables
         sessionVariables = {
           EDITOR = cfg.defaultEditor;
+          YAZI_LOG = "debug";  # Enable yazi plugin debug logging (works for both standalone and NixOS-integrated HM)
         } // cfg.environmentVariables;
+        
+        # Files and scripts
+        file = {};
         
         # THis isn't working. For now just run exec $SHELL manually
         # auto-exec $SHELL after a home-manager switch
@@ -316,6 +321,23 @@ in {
           glow = pkgs.yaziPlugins.glow;
           miller = pkgs.yaziPlugins.miller;
           ouch = pkgs.yaziPlugins.ouch;
+        };
+        initLua = ../files/yazi-init.lua;
+        settings = {  # Full settings spec at https://yazi-rs.github.io/docs/configuration/yazi
+          log = {
+            enabled = true;
+          };
+          mgr = {
+            linemode = "compact_meta";
+            ratio = [ 1 3 5 ];
+            show_hidden = true;
+            show_symlink = true;
+            sort_by = "mtime";  # natural, size
+            sort_dir_first = true;
+            sort_reverse = true;
+            sort_sensitive = true;
+            mouse_events = ["click" "scroll" "touch" "move" ];
+          };
         };
       };
     }
