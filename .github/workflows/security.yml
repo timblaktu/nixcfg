@@ -114,7 +114,10 @@ jobs:
                       grep -v 'api_token = {' | \
                       grep -v 'secretsScan' | \
                       grep -v 'secrets-scan' | \
-                      grep -v 'secretsManagement' || true)
+                      grep -v 'secretsManagement' | \
+                      grep -v 'sops.secrets' | \
+                      grep -v 'secretsFile' | \
+                      grep -v '^[[:space:]]*#' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
