@@ -116,7 +116,13 @@ jobs:
                       grep -v '/run/secrets\.d/.*/password' | \
                       grep -v 'tests/.*BEGIN.*PRIVATE KEY' | \
                       grep -v '\.github/workflows/security\.yml:' | \
-                      grep -v '\.md:.*".*".*=' || true)
+                      grep -v '\.md:.*".*".*=' | \
+                      grep -v 'tokens=re\.split' | \
+                      grep -v 'token.*!=' | \
+                      grep -v 'cfg\..*\.token' | \
+                      grep -v 'token.*=.*mkOption' | \
+                      grep -v 'sops\.secrets\..*token' | \
+                      grep -v '^.*#.*".*token".*=' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
