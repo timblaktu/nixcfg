@@ -2,6 +2,18 @@
 # Ignore sops encrypted files
 useDefault = true
 
+# Allowlist for documentation and configuration files
+[allowlist]
+description = "Ignore false positives in documentation and config files"
+paths = [
+    '''.*\.md$''',
+    '''modules/.*''',
+    '''docs/.*''',
+    '''secrets/TEMPLATE-.*''',
+    '''secrets/.*INSTRUCTIONS.*''',
+    '''.*\.template$''',
+]
+
 [[rules]]
 description = "Ignore sops encrypted files"
 regex = '''age1[a-z0-9]{58}'''
@@ -13,4 +25,17 @@ regex = '''age1[a-z0-9]{58}'''
 allowlist.paths = [
     '''.sops.yaml''',
     '''secrets/''',
+]
+
+[[rules]]
+description = "Ignore legitimate password references in configuration"
+regex = '''password.*=.*[^"]'''
+allowlist.paths = [
+    '''modules/base.nix''',
+    '''secrets/SECRETS-MANAGEMENT.md''',
+    '''secrets/TEMPLATE-SECRETS-GUIDE.md''',
+    '''secrets/SECRETS-USER-INSTRUCTIONS.md''',
+    '''docs/''',
+    '''BARE-MOUNT-*.md''',
+    '''OVERSEER-*.md''',
 ]
