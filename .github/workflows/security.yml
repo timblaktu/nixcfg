@@ -114,7 +114,8 @@ jobs:
                       grep -v 'passwordSecret.*=' | \
                       grep -v 'passwords.*=' | \
                       grep -v '/run/secrets\.d/.*/password' | \
-                      grep -v 'tests/.*BEGIN.*PRIVATE KEY' || true)
+                      grep -v 'tests/.*BEGIN.*PRIVATE KEY' | \
+                      grep -v '\.github/workflows/security\.yml:' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
