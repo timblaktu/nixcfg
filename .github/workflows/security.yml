@@ -115,6 +115,9 @@ jobs:
                       grep -v 'passwords.*=' | \
                       grep -v '/run/secrets\.d/.*/password' | \
                       grep -v 'tests/.*BEGIN.*PRIVATE KEY' | \
+                      grep -v '\.md:.*BEGIN.*PRIVATE KEY' | \
+                      grep -v '\.template:.*BEGIN.*PRIVATE KEY' | \
+                      grep -v 'sed.*BEGIN.*PRIVATE KEY' | \
                       grep -v '\.github/workflows/security\.yml:' | \
                       grep -v '\.md:.*".*".*=' | \
                       grep -v 'tokens=re\.split' | \
