@@ -92,34 +92,28 @@ jobs:
             'npm_[a-zA-Z0-9]{36}'  # NPM token
           )
           
-          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive --exclude-dir=tests"
-          exclude_files="--exclude=*.md --exclude=*.template --exclude=security.yml --exclude=*.sh"
+          # Only exclude git internals and build artifacts - scan everything else  
+          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive"
           
           for pattern in "${patterns[@]}"; do
-            # Check for matches but exclude legitimate configuration values
-            matches=$(grep -r -E "$pattern" . $exclude_dirs $exclude_files 2>/dev/null | \
+            # Check for matches but exclude standardized impossible placeholders and legitimate patterns
+            matches=$(grep -r -E "$pattern" . $exclude_dirs 2>/dev/null | \
+                      grep -v '<PLACEHOLDER_.*_IMPOSSIBLE>' | \
                       grep -v 'prohibit-password' | \
                       grep -v 'forced-commands-only' | \
                       grep -v 'PasswordAuthentication.*=.*(yes|no)' | \
                       grep -v 'PermitRootLogin.*=.*(yes|no|prohibit-password|forced-commands-only)' | \
                       grep -v 'password.*=.*""' | \
                       grep -v 'password.*=.*null' | \
-                      grep -v 'passwords.*=' | \
-                      grep -v 'db_password' | \
-                      grep -v 'new_password' | \
-                      grep -v 'tokens=' | \
-                      grep -v 'token != null' | \
-                      grep -v 'token = mkOption' | \
-                      grep -v 'github_token' | \
-                      grep -v 'api_token = {' | \
-                      grep -v 'secretsScan' | \
-                      grep -v 'secrets-scan' | \
-                      grep -v 'secretsManagement' | \
-                      grep -v 'sops.secrets' | \
-                      grep -v 'secretsFile' | \
-                      grep -v '^[[:space:]]*#' | \
-                      grep -v 'sed -n.*BEGIN.*PRIVATE KEY' | \
-                      grep -v 'BEGIN.*PRIVATE KEY.*pattern' || true)
+                      grep -v 'password.*=.*variable' | \
+                      grep -v 'new_password.*=' | \
+                      grep -v 'sops\.secrets\.' | \
+                      grep -v 'secretsManagement.*=' | \
+                      grep -v 'mkOption' | \
+                      grep -v 'age1[a-z0-9]\{58\}' | \
+                      grep -v '\.jsonl:' | \
+                      grep -v 'echo.*pattern' | \
+                      grep -v 'tests/.*BEGIN.*PRIVATE KEY' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"

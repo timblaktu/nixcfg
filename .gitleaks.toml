@@ -2,19 +2,18 @@
 [extend]
 useDefault = true
 
-# Global allowlist for false positives
+# Minimal allowlist - only exclude impossible placeholders and known false positives
 [allowlist]
-description = "Ignore false positives in documentation and config files"
-paths = [
-    '''.*\.md$''',
-    '''docs/.*''',
-    '''secrets/TEMPLATE-.*''',
-    '''secrets/.*INSTRUCTIONS.*''',
-    '''.*\.template$''',
-    '''.*\.nix$''',
-]
+description = "Exclude standardized impossible placeholders and legitimate config patterns"
 regexes = [
+    '''<PLACEHOLDER_.*_IMPOSSIBLE>''',
     '''prohibit-password''',
     '''forced-commands-only''',
     '''age1[a-z0-9]{58}''',
+    '''tblack-t14-nixos''',
+]
+paths = [
+    '''.*\.template$''',
+    '''secrets/.*INSTRUCTIONS.*''',
+    '''claude-runtime/.*\.jsonl$''',
 ]
