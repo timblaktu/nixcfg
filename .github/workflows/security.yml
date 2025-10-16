@@ -96,8 +96,16 @@ jobs:
           exclude_files="--exclude=*.md --exclude=*.template --exclude=security.yml"
           
           for pattern in "${patterns[@]}"; do
-            if grep -r -E "$pattern" . $exclude_dirs $exclude_files 2>/dev/null; then
+            # Check for matches but exclude legitimate SSH configuration values
+            matches=$(grep -r -E "$pattern" . $exclude_dirs $exclude_files 2>/dev/null | \
+                      grep -v 'prohibit-password' | \
+                      grep -v 'forced-commands-only' | \
+                      grep -v 'PasswordAuthentication.*=.*(yes|no)' | \
+                      grep -v 'PermitRootLogin.*=.*(yes|no|prohibit-password|forced-commands-only)' || true)
+            
+            if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
+              echo "$matches"
               exit 1
             fi
           done
