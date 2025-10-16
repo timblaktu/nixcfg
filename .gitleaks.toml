@@ -1,9 +1,9 @@
+# Use default gitleaks rules 
 [extend]
-# Use default gitleaks rules and extend them
 useDefault = true
 
-# Global allowlist for documentation and configuration files
-[[allowlist]]
+# Global allowlist for false positives
+[allowlist]
 description = "Ignore false positives in documentation and config files"
 paths = [
     '''.*\.md$''',
@@ -11,31 +11,10 @@ paths = [
     '''secrets/TEMPLATE-.*''',
     '''secrets/.*INSTRUCTIONS.*''',
     '''.*\.template$''',
-]
-
-# Specific allowlist for Nix files with SSH configuration patterns
-[[allowlist]]
-description = "Allow SSH configuration values in Nix files"
-regexTarget = "line"
-regexes = [
-    # SSH configuration assertions with literal values
-    '''assertion\s*=.*sshRootLogin.*(no|yes|prohibit-password|forced-commands-only)''',
-    # SSH configuration option comparisons
-    '''sshRootLogin\s*(==|!=)\s*["']?(no|yes|prohibit-password|forced-commands-only)["']?''',
-    # SSH configuration defaults and types
-    '''(default|type)\s*=.*(prohibit-password|forced-commands-only)''',
-    # Documentation mentioning SSH options
-    '''(description|message)\s*=.*prohibit-password''',
-]
-paths = [
     '''.*\.nix$''',
 ]
-
-# Rule for sops encrypted files
-[[rules]]
-description = "Ignore sops encrypted files"
-id = "sops-encrypted-files"
-regex = '''age1[a-z0-9]{58}'''
-path = '''\.sops\.ya?ml$'''
-
-# Age public keys are already covered by allowlist paths above
+regexes = [
+    '''prohibit-password''',
+    '''forced-commands-only''',
+    '''age1[a-z0-9]{58}''',
+]
