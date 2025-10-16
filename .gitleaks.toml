@@ -43,9 +43,8 @@ path = '''\.sops\.ya?ml$'''
 description = "Ignore age public keys"
 id = "age-public-keys"
 regex = '''age1[a-z0-9]{58}'''
-[rules.allowlist]
-paths = [
+allowlist = { paths = [
     '''.sops.yaml''',
     '''secrets/.*''',
     '''.*\.md$''',
-]
+] }

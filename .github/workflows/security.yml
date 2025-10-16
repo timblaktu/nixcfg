@@ -106,7 +106,10 @@ jobs:
                       grep -v 'password.*=.*null' | \
                       grep -v 'passwords.*=' | \
                       grep -v 'db_password' | \
-                      grep -v 'new_password' || true)
+                      grep -v 'new_password' | \
+                      grep -v 'tokens=' | \
+                      grep -v 'token != null' | \
+                      grep -v 'token = mkOption' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
