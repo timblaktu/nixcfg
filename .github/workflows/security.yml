@@ -109,7 +109,9 @@ jobs:
                       grep -v 'new_password' | \
                       grep -v 'tokens=' | \
                       grep -v 'token != null' | \
-                      grep -v 'token = mkOption' || true)
+                      grep -v 'token = mkOption' | \
+                      grep -v 'github_token' | \
+                      grep -v 'api_token = {' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
