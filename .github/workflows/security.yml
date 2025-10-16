@@ -92,8 +92,8 @@ jobs:
             'npm_[a-zA-Z0-9]{36}'  # NPM token
           )
           
-          # Only exclude git internals, build artifacts, docs, and claude runtime  
-          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive --exclude-dir=docs --exclude-dir=claude-runtime"
+          # Only exclude git internals, build artifacts, docs, scripts, and claude runtime  
+          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive --exclude-dir=docs --exclude-dir=scripts --exclude-dir=claude-runtime"
           
           for pattern in "${patterns[@]}"; do
             # Check for matches but exclude standardized impossible placeholders and legitimate patterns
