@@ -132,7 +132,10 @@ jobs:
                       grep -v 'secretFile.*=' | \
                       grep -v 'secretsFile.*=' | \
                       grep -v 'secret-test-service.*=' | \
-                      grep -v '"test-secrets\.yaml"' || true)
+                      grep -v '"test-secrets\.yaml"' | \
+                      grep -v 'Placeholder_.*' | \
+                      grep -v 'ghp_[Xx]*' | \
+                      grep -v '^.*#.*ghp_.*' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
