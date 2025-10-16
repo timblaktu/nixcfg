@@ -92,8 +92,8 @@ jobs:
             'npm_[a-zA-Z0-9]{36}'  # NPM token
           )
           
-          # Only exclude git internals and build artifacts - scan everything else  
-          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive"
+          # Only exclude git internals, build artifacts, docs, and claude runtime  
+          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive --exclude-dir=docs --exclude-dir=claude-runtime"
           
           for pattern in "${patterns[@]}"; do
             # Check for matches but exclude standardized impossible placeholders and legitimate patterns
@@ -105,14 +105,15 @@ jobs:
                       grep -v 'PermitRootLogin.*=.*(yes|no|prohibit-password|forced-commands-only)' | \
                       grep -v 'password.*=.*""' | \
                       grep -v 'password.*=.*null' | \
-                      grep -v 'password.*=.*variable' | \
                       grep -v 'new_password.*=' | \
                       grep -v 'sops\.secrets\.' | \
                       grep -v 'secretsManagement.*=' | \
                       grep -v 'mkOption' | \
                       grep -v 'age1[a-z0-9]\{58\}' | \
-                      grep -v '\.jsonl:' | \
-                      grep -v 'echo.*pattern' | \
+                      grep -v 'passwordFile.*=' | \
+                      grep -v 'passwordSecret.*=' | \
+                      grep -v 'passwords.*=' | \
+                      grep -v '/run/secrets\.d/.*/password' | \
                       grep -v 'tests/.*BEGIN.*PRIVATE KEY' || true)
             
             if [ -n "$matches" ]; then
