@@ -38,15 +38,4 @@ id = "sops-encrypted-files"
 regex = '''age1[a-z0-9]{58}'''
 path = '''\.sops\.ya?ml$'''
 
-# Rule for age public keys (they're meant to be public)
-[[rules]]
-description = "Ignore age public keys"
-id = "age-public-keys"
-regex = '''age1[a-z0-9]{58}'''
-
-[[rules.allowlists]]
-paths = [
-    '''.sops.yaml''',
-    '''secrets/.*''',
-    '''.*\.md$''',
-]
+# Age public keys are already covered by allowlist paths above

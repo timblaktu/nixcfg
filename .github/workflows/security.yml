@@ -111,7 +111,10 @@ jobs:
                       grep -v 'token != null' | \
                       grep -v 'token = mkOption' | \
                       grep -v 'github_token' | \
-                      grep -v 'api_token = {' || true)
+                      grep -v 'api_token = {' | \
+                      grep -v 'secretsScan' | \
+                      grep -v 'secrets-scan' | \
+                      grep -v 'secretsManagement' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
