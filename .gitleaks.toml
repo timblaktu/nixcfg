@@ -3,7 +3,7 @@
 useDefault = true
 
 # Global allowlist for documentation and configuration files
-[allowlist]
+[[allowlist]]
 description = "Ignore false positives in documentation and config files"
 paths = [
     '''.*\.md$''',

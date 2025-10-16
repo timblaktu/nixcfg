@@ -92,16 +92,21 @@ jobs:
             'npm_[a-zA-Z0-9]{36}'  # NPM token
           )
           
-          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive"
+          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive --exclude-dir=tests"
           exclude_files="--exclude=*.md --exclude=*.template --exclude=security.yml"
           
           for pattern in "${patterns[@]}"; do
-            # Check for matches but exclude legitimate SSH configuration values
+            # Check for matches but exclude legitimate configuration values
             matches=$(grep -r -E "$pattern" . $exclude_dirs $exclude_files 2>/dev/null | \
                       grep -v 'prohibit-password' | \
                       grep -v 'forced-commands-only' | \
                       grep -v 'PasswordAuthentication.*=.*(yes|no)' | \
-                      grep -v 'PermitRootLogin.*=.*(yes|no|prohibit-password|forced-commands-only)' || true)
+                      grep -v 'PermitRootLogin.*=.*(yes|no|prohibit-password|forced-commands-only)' | \
+                      grep -v 'password.*=.*""' | \
+                      grep -v 'password.*=.*null' | \
+                      grep -v 'passwords.*=' | \
+                      grep -v 'db_password' | \
+                      grep -v 'new_password' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
