@@ -40,8 +40,8 @@ in {
       openssl
       ncurses
       
-      docker
-      docker-compose
+      podman
+      podman-compose
       kubectl
       k9s
       

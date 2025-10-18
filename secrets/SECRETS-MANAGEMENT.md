@@ -77,7 +77,9 @@ graph TB
 ```
 nixcfg/
 ├── .sops.yaml                         # SOPS configuration & key mappings
-├── .pre-commit-config.yaml            # Gitleaks secret scanning
+├── .pre-commit-config.yaml            # Pre-commit hooks (deprecated - see GitHub Actions)
+├── .github/workflows/security.yml      # Comprehensive security scanning (Gitleaks, TruffleHog, SOPS)
+├── .gitleaks.toml                      # Gitleaks configuration with impossible placeholder patterns
 ├── secrets/
 │   ├── common/                        # Shared secrets across hosts
 │   │   ├── example.yaml.template      # Template for new secrets

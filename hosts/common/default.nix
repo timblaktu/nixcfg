@@ -56,7 +56,7 @@
   # Default user configuration
   users.users.tim = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "audio" "video" "docker" ];
+    extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
     openssh.authorizedKeys.keys = [];
   };
 

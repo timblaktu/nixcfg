@@ -18,6 +18,7 @@ in {
     ./terminal-verification.nix  # WSL Windows Terminal verification
     ./claude-code.nix  # Claude Code MCP servers configuration
     ./secrets-management.nix  # RBW and SOPS configuration
+    ./podman-tools.nix  # Container tools configuration
     # Enhanced nix-writers based script management  
     (if inputs != null && inputs ? nix-writers 
      then inputs.nix-writers.homeManagerModules.default
@@ -47,6 +48,7 @@ in {
       default = with pkgs; [
         
         age
+        act
         coreutils-full
         curl
         dua
@@ -145,6 +147,12 @@ in {
       type = types.bool;
       default = true;
       description = "Enable Claude Code configuration with MCP servers";
+    };
+    
+    enableContainerSupport = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable user container tools (podman-compose, podman-tui, etc.)";
     };
     
     # Environment variables
@@ -338,6 +346,17 @@ in {
             sort_sensitive = true;
             mouse_events = ["click" "scroll" "touch" "move" ];
           };
+        };
+      };
+      
+      # Container tools configuration (conditional)
+      programs.podman-tools = {
+        enable = cfg.enableContainerSupport;
+        enableCompose = true;
+        aliases = {
+          docker = "podman";
+          d = "podman";
+          dc = "podman-compose";
         };
       };
     }

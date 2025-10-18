@@ -165,11 +165,19 @@ in
       default = false;
       description = "Enable Claude Code enterprise managed settings";
     };
+
+    # Container support options
+    containerSupport = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable container support (podman) for development and CI workflows";
+    };
   };
 
-  # Actual configuration based on the options
-  config = {
-    # Runtime assertions for configuration validation
+  # Actual configuration based on the options  
+  config = lib.mkMerge [
+    {
+      # Runtime assertions for configuration validation
     assertions = [
       {
         assertion = cfg.userName != "";
@@ -228,8 +236,6 @@ in
       fd
     ] ++ cfg.additionalPackages;
 
-    # common home-manager properties
-    home-manager.backupFileExtension = "backup";
     
     # System-wide shell aliases
     environment.shellAliases = {
@@ -346,5 +352,33 @@ in
 
     # Set NixOS compatibility version
     system.stateVersion = cfg.stateVersion;
-  };
+    }
+    
+    # Container support configuration
+    (lib.mkIf cfg.containerSupport {
+      # Enable podman with Docker compatibility for act
+      virtualisation.podman = {
+        enable = true;
+        dockerCompat = true;
+        dockerSocket.enable = true;
+        defaultNetwork.settings.dns_enabled = true;
+      };
+      
+      # Enable container support
+      virtualisation.containers.enable = true;
+      
+      # Configure user for rootless podman
+      users.users.${cfg.userName} = {
+        subUidRanges = [{ startUid = 100000; count = 65536; }];
+        subGidRanges = [{ startGid = 100000; count = 65536; }];
+        extraGroups = [ "podman" ];
+      };
+      
+      # Additional packages for container workflows
+      environment.systemPackages = with pkgs; [
+        podman-compose
+        podman-tui
+      ];
+    })
+  ];
 }

@@ -446,7 +446,7 @@ EOF
 # Copy this to environment.yaml and edit with: sops environment.yaml
 
 # Development Tokens
-NPM_TOKEN: "npm_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+NPM_TOKEN: "<PLACEHOLDER_NPM_TOKEN_IMPOSSIBLE>"
 CARGO_REGISTRY_TOKEN: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Cloud Provider Credentials
