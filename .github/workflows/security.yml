@@ -52,9 +52,7 @@ jobs:
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
         with:
-          auditOn: push
           publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}  # Optional for Semgrep App
-          publishDeployment: ${{ secrets.SEMGREP_DEPLOYMENT_ID }}  # Optional
 
   verify-sops:
     name: Verify SOPS Encryption
