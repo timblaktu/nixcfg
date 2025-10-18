@@ -588,22 +588,24 @@
       
       nvim-tree = {
         enable = true;
-        disableNetrw = true;
-        hijackNetrw = true;
-        # Fix FileExplorer autocommand conflict
-        hijackUnnamedBufferWhenOpening = false;
-        view = {
-          width = 50;
-          side = "left";
-        };
-        renderer = {
-          highlightGit = true;
-          icons = {
-            show = {
-              git = true;
-              folder = true;
-              file = true;
-              folderArrow = true;
+        settings = {
+          disable_netrw = true;
+          hijack_netrw = true;
+          # Fix FileExplorer autocommand conflict
+          hijack_unnamed_buffer_when_opening = false;
+          view = {
+            width = 50;
+            side = "left";
+          };
+          renderer = {
+            highlight_git = true;
+            icons = {
+              show = {
+                git = true;
+                folder = true;
+                file = true;
+                folder_arrow = true;
+              };
             };
           };
         };
@@ -793,6 +795,19 @@
             enable = true;
             installCargo = false;
             installRustc = false;
+            settings = {
+              "rust-analyzer" = {
+                cargo = {
+                  allFeatures = true;
+                };
+                checkOnSave = {
+                  command = "clippy";
+                };
+                rustfmt = {
+                  extraArgs = ["+nightly"];
+                };
+              };
+            };
           };
           
           # Python
@@ -897,9 +912,14 @@
       overseer = {
         enable = true;
         settings = {
-          # Use terminal for better ANSI color support
+          # Use jobstart strategy without terminal to prevent line wrapping
+          # This avoids terminal emulation that wraps long lines at terminal width
           strategy = { 
-            "__unkeyed-1" = "terminal";
+            "__unkeyed-1" = "jobstart";
+            "__unkeyed-2" = {
+              use_terminal = false;  # Don't use terminal buffer, prevents line wrapping
+              preserve_output = true;  # Keep output when restarting tasks
+            };
           };
           templates = [ "builtin" ];
           task_list = {
@@ -931,7 +951,7 @@
           component_aliases = {
             default = [
               "display_duration"
-              { "__unkeyed-1" = "on_output_quickfix"; open_on_exit = "failure"; }
+              { "__unkeyed-1" = "on_output_quickfix"; open_on_exit = "failure"; items_only = true; tail = false; }
               "on_exit_set_status"
               "on_complete_notify"
             ];
@@ -976,8 +996,8 @@
             N = "N";
             H = "H";
           };
-          # Smart filename width
-          max_filename_width.__raw = ''function() return math.floor(math.min(50, vim.o.columns * 0.5)) end'';
+          # Smart filename width - don't truncate filenames, let them use natural width
+          max_filename_width.__raw = ''function() return 999 end'';
           # Enable editing capabilities
           edit = {
             enabled = true;
@@ -1317,7 +1337,7 @@
       })
       
       
-      -- Add protection for quickfix operations to prevent keyboard interrupt issues
+      --[[ Add protection for quickfix operations to prevent keyboard interrupt issues
       local orig_setqflist = vim.fn.setqflist
       vim.fn.setqflist = function(list, action, what)
         local ok, result = pcall(orig_setqflist, list, action, what)
@@ -1327,7 +1347,7 @@
         end
         return result
       end
-      
+      --]]
       -- Quicker.nvim now handles quickfix formatting and highlighting
       
       -- COMMENTED NVIM-NOTIFY SETUP FOR FUTURE USE
@@ -1356,6 +1376,27 @@
       -- Simple overseer integration
       local overseer = require('overseer')
       
+      -- FIX FOR ERROR MESSAGE TRUNCATION IN QUICKFIX:
+      -- The root cause is that overseer's jobstart strategy constrains PTY width to vim.o.columns - 4
+      -- This causes compiler output to be truncated when Neovim window is narrow (~100 columns).
+      -- TEMPORARY: Monkey-patch for when use_terminal=true (affects templates that override strategy)
+      -- Issue #445: https://github.com/stevearc/overseer.nvim/issues/445
+      -- PR pending: https://github.com/timblaktu/overseer.nvim/tree/fix-pty-width-truncation
+      local JobstartStrategy = require('overseer.strategy.jobstart')
+      local original_start = JobstartStrategy.start
+      JobstartStrategy.start = function(self, task)
+        -- Temporarily override vim.o.columns during jobstart
+        local saved_columns = vim.o.columns
+        vim.o.columns = 504  -- Will become 500 after "- 4" in the original code
+        local result = original_start(self, task)
+        vim.o.columns = saved_columns
+        return result
+      end
+      
+      -- Note: We're currently using use_terminal=false in overseer settings which avoids this issue
+      -- But some templates might override the strategy, so the monkey-patch helps those cases
+      -- Once PR is merged, can add pty_width=500 to strategy config and remove monkey-patch
+      
       -- Note: Auto-opening quickfix on failure is handled by the on_output_quickfix component
       -- configured with open_on_exit = "failure" in the overseer settings above
       
@@ -1381,11 +1422,45 @@
         end,
       })
       
+      -- Auto-run cargo check on Rust file save
+      vim.api.nvim_create_autocmd("BufWritePost", {
+        pattern = {"*.rs"},
+        callback = function()
+          -- Find Cargo.toml by walking up the directory tree
+          local function find_cargo_toml(path)
+            if path == "/" then return nil end
+            if vim.fn.filereadable(path .. '/Cargo.toml') == 1 then
+              return path
+            end
+            return find_cargo_toml(vim.fn.fnamemodify(path, ':h'))
+          end
+          
+          local cargo_root = find_cargo_toml(vim.fn.expand('%:p:h'))
+          if cargo_root then
+            -- Run cargo check using overseer
+            overseer.run_template({ name = "cargo", params = { task = "check" } }, function(task, err)
+              if task then
+                vim.notify("Cargo check started", vim.log.levels.INFO)
+              else
+                vim.notify("Failed to start cargo check: " .. (err or "unknown error"), vim.log.levels.ERROR)
+              end
+            end)
+          end
+        end,
+      })
+      
       -- Simple make command using overseer
       vim.api.nvim_create_user_command('Make', function(opts)
         local args = opts.args ~= "" and vim.split(opts.args, " ") or {}
         overseer.run_template({ name = "make", params = { args = args } })
       end, { nargs = '*', desc = 'Run make with optional arguments' })
+      
+      -- Simple cargo command using overseer
+      vim.api.nvim_create_user_command('Cargo', function(opts)
+        local args = opts.args ~= "" and vim.split(opts.args, " ") or { "check" }
+        local task = args[1] or "check"
+        overseer.run_template({ name = "cargo", params = { task = task, args = vim.list_slice(args, 2) } })
+      end, { nargs = '*', desc = 'Run cargo with arguments (default: check)' })
       
       
       -- Quickfix window enhancements

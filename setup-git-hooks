@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+# setup-git-hooks - Install validation as git hooks
+# Usage: ./setup-git-hooks
+
+set -euo pipefail
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log() {
+    local color=$1
+    shift
+    echo -e "${color}$*${NC}"
+}
+
+# Ensure we're in a git repository
+if [ ! -d ".git" ]; then
+    echo "Error: Not in a git repository"
+    exit 1
+fi
+
+# Create hooks directory if it doesn't exist
+mkdir -p .git/hooks
+
+# Install pre-push hook
+cat > .git/hooks/pre-push << 'EOF'
+#!/usr/bin/env bash
+
+# Git pre-push hook - Run security validation before pushing
+# This runs the quick validation to catch issues before they reach GitHub
+
+set -euo pipefail
+
+echo "🔍 Running pre-push security validation..."
+
+# Get the directory of this script to find validate-workflows
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+
+# Run quick validation from repository root
+cd "$SCRIPT_DIR"
+
+if [ -x "./validate-workflows" ]; then
+    # Note: Group permissions may require logout/login to take effect
+    # If this fails, run manually: ./validate-workflows quick
+    ./validate-workflows quick || {
+        echo "❌ Pre-push validation failed!"
+        echo "💡 To skip this check: git push --no-verify"
+        echo "💡 To run manually: ./validate-workflows quick"
+        exit 1
+    }
+else
+    echo "⚠️  validate-workflows not found, skipping validation"
+fi
+
+echo "✅ Pre-push validation passed!"
+EOF
+
+# Make the hook executable
+chmod +x .git/hooks/pre-push
+
+log $GREEN "✅ Git hooks installed successfully!"
+log $BLUE "📝 Pre-push hook will run './validate-workflows quick' before each push"
+log $BLUE "💡 To skip validation: git push --no-verify"
+log $BLUE "💡 To test manually: ./validate-workflows quick"
+
+# Show next steps
+echo
+echo "Next steps:"
+echo "1. Log out and log back in (or restart shell) for group permissions to take effect"
+echo "2. Test validation: ./validate-workflows quick"
+echo "3. Test git hook: git push --dry-run"

@@ -54,9 +54,7 @@ in
       # Process management
       psg = "ps aux | grep -i";
       
-      # Docker
-      d = "docker";
-      dc = "docker-compose";
+      # Container tools (provided by podman-tools module when containerSupport enabled)
       
       # Network
       ports = "sudo netstat -tulpn";

@@ -20,6 +20,8 @@ in {
       rust-analyzer
       rustc
       cargo
+      rustfmt
+      clippy
       nodejs
       yarn
       (python3.withPackages (ps: with ps; [
@@ -38,8 +40,8 @@ in {
       openssl
       ncurses
       
-      docker
-      docker-compose
+      podman
+      podman-compose
       kubectl
       k9s
       

@@ -7,15 +7,7 @@ let
   mockVaultData = {
     users = {
       alice = {
-        privateKey = ''
-          -----BEGIN OPENSSH PRIVATE KEY-----
-          b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-          QyNTUxOQAAACDQJZW5tL9Gp7K6kbEaA/uyHZWJqPmqzJgLMSx0YXJKmQAAAJCRjTwWkY08
-          FgAAAAtzc2gtZWQyNTUxOQAAACDQJZW5tL9Gp7K6kbEaA/uyHZWJqPmqzJgLMSx0YXJKmQ
-          AAAEA8p7XfAwNvofaydOLVZBxfPKAr9BTiKgctfcrsilcH+dAllbm0v0ansrqRsRoD+7Id
-          lYmo+arMmAsxLHRhckqZAAAADWFsaWNlQGhvc3QxCg==
-          -----END OPENSSH PRIVATE KEY-----
-        '';
+        privateKey = ''<PLACEHOLDER_SSH_PRIVATE_KEY_IMPOSSIBLE>'';
         publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINAllbm0v0ansrqRsRoD+7IdlYmo+arMmAsxLHRhckqZ alice@host1";
       };
       bob = {
@@ -44,15 +36,15 @@ let
     };
     
     passwords = {
-      "database-prod" = "prod_password_12345";
-      "database-dev" = "dev_password_67890";
-      "api-gateway" = "gateway_secret_xyz";
+      "database-prod" = "<PLACEHOLDER_PASSWORD_IMPOSSIBLE>";
+      "database-dev" = "<PLACEHOLDER_PASSWORD_IMPOSSIBLE>";
+      "api-gateway" = "<PLACEHOLDER_SECRET_IMPOSSIBLE>";
     };
     
     apiKeys = {
-      "github-token" = "ghp_1234567890abcdefghijklmnopqrstuvwxyz";
-      "gitlab-token" = "glpat-1234567890abcdefghij";
-      "aws-access-key" = "AKIAIOSFODNN7EXAMPLE";
+      "github-token" = "<PLACEHOLDER_GITHUB_TOKEN_IMPOSSIBLE>";
+      "gitlab-token" = "<PLACEHOLDER_GITLAB_TOKEN_IMPOSSIBLE>";
+      "aws-access-key" = "<PLACEHOLDER_AWS_KEY_IMPOSSIBLE>";
     };
   };
 
@@ -177,15 +169,15 @@ EOF
             ;;
             
           "github-token")
-            echo "ghp_1234567890abcdefghijklmnopqrstuvwxyz"
+            echo "<PLACEHOLDER_GITHUB_TOKEN_IMPOSSIBLE>"
             ;;
             
           "gitlab-token")
-            echo "glpat-1234567890abcdefghij"
+            echo "<PLACEHOLDER_GITLAB_TOKEN_IMPOSSIBLE>"
             ;;
             
           "aws-access-key")
-            echo "AKIAIOSFODNN7EXAMPLE"
+            echo "<PLACEHOLDER_AWS_KEY_IMPOSSIBLE>"
             ;;
             
           *)

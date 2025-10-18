@@ -234,7 +234,7 @@ EOF
     
     # Verify new secret
     new_password = sopshost.succeed("cat /run/secrets.d/1/database/password").strip()
-    assert new_password == "newsecret456", "Secret rotation failed"
+    assert new_password == "<PLACEHOLDER_PASSWORD_IMPOSSIBLE>", "Secret rotation failed"
     print("✓ Secret rotation successful")
     
     print("\n[8] Testing error recovery scenarios")

@@ -56,24 +56,18 @@
   wsl.usbip.autoAttach = [ "3-1" "3-2" ];  # .. the last on new sabrent hub is 8-4
   wsl.usbip.snippetIpAddress = "localhost";  # Fix for auto-attach
 
-  # For disk id and UUIDs, use: `lsblk -o NAME,SIZE,TYPE,FSTYPE,RO,MOUNTPOINTS,UUID`
-  wsl.bareMounts = {
-    enable = true;
-    mounts = [
-      {
-        diskUuid = "e030a5d0-fd70-4823-8f51-e6ea8c145fe6";
-        mountPoint = "/mnt/wsl/internal-4tb-nvme";
-        fsType = "ext4";
-        options = [ "defaults" "noatime" ];
-      }
-      # {
-      #   diskUuid = "ANOTHER-UUID-HERE";
-      #   mountPoint = "/mnt/wsl/ext-tb4-4tb-nvme-1";
-      #   fsType = "ext4";
-      #   options = [ "defaults" "noatime" ];
-      # }
-    ];
-  };
+  # # For disk id and UUIDs, use: `lsblk -o NAME,SIZE,TYPE,FSTYPE,RO,MOUNTPOINTS,UUID`
+  # wsl.bareMounts = {
+  #   enable = true;
+  #   mounts = [
+  #     {
+  #       diskUuid = "e030a5d0-fd70-4823-8f51-e6ea8c145fe6";
+  #       mountPoint = "/mnt/wsl/internal-4tb-nvme";
+  #       fsType = "ext4";
+  #       options = [ "defaults" "noatime" ];
+  #     }
+  #   ];
+  # };
   
   # Bind mount the Nix store from the bare-mounted disk
   # NOTE: Before enabling this, copy existing store with:
@@ -133,6 +127,8 @@
       environmentVariables = {
         WSL_DISTRO = "nixos";
         EDITOR = "nvim";
+        YAZI_LOG = "debug";  # Enable yazi plugin debug logging
+        TEST_IDEMPOTENT_ENV = "v1.0.0";  # Test variable for idempotent environment loading
       };
       shellAliases = {
         explorer = "explorer.exe .";
@@ -172,7 +168,6 @@
     inherit (inputs) nixpkgs-stable;
     wslHostname = "tblack-t14-nixos";
   };
-  home-manager.backupFileExtension = "backup";
 
   # SOPS-NiX configuration for secrets management
   sopsNix = {

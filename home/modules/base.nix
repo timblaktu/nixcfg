@@ -18,6 +18,7 @@ in {
     ./terminal-verification.nix  # WSL Windows Terminal verification
     ./claude-code.nix  # Claude Code MCP servers configuration
     ./secrets-management.nix  # RBW and SOPS configuration
+    ./podman-tools.nix  # Container tools configuration
     # Enhanced nix-writers based script management  
     (if inputs != null && inputs ? nix-writers 
      then inputs.nix-writers.homeManagerModules.default
@@ -45,27 +46,34 @@ in {
     basePackages = mkOption {
       type = types.listOf types.package;
       default = with pkgs; [
+        
         age
+        act
         coreutils-full
         curl
         dua
         fd
+        ffmpeg
+        file
+        fzf
         glow
         jq
         htop
+        imagemagick
         inotify-tools
         lbzip2
         nixfmt-rfc-style
         parallel
+        poppler
+        resvg
         ripgrep
         speedtest
         stress-ng
         tree
         unzip
-        yazi
-        # yaziPlugins.glow
-        # yaziPlugins.miller
-        # yaziPlugins.ouch
+        zoxide
+        p7zip
+        
         rbw
         pinentry-curses
         sops
@@ -141,6 +149,12 @@ in {
       description = "Enable Claude Code configuration with MCP servers";
     };
     
+    enableContainerSupport = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable user container tools (podman-compose, podman-tui, etc.)";
+    };
+    
     # Environment variables
     environmentVariables = mkOption {
       type = types.attrsOf types.str;
@@ -154,6 +168,7 @@ in {
       default = "24.11";
       description = "Home Manager state version";
     };
+    
     
     # Terminal verification options (WSL-specific)
     terminalVerification = mkOption {
@@ -202,7 +217,11 @@ in {
         # Set environment variables
         sessionVariables = {
           EDITOR = cfg.defaultEditor;
+          YAZI_LOG = "debug";  # Enable yazi plugin debug logging (works for both standalone and NixOS-integrated HM)
         } // cfg.environmentVariables;
+        
+        # Files and scripts
+        file = {};
         
         # THis isn't working. For now just run exec $SHELL manually
         # auto-exec $SHELL after a home-manager switch
@@ -297,6 +316,47 @@ in {
           nixos.enable = true;  # Using uvx to run mcp-nixos Python package
           # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
           # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
+        };
+      };
+      
+      # Yazi file manager configuration
+      programs.yazi = {
+        enable = true;
+        enableZshIntegration = true;
+        plugins = {
+          toggle-pane = pkgs.yaziPlugins.toggle-pane;
+          mediainfo = pkgs.yaziPlugins.mediainfo;
+          glow = pkgs.yaziPlugins.glow;
+          miller = pkgs.yaziPlugins.miller;
+          ouch = pkgs.yaziPlugins.ouch;
+        };
+        initLua = ../files/yazi-init.lua;
+        settings = {  # Full settings spec at https://yazi-rs.github.io/docs/configuration/yazi
+          log = {
+            enabled = true;
+          };
+          mgr = {
+            linemode = "compact_meta";
+            ratio = [ 1 3 5 ];
+            show_hidden = true;
+            show_symlink = true;
+            sort_by = "mtime";  # natural, size
+            sort_dir_first = true;
+            sort_reverse = true;
+            sort_sensitive = true;
+            mouse_events = ["click" "scroll" "touch" "move" ];
+          };
+        };
+      };
+      
+      # Container tools configuration (conditional)
+      programs.podman-tools = {
+        enable = cfg.enableContainerSupport;
+        enableCompose = true;
+        aliases = {
+          docker = "podman";
+          d = "podman";
+          dc = "podman-compose";
         };
       };
     }

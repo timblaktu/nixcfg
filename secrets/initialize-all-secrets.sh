@@ -384,11 +384,11 @@ EOF
 # Copy this to services.yaml and edit with: sops services.yaml
 
 # GitHub Integration
-github_token: "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+github_token: "Placeholder_ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # API Keys
-openai_api_key: "sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-anthropic_api_key: "sk-ant-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+openai_api_key: "Placeholder_sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+anthropic_api_key: "Placeholder_sk-ant-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Database Passwords
 postgres_password: "GENERATE_SECURE_PASSWORD"
@@ -399,8 +399,8 @@ nextcloud_admin_password: "GENERATE_SECURE_PASSWORD"
 grafana_admin_password: "GENERATE_SECURE_PASSWORD"
 
 # Service Tokens
-discord_bot_token: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-slack_webhook_url: "SLACK_WEBHOOK_URL_TEMPLATE"
+discord_bot_token: "Placeholder_DISCORD_BOT_TOKEN_HERE"
+slack_webhook_url: "Placeholder_SLACK_WEBHOOK_URL_FORMAT_hooks.slack.com/services/TEAM/CHANNEL/TOKEN"
 EOF
         log_and_print "  ${GREEN}✓${NC} Created services.yaml.template"
         ((templates_created++))
@@ -446,7 +446,7 @@ EOF
 # Copy this to environment.yaml and edit with: sops environment.yaml
 
 # Development Tokens
-NPM_TOKEN: "npm_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+NPM_TOKEN: "<PLACEHOLDER_NPM_TOKEN_IMPOSSIBLE>"
 CARGO_REGISTRY_TOKEN: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Cloud Provider Credentials

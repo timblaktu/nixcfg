@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# validate-simple - Quick validation wrapper for testing group permissions
+# This assumes you have podman group permissions (logout/login required)
+
+export DOCKER_HOST="unix:///run/podman/podman.sock"
+
+echo "🔍 Testing act with Podman..."
+act -j verify-sops --quiet

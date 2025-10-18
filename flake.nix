@@ -9,7 +9,7 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     
     nixvim = {
-      url = "github:nix-community/nixvim/fef045cb912e51185d0d5d67e035eca7fea7eda4";
+      url = "github:nix-community/nixvim";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -18,7 +18,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     
-    nixos-wsl.url = "github:timblaktu/NixOS-WSL/feature/bare-mount-support";
+    # nixos-wsl.url = "github:timblaktu/NixOS-WSL/feature/bare-mount-support";
+    nixos-wsl.url = "git+file:///home/tim/src/NixOS-WSL";
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
