@@ -2,7 +2,9 @@
 
 ## Executive Summary
 
-This document outlines the consolidation of `home/modules/files` and `home/modules/validated-scripts` into a single, comprehensive `home/files` module that provides validated file management for any file type, not just scripts. The unified module will maintain all existing functionality while eliminating coordination overhead and providing a more extensible architecture.
+**REVISED APPROACH**: This document outlines a **hybrid unified files module** that leverages nixpkgs `autoWriter` as the foundation while preserving unique high-value components from `validated-scripts`. Analysis revealed that nixpkgs `autoWriter` provides 90% of the proposed functionality out-of-the-box, enabling a **70% code reduction** while maintaining all unique capabilities.
+
+**Key Strategy**: Build a thin integration layer around `autoWriter` + retain script library system, enhanced testing, and domain-specific generators that provide genuine value beyond autoWriter's scope.
 
 ## Current State Analysis
 
@@ -24,29 +26,27 @@ This document outlines the consolidation of `home/modules/files` and `home/modul
 - Split responsibility for script management
 - No validation for non-script files
 
-## Unified Architecture Design
+## Hybrid Architecture Design (REVISED)
 
 ### Module Structure
 ```
 home/files/
-├── default.nix              # Main module entry point
+├── default.nix              # Main module entry point - thin wrapper around autoWriter
 ├── README.md                # This document
 ├── lib/
-│   ├── file-validators.nix   # Validation functions by file type
-│   ├── completion-generators.nix  # Shell completion generators
-│   ├── test-frameworks.nix  # Testing framework
-│   └── writers.nix          # File generation utilities
-├── types/
-│   ├── scripts.nix          # Script-specific validation (bash, python, etc.)
-│   ├── configs.nix          # Configuration file validation
-│   ├── data.nix             # Data file validation (JSON, YAML, etc.)
-│   └── assets.nix           # Asset file handling (images, docs, etc.)
+│   ├── autowriter-helpers.nix  # Extensions to nixpkgs autoWriter
+│   ├── script-libraries.nix    # Non-executable script library system  
+│   ├── enhanced-testing.nix    # Testing beyond autoWriter validation
+│   ├── domain-generators.nix   # Claude wrappers, tmux helpers, etc.
+│   └── config-validation.nix   # Schema validation for JSON/YAML/TOML
 └── content/                 # Actual file content (replaces current bin/, lib/, etc.)
-    ├── scripts/
-    ├── configs/
-    ├── data/
-    └── assets/
+    ├── scripts/             # Auto-detected via autoWriter
+    ├── libraries/           # Non-executable, for sourcing
+    ├── configs/             # JSON/YAML with schema validation
+    └── assets/              # Static files
 ```
+
+**Key Change**: Eliminated custom file type detection, writer dispatch, and validation logic - **nixpkgs autoWriter handles this better**.
 
 ### Core Concepts
 
@@ -58,23 +58,42 @@ Extend beyond scripts to support any file type:
 - **Assets**: Images, documents with integrity checks
 - **Static Files**: Direct file copying (current files module behavior)
 
-#### 2. Universal File Definition Schema
+#### 2. Hybrid File Definition Schema (REVISED)
 ```nix
-mkValidatedFile = {
-  name,                    # File name
-  type,                    # File type (script, config, data, asset, static)
-  lang ? null,             # Language/format (bash, json, yaml, etc.)
+# For scripts - leverage autoWriter directly
+mkScript = {
+  target,                  # Target path in home directory  
   content ? null,          # Inline content
   source ? null,           # Source file path
-  target,                  # Target path in home directory
-  executable ? false,      # Whether file should be executable
-  deps ? [],              # Dependencies (packages, libraries)
-  schema ? null,          # Validation schema
-  tests ? {},             # Custom tests
-  generateCompletions ? false,  # Generate shell completions
-  extraChecks ? [],       # Additional validation checks
-  metadata ? {}           # Custom metadata
-}
+  deps ? [],              # Dependencies
+  tests ? {},             # Enhanced tests beyond autoWriter
+  options ? {}            # Writer-specific options
+}:
+pkgs.writers.autoWriter {
+  path = target;
+  content = if source != null then builtins.readFile source else content;
+  inherit deps options;
+} // { passthru = { inherit tests; }; };
+
+# For script libraries - unique to our system
+mkScriptLibrary = {
+  name,
+  content ? null,
+  source ? null,
+  deps ? [],
+  tests ? {}
+}:
+pkgs.writeText name (if source != null then builtins.readFile source else content);
+
+# For configs - extend autoWriter with schema validation
+mkConfig = {
+  target,
+  content,
+  schema ? null,
+  tests ? {}
+}:
+let validated = if schema != null then validateSchema schema content else content;
+in (detectConfigWriter target).generate target validated;
 ```
 
 #### 3. Type-Specific Validators
@@ -110,21 +129,24 @@ validators = {
 
 ## Implementation Strategy
 
-### Phase 1: Foundation (Immediate)
-1. **Create unified module structure**
-   - New `home/files/default.nix` with modular imports
-   - Move existing functionality into type-specific modules
-   - Preserve all current behavior
+### Phase 1: Foundation (Immediate) - REVISED
+1. **Create hybrid module structure**
+   - New `home/files/default.nix` as thin wrapper around autoWriter
+   - Preserve script library system from validated-scripts
+   - Preserve enhanced testing framework
+   - Preserve domain-specific generators
 
-2. **Implement core file definition system**
-   - Universal `mkValidatedFile` function
-   - Type registry and dispatcher
-   - Backward compatibility layer
+2. **Implement autoWriter integration**
+   - Replace `mkValidatedScript` with `autoWriter` calls
+   - Migrate all scripts to use auto-detection
+   - Eliminate manual language specification
+   - Maintain all current script functionality
 
-3. **Migrate existing scripts**
-   - Convert all validated-scripts definitions to new format
-   - Ensure identical output and functionality
-   - Remove hardcoded exclusion lists
+3. **Preserve unique components**
+   - Keep `mkScriptLibrary` for non-executable scripts
+   - Keep cross-reference library injection pattern
+   - Keep enhanced testing beyond syntax validation
+   - Keep Claude wrapper and domain-specific generators
 
 ### Phase 2: Enhancement (Next Sprint)
 1. **Add configuration file support**
@@ -177,19 +199,21 @@ validators = {
 4. Remove old modules after verification
 5. Update documentation and examples
 
-## Benefits
+## Benefits (REVISED)
 
 ### Immediate Benefits
+- **70% code reduction** (2700 → 800 lines) by leveraging autoWriter
+- **Mature file type detection** from nixpkgs instead of custom implementation
+- **Upstream maintenance** of core writer functionality
 - **Elimination of coordination overhead** between modules
-- **Dynamic script discovery** replaces hardcoded exclusion lists
-- **Unified testing and validation** across all file types
-- **Consistent API** for all home directory file management
+- **Preservation of all unique value** (libraries, enhanced testing, generators)
 
 ### Long-term Benefits
-- **Extensible architecture** for new file types
-- **Enhanced validation capabilities** beyond scripts
-- **Better development workflow** with unified tooling
-- **Reduced complexity** through single responsibility
+- **Future compatibility** with nixpkgs writer improvements
+- **Community contributions** flow upstream to file detection
+- **Reduced maintenance burden** - focus on unique functionality
+- **Better performance** from optimized nixpkgs implementations
+- **Strategic value preservation** while eliminating redundant code
 
 ## Configuration Examples
 

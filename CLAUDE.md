@@ -21,39 +21,25 @@
 - **VALIDATED-SCRIPTS LIBRARY PATTERN**: Library dependencies in validated-scripts use `builtins.replaceStrings` to replace `"source library-name"` with `"source ${libraryDerivation}"`. This creates working library integration where functions are sourced from Nix store paths. DO NOT assume "code duplication" - verify actual functionality before claiming architectural problems. The pattern `mkScriptLibrary` → string replacement → runtime sourcing is CORRECT and WORKING.
 - **NIX FLAKE CHECK DEBUGGING**: When `nix flake check` fails, debug in-place using: (1) `nix log /nix/store/...` for detailed failure logs, (2) `nix flake check --verbose --debug --print-build-logs`, (3) `nix build .#checks.SYSTEM.TEST_NAME` for individual test execution, (4) `nix repl` + `:lf .` for interactive flake exploration. NEVER waste time on manual test reproduction - use Nix's built-in debugging tools.
 
-## 🤖 PROJECT STATUS
+## CURRENT FOCUS: **HYBRID UNIFIED FILES MODULE: autoWriter + Enhanced Libraries**
 
-**ARCHITECTURAL CONSOLIDATION: Unified Home Files Module**
-
-Major architectural decision: Consolidating `home/modules/files` and `home/modules/validated-scripts` into a single, comprehensive `home/files` module that provides validated file management for any file type (scripts, configs, data, assets, static files).
+**CRITICAL ARCHITECTURAL FINDING**: nixpkgs `autoWriter` provides 90% of proposed functionality out-of-the-box. **REVISED STRATEGY**: Build thin integration layer leveraging autoWriter + preserve unique high-value components from validated-scripts.
 
 ## 📋 CURRENT TASK QUEUE
 
-### ✅ COMPLETED: tmux-session-picker Test Fixes
+### 🎯 ACTIVE: Hybrid Unified Files Module Design
 
-**STATUS**: All tmux-session-picker tests now passing on dev branch.
+**IMPLEMENTATION STRATEGY (REVISED)**:
+1. **Leverage nixpkgs autoWriter as foundation** - File type detection, writer dispatch, validation
+2. **Preserve script library system** - `mkScriptLibrary` pattern for non-executable sourced scripts
+3. **Retain enhanced testing framework** - Integration tests, help validation, library function tests  
+4. **Keep domain-specific generators** - Claude wrappers, tmux helpers, etc.
+5. **Add configuration file support** - JSON/YAML schema validation beyond autoWriter scope
 
-**COMPLETED WORK**:
-- ✅ **Test Pattern Updates**: Fixed truncation patterns (`project_work` → `proj…`)
-- ✅ **Parallel Processing Order**: Removed non-deterministic ordering tests (intentional design)
-- ✅ **Validation Consistency**: Removed consistency tests incompatible with parallel processing
-- ✅ **All Tests Passing**: `nix flake check` succeeds completely
+**KEY RETENTION DECISIONS**:
+- **Script Library System**: `terminalUtils`, `colorUtils` - autoWriter only creates executables
+- **Cross-Reference Injection**: `"source library-name"` → `"source ${libraryDerivation}"` pattern
+- **Enhanced Testing**: Integration tests beyond autoWriter's syntax validation
+- **Domain Generators**: Claude wrapper PID management, config merging logic
 
-**KEY DECISIONS DOCUMENTED**:
-- Parallel processing prioritizes performance over deterministic ordering
-- Progressive result display preferred over waiting for all workers
-- Test expectations now match actual implementation behavior
-
-### 🎯 ACTIVE: Nixpkgs Writers Sync & Unified Files Module
-
-**NEXT PHASE OBJECTIVES**:
-1. **Upstream nixpkgs writers sync** - Research current nixpkgs writers API changes
-2. **Unified files module design** - Consolidate `home/modules/files` + `home/modules/validated-scripts`
-3. **API compatibility planning** - Ensure smooth migration path
-4. **Implementation & validation** - Build working unified module
-
-**ARCHITECTURAL GOALS**:
-- Single module for all file management (scripts, configs, assets, static files)
-- Maintain existing validated-scripts functionality
-- Leverage updated nixpkgs writers patterns
-- Provide clean migration path from current dual-module approach
+**CODE REDUCTION ESTIMATE**: ~70% elimination (2700 → 800 lines) while preserving all unique value
