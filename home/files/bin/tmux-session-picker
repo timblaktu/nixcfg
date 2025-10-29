@@ -322,8 +322,7 @@ _format_session_row() {
     local display_session="$session"
     local session_display_width=$(get_display_width "$display_session")
     if [[ $session_display_width -gt $session_width ]]; then
-        display_session=$(truncate_to_display_width "$display_session" $((session_width - 1)))
-        display_session="${display_session}…"
+        display_session=$(truncate_to_display_width "$display_session" $session_width)
     fi
     
     # Process and abbreviate summary paths/commands

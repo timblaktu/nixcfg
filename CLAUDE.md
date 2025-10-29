@@ -29,51 +29,26 @@ Major architectural decision: Consolidating `home/modules/files` and `home/modul
 
 ## 📋 CURRENT TASK QUEUE
 
-### MAJOR DISCOVERY: Upstream nixpkgs Writers Restructuring
+### IMMEDIATE: Fix Failing Tests (Post-Merge Issues)
 
-**CRITICAL FINDING**: Upstream nixpkgs has undergone a massive restructuring of the `writers` module that directly aligns with our unified files module goals. The new upstream structure includes:
+**STATUS**: tmuxfix branch successfully merged to main, but tests need fixing due to truncation pattern changes.
 
-- **Modular Architecture**: `pkgs/build-support/writers/` now split into:
-  - `scripts.nix` - All script writers (bash, python, rust, etc.)
-  - `data.nix` - Data format writers (JSON, YAML, TOML, etc.) 
-  - `auto.nix` - **AUTOMATIC WRITER SELECTION** based on file type detection
-- **Enhanced `makeScriptWriter`**: Now supports path-based script creation (`"/bin/name"` syntax)
-- **Improved `makeBinWriter`**: Better compilation script support
-- **New Writers**: Enhanced support for Guile, Nim, Nu, Ruby, Lua, Rust, JS, etc.
+**COMPLETED**:
+- ✅ **Double Ellipsis Bug Fixed**: Removed redundant ellipsis append in `_format_session_row` 
+- ✅ **IFS Robustness Test Fixed**: Updated test patterns from `📁-proj…` to `📁-pr…` to match 7-char session width
 
-**OUR FORK STATUS**: We already have `autoWriter` functionality implemented in our fork that appears to parallel the upstream work. However, the massive upstream restructuring suggests we should sync with upstream and build on their foundation rather than maintaining parallel implementations.
+**REMAINING TEST FAILURES**:
+1. **Session Discovery Test**: Wrong sort order - sessions not sorted newest-first as expected
+2. **Session File Validation Test**: Test expects `project_work` but finds `proj…` (truncation mismatch)
+3. **Multiple Other Tests**: Unicode display width, tmux environment detection, syntax tests
 
-**RESEARCH SUMMARY**: 
-- **Upstream Changes**: Only one minor change to writers since our fork - a Nim compilation fix in `scripts.nix`
-- **Our Advanced Features**: Our fork includes `lib.fileTypes` module and `autoWriter` with automatic file type detection
-- **Strategic Advantage**: We can contribute our auto-detection work upstream while gaining their modular architecture
-- **Sync Recommendation**: STRONGLY RECOMMENDED - upstream's restructuring provides the exact foundation we need
+**ROOT CAUSE**: Test expectations written for different truncation behavior than current implementation
 
-### Revised Task Queue: 
+### NEXT ACTIONS:
+1. **Fix test validation patterns** to match current truncation behavior
+2. **Investigate session sorting** - ensure newest sessions appear first  
+3. **Run full test suite** and systematically fix pattern mismatches
+4. **Verify functionality** - ensure scripts work correctly despite test issues
 
-#### Phase 1: Upstream Sync & Assessment (IMMEDIATE PRIORITY)
-1. **Sync Fork with Upstream** - Merge upstream changes to get latest writers structure
-2. **Assess autoWriter Compatibility** - Compare our implementation with upstream's new `auto.nix`
-3. **Evaluate Integration Opportunities** - Determine how to leverage upstream's modular architecture
-4. **Preserve Custom Features** - Ensure our file type detection and library injection patterns survive the sync
-
-#### Phase 2: Enhanced Unified Module (Next Sprint)  
-1. **Leverage Upstream Writers** - Use new modular upstream structure as foundation
-2. **Implement mkValidatedFile** - Build on upstream's `autoWriter` for seamless file type detection
-3. **Library Injection System** - Preserve and enhance our `builtins.replaceStrings` library pattern
-4. **Dynamic Discovery** - Replace hardcoded `validatedScriptNames` with upstream-compatible detection
-5. **Testing Integration** - Combine our validation framework with upstream's enhanced writers
-6. **Backward Compatibility** - Ensure smooth migration from current validated-scripts module
-
-### Key Architectural Decisions Documented:
-- **Universal File Schema**: `mkValidatedFile` supports any file type with validation, testing, and completion generation
-- **Type-Specific Validators**: Modular validation system for scripts, configs, data, assets, and static files  
-- **Elimination of Coordination Overhead**: No more hardcoded cross-module dependencies
-- **Extensible Design**: Easy addition of new file types through type registry
-- **Migration Strategy**: Staged rollout with compatibility layer to ensure zero disruption
-
-### Success Criteria:
-- Functional equivalence with existing modules
-- Zero coordination overhead between modules
-- Extensibility for any file type
-- Improved developer experience with unified API
+### ARCHITECTURAL PROJECTS (DEFERRED):
+- Upstream nixpkgs writers sync and unified files module (postponed until tests fixed)

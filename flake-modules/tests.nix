@@ -1884,7 +1884,7 @@
                           echo "Workflow output received: $output"
               
                           # Test 3: Validate that both sessions appear in output (expecting truncated session names)
-                          if echo "$output" | grep -q "📁-proj…" && echo "$output" | grep -q "simple…"; then
+                          if echo "$output" | grep -q "📁-pr…" && echo "$output" | grep -q "simple…"; then
                             echo "✅ Both UTF-8 and simple sessions processed successfully"
                           else
                             echo "❌ CRITICAL: Not all sessions processed correctly"
@@ -1911,7 +1911,7 @@
                           }
               
                           # Should still show valid sessions, malformed one should be skipped (expecting truncated names)
-                          if echo "$malformed_output" | grep -q "📁-proj…\|simple…"; then
+                          if echo "$malformed_output" | grep -q "📁-pr…\|simple…"; then
                             echo "✅ Malformed files handled gracefully, valid sessions still processed"
                           else
                             echo "❌ CRITICAL: Malformed file broke entire workflow"
