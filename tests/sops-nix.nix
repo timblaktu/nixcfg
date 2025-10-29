@@ -4,7 +4,7 @@
 
 rec {
   # Test utilities
-  testUtils = pkgs.writeShellScriptBin "test-utils" ''
+  testUtils = pkgs.writers.writeBashBin "test-utils" ''
     export RED='\033[0;31m'
     export GREEN='\033[0;32m'
     export YELLOW='\033[1;33m'
@@ -28,10 +28,11 @@ rec {
   '';
 
   # Test 1: SOPS roundtrip operations
-  sopsRoundtrip = pkgs.runCommand "test-sops-roundtrip" {
-    buildInputs = with pkgs; [ sops age ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  sopsRoundtrip = pkgs.runCommand "test-sops-roundtrip"
+    {
+      buildInputs = with pkgs; [ sops age ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -93,10 +94,11 @@ rec {
   '';
 
   # Test 2: Age key operations and SSH conversion
-  ageKeyOperations = pkgs.runCommand "test-age-key-operations" {
-    buildInputs = with pkgs; [ sops age ssh-to-age openssh ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  ageKeyOperations = pkgs.runCommand "test-age-key-operations"
+    {
+      buildInputs = with pkgs; [ sops age ssh-to-age openssh ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -150,10 +152,11 @@ rec {
   '';
 
   # Test 3: Multi-host secret sharing
-  multiHostSharing = pkgs.runCommand "test-multihost-sharing" {
-    buildInputs = with pkgs; [ sops age ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  multiHostSharing = pkgs.runCommand "test-multihost-sharing"
+    {
+      buildInputs = with pkgs; [ sops age ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -247,10 +250,11 @@ rec {
   '';
 
   # Test 4: Module integration
-  moduleIntegration = pkgs.runCommand "test-module-integration" {
-    buildInputs = with pkgs; [ coreutils findutils ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  moduleIntegration = pkgs.runCommand "test-module-integration"
+    {
+      buildInputs = with pkgs; [ coreutils findutils ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -270,7 +274,7 @@ rec {
   '';
 
   # Combine all tests
-  allTests = pkgs.runCommand "test-sops-nix-all" {} ''
+  allTests = pkgs.runCommand "test-sops-nix-all" { } ''
     echo "=== SOPS-NiX Comprehensive Test Suite ===" > $out
     echo "" >> $out
     echo "Run individual tests:" >> $out

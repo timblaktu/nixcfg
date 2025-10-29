@@ -9,13 +9,12 @@
     ../../modules/wsl-tarball-checks.nix
     ../../modules/nixos/sops-nix.nix
     inputs.sops-nix.nixosModules.sops
-    inputs.home-manager.nixosModules.home-manager
     inputs.nixos-wsl.nixosModules.default
   ];
-  
+
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
-  
+
   # Base module configuration
   base = {
     userName = "tim";
@@ -40,7 +39,7 @@
     enable = true;
     hostname = "thinky-nixos";
     defaultUser = "tim";
-    sshPort = 2223;  # Must bind to unique port since sharing winHost with another WSL guest
+    sshPort = 2223; # Must bind to unique port since sharing winHost with another WSL guest
     userGroups = [ "wheel" "dialout" ];
     authorizedKeys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
@@ -53,8 +52,8 @@
   wsl.defaultUser = "tim";
   wsl.interop.register = true;
   wsl.usbip.enable = true;
-  wsl.usbip.autoAttach = [ "3-1" "3-2" ];  # .. the last on new sabrent hub is 8-4
-  wsl.usbip.snippetIpAddress = "localhost";  # Fix for auto-attach
+  wsl.usbip.autoAttach = [ "3-1" "3-2" ]; # .. the last on new sabrent hub is 8-4
+  wsl.usbip.snippetIpAddress = "localhost"; # Fix for auto-attach
 
   # # For disk id and UUIDs, use: `lsblk -o NAME,SIZE,TYPE,FSTYPE,RO,MOUNTPOINTS,UUID`
   # wsl.bareMounts = {
@@ -68,7 +67,7 @@
   #     }
   #   ];
   # };
-  
+
   # Bind mount the Nix store from the bare-mounted disk
   # NOTE: Before enabling this, copy existing store with:
   # sudo rsync -avHAX /nix/ /mnt/wsl/internal-4tb-nvme/nix-thinky-nixos/
@@ -85,11 +84,11 @@
   #     "nofail"                         # Don't fail boot if unavailable
   #   ];
   # };
-  
+
   # SSH service configuration
   services.openssh = {
     enable = true;
-    ports = [ 2223 ];  # Must bind to unique port since sharing winHost with another WSL guest
+    ports = [ 2223 ]; # Must bind to unique port since sharing winHost with another WSL guest
   };
 
   # USB device management for ESP32 development
@@ -116,58 +115,8 @@
     })
   ];
 
-  # Home Manager configuration for user tim
-  home-manager.users.tim = {
-    imports = [ ../../home/modules/base.nix ];
-    homeBase = {
-      username = "tim";
-      homeDirectory = "/home/tim";
-      enableDevelopment = true;
-      enableEspIdf = true;
-      environmentVariables = {
-        WSL_DISTRO = "nixos";
-        EDITOR = "nvim";
-        YAZI_LOG = "debug";  # Enable yazi plugin debug logging
-        TEST_IDEMPOTENT_ENV = "v1.0.0";  # Test variable for idempotent environment loading
-      };
-      shellAliases = {
-        explorer = "explorer.exe .";
-        code = "code.exe";
-        code-insiders = "code-insiders.exe";
-        esp32c5 = "esp-idf-shell";
-      };
-    };
-    
-    # Configure Bitwarden rbw CLI for secrets management
-    secretsManagement = {
-      enable = true;
-      rbw = {
-        email = "timblaktu@gmail.com";
-        # Explicitly set Bitwarden cloud service URLs (these are the defaults)
-        baseUrl = "https://vault.bitwarden.com";
-        identityUrl = "https://identity.bitwarden.com";
-        uiUrl = "https://vault.bitwarden.com";
-        notificationsUrl = "https://notifications.bitwarden.com";
-      };
-    };
-    terminalVerification.terminalFont = "JetBrainsMono Nerd Font";
-    targets.wsl = {
-      enable = true;
-      windowsUsername = "tblack";
-      windowsTools = {
-        enablePowerShell = true;
-        enableCmd = false;
-        enableWslPath = true;
-        wslPathPath = "/bin/wslpath";
-      };
-      bindMountRoot.enable = false;
-    };
-  };
-  home-manager.extraSpecialArgs = {
-    inherit inputs;
-    inherit (inputs) nixpkgs-stable;
-    wslHostname = "tblack-t14-nixos";
-  };
+  # User environment managed by standalone Home Manager
+  # Deploy with: home-manager switch --flake '.#tim@thinky-nixos'
 
   # SOPS-NiX configuration for secrets management
   sopsNix = {
@@ -175,7 +124,7 @@
     hostKeyPath = "/etc/sops/age.key";
     # defaultSopsFile will be set when we have production secrets
   };
-  
+
   # Production secrets will be defined here as needed
   # Example:
   # sops.secrets = {

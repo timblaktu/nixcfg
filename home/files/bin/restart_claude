@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-. ~/bin/functions.sh 
+. "${HOME}/bin/functions.sh" 
 
 # Robustly restart claude desktop with updated configuration
 # TODO: make this a systemd service that can be restarted..

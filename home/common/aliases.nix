@@ -5,29 +5,30 @@ with lib;
 
 let
   cfg = config.homeBase;
-in {
+in
+{
   config = {
     # Enhanced shell aliases from existing ~/.profile
     programs.bash.shellAliases = lib.mkAfter {
       # Enhanced ls alias from ~/.profile  
       lsblk = "lsblk -po name,vendor,model,label,size,type,fstype,mountpoints";
-      
+
       # Navigation shortcuts from ~/.profile
       lh = "ls -lath | head";
       cds = "cd ~/src; lh";
-      cdtr = "cd ~/src/tr; lh"; 
+      cdtr = "cd ~/src/tr; lh";
       cdmx = "cd ~/src/mxts; lh";
       cdddd = "cd ~/tr-dep-diagnostics; lh";
-      
+
       # Git workflow shortcuts from ~/.profile
       gitit = "git commit -av && git push";
       nvtr = "(cdtr && nvim -S && gitit)";
       nvmx = "(cdmx && nvim -S && gitit)";
-      nvt = "nvim ~/bin/tellclaude && tellclaude";
-      
+      nvt = "nvim \"$HOME/bin/tellclaude\" && tellclaude";
+
       # Debug git alias from ~/.profile
       dgit = "GIT_TRACE=true GIT_CURL_VERBOSE=true GIT_SSH_COMMAND=\"ssh -vvv\" GIT_TRACE_PACK_ACCESS=true GIT_TRACE_PACKET=true GIT_TRACE_PACKFILE=true GIT_TRACE_PERFORMANCE=true GIT_TRACE_SETUP=true GIT_TRACE_SHALLOW=true git";
-      
+
       # Drive navigation shortcuts from ~/.profile
       cdint = "verbosecd /mnt/internal-4tb-nvme";
       cdext1 = "verbosecd /mnt/ext-tb4-4tb-nvme-1";
@@ -37,69 +38,69 @@ in {
       cdx = "verbosecd /mnt/x";
       cdy = "verbosecd /mnt/y";
       cdz = "verbosecd /mnt/z";
-      
+
       # Poetry shortcut from ~/.profile
       poetryshell = "eval $(poetry env activate)";
-      
+
       # RBW (Rust Bitwarden) aliases for secrets management
-      rbwl = "rbw login";  # Login to Bitwarden
-      rbwu = "rbw unlock";  # Unlock vault
-      rbws = "rbw sync";  # Sync with Bitwarden server
-      rbwg = "rbw get";  # Get a password
-      rbwgn = "rbw get -f notes";  # Get notes field
-      rbwls = "rbw list";  # List all entries
-      rbwlock = "rbw lock";  # Lock the vault
-      rbwstop = "rbw stop-agent";  # Stop rbw agent
-      
+      rbwl = "rbw login"; # Login to Bitwarden
+      rbwu = "rbw unlock"; # Unlock vault
+      rbws = "rbw sync"; # Sync with Bitwarden server
+      rbwg = "rbw get"; # Get a password
+      rbwgn = "rbw get -f notes"; # Get notes field
+      rbwls = "rbw list"; # List all entries
+      rbwlock = "rbw lock"; # Lock the vault
+      rbwstop = "rbw stop-agent"; # Stop rbw agent
+
       # SOPS aliases for secrets management
-      sopse = "sops";  # Edit encrypted file
-      sopsd = "sops -d";  # Decrypt and display file
+      sopse = "sops"; # Edit encrypted file
+      sopsd = "sops -d"; # Decrypt and display file
     };
-    
+
     programs.zsh.shellAliases = lib.mkAfter {
       # Same aliases for zsh
       lsblk = "lsblk -po name,vendor,model,label,size,type,fstype,mountpoints";
-      
+
       # Navigation shortcuts
       lh = "ls -lath | head";
       cds = "cd ~/src; lh";
       cdtr = "cd ~/src/tr; lh";
       cdmx = "cd ~/src/mxts; lh";
       cdddd = "cd ~/tr-dep-diagnostics; lh";
-      
+
       # Git workflow shortcuts
       gitit = "git commit -av && git push";
       nvtr = "(cdtr && nvim -S && gitit)";
       nvmx = "(cdmx && nvim -S && gitit)";
-      nvt = "nvim ~/bin/tellclaude && tellclaude";
-      
+      nvt = "nvim \"$HOME/bin/tellclaude\" && tellclaude";
+
       # Debug git alias
       dgit = "GIT_TRACE=true GIT_CURL_VERBOSE=true GIT_SSH_COMMAND=\"ssh -vvv\" GIT_TRACE_PACK_ACCESS=true GIT_TRACE_PACKET=true GIT_TRACE_PACKFILE=true GIT_TRACE_PERFORMANCE=true GIT_TRACE_SETUP=true GIT_TRACE_SHALLOW=true git";
-      
+
       # Drive navigation shortcuts
       cdint = "verbosecd /mnt/internal-4tb-nvme";
       cdext1 = "verbosecd /mnt/ext-tb4-4tb-nvme-1";
       cdext2 = "verbosecd /mnt/ext-tb4-4tb-nvme-2";
       cdc = "verbosecd /mnt/g";
-      
+
       # Poetry shortcut
       poetryshell = "eval $(poetry env activate)";
-      
+
       # RBW (Rust Bitwarden) aliases for secrets management
-      rbwl = "rbw login";  # Login to Bitwarden
-      rbwu = "rbw unlock";  # Unlock vault
-      rbws = "rbw sync";  # Sync with Bitwarden server
-      rbwg = "rbw get";  # Get a password
-      rbwgn = "rbw get -f notes";  # Get notes field
-      rbwls = "rbw list";  # List all entries
-      rbwlock = "rbw lock";  # Lock the vault
-      rbwstop = "rbw stop-agent";  # Stop rbw agent
-      
+      rbwl = "rbw login"; # Login to Bitwarden
+      rbwu = "rbw unlock"; # Unlock vault
+      rbws = "rbw sync"; # Sync with Bitwarden server
+      rbwg = "rbw get"; # Get a password
+      rbwgn = "rbw get -f notes"; # Get notes field
+      rbwls = "rbw list"; # List all entries
+      rbwlock = "rbw lock"; # Lock the vault
+      rbwstop = "rbw stop-agent"; # Stop rbw agent
+
       # SOPS aliases for secrets management
-      sopse = "sops";  # Edit encrypted file
-      sopsd = "sops -d";  # Decrypt and display file
+      sopse = "sops"; # Edit encrypted file
+      sopsd = "sops -d"; # Decrypt and display file
     };
-    
+
     # Custom shell functions from existing ~/.profile
     programs.bash.initExtra = lib.mkAfter ''
       # Custom functions from existing ~/.profile
@@ -120,7 +121,7 @@ in {
       # SSH options setup from ~/.profile
       SSHOPTS_LENIENT=( -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null )
     '';
-    
+
     programs.zsh.initContent = lib.mkAfter ''
       # Custom functions from existing ~/.profile  
       better_less() {

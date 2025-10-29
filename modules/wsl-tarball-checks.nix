@@ -6,14 +6,14 @@ with lib;
 
 let
   cfg = config.wsl;
-  
+
   # List of personal identifiers to check for
   personalIdentifiers = [
     "tim"
     "tblack"
     "timblack"
   ];
-  
+
   # List of sensitive environment patterns
   sensitiveEnvPatterns = [
     "TOKEN"
@@ -28,9 +28,9 @@ let
     "OPENAI"
     "ANTHROPIC"
   ];
-  
+
   # Generate a security check script
-  securityCheckScript = pkgs.writeShellScriptBin "wsl-tarball-security-check" ''
+  securityCheckScript = pkgs.writers.writeBashBin "wsl-tarball-security-check" ''
     set -e
     
     # Colors for output
@@ -151,7 +151,7 @@ let
       echo -e "''${YELLOW}⚠ CHECKS BYPASSED - Proceeding despite warnings''${NC}"
     fi
   '';
-  
+
 in
 {
   options = {
@@ -161,13 +161,13 @@ in
         default = true;
         description = "Enable security and privacy checks for tarball builds";
       };
-      
+
       personalIdentifiers = mkOption {
         type = types.listOf types.str;
         default = personalIdentifiers;
         description = "List of personal identifiers to check for";
       };
-      
+
       sensitivePatterns = mkOption {
         type = types.listOf types.str;
         default = sensitiveEnvPatterns;
@@ -175,7 +175,7 @@ in
       };
     };
   };
-  
+
   config = mkIf (cfg.enable or false) {
     # Provide the check script as a build artifact
     system.build.tarballSecurityCheck = securityCheckScript;

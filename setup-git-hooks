@@ -29,46 +29,47 @@ mkdir -p .git/hooks
 cat > .git/hooks/pre-push << 'EOF'
 #!/usr/bin/env bash
 
-# Git pre-push hook - Run security validation before pushing
-# This runs the quick validation to catch issues before they reach GitHub
+# Git pre-push hook - Run validation before pushing
+# Supports both fast (default) and comprehensive validation modes
 
 set -euo pipefail
 
-echo "🔍 Running pre-push security validation..."
+echo "🔍 Running pre-push validation..."
 
-# Get the directory of this script to find validate-workflows
+# Get the directory of this script to find the repository root
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-
-# Run quick validation from repository root
 cd "$SCRIPT_DIR"
 
-if [ -x "./validate-workflows" ]; then
-    # Note: Group permissions may require logout/login to take effect
-    # If this fails, run manually: ./validate-workflows quick
-    ./validate-workflows quick || {
-        echo "❌ Pre-push validation failed!"
-        echo "💡 To skip this check: git push --no-verify"
-        echo "💡 To run manually: ./validate-workflows quick"
+# Check for flake-based validation
+if [ -f flake.nix ] && command -v nix >/dev/null 2>&1; then
+    echo "🔍 Running flake validation..."
+    nix flake check --no-build || {
+        echo "❌ Flake validation failed!"
+        echo "💡 To skip: git push --no-verify"
+        echo "💡 To include GitHub Actions: Enable in github-actions.nix"
         exit 1
     }
+    echo "✅ Flake validation passed!"
 else
-    echo "⚠️  validate-workflows not found, skipping validation"
+    echo "⚠️  No flake found, skipping validation"
 fi
-
-echo "✅ Pre-push validation passed!"
 EOF
 
 # Make the hook executable
 chmod +x .git/hooks/pre-push
 
 log $GREEN "✅ Git hooks installed successfully!"
-log $BLUE "📝 Pre-push hook will run './validate-workflows quick' before each push"
+log $BLUE "📝 Pre-push hook will run 'nix flake check' before each push"
 log $BLUE "💡 To skip validation: git push --no-verify"
-log $BLUE "💡 To test manually: ./validate-workflows quick"
 
 # Show next steps
 echo
 echo "Next steps:"
-echo "1. Log out and log back in (or restart shell) for group permissions to take effect"
-echo "2. Test validation: ./validate-workflows quick"
-echo "3. Test git hook: git push --dry-run"
+echo "1. Test validation: nix flake check"
+echo "2. Test git hook: git push --dry-run"
+echo ""
+echo "GitHub Actions validation:"
+echo "  • To enable: nix run .#init-github-actions-config"
+echo "  • To configure: Edit github-actions.nix"
+echo "  • To run manually: nix build .#checks.x86_64-linux.github-actions"
+echo "  • To view config: nix run .#show-github-actions-config"

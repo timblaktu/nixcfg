@@ -10,33 +10,17 @@
           modules = [
             # Global config for nixpkgs
             { nixpkgs.config.allowUnfree = true; }
-            
+
             # Base configuration
             ../hosts/macbook-air
-            
-            # Home-manager module
-            inputs.home-manager.darwinModules.home-manager
-            {
-              home-manager.useGlobalPkgs = true;
-              home-manager.useUserPackages = true;
-              home-manager.users.tim = { 
-                imports = [
-                  ../home/modules/base.nix
-                  ../home/modules/mcp-servers.nix
-                ];
-                # Pass configuration to homeBase
-                homeBase = { };
-              };
-              home-manager.extraSpecialArgs = { 
-                inherit inputs;
-                inherit (inputs) nixpkgs-stable;
-              };
-            }
-            
+
+            # User environment managed by standalone Home Manager
+            # Deploy with: home-manager switch --flake '.#tim@macbook-air'
+
             # Secrets management
             inputs.sops-nix.darwinModules.sops
           ];
-          
+
           specialArgs = {
             inherit inputs;
             inherit (inputs) nixpkgs-stable;

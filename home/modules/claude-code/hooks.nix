@@ -5,26 +5,29 @@ with lib;
 let
   cfg = config.programs.claude-code;
 
-  mkHook = {
-    matcher,
-    type ? "command",
-    command ? null,
-    script ? null,
-    env ? {},
-    timeout ? 60,
-    continueOnError ? true
-  }: {
-    inherit matcher;
-    hooks = [({
-      inherit type timeout;
-    } // (if command != null 
-      then { command = command; }
-      else { script = script; })
-    // (optionalAttrs (env != {}) { inherit env; })
-    // (optionalAttrs continueOnError { continueOnError = true; }))];
-  };
+  mkHook =
+    { matcher
+    , type ? "command"
+    , command ? null
+    , script ? null
+    , env ? { }
+    , timeout ? 60
+    , continueOnError ? true
+    }: {
+      inherit matcher;
+      hooks = [
+        ({
+          inherit type timeout;
+        } // (if command != null
+        then { command = command; }
+        else { script = script; })
+        // (optionalAttrs (env != { }) { inherit env; })
+        // (optionalAttrs continueOnError { continueOnError = true; }))
+      ];
+    };
 
-in {
+in
+{
   options.programs.claude-code.hooks = {
     formatting = {
       enable = mkOption {
@@ -45,7 +48,7 @@ in {
         description = "Formatting commands by file extension";
       };
     };
-    
+
     linting = {
       enable = mkEnableOption "linting hooks";
       commands = mkOption {
@@ -57,7 +60,7 @@ in {
         description = "Linting commands by file extension";
       };
     };
-    
+
     security = {
       enable = mkOption {
         type = types.bool;
@@ -70,7 +73,7 @@ in {
         description = "File patterns to block access to";
       };
     };
-    
+
     git = {
       enable = mkEnableOption "git integration hooks";
       autoStage = mkOption {
@@ -80,7 +83,7 @@ in {
       };
       autoCommit = mkEnableOption "automatically commit changes";
     };
-    
+
     testing = {
       enable = mkEnableOption "test automation hooks";
       sourcePattern = mkOption {
@@ -94,7 +97,7 @@ in {
         description = "Test command to run";
       };
     };
-    
+
     logging = {
       enable = mkOption {
         type = types.bool;
@@ -108,7 +111,7 @@ in {
       };
       verbose = mkEnableOption "include tool inputs in logs";
     };
-    
+
     notifications = {
       enable = mkEnableOption "notification hooks";
       matcher = mkOption {
@@ -127,18 +130,130 @@ in {
         description = "Notification message";
       };
     };
-    
+
+    development = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable development workflow hooks";
+      };
+      flakeCheck = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Run nix flake check after editing flake.nix";
+      };
+      autoFormat = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Auto-format files before editing";
+      };
+    };
+
     custom = mkOption {
       type = types.attrs;
-      default = { PreToolUse = []; PostToolUse = []; Start = []; Stop = []; };
+      default = { PreToolUse = [ ]; PostToolUse = [ ]; Start = [ ]; Stop = [ ]; };
       description = "Custom hook definitions";
     };
   };
 
-  config.programs.claude-code._internal.hooks = {
-    PreToolUse = null;
-    PostToolUse = null;  
-    Start = null;
-    Stop = null;
-  };
+  config.programs.claude-code._internal.hooks = mkMerge [
+    # Base hook structure
+    {
+      PreToolUse = [ ];
+      PostToolUse = [ ];
+      Start = [ ];
+      Stop = [ ];
+    }
+
+    # Development workflow hooks
+    (mkIf cfg.hooks.development.enable {
+      PreToolUse = [
+        # Auto-format files before editing
+        (mkIf cfg.hooks.development.autoFormat (mkHook {
+          matcher = "Edit|Write|MultiEdit";
+          command = ''
+            file_path="$1"
+            case "$file_path" in
+              *.nix)   ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt "$file_path" 2>/dev/null || true ;;
+              *.py)    ${pkgs.black}/bin/black "$file_path" 2>/dev/null || true ;;
+              *.rs)    ${pkgs.rustfmt}/bin/rustfmt "$file_path" 2>/dev/null || true ;;
+              *.js|*.json) ${pkgs.nodePackages.prettier}/bin/prettier --write "$file_path" 2>/dev/null || true ;;
+            esac
+          '';
+          continueOnError = true;
+          timeout = 10;
+        }))
+      ];
+
+      PostToolUse = [
+        # Run flake check after editing flake.nix
+        (mkIf cfg.hooks.development.flakeCheck (mkHook {
+          matcher = "Edit.*flake\\.nix|Write.*flake\\.nix";
+          command = ''
+            if [ -f flake.nix ]; then
+              echo "🔍 Running nix flake check after flake.nix change..."
+              ${pkgs.nix}/bin/nix flake check --no-build 2>/dev/null || {
+                echo "⚠️  Flake check failed - please review manually"
+                exit 0  # Don't fail the hook
+              }
+              echo "✅ Flake check passed"
+            fi
+          '';
+          continueOnError = true;
+          timeout = 30;
+        }))
+
+        # Auto-stage files in flake projects
+        (mkIf cfg.hooks.git.autoStage (mkHook {
+          matcher = "Edit|Write|MultiEdit";
+          command = ''
+            if [ -f flake.nix ] && [ -d .git ]; then
+              file_path="$1"
+              if [ -n "$file_path" ] && [ -f "$file_path" ]; then
+                ${pkgs.git}/bin/git add "$file_path" 2>/dev/null || true
+                echo "📁 Auto-staged: $file_path"
+              fi
+            fi
+          '';
+          continueOnError = true;
+          timeout = 5;
+        }))
+      ];
+    })
+
+    # Security hooks
+    (mkIf cfg.hooks.security.enable {
+      PreToolUse = [
+        (mkHook {
+          matcher = "Read|Edit|Write";
+          command = ''
+            file_path="$1"
+            for pattern in ${toString cfg.hooks.security.blockedPatterns}; do
+              if echo "$file_path" | grep -qE "$pattern"; then
+                echo "🚫 Security: Access blocked to sensitive file pattern: $pattern"
+                exit 1
+              fi
+            done
+          '';
+          continueOnError = false;
+          timeout = 5;
+        })
+      ];
+    })
+
+    # Logging hooks
+    (mkIf cfg.hooks.logging.enable {
+      PostToolUse = [
+        (mkHook {
+          matcher = ".*";
+          command = ''
+            mkdir -p "$(dirname "${cfg.hooks.logging.logPath}")"
+            echo "$(date): Tool used in $(pwd)" >> "${cfg.hooks.logging.logPath}"
+          '';
+          continueOnError = true;
+          timeout = 5;
+        })
+      ];
+    })
+  ];
 }

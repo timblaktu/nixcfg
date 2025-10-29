@@ -12,14 +12,29 @@
 #     #{?#{<:#{client_width},#{@MEDIUM_TERM}},#[dim]#I:#[default]#{=/12/…:window_name},\
 #     #[dim]#I:#[default]#{=/16/…:window_name}}}'
 
-# Source functions.sh for print_subscript function
-source "${HOME}/bin/functions.sh"
+# Error handling and parameter validation
+if [[ $# -ne 3 ]]; then
+    printf "%s" "?:ERR"
+    exit 1
+fi
+
+source "${HOME}/lib/general-utils.bash"
 
 client_width=$1
 one_based_window_index=$2
 window_name=$3
 
-tiny_one_based_window_index="$(print_superscript "$(( one_based_window_index ))")"
+# Validate inputs
+if ! [[ "$client_width" =~ ^[0-9]+$ ]] || ! [[ "$one_based_window_index" =~ ^[0-9]+$ ]]; then
+    printf "%s" "?:ERR"
+    exit 1
+fi
+
+# Use default values for missing environment variables
+NIX_TMUX_SMALL_TERM=${NIX_TMUX_SMALL_TERM:-80}
+NIX_TMUX_MEDIUM_TERM=${NIX_TMUX_MEDIUM_TERM:-120}
+
+tiny_one_based_window_index="$(print_superscript "$(( one_based_window_index ))" 2>/dev/null)" || tiny_one_based_window_index="$one_based_window_index"
 
 if (( client_width < NIX_TMUX_SMALL_TERM )); then
     printf "%b%b" "$tiny_one_based_window_index" "${window_name:0:8}"

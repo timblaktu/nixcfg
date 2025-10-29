@@ -8,9 +8,12 @@
 # [[ "${0}" = "${BASH_SOURCE[0]}" ]] && printf "ERROR: ${BASH_SOURCE[0]} may not be executed!\n" && exit 1
 # SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-# Source color functions if available
-if [[ -f "${HOME}/bin/colorfuncs.sh" ]]; then
-    source "${HOME}/bin/colorfuncs.sh"
+# Source color functions from lib directory
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+if [[ -f "${SCRIPT_DIR}/color-utils.bash" ]]; then
+    source "${SCRIPT_DIR}/color-utils.bash"
+    # Initialize color support
+    detect_color_support
 fi
 
 # Simple abort function for error handling
@@ -657,21 +660,28 @@ print_superscript() {
   # Alternative 10: Squared Numbers (CJK enclosed, may not display in all terminals)
   # local superscripts=(🄀 🄁 🄂 🄃 🄄 🄅 🄆 🄇 🄈 🄉)
 
-  if [[ $num =~ ^[0-9]$ ]]; then
-    printf "%b" "${superscripts[num]}"
-  else
-    echo "Error: Input must be a single digit 0-9" >&2
-    return 1
-  fi
+  local index=$(( num % 10 ))
+  printf "%b" "${superscripts[$index]}"
 }
 
+grepfunc() {
+  if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: grepfunc <function_name> <script_file>"
+    return 1
+  fi
+
+  local funcname="$1"
+  local script="$2"
+
+  rg --pcre2 -U "(^|\n)\s*(function\s+)?${funcname}\s*(\(\))?\s*\{(?:[^{}]*|(?R))*\}" "$script"
+}
 
 # Export functions for bash (zsh doesn't support export -f)
 if [[ -n "$BASH_VERSION" ]]; then
     export -f edit_my_systemd_files modify_my_systemd_files edit_my_desktop_files modify_my_desktop_files 2>/dev/null || true
     export -f stopwatch devtestloop contains recipeloglink runrecipe runrecipe_exit_handler 2>/dev/null || true
     export -f nuke_domains wait_for_virsh_domstate check_required_binaries check_required_binaries_usage 2>/dev/null || true
-    export -f is_wsl copy_to_clipboard exec_local_script_on_serial print_subscript print_superscript 2>/dev/null || true
+    export -f is_wsl copy_to_clipboard exec_local_script_on_serial print_subscript print_superscript grepfunc 2>/dev/null || true
 fi
 
 # Restore original allexport behavior

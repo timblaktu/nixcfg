@@ -3,7 +3,7 @@
 { pkgs, lib, ... }:
 
 rec {
-  testUtils = pkgs.writeShellScriptBin "test-utils" ''
+  testUtils = pkgs.writers.writeBashBin "test-utils" ''
     export RED='\033[0;31m'
     export GREEN='\033[0;32m'
     export YELLOW='\033[1;33m'
@@ -28,10 +28,11 @@ rec {
   '';
 
   # Test 1: SSH key generation and permissions
-  sshKeyGeneration = pkgs.runCommand "test-ssh-key-generation" {
-    buildInputs = with pkgs; [ openssh coreutils ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  sshKeyGeneration = pkgs.runCommand "test-ssh-key-generation"
+    {
+      buildInputs = with pkgs; [ openssh coreutils ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -108,10 +109,11 @@ rec {
   '';
 
   # Test 2: Cross-host authentication setup
-  crossHostAuth = pkgs.runCommand "test-cross-host-auth" {
-    buildInputs = with pkgs; [ openssh coreutils ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  crossHostAuth = pkgs.runCommand "test-cross-host-auth"
+    {
+      buildInputs = with pkgs; [ openssh coreutils ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -169,10 +171,11 @@ rec {
   '';
 
   # Test 3: Known hosts management
-  knownHosts = pkgs.runCommand "test-known-hosts" {
-    buildInputs = with pkgs; [ openssh coreutils ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  knownHosts = pkgs.runCommand "test-known-hosts"
+    {
+      buildInputs = with pkgs; [ openssh coreutils ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -220,10 +223,11 @@ rec {
   '';
 
   # Test 4: Module file existence
-  moduleExistence = pkgs.runCommand "test-module-existence" {
-    buildInputs = with pkgs; [ coreutils ];
-    nativeBuildInputs = [ testUtils ];
-  } ''
+  moduleExistence = pkgs.runCommand "test-module-existence"
+    {
+      buildInputs = with pkgs; [ coreutils ];
+      nativeBuildInputs = [ testUtils ];
+    } ''
     source ${testUtils}/bin/test-utils
     export TEST_RESULTS=$out
     
@@ -242,7 +246,7 @@ rec {
   '';
 
   # Combine all SSH tests
-  allTests = pkgs.runCommand "test-ssh-auth-all" {} ''
+  allTests = pkgs.runCommand "test-ssh-auth-all" { } ''
     echo "=== SSH Authentication Test Suite ===" > $out
     echo "" >> $out
     echo "Run individual tests:" >> $out

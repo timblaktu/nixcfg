@@ -5,15 +5,16 @@ with lib;
 
 let
   cfg = config.homeBase;
-  
+
   # Get the absolute path to the files directory
   filesDir = ./../../files;
-  
+
   # Generate automatic zsh completion by parsing help text
   generateAutoZshCompletion = { name }:
     let
       funcName = "_${lib.replaceStrings ["-"] ["_"] name}";
-    in pkgs.writeText "_${name}" ''
+    in
+    pkgs.writeText "_${name}" ''
       #compdef ${name}
       
       ${funcName}() {
@@ -167,12 +168,13 @@ let
       
       ${funcName} "$@"
     '';
-    
+
   # Generate bash completion (enhanced to support value constraints)
   generateAutoBashCompletion = { name }:
     let
       funcName = "_${lib.replaceStrings ["-"] ["_"] name}";
-    in pkgs.writeText "${name}-completion.bash" ''
+    in
+    pkgs.writeText "${name}-completion.bash" ''
       # Auto-generated bash completion for ${name}
       ${funcName}() {
           local cur prev words cword
@@ -271,61 +273,94 @@ let
       }
       complete -F ${funcName} ${name}
     '';
-  
+
+  # Static list of scripts managed by validated-scripts module
+  # This prevents circular dependency issues while ensuring exclusion works
+  validatedScriptNames = [
+    "simple-test"
+    "hello-validated"
+    "smart-nvimdiff"
+    "setup-terminal-fonts"
+    "esp-idf-install"
+    "esp-idf-shell"
+    "esp-idf-export"
+    "idf.py"
+    "claude-code-wrapper"
+    "claude-code-update"
+    "onedrive-force-sync"
+    "tmux-auto-attach"
+    "colorfuncs"
+    "mergejson"
+    "diagnose-emoji-rendering"
+    "onedrive-status"
+    "tmux-session-picker" # This is the key one we want to exclude
+  ];
+
   # Helper functions
-  mkHomeFiles = { sourceDir, targetDir, executable ? false }: 
+  mkHomeFiles = { sourceDir, targetDir, executable ? false, excludeNames ? [ ] }:
     let
       dirContents = builtins.readDir sourceDir;
-      files = filterAttrs (name: type: type == "regular") dirContents;
-      fileEntries = mapAttrs' (name: value: {
-        name = "${targetDir}/${name}";
-        value = {
-          source = sourceDir + "/${name}";
-          executable = executable;
-        };
-      }) files;
-    in fileEntries;
-    
-  # Generate bash completion files automatically for all scripts
-  mkBashCompletionFiles = 
-    let
-      binDir = filesDir + "/bin";
-      binContents = builtins.readDir binDir;
-      executableFiles = filterAttrs (name: type: type == "regular") binContents;
+      files = filterAttrs (name: type: type == "regular" && !(builtins.elem name excludeNames)) dirContents;
+      fileEntries = mapAttrs'
+        (name: value: {
+          name = "${targetDir}/${name}";
+          value = {
+            source = sourceDir + "/${name}";
+            executable = executable;
+          };
+        })
+        files;
     in
-    mapAttrs' (scriptName: _: {
-      name = ".local/share/bash-completion/completions/${scriptName}";
-      value = {
-        source = generateAutoBashCompletion {
-          name = scriptName;
-        };
-      };
-    }) executableFiles;
-  
-  # Generate zsh completion files automatically for all scripts
-  mkZshCompletionFiles = 
-    let
-      binDir = filesDir + "/bin";
-      binContents = builtins.readDir binDir;
-      executableFiles = filterAttrs (name: type: type == "regular") binContents;
-    in
-    mapAttrs' (scriptName: _: {
-      name = ".local/share/zsh/site-functions/_${scriptName}";
-      value = {
-        source = generateAutoZshCompletion {
-          name = scriptName;
-        };
-      };
-    }) executableFiles;
+    fileEntries;
 
-in {
+  # Generate bash completion files automatically for all scripts (excluding validated-scripts)
+  mkBashCompletionFiles =
+    let
+      binDir = filesDir + "/bin";
+      binContents = builtins.readDir binDir;
+      allFiles = filterAttrs (name: type: type == "regular") binContents;
+      executableFiles = filterAttrs (name: _: !(builtins.elem name validatedScriptNames)) allFiles;
+    in
+    mapAttrs'
+      (scriptName: _: {
+        name = ".local/share/bash-completion/completions/${scriptName}";
+        value = {
+          source = generateAutoBashCompletion {
+            name = scriptName;
+          };
+        };
+      })
+      executableFiles;
+
+  # Generate zsh completion files automatically for all scripts (excluding validated-scripts)
+  mkZshCompletionFiles =
+    let
+      binDir = filesDir + "/bin";
+      binContents = builtins.readDir binDir;
+      allFiles = filterAttrs (name: type: type == "regular") binContents;
+      executableFiles = filterAttrs (name: _: !(builtins.elem name validatedScriptNames)) allFiles;
+    in
+    mapAttrs'
+      (scriptName: _: {
+        name = ".local/share/zsh/site-functions/_${scriptName}";
+        value = {
+          source = generateAutoZshCompletion {
+            name = scriptName;
+          };
+        };
+      })
+      executableFiles;
+
+in
+{
   config = {
     home.file = lib.mkMerge [
-      # Executable scripts
+      # Executable scripts (excluding those managed by validated-scripts)
       (mkHomeFiles {
         sourceDir = filesDir + "/bin";
         targetDir = "bin";
         executable = true;
+        excludeNames = validatedScriptNames;
       })
       # Claude directory
       {
@@ -334,13 +369,20 @@ in {
           recursive = true;
         };
       }
+      # Library directory (for bash utility functions)
+      {
+        "lib" = {
+          source = filesDir + "/lib";
+          recursive = true;
+        };
+      }
       # Auto-generated completions for all scripts
       mkBashCompletionFiles
       mkZshCompletionFiles
     ];
-    
+
     programs.bash.enableCompletion = true;
-    
+
     programs.zsh = {
       enableCompletion = true;
       initContent = lib.mkAfter ''

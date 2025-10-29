@@ -1,13 +1,13 @@
 # ZSH and shell configuration (merged from shell.nix)
 { config, pkgs, lib, ... }:
-let 
+let
   inherit (lib) mkIf optionalString;
 in
 {
   programs.zsh = {
     enable = true;
     enableCompletion = true;
-    
+
     history = {
       size = 50000;
       save = 50000;
@@ -17,7 +17,7 @@ in
       extended = true;
       share = true;
     };
-    
+
     shellAliases = {
       # System maintenance
       update = "sudo nixos-rebuild switch";
@@ -25,56 +25,61 @@ in
       rebuild = "home-manager switch --flake ~/src/nixcfg#tim@tblack-t14-nixos";
       rebuild-s = "NIXPKGS_ALLOW_UNFREE=1 home-manager switch --impure --flake ~/src/nixcfg#tim@tblack-t14-nixos";
       h-m = "NIXPKGS_ALLOW_UNFREE=1 home-manager switch --impure --flake ~/src/nixcfg#tim@tblack-t14-nixos";
-      gc = "sudo nix-collect-garbage -d";
       optimise = "sudo nix-store --optimise";
-      
+
       # Navigation
       ll = "ls -l";
-      la = "ls -la";  
+      la = "ls -la";
       l = "ls -CF";
       ".." = "cd ..";
       "..." = "cd ../..";
-      
+
       # Git
       g = "git";
-      gs = "git status";
+      gs = "git status --short";
       ga = "git add";
-      gco = "git commit";
+      gau = "git add --update";
+      gaa = "git add --all";
+      gc = "git commit";
+      gcu = "git commit --update --verbose";
+      gca = "git commit --all --verbose";
+      gci = "git commit --interactive --verbose";
       gp = "git push";
       gl = "git log";
       gd = "git diff";
-      
+      gdu = "git diff --no-pager";
+
       # Convenience
       c = "clear";
       e = "$EDITOR";
       v = "nvim";
       vi = "nvim";
       vim = "nvim";
-      
+
       # Process management
       psg = "ps aux | grep -i";
-      
+
       # Container tools (provided by podman-tools module when containerSupport enabled)
-      
+
       # Network
       ports = "sudo netstat -tulpn";
       myip = "curl ifconfig.me";
-      
+
       # System info
       df = "df -h";
       du = "du -h";
       free = "free -h";
-      
+
       # Safety  
       rm = "rm -i";
       cp = "cp -i";
       mv = "mv -i";
-      
+
       # Clipboard (WSL)
       clip = mkIf (config.targets.wsl.enable or false) "clip.exe";
       paste = mkIf (config.targets.wsl.enable or false) "powershell.exe Get-Clipboard";
     };
-    
+
     sessionVariables = {
       EDITOR = "nvim";
       VISUAL = "nvim";
@@ -82,7 +87,7 @@ in
       LESS = "-R";
       TERM = "xterm-256color";
     };
-    
+
     completionInit = ''
       autoload -U compinit && compinit
       zstyle ':completion:*' auto-description 'specify: %d'
@@ -106,7 +111,7 @@ in
       # Option C: Show description in bold without "Completing"
       zstyle ':completion:*:descriptions' format '%B%d:%b'
     '';
-    
+
     initContent = ''
       # Source NixOS system environment first
       if [[ -r "/etc/set-environment" ]]; then
@@ -362,13 +367,13 @@ in
         alias "$i"="cd -$i"
       done
     '';
-    
+
     plugins = [
       {
         name = "zsh-autosuggestions";
         src = pkgs.fetchFromGitHub {
           owner = "zsh-users/zsh-autosuggestions";
-          repo = "zsh-autosuggestions"; 
+          repo = "zsh-autosuggestions";
           rev = "v0.7.0";
           sha256 = "sha256-KLUYpUu4DHRumQZ3w59m9aTW6TBKMCXl2UcKi4uMd7w=";
         };

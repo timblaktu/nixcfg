@@ -1,4 +1,4 @@
-# Comprehensive Nixvim configuration - Phase 2
+# Comprehensive Nixvim configuration - Refactored with proper autoCmd usage
 { config, lib, pkgs, inputs, ... }:
 
 {
@@ -9,12 +9,12 @@
     defaultEditor = true;
     viAlias = true;
     vimAlias = true;
-    
+
     # Fix VIMRUNTIME environment variable for LSP functionality
     env = {
       VIMRUNTIME = "${pkgs.neovim-unwrapped}/share/nvim/runtime";
     };
-    
+
     # Core vim settings
     opts = {
       # Basic editor settings
@@ -30,13 +30,13 @@
       modelines = 2;
       modeline = true;
       mouse = "a";
-      
+
       # Search settings
       incsearch = true;
       hlsearch = true;
       ignorecase = true;
       smartcase = true;
-      
+
       # UI settings
       showmatch = true;
       showcmd = true;
@@ -45,7 +45,7 @@
       scrolloff = 2;
       termguicolors = true;
       updatetime = 100;
-      
+
       # Backup and undo
       backup = true;
       backupdir = "${config.xdg.stateHome}/nvim/backup,~/tmp/vim-backupdir,~/tmp";
@@ -53,46 +53,46 @@
       backupcopy = "yes";
       undofile = true;
       undodir = "${config.xdg.stateHome}/nvim/undo";
-      
+
       # Other settings
       hidden = true;
       backspace = "start,indent,eol";
       shortmess = "aFI"; # I = skip intro message
       completeopt = "menuone,noselect";
       timeout = true;
-      timeoutlen = 150;  # Reduced from 300ms for faster leader key response
-      ttimeoutlen = 10;   # Reduced from 250ms for faster escape key response
+      timeoutlen = 150; # Reduced from 300ms for faster leader key response
+      ttimeoutlen = 10; # Reduced from 250ms for faster escape key response
       clipboard = "unnamedplus";
       foldcolumn = "0";
-      
+
       # Wildmenu settings
       wildmenu = true;
       wildmode = "longest:list";
       autoread = true;
-      
+
       # Format options
       formatoptions = "croq";
-      
+
       # Regex engine settings
       re = 0;
       regexpengine = 0;
     };
-    
+
     globals = {
       mapleader = " ";
       maplocalleader = " ";
     };
-    
+
     # Set default colorscheme explicitly to avoid conflicts
     colorscheme = lib.mkForce "gruvbox";
-    
+
     colorschemes = {
       base16 = {
-        enable = false;  # Disabled to prevent conflicts with gruvbox
+        enable = false; # Disabled to prevent conflicts with gruvbox
         colorscheme = "solarized-dark";
       };
       solarized-osaka = {
-        enable = false;  # Disabled - enable only when using this theme
+        enable = false; # Disabled - enable only when using this theme
         settings = {
           transparent = false;
           styles = {
@@ -104,7 +104,7 @@
         };
       };
       tokyonight = {
-        enable = false;  # Disabled - enable only when using this theme
+        enable = false; # Disabled - enable only when using this theme
         settings = {
           style = "storm";
           transparent = false;
@@ -112,21 +112,21 @@
         };
       };
       catppuccin = {
-        enable = false;  # Disabled - enable only when using this theme
+        enable = false; # Disabled - enable only when using this theme
         settings = {
           flavour = "mocha";
           transparent_background = false;
         };
       };
       gruvbox = {
-        enable = true;  # This is the active colorscheme
+        enable = true; # This is the active colorscheme
         settings = {
           contrast = "medium";
           transparent_mode = false;
         };
       };
     };
-    
+
     # Core keymaps
     keymaps = [
       # Core navigation and editing
@@ -134,29 +134,29 @@
       { mode = "n"; key = "<F2>"; action = ":set number! relativenumber!<CR>"; options.silent = true; }
       { mode = "n"; key = "<F5>"; action = ":!%<CR>"; }
       { mode = "n"; key = "<F11>"; action = ":set paste!<CR>"; options.silent = true; }
-      
+
       # Buffer navigation
       { mode = "n"; key = "<Tab>"; action = ":bnext<CR>"; options.silent = true; }
       { mode = "n"; key = "<S-Tab>"; action = ":bprevious<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>x"; action = ":bp<bar>sp<bar>bn<bar>bd<CR>"; options.silent = true; }
-      
+
       # Quickfix navigation
       { mode = "n"; key = "]q"; action = ":cnext<CR>"; options.silent = true; }
       { mode = "n"; key = "[q"; action = ":cprevious<CR>"; options.silent = true; }
       { mode = "n"; key = "]Q"; action = ":clast<CR>"; options.silent = true; }
       { mode = "n"; key = "[Q"; action = ":cfirst<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>q"; action = ":copen<CR>"; options = { silent = true; desc = "Toggle quickfix window"; }; }
-      
+
       # Help navigation
       { mode = "n"; key = "<Leader>K"; action = ":h expand(\"<cword>\")<cr>"; }
-      
+
       # Scrollbind
       { mode = "n"; key = "<leader>r"; action = ":windo set scrollbind<CR>"; }
       { mode = "n"; key = "<leader>R"; action = ":windo set scrollbind!<CR>"; }
-      
+
       # Visual search
       { mode = "v"; key = "//"; action = "y/<C-R>\"<CR>N"; }
-      
+
       # Modern keymaps
       { mode = "n"; key = "<leader>e"; action = "<cmd>NvimTreeToggle<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>ff"; action = "<cmd>Telescope find_files<CR>"; options.silent = true; }
@@ -164,17 +164,17 @@
       { mode = "n"; key = "<leader>fw"; action = "<cmd>Telescope grep_string<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>fb"; action = "<cmd>Telescope buffers<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>fh"; action = "<cmd>Telescope help_tags<CR>"; options.silent = true; }
-      
+
       # Very magic regex by default
       { mode = "n"; key = "/"; action = "/\\v"; }
       { mode = "v"; key = "/"; action = "/\\v"; }
-      
+
       # Diff/merge keybindings
       { mode = "n"; key = "<leader>dgl"; action = ":diffget LOCAL<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>dgb"; action = ":diffget BASE<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>dgr"; action = ":diffget REMOTE<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>du"; action = ":diffupdate<CR>"; options.silent = true; }
-      
+
       # Git conflict marker navigation
       { mode = "n"; key = "]x"; action = "/^\\(<\\{7\\}\\|=\\{7\\}\\|>\\{7\\}\\)<CR>"; options = { silent = true; desc = "Next conflict marker"; }; }
       { mode = "n"; key = "[x"; action = "?^\\(<\\{7\\}\\|=\\{7\\}\\|>\\{7\\}\\)<CR>"; options = { silent = true; desc = "Previous conflict marker"; }; }
@@ -186,18 +186,18 @@
       { mode = "n"; key = "<leader>ct"; action = ":colorscheme tokyonight<CR>"; options = { silent = true; desc = "Tokyo Night"; }; }
       { mode = "n"; key = "<leader>cc"; action = ":colorscheme catppuccin<CR>"; options = { silent = true; desc = "Catppuccin"; }; }
       { mode = "n"; key = "<leader>cg"; action = ":colorscheme gruvbox<CR>"; options = { silent = true; desc = "Gruvbox"; }; }
-      
+
       # Commenting with leader key
       { mode = "n"; key = "<leader>/"; action = "gcc"; options = { silent = true; desc = "Toggle line comment"; remap = true; }; }
       { mode = "v"; key = "<leader>/"; action = "gc"; options = { silent = true; desc = "Toggle comment"; remap = true; }; }
       { mode = "n"; key = "<leader>?"; action = "gbc"; options = { silent = true; desc = "Toggle block comment"; remap = true; }; }
       { mode = "v"; key = "<leader>?"; action = "gb"; options = { silent = true; desc = "Toggle block comment"; remap = true; }; }
-      
+
       # Quitting
       { mode = "n"; key = "<leader><leader>q"; action = ":qa<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader><leader>x"; action = ":xa<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader><leader>c"; action = ":cq<CR>"; options.silent = true; }
-      
+
       # Overseer task runner keymaps
       { mode = "n"; key = "<leader>tr"; action = "<cmd>OverseerRun<CR>"; options = { silent = true; desc = "Run task"; }; }
       { mode = "n"; key = "<leader>tt"; action = "<cmd>OverseerToggle<CR>"; options = { silent = true; desc = "Toggle task list"; }; }
@@ -206,11 +206,177 @@
       { mode = "n"; key = "<leader>tq"; action = "<cmd>OverseerQuickAction<CR>"; options = { silent = true; desc = "Quick action"; }; }
       { mode = "n"; key = "<leader>tc"; action = "<cmd>OverseerClearCache<CR>"; options = { silent = true; desc = "Clear cache"; }; }
     ];
-    
+
+    # Autocommand groups - organized by functionality
+    autoGroups = {
+      # File type specific settings
+      filetype_settings = {
+        clear = true;
+      };
+      # Diff mode enhancements
+      diff_mode = {
+        clear = true;
+      };
+      # Quickfix window customization
+      quickfix_enhancements = {
+        clear = true;
+      };
+      # Session management
+      session_management = {
+        clear = true;
+      };
+    };
+
+    # Autocmds - using nixvim's native autoCmd option for simple cases
+    autoCmd = [
+      # ========================================================================
+      # FILE TYPE SPECIFIC SETTINGS
+      # ========================================================================
+
+      # PowerShell BOM configuration
+      {
+        event = "BufWritePre";
+        pattern = "*.ps1";
+        group = "filetype_settings";
+        callback = {
+          __raw = ''
+            function()
+              vim.bo.bomb = true
+            end
+          '';
+        };
+        desc = "Set BOM flag for PowerShell files before writing";
+      }
+
+      # Help window configuration
+      {
+        event = "FileType";
+        pattern = "help";
+        group = "filetype_settings";
+        callback = {
+          __raw = ''
+            function()
+              vim.opt_local.helpheight = 9999
+              vim.opt_local.relativenumber = true
+              vim.keymap.set('n', 'q', ':q<cr>', { buffer = true, noremap = true })
+            end
+          '';
+        };
+        desc = "Help window settings";
+      }
+
+      # YAML-specific settings
+      {
+        event = "FileType";
+        pattern = "yaml";
+        group = "filetype_settings";
+        callback = {
+          __raw = ''
+            function()
+              vim.opt_local.tabstop = 2
+              vim.opt_local.softtabstop = 2
+              vim.opt_local.shiftwidth = 2
+              vim.opt_local.expandtab = true
+            end
+          '';
+        };
+        desc = "YAML indentation settings";
+      }
+
+      # ========================================================================
+      # QUICKFIX WINDOW CUSTOMIZATION
+      # ========================================================================
+
+      {
+        event = "FileType";
+        pattern = "qf";
+        group = "quickfix_enhancements";
+        callback = {
+          __raw = ''
+            function()
+              vim.opt_local.number = false
+              vim.opt_local.relativenumber = false
+              
+              -- Useful mappings for quickfix navigation
+              local opts = { buffer = true, noremap = true, silent = true }
+              vim.keymap.set('n', '<CR>', '<CR>', opts)
+              vim.keymap.set('n', 'o', '<CR>', opts)
+              vim.keymap.set('n', 's', '<C-W><CR>', opts)
+              vim.keymap.set('n', 'v', '<C-W><CR><C-W>L', opts)
+              vim.keymap.set('n', 't', '<C-W><CR><C-W>T', opts)
+              
+              -- Quicker.nvim context expansion/collapse
+              vim.keymap.set('n', '>', ':lua require("quicker").expand({ before = 2, after = 2, add_to_existing = true })<CR>', opts)
+              vim.keymap.set('n', '<', ':lua require("quicker").collapse()<CR>', opts)
+            end
+          '';
+        };
+        desc = "Quickfix window settings and keymaps";
+      }
+
+      # ========================================================================
+      # SESSION MANAGEMENT
+      # ========================================================================
+
+      {
+        event = "VimLeavePre";
+        pattern = "*";
+        group = "session_management";
+        callback = {
+          __raw = ''
+            function()
+              if vim.v.this_session ~= "" then
+                vim.cmd("mksession! " .. vim.v.this_session)
+              end
+            end
+          '';
+        };
+        desc = "Auto-save session on exit";
+      }
+
+      # ========================================================================
+      # DIFF MODE ENHANCEMENTS
+      # ========================================================================
+
+      {
+        event = [ "VimEnter" "WinEnter" ];
+        pattern = "*";
+        group = "diff_mode";
+        callback = {
+          __raw = ''
+            function()
+              if vim.o.diff then
+                vim.wo.cursorline = true
+              end
+            end
+          '';
+        };
+        desc = "Enable cursorline in diff mode";
+      }
+
+      {
+        event = "OptionSet";
+        pattern = "diff";
+        group = "diff_mode";
+        callback = {
+          __raw = ''
+            function()
+              if vim.v.option_new then
+                vim.wo.cursorline = true
+              else
+                vim.wo.cursorline = false
+              end
+            end
+          '';
+        };
+        desc = "Toggle cursorline when diff mode changes";
+      }
+    ];
+
     # Basic plugins
     plugins = {
       web-devicons = {
-        enable = true;  # Keep enabled for other plugins that might use it
+        enable = true; # Keep enabled for other plugins that might use it
         settings = {
           # Use text fallbacks if icons aren't available
           default = true;
@@ -270,7 +436,7 @@
       };
       tmux-navigator.enable = true;
       vim-surround.enable = true;
-      
+
       # UI Enhancements
       lualine = {
         enable = true;
@@ -279,7 +445,7 @@
             theme = "auto";
             component_separators = { left = "|"; right = "|"; };
             section_separators = { left = ""; right = ""; };
-            globalstatus = false;  # Per-window statuslines
+            globalstatus = false; # Per-window statuslines
           };
           sections = {
             # Left sections
@@ -411,11 +577,11 @@
                       
                       local STATUS = overseer.STATUS
                       local status_symbols = {
-                        [STATUS.FAILURE] = "❌",
-                        [STATUS.CANCELED] = "⏹",
-                        [STATUS.SUCCESS] = "✅", 
-                        [STATUS.RUNNING] = "▶",
-                        [STATUS.PENDING] = "⏸",
+                        [STATUS.FAILURE] = "✘",
+                        [STATUS.CANCELED] = "⊘",
+                        [STATUS.SUCCESS] = "✓", 
+                        [STATUS.RUNNING] = "⟳",
+                        [STATUS.PENDING] = "⋯",
                       }
                       
                       local symbol = status_symbols[task.status] or "?"
@@ -470,7 +636,7 @@
                       if errors > 0 then table.insert(parts, errors .. 'E') end
                       if warnings > 0 then table.insert(parts, warnings .. 'W') end
                       
-                      return #parts > 0 and ('🔴 ' .. table.concat(parts, ' ')) or '🔴 ' .. #qflist
+                      return #parts > 0 and ('🗲 ' .. table.concat(parts, ' ')) or '🗲 ' .. #qflist
                     end,
                     color = { fg = '#f7768e', gui = 'bold' },
                     on_click = function()
@@ -581,11 +747,11 @@
           };
         };
       };
-      
+
       bufferline = {
-        enable = false;  # Disable tabs at the top
+        enable = false; # Disable tabs at the top
       };
-      
+
       nvim-tree = {
         enable = true;
         settings = {
@@ -610,7 +776,7 @@
           };
         };
       };
-      
+
       # Telescope
       telescope = {
         enable = true;
@@ -627,10 +793,10 @@
         };
         settings = {
           defaults = {
-            prompt_prefix = "❯ ";
-            selection_caret = "▶ ";
-            entry_prefix = "  ";  # Two spaces for clean alignment
-            multi_icon = "+ ";    # Clear multi-select indicator
+            prompt_prefix = "› ";
+            selection_caret = "▸ ";
+            entry_prefix = "  "; # Two spaces for clean alignment
+            multi_icon = "+ "; # Clear multi-select indicator
             path_display = [ "truncate" ];
             # Start selection at top instead of bottom
             sorting_strategy = "ascending";
@@ -716,7 +882,7 @@
           };
         };
       };
-      
+
       # Git integration
       gitsigns = {
         enable = true;
@@ -736,9 +902,9 @@
           };
         };
       };
-      
+
       fugitive.enable = true;
-      
+
       # Treesitter
       treesitter = {
         enable = true;
@@ -770,7 +936,7 @@
           ];
         };
       };
-      
+
       # LSP configuration
       lsp = {
         enable = true;
@@ -789,7 +955,7 @@
               };
             };
           };
-          
+
           # Rust
           rust_analyzer = {
             enable = true;
@@ -804,21 +970,21 @@
                   command = "clippy";
                 };
                 rustfmt = {
-                  extraArgs = ["+nightly"];
+                  extraArgs = [ "+nightly" ];
                 };
               };
             };
           };
-          
+
           # Python
           pyright.enable = true;
-          
+
           # TypeScript/JavaScript
           ts_ls.enable = true;
-          
+
           # Go
           gopls.enable = true;
-          
+
           # Lua
           lua_ls = {
             enable = true;
@@ -830,31 +996,31 @@
               };
             };
           };
-          
+
           # Bash
           bashls.enable = true;
-          
+
           # JSON
           jsonls.enable = true;
-          
+
           # YAML
           yamlls.enable = true;
-          
+
           # C/C++ with less aggressive diagnostics
           clangd = {
             enable = true;
             cmd = [
               "clangd"
               "--header-insertion=never"
-              "--clang-tidy=false"  # Disable clang-tidy for less red
+              "--clang-tidy=false" # Disable clang-tidy for less red
               "--ranking-model=heuristics"
               "--completion-style=detailed"
-              "--fallback-style=none"  # Don't use any fallback style
-              "--enable-config"  # Explicitly enable .clang-format usage
+              "--fallback-style=none" # Don't use any fallback style
+              "--enable-config" # Explicitly enable .clang-format usage
             ];
           };
         };
-        
+
         keymaps = {
           silent = true;
           lspBuf = {
@@ -866,7 +1032,7 @@
             K = "hover";
             "<leader>ca" = "code_action";
             "<leader>rn" = "rename";
-            "<leader>lf" = "format";  # Changed from <leader>f to avoid Telescope conflict
+            "<leader>lf" = "format"; # Changed from <leader>f to avoid Telescope conflict
           };
           diagnostic = {
             "[d" = "goto_prev";
@@ -876,7 +1042,7 @@
           };
         };
       };
-      
+
       # Completion
       cmp = {
         enable = true;
@@ -901,24 +1067,24 @@
           ];
         };
       };
-      
+
       # Command line completion
       cmp-cmdline.enable = true;
-      
+
       # Snippets
       luasnip.enable = true;
-      
+
       # Task runner and quickfix enhancements
       overseer = {
         enable = true;
         settings = {
           # Use jobstart strategy without terminal to prevent line wrapping
           # This avoids terminal emulation that wraps long lines at terminal width
-          strategy = { 
+          strategy = {
             "__unkeyed-1" = "jobstart";
             "__unkeyed-2" = {
-              use_terminal = false;  # Don't use terminal buffer, prevents line wrapping
-              preserve_output = true;  # Keep output when restarting tasks
+              use_terminal = false; # Don't use terminal buffer, prevents line wrapping
+              preserve_output = true; # Keep output when restarting tasks
             };
           };
           templates = [ "builtin" ];
@@ -958,18 +1124,18 @@
           };
         };
       };
-      
+
       quicker = {
         enable = true;
         settings = {
           # Keys for expanding/collapsing context
           keys = [
-            { 
+            {
               __unkeyed-1 = ">";
               __unkeyed-2.__raw = ''function() require("quicker").expand({ before = 2, after = 2, add_to_existing = true }) end'';
               desc = "Expand quickfix context";
             }
-            { 
+            {
               __unkeyed-1 = "<";
               __unkeyed-2.__raw = ''function() require("quicker").collapse() end'';
               desc = "Collapse quickfix context";
@@ -1005,13 +1171,13 @@
           };
         };
       };
-      
+
       # Vim-repeat for enhanced dot command repetition
       repeat.enable = true;
     };
 
-    
-    # Essential extra config for directory setup
+
+    # Essential extra config - SIMPLIFIED (autocmds moved to autoCmd or extraConfigLua)
     extraConfigVim = ''
       " Set up grep to use ripgrep
       set grepprg=rg\ --vimgrep\ --smart-case\ --follow
@@ -1023,39 +1189,7 @@
       endfor
       silent !mkdir -p ~/.vimundo
       
-      " Session management
-      au VimLeavePre * if v:this_session != "" | exec "mksession! " . v:this_session | endif
-      
-      " Help window configuration
-      set helpheight=9999
-      autocmd filetype help set helpheight=9999
-      autocmd filetype help set relativenumber
-      autocmd filetype help noremap <buffer> q :q<cr>
-      
-      " Quickfix window customization
-      autocmd FileType qf setlocal nonumber norelativenumber
-      " Quicker.nvim handles display formatting
-      " Useful mappings for quickfix navigation
-      autocmd FileType qf nnoremap <buffer> <CR> <CR>
-      autocmd FileType qf nnoremap <buffer> o <CR>
-      autocmd FileType qf nnoremap <buffer> s <C-W><CR>
-      autocmd FileType qf nnoremap <buffer> v <C-W><CR><C-W>L
-      autocmd FileType qf nnoremap <buffer> t <C-W><CR><C-W>T
-      " Quicker.nvim context expansion/collapse
-      autocmd FileType qf nnoremap <buffer> > :lua require('quicker').expand({ before = 2, after = 2, add_to_existing = true })<CR>
-      autocmd FileType qf nnoremap <buffer> < :lua require('quicker').collapse()<CR>
-      
-      " Auto-jump to first error/warning when quickfix opens - moved to extraConfigLua
-      
-      " YAML-specific settings
-      autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
-      
-      " Simple mergetool focus fix
-      " When entering diff mode with 4 windows, ensure bottom window has focus
-      "autocmd VimEnter * if &diff && winnr('$') == 4 | call timer_start(250, {-> execute('wincmd b')}) | endif
-      
-      " Enhanced diff mode highlighting
-      " Make current diff/conflict line more visible
+      " Enhanced diff mode highlighting (initial setup for when starting in diff mode)
       if &diff
         " Set cursor line highlighting in diff mode
         set cursorline
@@ -1069,14 +1203,7 @@
         " Make cursor line very visible in diff mode
         highlight CursorLine cterm=underline,bold ctermbg=237 gui=underline,bold guibg=#3e4452
         highlight CursorLineNr cterm=bold ctermfg=yellow gui=bold guifg=#e2b93d
-      endif
-      
-      " Auto-enable cursorline in diff mode
-      autocmd VimEnter,WinEnter * if &diff | set cursorline | endif
-      autocmd OptionSet diff if v:option_new | set cursorline | else | set nocursorline | endif
-      
-      " Additional diff mode settings
-      if &diff
+        
         " Better fold settings for diff mode
         set foldmethod=diff
         set foldcolumn=1
@@ -1085,9 +1212,13 @@
         syntax on
       endif
     '';
-    
-    # Additional Lua configuration for modern features
+
+    # Additional Lua configuration for complex features
     extraConfigLua = ''
+      -- ========================================================================
+      -- SYSTEM CONFIGURATION
+      -- ========================================================================
+      
       -- Completely disable netrw to prevent FileExplorer autocommand conflicts
       vim.g.loaded_netrw = 1
       vim.g.loaded_netrwPlugin = 1
@@ -1111,6 +1242,10 @@
           cache_enabled = 0,
         }
       end
+      
+      -- ========================================================================
+      -- LSP CONFIGURATION
+      -- ========================================================================
       
       -- Set up proper keymaps for LSP
       vim.api.nvim_create_autocmd('LspAttach', {
@@ -1153,7 +1288,9 @@
         },
       })
       
-      -- All colorschemes now configured via nixvim colorschemes option
+      -- ========================================================================
+      -- LANGUAGE-SPECIFIC AUTOCMDS
+      -- ========================================================================
       
       -- Reduce red highlighting for C/C++ files
       vim.api.nvim_create_autocmd("FileType", {
@@ -1187,6 +1324,56 @@
         end,
       })
       
+      -- Set proper errorformat for C/C++ compilers and build tools
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = {"c", "cpp"},
+        callback = function()
+          -- Enhanced errorformat for GCC/Clang/Ninja/CMake/Meson
+          vim.bo.errorformat = table.concat({
+            -- GCC/Clang patterns
+            "%f:%l:%c: %trror: %m",     -- filename:line:col: error: message
+            "%f:%l:%c: %tarning: %m",   -- filename:line:col: warning: message
+            "%f:%l:%c: %tote: %m",       -- filename:line:col: note: message
+            "%f:%l:%c: %m",              -- filename:line:col: message
+            "%f:%l: %trror: %m",         -- filename:line: error: message
+            "%f:%l: %tarning: %m",       -- filename:line: warning: message
+            "%f:%l: %tote: %m",          -- filename:line: note: message
+            "%f:%l: %m",                 -- filename:line: message
+            "%f: %trror: %m",            -- filename: error: message
+            "%f: %tarning: %m",          -- filename: warning: message
+            "%f: %m",                    -- filename: message
+            -- Make patterns
+            "make: *** %m",              -- make errors
+            "make[%*\\d]: *** %m",        -- make recursive errors
+            "make: %m",                  -- make general messages
+            -- Ninja patterns
+            "ninja: %trror: %m",         -- ninja errors
+            "ninja: %m",                 -- ninja messages
+            "FAILED: %f:%l:%c: %m",      -- ninja compilation failures
+            "FAILED: %m",               -- ninja general failures
+            -- CMake patterns
+            "CMake %trror at %f:%l %m",  -- cmake errors with file:line
+            "CMake %trror: %m",          -- cmake general errors
+            "CMake %tarning at %f:%l %m", -- cmake warnings with file:line
+            "CMake %tarning: %m",        -- cmake general warnings
+            -- Meson patterns
+            "meson.build:%l:%c: %trror: %m", -- meson build file errors
+            "meson.build:%l:%c: %tarning: %m", -- meson build file warnings
+            "ERROR: %m",                 -- meson general errors
+            "WARNING: %m",               -- meson general warnings
+            -- Include file traces
+            "In file included from %f:%l:",  -- Include traces
+            "%*[ ]from %f:%l:",          -- Continuation of include traces
+            "In file included from %f:%l,%*\\d:",  -- Include with column
+            "%*[ ]from %f:%l,%*\\d:",      -- Continuation with column
+          }, ",")
+        end,
+      })
+      
+      -- ========================================================================
+      -- DIFF MODE ENHANCEMENTS
+      -- ========================================================================
+      
       -- Enhanced diff mode configuration
       vim.api.nvim_create_autocmd({"VimEnter", "WinEnter"}, {
         callback = function()
@@ -1194,7 +1381,7 @@
             -- Enable cursorline in all diff windows
             vim.wo.cursorline = true
             
-            -- Set up better diff colors that work with tokyonight
+            -- Set up better diff colors that work with various colorschemes
             vim.api.nvim_set_hl(0, 'DiffAdd', { bg = '#1a3a52', fg = '#9ccc65', bold = true })
             vim.api.nvim_set_hl(0, 'DiffDelete', { bg = '#3a1a1a', fg = '#ff5370', bold = true })
             vim.api.nvim_set_hl(0, 'DiffChange', { bg = '#3a3a1a', fg = '#e2b93d', bold = true })
@@ -1236,6 +1423,10 @@
           vim.cmd('normal! [c')
         end
       end, { desc = 'Previous diff/change' })
+      
+      -- ========================================================================
+      -- UI ENHANCEMENTS
+      -- ========================================================================
       
       -- Clean up Telescope appearance - reduce distracting background colors
       vim.api.nvim_create_autocmd("ColorScheme", {
@@ -1290,90 +1481,10 @@
         vim.api.nvim_set_hl(0, 'TelescopeMatching', { fg = '#ff9e64', bg = 'NONE', bold = true })
       end)
       
-      -- Set proper errorformat for C/C++ compilers and build tools
-      vim.api.nvim_create_autocmd("FileType", {
-        pattern = {"c", "cpp"},
-        callback = function()
-          -- Enhanced errorformat for GCC/Clang/Ninja/CMake/Meson
-          vim.bo.errorformat = table.concat({
-            -- GCC/Clang patterns
-            "%f:%l:%c: %trror: %m",     -- filename:line:col: error: message
-            "%f:%l:%c: %tarning: %m",   -- filename:line:col: warning: message
-            "%f:%l:%c: %tote: %m",       -- filename:line:col: note: message
-            "%f:%l:%c: %m",              -- filename:line:col: message
-            "%f:%l: %trror: %m",         -- filename:line: error: message
-            "%f:%l: %tarning: %m",       -- filename:line: warning: message
-            "%f:%l: %tote: %m",          -- filename:line: note: message
-            "%f:%l: %m",                 -- filename:line: message
-            "%f: %trror: %m",            -- filename: error: message
-            "%f: %tarning: %m",          -- filename: warning: message
-            "%f: %m",                    -- filename: message
-            -- Make patterns
-            "make: *** %m",              -- make errors
-            "make[%*\d]: *** %m",        -- make recursive errors
-            "make: %m",                  -- make general messages
-            -- Ninja patterns
-            "ninja: %trror: %m",         -- ninja errors
-            "ninja: %m",                 -- ninja messages
-            "FAILED: %f:%l:%c: %m",      -- ninja compilation failures
-            "FAILED: %m",               -- ninja general failures
-            -- CMake patterns
-            "CMake %trror at %f:%l %m",  -- cmake errors with file:line
-            "CMake %trror: %m",          -- cmake general errors
-            "CMake %tarning at %f:%l %m", -- cmake warnings with file:line
-            "CMake %tarning: %m",        -- cmake general warnings
-            -- Meson patterns
-            "meson.build:%l:%c: %trror: %m", -- meson build file errors
-            "meson.build:%l:%c: %tarning: %m", -- meson build file warnings
-            "ERROR: %m",                 -- meson general errors
-            "WARNING: %m",               -- meson general warnings
-            -- Include file traces
-            "In file included from %f:%l:",  -- Include traces
-            "%*[ ]from %f:%l:",          -- Continuation of include traces
-            "In file included from %f:%l,%*\d:",  -- Include with column
-            "%*[ ]from %f:%l,%*\d:",      -- Continuation with column
-          }, ",")
-        end,
-      })
+      -- ========================================================================
+      -- OVERSEER INTEGRATION
+      -- ========================================================================
       
-      
-      --[[ Add protection for quickfix operations to prevent keyboard interrupt issues
-      local orig_setqflist = vim.fn.setqflist
-      vim.fn.setqflist = function(list, action, what)
-        local ok, result = pcall(orig_setqflist, list, action, what)
-        if not ok then
-          -- Silently handle errors during setqflist
-          return 0
-        end
-        return result
-      end
-      --]]
-      -- Quicker.nvim now handles quickfix formatting and highlighting
-      
-      -- COMMENTED NVIM-NOTIFY SETUP FOR FUTURE USE
-      -- Uncomment this section if you want rich notifications with nvim-notify plugin
-      -- Note: You'll need to add nvim-notify to your plugins first
-      --[[
-      local notify = require("notify")
-      notify.setup({
-        stages = "slide",       -- Animation style: fade_in_slide_out, fade, slide, static
-        timeout = 3000,         -- Default timeout for notifications
-        render = "minimal",     -- Render style: default, minimal, compact
-        max_width = 50,
-        max_height = 10,
-        on_open = function(win)
-          vim.api.nvim_win_set_config(win, { focusable = false })
-        end,
-      })
-      vim.notify = notify
-      
-      -- Custom highlights for notification levels
-      vim.api.nvim_set_hl(0, 'NotifyINFOTitle', { fg = '#9ece6a' })
-      vim.api.nvim_set_hl(0, 'NotifyERRORTitle', { fg = '#f7768e' })
-      vim.api.nvim_set_hl(0, 'NotifyWARNTitle', { fg = '#e0af68' })
-      --]]
-      
-      -- Simple overseer integration
       local overseer = require('overseer')
       
       -- FIX FOR ERROR MESSAGE TRUNCATION IN QUICKFIX:
@@ -1396,9 +1507,6 @@
       -- Note: We're currently using use_terminal=false in overseer settings which avoids this issue
       -- But some templates might override the strategy, so the monkey-patch helps those cases
       -- Once PR is merged, can add pty_width=500 to strategy config and remove monkey-patch
-      
-      -- Note: Auto-opening quickfix on failure is handled by the on_output_quickfix component
-      -- configured with open_on_exit = "failure" in the overseer settings above
       
       -- Auto-run make on C/C++ file save
       vim.api.nvim_create_autocmd("BufWritePost", {
@@ -1449,6 +1557,10 @@
         end,
       })
       
+      -- ========================================================================
+      -- CUSTOM COMMANDS
+      -- ========================================================================
+      
       -- Simple make command using overseer
       vim.api.nvim_create_user_command('Make', function(opts)
         local args = opts.args ~= "" and vim.split(opts.args, " ") or {}
@@ -1462,17 +1574,16 @@
         overseer.run_template({ name = "cargo", params = { task = task, args = vim.list_slice(args, 2) } })
       end, { nargs = '*', desc = 'Run cargo with arguments (default: check)' })
       
+      -- ========================================================================
+      -- QUICKFIX ENHANCEMENTS
+      -- ========================================================================
       
-      -- Quickfix window enhancements
+      -- Quickfix statusline with error/warning counts
       vim.api.nvim_create_autocmd("FileType", {
         pattern = "qf",
         callback = function()
           local win = vim.api.nvim_get_current_win()
           local buf = vim.api.nvim_get_current_buf()
-          
-          -- Remove line numbers and relative numbers
-          vim.wo[win].number = false
-          vim.wo[win].relativenumber = false
           
           -- Enable cursorline for better visibility
           vim.wo[win].cursorline = true
@@ -1511,9 +1622,33 @@
         end,
       })
       
+      -- ========================================================================
+      -- OPTIONAL: NVIM-NOTIFY SETUP (COMMENTED OUT)
+      -- ========================================================================
       
+      -- Uncomment this section if you want rich notifications with nvim-notify plugin
+      -- Note: You'll need to add nvim-notify to your plugins first
+      --[[
+      local notify = require("notify")
+      notify.setup({
+        stages = "slide",       -- Animation style: fade_in_slide_out, fade, slide, static
+        timeout = 3000,         -- Default timeout for notifications
+        render = "minimal",     -- Render style: default, minimal, compact
+        max_width = 50,
+        max_height = 10,
+        on_open = function(win)
+          vim.api.nvim_win_set_config(win, { focusable = false })
+        end,
+      })
+      vim.notify = notify
+      
+      -- Custom highlights for notification levels
+      vim.api.nvim_set_hl(0, 'NotifyINFOTitle', { fg = '#9ece6a' })
+      vim.api.nvim_set_hl(0, 'NotifyERRORTitle', { fg = '#f7768e' })
+      vim.api.nvim_set_hl(0, 'NotifyWARNTitle', { fg = '#e0af68' })
+      --]]
     '';
-    
+
     # Additional packages for full functionality
     extraPackages = with pkgs; [
       # Language servers
@@ -1525,20 +1660,20 @@
       lua-language-server
       bash-language-server
       yaml-language-server
-      
+
       # Formatters
       nixpkgs-fmt
       rustfmt
       black
       nodePackages.prettier
-      
+
       # Tools
       ripgrep
       fd
       tree-sitter
       gcc # For treesitter compilation
       clang-tools # Provides clangd LSP server
-      
+
       # Font with icon support (for devicons)
       # Note: You may need to configure your terminal to use a Nerd Font
       # such as "MesloLGS NF", "FiraCode Nerd Font", etc.

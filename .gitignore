@@ -23,6 +23,7 @@ Thumbs.db
 *.tmp
 *.bak
 *.orig
+**/__pycache__/
 
 # Security - Prevent accidental secret commits
 *.dec
@@ -45,7 +46,6 @@ secrets.yaml
 !*.template         # Allow template files
 *.pcap
 *.wsl
-CLAUDE.md
 .claude/
 .serena/
 build-profiles/

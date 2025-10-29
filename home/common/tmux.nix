@@ -4,41 +4,43 @@
 let
   # Width thresholds
   narrowWidth = "60";
-  mediumWidth = "100"; 
+  mediumWidth = "100";
   wideWidth = "140";
-  
+
   # Fixed conditional logic using >= comparisons instead of < to avoid nesting issues
   cpuRamSection = ''
     #{?#{>=:#{client_width},${mediumWidth}},#(${config.home.homeDirectory}/bin/tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(${config.home.homeDirectory}/bin/tmux-cpu-mem medium),#(${config.home.homeDirectory}/bin/tmux-cpu-mem narrow)}}
   '';
-  
+
   # System info - load average now included in script
   loadAverage = "#(cat /proc/loadavg | cut -d' ' -f1,2,3)";
-  
-  # Status bar components
-  statusLeft = "#[''$lock_open]⮞#[''$style_normal]#{=10;p10:host_short} %b %d %T";
+
+  # Status bar components - pointer char only shown when nested
+  pointerChar = "→"; #  → ⇛ ➙ ⇒ ➜ ➠ 󰋇  ⮞
+  # Show pointer only when nested - count tmux processes to detect nesting
+  statusLeft = "#[''$lock_open]#(pgrep tmux | wc -l | awk '$1 > 1 {print \"${pointerChar}\"}')#[''$style_normal]#{=10;p10:host_short} %b %d %T";
   # Use responsive design - script handles all the conditional logic
   statusRight = "${cpuRamSection}";
-   
+
 in
 {
   programs.tmux = {
     enable = lib.mkDefault true;
-    
+
     # Basic configuration
-    shortcut = "a";  # Use Ctrl-a as prefix (matching your old config)
-    escapeTime = 1;  # Faster command sequences
-    baseIndex = 1;   # Start window numbering at 1
-    keyMode = "vi";  # Vim-style key bindings
-    mouse = true;    # Enable mouse support
-    historyLimit = 100000;  # Large history (matching your old config)
+    shortcut = "a"; # Use Ctrl-a as prefix (matching your old config)
+    escapeTime = 1; # Faster command sequences
+    baseIndex = 1; # Start window numbering at 1
+    keyMode = "vi"; # Vim-style key bindings
+    mouse = true; # Enable mouse support
+    historyLimit = 100000; # Large history (matching your old config)
     # terminal setting moved to extraConfig for better Microsoft Terminal compatibility
-    aggressiveResize = true;  # From old config
-    focusEvents = true;       # Enable focus events
-    
+    aggressiveResize = true; # From old config
+    focusEvents = true; # Enable focus events
+
     # Shell configuration - use zsh if available, otherwise system default
     shell = if config.programs.zsh.enable then "${config.programs.zsh.package}/bin/zsh" else "${pkgs.bash}/bin/bash";
-    
+
     extraConfig = ''
       # ---- ENVIRONMENT HANDLING ----
       # Update these variables when attaching to ensure they reflect current terminal
@@ -174,31 +176,33 @@ in
       bind -T off F12 \
         set -u prefix \;\
         set -u key-table \;\
-        set -g status-left "#[''$lock_open]⮞#[''$style_normal]#{=10;p10:host_short} %b %d %T" \;\
+        set -g status-left "#[''$lock_open]#(pgrep tmux | wc -l | awk '$1 > 1 {print \"${pointerChar}\"}')#[''$style_normal]#{=10;p10:host_short} %b %d %T" \;\
         send-keys C-a O \;\
         refresh-client -S
       
       # ---- SPECIALIZED BINDINGS ----
-      # Save resurrect session only on detach and session close
-      set-hook -g client-detached 'run-shell "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh > /dev/null 2>&1"'
-      set-hook -g session-closed 'run-shell "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh > /dev/null 2>&1"'
+      # Save resurrect session only on detach and session close, with cleanup
+      set-hook -g client-detached 'run-shell "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh > /dev/null 2>&1; tmux-resurrect-cleanup > /dev/null 2>&1"'
+      set-hook -g session-closed 'run-shell "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh > /dev/null 2>&1; tmux-resurrect-cleanup > /dev/null 2>&1"'
       
-      # Session pickers
-      # Use improved fzf-based picker with Miller/jq for robust parsing
+      # Session pickers with layout options
       # Note: Prefix + t is remapped from default time display
-      bind-key t display-popup -E -w 95% -h 95% "tmux-session-picker"
-      # Alternative: basic interactive mode (without fzf)
+      # Vertical layout - preview above search results
+      bind-key t display-popup -E -w 95% -h 95% 'bash -c "tmux-session-picker --layout vertical"'
+      # Horizontal layout - preview on right side  
+      bind-key T display-popup -E -w 95% -h 95% 'bash -c "tmux-session-picker --layout horizontal"'
+      
+      # Alternative legacy pickers (for fallback)
       bind-key M-T display-popup -E -w 80% -h 80% "tmux-resurrect-browse interactive"
-      # Alternative: just list sessions
       bind-key M-t run-shell "tmux-resurrect-browse list"
       
       # Bitbake logfile opener (conditional on script existence)
-      if-shell '[ -f ~/bin/tmux-open-filename-in-current-pane ]' \
-        "bind-key -n C-b run-shell \"~/bin/tmux-open-filename-in-current-pane 'Logfile of failure stored in:'\""
+      if-shell '[ -f "${config.home.homeDirectory}/bin/tmux-open-filename-in-current-pane" ]' \
+        "bind-key -n C-b run-shell \"${config.home.homeDirectory}/bin/tmux-open-filename-in-current-pane 'Logfile of failure stored in:'\""
       
 
     '';
-    
+
     plugins = with pkgs.tmuxPlugins; [
       sensible
       yank
@@ -226,6 +230,9 @@ in
               "~*loop *" \
               "~claude" \
           '
+          
+          # Cleanup empty resurrect files on save
+          set -g @resurrect-save-command-strategy 'tmux-resurrect-cleanup'
         '';
       }
       {
@@ -237,22 +244,22 @@ in
           # set -g @continuum-systemd-start-cmd 'new-session -d'
         '';
       }
-        #{
-        #  plugin = cpu;
-        #  extraConfig = ''
-        #    set -g @cpu_percentage_format "%3.0f%%"
-        #    set -g @ram_percentage_format "%3.0f%%"
-        #    set -g @cpu_low_icon "="
-        #    set -g @cpu_medium_icon "≡" 
-        #    set -g @cpu_high_icon "≣"
-        #    set -g @cpu_medium_thresh "25"
-        #    set -g @cpu_high_thresh "75"
-        #    run-shell 'sleep 0.1 && ${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/cpu.tmux'
-        #  '';
-        #}
+      #{
+      #  plugin = cpu;
+      #  extraConfig = ''
+      #    set -g @cpu_percentage_format "%3.0f%%"
+      #    set -g @ram_percentage_format "%3.0f%%"
+      #    set -g @cpu_low_icon "="
+      #    set -g @cpu_medium_icon "≡" 
+      #    set -g @cpu_high_icon "≣"
+      #    set -g @cpu_medium_thresh "25"
+      #    set -g @cpu_high_thresh "75"
+      #    run-shell 'sleep 0.1 && ${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/cpu.tmux'
+      #  '';
+      #}
     ];
   };
-  
+
   # CRITICAL: Create persistent directory for tmux-resurrect saves
   home.file.".local/share/tmux/resurrect/.keep" = {
     text = ''
@@ -260,21 +267,46 @@ in
       # tmux-resurrect saves will be stored here and persist across home-manager switches
     '';
   };
-  
+
   # Ensure system tools are available
   home.packages = with pkgs; [
-    procps  # Provides tools like ps, top, free for system monitoring
-    bc      # Basic calculator
-    
+    procps # Provides tools like ps, top, free for system monitoring
+    bc # Basic calculator
+
     # Custom tmux window status format script with proper Nix path substitution
-    (writeScriptBin "tmux-window-status-format" (builtins.replaceStrings 
+    (pkgs.writers.writeBashBin "tmux-window-status-format" (builtins.replaceStrings
       [ ''source "''${HOME}/bin/functions.sh"'' ]
-      [ "source \"${config.home.homeDirectory}/bin/functions.sh\"" ]
+      [ "source \"${config.home.homeDirectory}/.nix-profile/lib/bash-utils/general-utils.bash\"" ]
       (builtins.readFile ../files/bin/tmux-window-status-format)
     ))
-    
+
+    # Tmux resurrect cleanup script
+    (pkgs.writers.writeBashBin "tmux-resurrect-cleanup" ''
+      #!/usr/bin/env bash
+      
+      # tmux-resurrect-cleanup: Clean up empty and corrupted session files
+      
+      RESURRECT_DIR="${config.home.homeDirectory}/.local/share/tmux/resurrect"
+      
+      if [[ ! -d "$RESURRECT_DIR" ]]; then
+        exit 0
+      fi
+      
+      # Find and remove empty or near-empty session files (< 50 bytes)
+      find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -size -50c -delete 2>/dev/null || true
+      
+      # Clean up files older than 30 days (keep last 30 days of sessions)
+      find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -mtime +30 -delete 2>/dev/null || true
+      
+      # Limit total session files to 50 most recent
+      if command -v ls >/dev/null 2>&1; then
+        cd "$RESURRECT_DIR" 2>/dev/null || exit 0
+        ls -t tmux_resurrect_*.txt 2>/dev/null | tail -n +51 | xargs -r rm -f 2>/dev/null || true
+      fi
+    '')
+
     # Tmux resurrect session management scripts
-    (writeScriptBin "tmux-resurrect-browse" ''
+    (pkgs.writers.writeBashBin "tmux-resurrect-browse" ''
       #!/usr/bin/env bash
       
       # tmux-resurrect-browse: Simple resurrect session browser

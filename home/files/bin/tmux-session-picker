@@ -1,0 +1,989 @@
+#!/usr/bin/env bash
+
+# tmux-session-picker: Clean tmux resurrect session picker with adaptive column layout
+# Uses direct text processing for performance and maintainability
+
+set -euo pipefail
+
+# Source utility libraries
+source terminal-utils
+source color-utils  
+source path-utils
+
+RESURRECT_DIR="${HOME}/.local/share/tmux/resurrect"
+SCRIPT_PATH="$0"
+
+get_display_width() {
+    local text="$1"
+    
+    # Handle empty text
+    if [[ -z "$text" ]]; then
+        echo "0"
+        return
+    fi
+    
+    local width
+    
+    # Fast approximation for ASCII-only strings (common case)
+    # Simple ASCII detection: no unicode characters above U+007F
+    if [[ "$text" = "${text//[^[:print:]]/}" ]] && [[ "$text" = "${text//[^[:ascii:]]/}" ]]; then
+        width=${#text}
+    else
+        # Use Python for complex unicode (Nix guarantees python3 availability)
+        width=$(python3 -c "
+import unicodedata
+import sys
+text = sys.argv[1] if len(sys.argv) > 1 else ''
+width = 0
+for char in text:
+    if unicodedata.category(char).startswith('C'):
+        continue
+    if unicodedata.east_asian_width(char) in ('F', 'W'):
+        width += 2
+    elif unicodedata.combining(char):
+        width += 0
+    else:
+        width += 1
+print(width)
+" "$text" 2>/dev/null || echo ${#text})
+    fi
+    
+    echo "$width"
+}
+
+
+truncate_to_display_width() {
+    local text="$1"
+    local max_width="$2"
+    local ellipsis="${3:-…}"
+    
+    local current_width=$(get_display_width "$text")
+    
+    # If it fits, return as-is
+    if [[ $current_width -le $max_width ]]; then
+        echo "$text"
+        return
+    fi
+    
+    local ellipsis_width=$(get_display_width "$ellipsis")
+    local target_width=$((max_width - ellipsis_width))
+    
+    # For ASCII-only text, use simple calculation
+    if [[ "$text" = "${text//[^[:print:]]/}" ]] && [[ "$text" = "${text//[^[:ascii:]]/}" ]]; then
+        local truncate_len=$target_width
+        [[ $truncate_len -gt ${#text} ]] && truncate_len=${#text}
+        echo "${text:0:$truncate_len}$ellipsis"
+        return
+    fi
+    
+    # For Unicode text, use linear search from estimated position
+    # Start from a reasonable estimate (assumes average 1.2 chars per column)
+    local estimated_start=$((target_width * 80 / 100))
+    [[ $estimated_start -gt ${#text} ]] && estimated_start=${#text}
+    
+    # Search backwards from estimate to find safe truncation point
+    local best_len=0
+    for (( len=estimated_start; len >= 0; len-- )); do
+        local substring="${text:0:$len}"
+        local sub_width=$(get_display_width "$substring")
+        
+        if [[ $sub_width -le $target_width ]]; then
+            best_len=$len
+            break
+        fi
+    done
+    
+    echo "${text:0:$best_len}$ellipsis"
+}
+
+# Default configuration (can be overridden by environment or arguments)
+DEFAULT_LAYOUT="${TMUX_SESSION_PICKER_LAYOUT:-horizontal}"
+DEFAULT_PREVIEW_SIZE="${TMUX_SESSION_PICKER_PREVIEW_SIZE:-60%}"
+
+# Color setup using library functions with fallback compatibility
+setup_colors() {
+    local use_colors="${1:-auto}"
+    
+    # Use color-utils library for detection when available, fallback to manual
+    if command -v detect_color_support >/dev/null 2>&1; then
+        # Library available - use it for color detection
+        if [[ "$use_colors" == "never" ]] || [[ "$use_colors" == "auto" && ! -t 1 ]]; then
+            _init_no_color_fallbacks 2>/dev/null || true
+        else
+            detect_color_support >/dev/null 2>&1 || true
+        fi
+        
+        # Use library colors directly with fallback values
+        BOLD="${COLOR_BOLD:-\033[1m}"
+        DIM="${COLOR_DIM:-\033[2m}"
+        RESET="${COLOR_RESET:-\033[0m}"
+        YELLOW="${COLOR_YELLOW:-\033[33m}"
+        CYAN="${COLOR_CYAN:-\033[36m}"
+        BLUE="${COLOR_BLUE:-\033[34m}"
+        GREEN="${COLOR_GREEN:-\033[32m}"
+        MAGENTA="${COLOR_MAGENTA:-\033[35m}"
+    else
+        # Fallback implementation when library unavailable
+        if [[ "$use_colors" == "never" ]] || [[ "$use_colors" == "auto" && ! -t 1 ]]; then
+            BOLD='' DIM='' RESET='' YELLOW='' CYAN='' BLUE='' GREEN='' MAGENTA=''
+        else
+            BOLD='\033[1m' DIM='\033[2m' RESET='\033[0m' 
+            YELLOW='\033[33m' CYAN='\033[36m' BLUE='\033[34m' 
+            GREEN='\033[32m' MAGENTA='\033[35m'
+        fi
+    fi
+}
+
+# Helper function to get terminal width consistently
+get_terminal_width() {
+    if declare -f detect_terminal_width >/dev/null 2>&1; then
+        detect_terminal_width
+    else
+        echo "${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    fi
+}
+export -f get_terminal_width  # Make function available to all subprocesses (including GNU parallel workers)
+
+# Initialize colors (deferred until needed)
+
+# Show help information
+show_help() {
+    cat << EOF
+tmux-session-picker - Interactive tmux session picker with configurable layouts
+
+USAGE:
+    tmux-session-picker [OPTIONS]
+    tmux-session-picker --preview <session-data>
+    tmux-session-picker --list
+
+OPTIONS:
+    -l, --layout LAYOUT     Set fzf layout: 'horizontal' or 'vertical' (default: $DEFAULT_LAYOUT)
+    -s, --size SIZE         Set preview window size, e.g., '60%', '40%' (default: $DEFAULT_PREVIEW_SIZE)
+    -v, --verbose          Enable verbose error messages and diagnostics
+    -h, --help             Show this help message
+
+LAYOUTS:
+    horizontal             Preview window on the right side (default)
+    vertical               Preview window above the search results
+
+ENVIRONMENT VARIABLES:
+    TMUX_SESSION_PICKER_LAYOUT        Default layout (horizontal|vertical)
+    TMUX_SESSION_PICKER_PREVIEW_SIZE  Default preview window size
+
+TMUX KEY BINDINGS:
+    Prefix + t            Launch with vertical layout
+    Prefix + T            Launch with horizontal layout
+
+INTERACTIVE KEY BINDINGS (within fzf):
+    Ctrl-R                Reload session list
+    Ctrl-L                Show current layout info
+    Ctrl-T, ←, →          Toggle between horizontal/vertical layouts
+    Enter                 Select and restore session
+    Esc                   Cancel
+
+EXAMPLES:
+    tmux-session-picker                               # Use defaults
+    tmux-session-picker --layout vertical             # Vertical layout
+    tmux-session-picker -l horizontal -s 50%          # Horizontal with 50% preview
+    TMUX_SESSION_PICKER_LAYOUT=vertical \\
+        tmux-session-picker                            # Set via environment
+
+INTERNAL OPTIONS:
+    --preview <data>       Generate preview for session data (used by fzf)
+    --list                Show session list (used by fzf reload)
+
+EOF
+}
+
+# Parse command line arguments
+parse_arguments() {
+    LAYOUT="$DEFAULT_LAYOUT"
+    PREVIEW_SIZE="$DEFAULT_PREVIEW_SIZE"
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -l|--layout)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --layout requires a value (horizontal|vertical)" >&2
+                    exit 1
+                fi
+                case "$2" in
+                    horizontal|vertical)
+                        LAYOUT="$2"
+                        ;;
+                    *)
+                        echo "Error: Invalid layout '$2'. Must be 'horizontal' or 'vertical'" >&2
+                        exit 1
+                        ;;
+                esac
+                shift 2
+                ;;
+            -s|--size)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --size requires a value (e.g., '60%', '40%')" >&2
+                    exit 1
+                fi
+                PREVIEW_SIZE="$2"
+                shift 2
+                ;;
+            -v|--verbose)
+                # Verbose mode handled locally per component
+                shift
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            --preview|--list)
+                # These are handled in the main case statement at the end
+                return 0
+                ;;
+            *)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Use --help for usage information" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
+
+# Function to abbreviate common paths
+abbreviate_path() {
+    local path="$1"
+    # Common abbreviations
+    path="${path/#$HOME\//~/}"
+    path="${path/#\/home\/$USER\//~/}"
+    
+    # Abbreviate common directories (using bash parameter expansion for speed)
+    path="${path//~\/projects\//~/p/}"
+    path="${path//~\/Projects\//~/P/}"
+    path="${path//~\/src\//~/s/}"
+    path="${path//~\/Documents\//~/D/}"
+    path="${path//~\/Downloads\//~/dl/}"
+    path="${path//~\/Desktop\//~/dt/}"
+    path="${path//\/usr\/local\//\/u\/l\/}"
+    path="${path//\/var\/log\//\/v\/l\/}"
+    
+    # If still too long, show last two segments (using display width)
+    if [[ $(get_display_width "$path") -gt 20 ]]; then
+        local segments=(${path//\// })
+        local count=${#segments[@]}
+        if [[ $count -gt 2 ]]; then
+            path="…/${segments[$count-2]}/${segments[$count-1]}"
+        fi
+    fi
+    
+    echo "$path"
+}
+
+
+
+# Shared session row formatting function
+# Args: session, window_count, pane_count, timestamp, window_summary, is_current, [term_width]
+# Returns: formatted display line
+_format_session_row() {
+    local session="$1" window_count="$2" pane_count="$3" timestamp="$4" window_summary="$5" is_current="$6"
+    local term_width="${7:-$(get_terminal_width)}"
+    
+    # Initialize colors (inherit from environment or set defaults)
+    local BOLD="${BOLD:-'\033[1m'}" DIM="${DIM:-'\033[2m'}" RESET="${RESET:-'\033[0m'}"
+    local YELLOW="${YELLOW:-'\033[33m'}" CYAN="${CYAN:-'\033[36m'}" BLUE="${BLUE:-'\033[34m'}" 
+    local GREEN="${GREEN:-'\033[32m'}" MAGENTA="${MAGENTA:-'\033[35m'}"
+    
+    # Calculate layout dimensions
+    local metadata_width=1 session_width=7 date_width=11 stats_width=5 separator_chars=3
+    local remaining_width=$((term_width - metadata_width - session_width - date_width - stats_width - separator_chars))
+    [[ $remaining_width -lt 45 ]] && remaining_width=45
+    
+    # Format date/time from timestamp
+    local formatted_date="--"
+    if [[ "$timestamp" =~ ^[0-9]{8}T[0-9]{6}$ ]]; then
+        local month="${timestamp:4:2}"
+        local day="${timestamp:6:2}"
+        local hour="${timestamp:9:2}"
+        local minute="${timestamp:11:2}"
+        formatted_date="${month}/${day} ${hour}:${minute}"
+    elif [[ "$timestamp" =~ ^[0-9]{8}_[0-9]{6}$ ]]; then
+        local month="${timestamp:4:2}"
+        local day="${timestamp:6:2}"
+        local hour="${timestamp:9:2}"
+        local minute="${timestamp:11:2}"
+        formatted_date="${month}/${day} ${hour}:${minute}"
+    fi
+    
+    # Active session marker
+    local metadata="  "
+    if [[ "$is_current" == "true" ]]; then
+        metadata="★ "
+    fi
+    
+    # Truncate session name if needed
+    local display_session="$session"
+    local session_display_width=$(get_display_width "$display_session")
+    if [[ $session_display_width -gt $session_width ]]; then
+        display_session=$(truncate_to_display_width "$display_session" $((session_width - 1)))
+        display_session="${display_session}…"
+    fi
+    
+    # Process and abbreviate summary paths/commands
+    local display_summary="$window_summary"
+    
+    # If summary contains tokens, apply smart abbreviation based on available width and token count
+    if [[ -n "$window_summary" && ! "$window_summary" =~ ^[0-9]+w\ [0-9]+p$ ]]; then
+        # Split summary into tokens
+        local -a tokens
+        read -ra tokens <<< "$window_summary"
+        local token_count=${#tokens[@]}
+        
+        # Calculate smart abbreviation width per token based on available space
+        if [[ $token_count -gt 0 ]]; then
+            # Prioritized token display strategy for readability
+            local abbreviated_tokens=()
+            local space_used=0
+            local min_readable_width=12
+            local max_token_width=18
+            local tokens_shown=0
+            
+            # Show tokens until we run out of readable space
+            for token in "${tokens[@]}"; do
+                # Calculate space needed for this token (including separator if not first)
+                local token_width=${#token}
+                local needed_space=$token_width
+                [[ $tokens_shown -gt 0 ]] && needed_space=$((needed_space + 1))  # space separator
+                
+                # If token needs truncation, use readable width
+                if [[ $token_width -gt $max_token_width ]]; then
+                    needed_space=$max_token_width
+                    [[ $tokens_shown -gt 0 ]] && needed_space=$((needed_space + 1))
+                fi
+                
+                # Check if we have enough space for readable token
+                if [[ $((space_used + needed_space)) -le $remaining_width ]]; then
+                    # Add token (truncate if needed but keep readable)
+                    if [[ $token_width -gt $max_token_width ]]; then
+                        abbreviated_tokens+=("$(truncate_middle_to_display_width "$token" "$max_token_width")")
+                        space_used=$((space_used + max_token_width))
+                    else
+                        abbreviated_tokens+=("$token")
+                        space_used=$((space_used + token_width))
+                    fi
+                    [[ $tokens_shown -gt 0 ]] && space_used=$((space_used + 1))  # separator space
+                    tokens_shown=$((tokens_shown + 1))
+                else
+                    # Not enough space for readable token, stop here
+                    break
+                fi
+            done
+            
+            # Add indicator if we truncated tokens
+            local remaining_tokens=$((token_count - tokens_shown))
+            if [[ $remaining_tokens -gt 0 ]]; then
+                local indicator="+$remaining_tokens"
+                # Check if we have space for indicator
+                local indicator_space=$((${#indicator} + 1))  # space + indicator
+                if [[ $((space_used + indicator_space)) -le $remaining_width ]]; then
+                    abbreviated_tokens+=("$indicator")
+                fi
+            fi
+            
+            # Reconstruct summary with abbreviated tokens
+            display_summary="${abbreviated_tokens[*]}"
+        fi
+    fi
+    
+    # Final truncation to ensure it fits the column
+    display_summary=$(truncate_to_display_width "$display_summary" "$remaining_width")
+    
+    # Create formatted display line
+    local display_line
+    printf -v display_line "${YELLOW}%-*s${RESET}${CYAN}${BOLD}%-*s${RESET} ${BLUE}%-*s${RESET} ${GREEN}%*s${RESET} ${DIM}%-*s${RESET}" \
+        "$metadata_width" "$metadata" \
+        "$session_width" "$display_session" \
+        "$date_width" "$formatted_date" \
+        "$stats_width" "$(printf '%2d/%2d' "$window_count" "$pane_count")" \
+        "$remaining_width" "$display_summary"
+    
+    echo "$display_line"
+}
+
+# GNU Parallel Processing Architecture Functions
+# This function is designed to be completely self-contained with zero environment dependencies
+# Args: session_file_path - absolute path to tmux session file
+# Args: terminal_width - terminal width for consistent formatting (optional)
+# Output: Complete session data + preview content in structured format for GNU parallel collection
+# Returns: 0 on success, 1 on failure
+process_session_file_complete() {
+    local session_file="$1"
+    local terminal_width="$2"
+    
+    # Validate input
+    if [[ -z "$session_file" ]]; then
+        echo "Error: No session file path provided" >&2
+        return 1
+    fi
+    
+    # Self-contained context discovery (zero environment dependencies)
+    local resurrect_dir=$(dirname "$session_file")
+    local current_session_file=$(readlink -f "$resurrect_dir/last" 2>/dev/null || echo "")
+    local timestamp=$(basename "$session_file" | sed 's/tmux_resurrect_\(.*\)\.txt/\1/')
+    
+    # Validate file exists and is readable
+    if [[ ! -f "$session_file" ]]; then
+        echo "Error: Session file not found: $session_file" >&2
+        return 1
+    fi
+    
+    if [[ ! -r "$session_file" ]]; then
+        echo "Error: Cannot read session file: $session_file" >&2
+        return 1
+    fi
+    
+    # Initialize colors for worker process (self-contained setup)
+    local BOLD='\033[1m' DIM='\033[2m' RESET='\033[0m'
+    local YELLOW='\033[33m' CYAN='\033[36m' BLUE='\033[34m' 
+    local GREEN='\033[32m' MAGENTA='\033[35m'
+    
+    # Parse file using optimized parser (self-contained)
+    local parser_output parser_exit_code
+    parser_output=$(tmux-parser-optimized "$session_file" "$current_session_file" 2>/dev/null)
+    parser_exit_code=$?
+    
+    if [[ $parser_exit_code -ne 0 ]] || [[ -z "$parser_output" ]]; then
+        echo "Error: Failed to parse session file: $session_file" >&2
+        return 1
+    fi
+    
+    # Extract parsed data
+    local session window_count pane_count parsed_timestamp window_summary is_current
+    IFS=$'\x1F' read -r session window_count pane_count parsed_timestamp window_summary is_current <<< "$parser_output"
+    
+    # Validate and default empty fields
+    [[ -z "$session" ]] && session="unknown"
+    [[ -z "$window_count" ]] && window_count="0"
+    [[ -z "$pane_count" ]] && pane_count="0"
+    [[ -z "$parsed_timestamp" ]] && parsed_timestamp="$timestamp"
+    [[ -z "$window_summary" ]] && window_summary=""
+    [[ -z "$is_current" ]] && is_current="false"
+    
+    # Use shared formatting function
+    local display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$parsed_timestamp" "$window_summary" "$is_current" "$terminal_width")
+    
+    # Output structured format for GNU parallel collection:
+    # Line 1: Formatted session data for fzf display (with tab + timestamp)
+    printf "%s\t%s\n" "$display_line" "$parsed_timestamp"
+    
+    # Line 2: Preview cache marker
+    echo "##PREVIEW_CACHE:${parsed_timestamp}##"
+    
+    # Lines 3+: Complete preview content
+    if [[ "$is_current" == "true" ]]; then
+        echo -e "${YELLOW}${BOLD}* CURRENTLY ACTIVE SESSION${RESET}"
+    fi
+    
+    # Generate preview content
+    while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+        # Skip windows that don't belong to our target session
+        [[ "$session_name" != "$session" ]] && continue
+        
+        window_name="${window_name#:}"
+        local marker="○"
+        [[ "$active" == "1" ]] && marker="●"
+        
+        echo -e "  ${marker} ${CYAN}${BOLD}Window ${window_idx}: ${window_name}${RESET}"
+        
+        # Show panes for this window
+        grep "^pane" "$session_file" | while IFS=$'\t' read -r ptype psession pwindow pane_idx pwindow_name pane_id title path focused command args; do
+            if [[ "$psession" == "$session_name" && "$pwindow" == "$window_idx" ]]; then
+                local pmarker=" "
+                [[ "$focused" == "1" ]] && pmarker="▸"
+                
+                title="${title#:}"
+                [[ -z "$title" || "$title" == ":" ]] && title="pane${pane_idx}"
+                
+                command="${command:-shell}"
+                
+                # Enhance command with arguments if available
+                if [[ -n "$args" && "$args" != ":" && "$args" != "$command" ]]; then
+                    # Clean up args and extract just the arguments part
+                    args="${args#:}"
+                    # Extract arguments by removing the command path from the beginning
+                    # Pattern: /path/to/command arg1 arg2 -> arg1 arg2
+                    if [[ "$args" =~ ^[^[:space:]]+[[:space:]]+(.+)$ ]]; then
+                        local extracted_args="${BASH_REMATCH[1]}"
+                        # Limit args to reasonable length to prevent overflow
+                        local max_args_length=25
+                        if [[ ${#extracted_args} -gt $max_args_length ]]; then
+                            extracted_args="${extracted_args:0:$((max_args_length - 1))}…"
+                        fi
+                        command="$command $extracted_args"
+                    fi
+                fi
+                
+                # Simple path abbreviation for preview
+                path="${path/#$HOME\//~/}"
+                path="${path//~\/src\//~/s/}"
+                
+                # Simple truncation for preview (no complex unicode handling in worker)
+                local truncated_title="${title:0:20}"
+                [[ ${#title} -gt 20 ]] && truncated_title="${title:0:19}…"
+                
+                # Increase command column width to accommodate richer command+args info
+                local truncated_command="${command:0:20}"
+                [[ ${#command} -gt 20 ]] && truncated_command="${command:0:19}…"
+                
+                printf "    %s \033[35m%-20s\033[0m \033[34m%-20s\033[0m %s\n" \
+                    "$pmarker" "$truncated_title" "$truncated_command" "$path"
+            fi
+        done
+    done < <(grep "^window" "$session_file")
+    
+    return 0
+}
+
+# Process session files in parallel using GNU parallel
+# Args: session_files - array of file paths to process
+# Output: combined parsed data from all files (formatted display lines only)
+parse_all_files_parallel() {
+    local -a session_files=("$@")
+    
+    # Detect terminal width once in main process for consistent formatting
+    local terminal_width=$(get_terminal_width)
+    
+    # Create debug directory for stderr capture
+    local debug_dir="/tmp/tmux-session-picker-debug-$$"
+    mkdir -p "$debug_dir"
+    
+    # Export worker function for parallel processing (uses library functions)
+    export -f process_session_file_complete
+    export -f _format_session_row
+    export -f get_display_width
+    export -f truncate_to_display_width  
+    export -f truncate_middle_to_display_width
+    # Libraries sourced: terminal-utils, color-utils, path-utils
+    
+    
+    export PARALLEL_CITATION="will-cite"
+    
+    # Use streaming approach without --keep-order for progressive population
+    local parallel_flags="--will-cite --jobs 0"
+    
+    # Process files in parallel using the complete worker function
+    # Extract only the first line (formatted display data) from each worker output
+    # Capture stderr to individual files for debugging (only when debugging is needed)
+    if [[ "${TMUX_PICKER_DEBUG:-false}" == "true" ]]; then
+        printf '%s\n' "${session_files[@]}" | \
+            parallel $parallel_flags \
+                'process_session_file_complete {} '"$terminal_width"' 2>'"$debug_dir"'/worker-{#}.stderr | head -n 1'
+        echo "Debug files preserved in: $debug_dir" >&2
+        echo "Worker stderr files: $debug_dir/worker-*.stderr" >&2
+    else
+        # Normal mode: send stderr to /dev/null for clean operation
+        printf '%s\n' "${session_files[@]}" | \
+            parallel $parallel_flags \
+                'process_session_file_complete {} '"$terminal_width"' 2>/dev/null | head -n 1'
+        # Clean up debug directory in normal mode
+        rm -rf "$debug_dir"
+    fi
+}
+
+
+# Format a single session row for display
+# Args: session_entry - \x1E-separated session data string
+# Args: terminal_width - terminal width for consistent formatting (optional)
+# Output: formatted session row with tab-separated timestamp
+format_single_session_row() {
+    local session_entry="$1"
+    local terminal_width="$2"
+    
+    # Unpack session data from \x1E-separated string
+    local session window_count pane_count timestamp summary is_active
+    IFS=$'\x1E' read -r session window_count pane_count timestamp summary is_active <<< "$session_entry"
+    
+    # Use shared formatting function
+    local display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_active" "$terminal_width")
+    
+    # Output as single field + tab + timestamp
+    printf "%s\t%s\n" "$display_line" "$timestamp"
+}
+
+
+
+# Internal function to generate preview content from parsed data
+_generate_preview_content() {
+    local file="$1" 
+    local session="$2"
+    local is_current="$3"
+    
+    # Show current session indicator
+    if [[ "$is_current" == "true" ]]; then
+        echo -e "${YELLOW}${BOLD}* CURRENTLY ACTIVE SESSION${RESET}"
+    fi
+    
+    # Show detailed window and pane information (only for the detected session)
+    while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+        # Skip windows that don't belong to our target session
+        [[ "$session_name" != "$session" ]] && continue
+        
+        window_name="${window_name#:}"
+        local marker="○"  # Default to inactive
+        [[ "$active" == "1" ]] && marker="●"  # Mark active window
+        
+        echo -e "  ${marker} ${CYAN}${BOLD}Window ${window_idx}: ${window_name}${RESET}"
+        
+        # Show panes for this window - cleaned up separators
+        grep "^pane" "$file" | while IFS=$'\t' read -r ptype psession pwindow pane_idx pwindow_name pane_id title path focused command args; do
+            if [[ "$psession" == "$session_name" && "$pwindow" == "$window_idx" ]]; then
+                local pmarker=" "
+                [[ "$focused" == "1" ]] && pmarker="▸"
+                
+                title="${title#:}"
+                [[ -z "$title" || "$title" == ":" ]] && title="pane${pane_idx}"
+                
+                command="${command:-shell}"
+                
+                # Enhance command with arguments if available
+                if [[ -n "$args" && "$args" != ":" && "$args" != "$command" ]]; then
+                    # Clean up args and extract just the arguments part
+                    args="${args#:}"
+                    # Extract arguments by removing the command path from the beginning
+                    # Pattern: /path/to/command arg1 arg2 -> arg1 arg2
+                    if [[ "$args" =~ ^[^[:space:]]+[[:space:]]+(.+)$ ]]; then
+                        local extracted_args="${BASH_REMATCH[1]}"
+                        # Limit args to reasonable length to prevent overflow
+                        local max_args_length=25
+                        if [[ ${#extracted_args} -gt $max_args_length ]]; then
+                            extracted_args=$(truncate_to_display_width "$extracted_args" $((max_args_length - 1)))
+                            extracted_args="${extracted_args}…"
+                        fi
+                        command="$command $extracted_args"
+                    fi
+                fi
+                
+                path=$(abbreviate_path "$path")
+                
+                # Use unicode-aware truncation and padding for proper column alignment
+                local truncated_title=$(truncate_to_display_width "$title" 20)
+                # Increase command column width to accommodate richer command+args info
+                local truncated_command=$(truncate_to_display_width "$command" 20)
+                
+                # Manually pad to exact display width since printf doesn't understand unicode width
+                local title_width=$(get_display_width "$truncated_title")
+                local command_width=$(get_display_width "$truncated_command")
+                local title_padding=$(printf "%*s" $((20 - title_width)) "")
+                local command_padding=$(printf "%*s" $((20 - command_width)) "")
+                
+                printf "    %s \033[35m%s%s\033[0m \033[34m%s%s\033[0m %s\n" \
+                    "$pmarker" "$truncated_title" "$title_padding" "$truncated_command" "$command_padding" "$path"
+            fi
+        done
+    done < <(grep "^window" "$file")
+}
+
+# Function to generate preview
+generate_preview() {
+    local file="$1"
+    
+    # Initialize current session file reference
+    local current_session_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
+    
+    # Validate file exists and is readable before parsing
+    if [[ ! -f "$file" ]]; then
+        echo "╔══════════════════════════════════════════════╗"
+        echo "║            FILE NOT FOUND                    ║"
+        echo "╚══════════════════════════════════════════════╝"
+        echo "File: $(basename "$file")"
+        echo "The session file does not exist."
+        return
+    fi
+    
+    if [[ ! -r "$file" ]]; then
+        echo "╔══════════════════════════════════════════════╗"
+        echo "║            ACCESS DENIED                     ║"
+        echo "╚══════════════════════════════════════════════╝"
+        echo "File: $(basename "$file")"
+        echo "Cannot read the session file."
+        return
+    fi
+    
+    # Parse file using optimized parser
+    local file_data
+    file_data=$(tmux-parser-optimized "$file" "$current_session_file" 2>/dev/null) || {
+        echo "╔══════════════════════════════════════════════╗"
+        echo "║         CORRUPTED SESSION FILE               ║"
+        echo "╚══════════════════════════════════════════════╝"
+        echo "File: $(basename "$file")"
+        echo "This session file cannot be parsed or restored."
+        echo "This may be due to malformed tmux-resurrect data."
+        return
+    }
+    
+    # Extract parsed data from optimized parser output
+    local session window_count pane_count timestamp window_summary is_current
+    IFS=$'\x1F' read -r session window_count pane_count timestamp window_summary is_current <<< "$file_data"
+    
+    # Generate preview content using shared logic
+    _generate_preview_content "$file" "$session" "$is_current"
+}
+
+generate_preview_for_worker() {
+    local file="$1"
+    local timestamp="$2"
+    local file_data="$3"
+    
+    # Set up colors for worker process
+    setup_colors "never"
+    
+    # Validate inputs
+    if [[ ! -f "$file" || ! -r "$file" ]]; then
+        cat << EOF
+╔══════════════════════════════════════════════╗
+║            FILE NOT ACCESSIBLE               ║
+╚══════════════════════════════════════════════╝
+File: $(basename "$file")
+The session file cannot be read.
+EOF
+        return
+    fi
+    
+    # Validate pre-parsed data
+    if [[ -z "$file_data" ]]; then
+        cat << EOF
+╔══════════════════════════════════════════════╗
+║         CORRUPTED SESSION FILE               ║
+╚══════════════════════════════════════════════╝
+File: $(basename "$file")
+This session file cannot be parsed or restored.
+This may be due to malformed tmux-resurrect data.
+EOF
+        return
+    fi
+    
+    # Extract parsed data from optimized parser output (reusing existing data)
+    local session window_count pane_count parsed_timestamp window_summary is_current
+    IFS=$'\x1F' read -r session window_count pane_count parsed_timestamp window_summary is_current <<< "$file_data"
+    
+    # Generate preview content using shared logic
+    _generate_preview_content "$file" "$session" "$is_current"
+}
+
+# Get session files sorted by modification time (newest first)
+# Output: Array of session file paths sorted by newest first
+get_session_files_sorted() {
+    local session_files=()
+    
+    # Find all resurrect files using fd with stat-based sorting for newest-first
+    if [[ -d "$RESURRECT_DIR" && -r "$RESURRECT_DIR" ]]; then
+        # Use fd with stat-based sorting for precise modification time ordering
+        local fd_output
+        if fd_output=$(fd --type f "tmux_resurrect_.*\.txt" "$RESURRECT_DIR" --exec stat --format='%Y\t{}' 2>/dev/null | sort -nr | cut -f2); then
+            while IFS= read -r file; do
+                # Additional validation: ensure file is readable and non-empty
+                if [[ -f "$file" && -r "$file" && -s "$file" ]]; then
+                    session_files+=("$file")
+                else
+                    # Skip unreadable files silently
+                    :
+                fi
+            done <<< "$fd_output"
+        else
+            # fd command failed - continue silently
+            :
+        fi
+    else
+        # Directory not accessible - continue silently
+        :
+    fi
+    
+    # Output the sorted file list
+    printf '%s\n' "${session_files[@]}"
+}
+
+
+# Function to get session list (coordinator role - discovery, headers, and delegation)
+get_session_list() {
+    local session_files=()
+    
+    # Find all resurrect files (sorted newest first) using fd for performance
+    if [[ -d "$RESURRECT_DIR" && -r "$RESURRECT_DIR" ]]; then
+        # Use fd with error handling for file discovery
+        local fd_output
+        if fd_output=$(fd --type f "tmux_resurrect_.*\.txt" "$RESURRECT_DIR" 2>/dev/null | sort -r); then
+            while IFS= read -r file; do
+                # Additional validation: ensure file is readable and non-empty
+                if [[ -f "$file" && -r "$file" && -s "$file" ]]; then
+                    session_files+=("$file")
+                else
+                    echo "Warning: Skipping unreadable or empty session file: $(basename "$file")" >&2
+                fi
+            done <<< "$fd_output"
+        else
+            echo "Warning: Failed to scan resurrect directory with fd" >&2
+        fi
+    else
+        echo "Warning: Resurrect directory is not accessible: $RESURRECT_DIR" >&2
+    fi
+    
+    # Main coordinator role: generate headers and delegate data formatting to workers
+    if [[ ${#session_files[@]} -gt 0 ]]; then
+        # Coordinator generates table headers (for test compatibility)
+        echo "  SESSION  DATE  TIME #W/#P SUMMARY##HEADER"
+        echo "────────────────────────────────────────────##SEPARATOR"
+        
+        # Process session files in parallel using GNU parallel
+        parse_all_files_parallel "${session_files[@]}"
+    else
+        # No session files found - provide informative message
+        echo "No tmux sessions found in $RESURRECT_DIR"
+    fi
+}
+
+# Build fzf command with layout-specific configuration (coordinator role - no formatting)
+build_fzf_command() {
+    local layout="$1"
+    local preview_size="$2"
+    
+    # Configure preview window based on layout
+    local preview_window
+    case "$layout" in
+        horizontal)
+            preview_window="right:${preview_size}:wrap"
+            ;;
+        vertical)
+            preview_window="up:${preview_size}:wrap"
+            ;;
+        *)
+            echo "Error: Invalid layout '$layout'" >&2
+            exit 1
+            ;;
+    esac
+    
+    # Build the fzf command - using an array for better argument handling
+    # Note: Removed --height to use fullscreen (default behavior)
+    local fzf_args=(
+        --layout=reverse
+        --border=rounded
+        --header="  SESSION  DATE  TIME #W/#P SUMMARY"
+        --ansi
+        --cycle
+        --no-separator
+        --delimiter="\t"
+        --with-nth="1"
+        --ellipsis='…'
+        --bind="ctrl-r:reload(${SCRIPT_PATH} --list)"
+        --bind="ctrl-l:execute-silent(tmux display-message 'Layout: $layout | Size: $preview_size')"
+        --bind="ctrl-t:change-preview-window(up:${preview_size}:wrap|right:${preview_size}:wrap)"
+        --bind="left:change-preview-window(up:${preview_size}:wrap|right:${preview_size}:wrap)"
+        --bind="right:change-preview-window(up:${preview_size}:wrap|right:${preview_size}:wrap)"
+        --preview="${SCRIPT_PATH} --preview {}"
+        --preview-window="${preview_window}"
+        --prompt="Search ($layout)> "
+        --highlight-line
+        --gutter=" "
+        --pointer="▶"
+        --marker="✓"
+        --color="header:bold,prompt:cyan,pointer:yellow,marker:green,info:dim,hl:bold:yellow,hl+:bold:bright-yellow"
+        --info=inline
+    )
+    
+    # Execute fzf with the built arguments
+    fzf "${fzf_args[@]}"
+}
+
+# Main execution
+main() {
+    
+    # Set up colors for interactive use
+    setup_colors
+    # Parse command line arguments first
+    parse_arguments "$@"
+    # Dependencies should be available via Nix environment
+    
+    if [[ ! -d "$RESURRECT_DIR" ]]; then
+        echo "Error: tmux-resurrect directory not found at $RESURRECT_DIR" >&2
+        echo "Please ensure tmux-resurrect is properly configured" >&2
+        exit 1
+    fi
+    
+    # Validate directory is readable
+    if [[ ! -r "$RESURRECT_DIR" ]]; then
+        echo "Error: Cannot read resurrect directory at $RESURRECT_DIR" >&2
+        exit 1
+    fi
+    
+    # Use fzf with configurable layout
+    local selected
+    selected=$(get_session_list | grep -v "##HEADER\|##SEPARATOR" | build_fzf_command "$LAYOUT" "$PREVIEW_SIZE") || {
+        echo "No session selected"
+        exit 0
+    }
+    
+    # Extract timestamp from the tab-delimited line (last field)
+    local timestamp=$(echo "$selected" | cut -d$'\t' -f2)
+    local selected_file="$RESURRECT_DIR/tmux_resurrect_${timestamp}.txt"
+    
+    if [[ ! -f "$selected_file" ]]; then
+        echo "Error: Selected file does not exist: $selected_file"
+        echo "Timestamp: $timestamp"
+        exit 1
+    fi
+    
+    # Update the 'last' symlink
+    echo "Setting '$(basename "$selected_file")' as the session to restore..."
+    ln -sf "$(basename "$selected_file")" "$RESURRECT_DIR/last"
+    
+    # Restore session using tmux-resurrect plugin
+    local restore_script="TMUX_RESURRECT_RESTORE_SCRIPT_NIX_PLACEHOLDER"
+    local continuum_enabled="TMUX_CONTINUUM_ENABLED_NIX_PLACEHOLDER"
+    
+    if [[ -n "${TMUX:-}" ]]; then
+        echo "Restoring session in current tmux environment..."
+        tmux run-shell "$restore_script"
+    else
+        if [[ "$continuum_enabled" == "true" ]]; then
+            echo "Starting new tmux session (continuum will auto-restore selected session)..."
+            exec tmux new-session
+        else
+            echo "Starting new tmux session..."
+            tmux new-session -d
+            tmux run-shell "$restore_script"
+            exec tmux attach-session
+        fi
+    fi
+}
+
+# Handle command line arguments
+case "${1:-}" in
+    --preview)
+        # Initialize cache for preview mode (separate process)
+        setup_colors
+        if [[ -n "${2:-}" ]]; then
+            # Extract timestamp from the tab-delimited line (last field)
+            timestamp=$(echo "$2" | cut -d$'\t' -f2)
+            file_path="$RESURRECT_DIR/tmux_resurrect_${timestamp}.txt"
+            
+            if [[ -n "$timestamp" && -f "$file_path" ]]; then
+                # Generate preview directly (no cache)
+                generate_preview "$file_path"
+            else
+                echo "Error: Could not extract valid timestamp from: $2"
+                echo "Timestamp: '$timestamp'"
+                echo "File path: '$file_path'"
+            fi
+        fi
+        ;;
+    --list)
+        setup_colors "never"
+        get_session_list
+        ;;
+    -h|--help)
+        show_help
+        ;;
+    -l|--layout|-s|--size)
+        # These require parsing, so pass to main
+        main "$@"
+        ;;
+    *)
+        main "$@"
+        ;;
+esac

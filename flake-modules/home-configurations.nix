@@ -1,25 +1,18 @@
 # flake-modules/home-configurations.nix
-# Standalone home-manager configurations
+# Standalone-only home-manager configurations
 { inputs, self, withSystem, ... }: {
   flake = {
-    # Standalone home-manager configurations
+    # Standalone-only home-manager configurations
     #
-    # These configurations can be applied in two ways:
+    # These configurations provide user environments independent of system configuration.
+    # Applied with: home-manager switch --flake .#user@hostname
+    # Works on any system with Nix installed (NixOS, Ubuntu, macOS, WSL)
     #
-    # 1. For NixOS systems:
-    #    - Primary: These configurations are already integrated into NixOS through
-    #      the home-manager.nixosModules.home-manager module in nixos-configurations.nix
-    #    - Optional: Can be applied separately with:
-    #      nix run home-manager -- switch --flake .#user@hostname
-    #    - Benefit: Allows testing home-manager changes without rebuilding the system
-    #
-    # 2. For non-NixOS systems (Ubuntu, macOS):
-    #    - Required: These are the only way to apply home-manager on non-NixOS systems
-    #    - Applied with: nix run home-manager -- switch --flake .#user@hostname
-    #    - Works on any system with Nix installed (Linux, macOS, WSL)
-    #
-    # Using standalone configurations for all hosts provides deployment flexibility 
-    # and consistent user environments across different systems.
+    # Benefits of standalone-only approach:
+    # - Fast iteration on user environment changes
+    # - Clear separation of system vs user concerns
+    # - Error isolation between system and user environments
+    # - User autonomy (no root required for user changes)
     homeConfigurations = {
       "tim@mbp" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
@@ -42,7 +35,7 @@
           };
         }
       );
-      
+
       "tim@thinky-ubuntu" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
@@ -83,7 +76,7 @@
           };
         }
       );
-      
+
       "tim@thinky-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
@@ -124,6 +117,7 @@
               };
             }
             ../home/modules/mcp-servers.nix
+            # ../home/modules/autovalidate-demo.nix  # Disabled - requires home-manager autoValidate integration
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -132,10 +126,10 @@
           };
         }
       );
-      
+
       # tim@tblack-t14-nixos configuration archived (work laptop no longer in use)
       # See hosts/archived/tblack-t14-nixos/ for reference
-      
+
       "tim@nixvim-minimal" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
@@ -165,10 +159,10 @@
           };
         }
       );
-      
+
       # tim@tblack-t14-ubuntu configuration archived (work laptop no longer in use)
       # See hosts/archived/ for reference
-      
+
       "tim@potato" = withSystem "aarch64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;

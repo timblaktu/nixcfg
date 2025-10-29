@@ -300,12 +300,12 @@ For SSH sessions with tmux on remote hosts:
 
 **Technical Details**:
 - **Fixed 6 references** across 3 files using `${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/restore.sh`
-- **Build-time path substitution** in tmux-session-picker-v2 for robust script generation
+- **Build-time path substitution** in tmux-session-picker for robust script generation
 - **Future-proof architecture** that survives plugin updates and system rebuilds
 
 **Files Updated**:
 - `home/common/tmux.nix`: Hook configurations (lines 188-189, 378)
-- `home/modules/validated-scripts/bash.nix`: Build-time substitution for tmux-session-picker-v2
+- `home/modules/validated-scripts/bash.nix`: Build-time substitution for tmux-session-picker
 - Generated tmux.conf now uses correct Nix store paths
 
 **Status**: ✅ **RESOLVED** - Session picker now properly restores selected sessions
@@ -364,7 +364,7 @@ All are automatically installed via the Nix configuration
 
 - `home/common/tmux.nix` - Main tmux configuration with proper Nix plugin derivation references
 - `home/files/bin/tmux-cpu-mem` - CPU/memory monitoring script
-- `home/files/bin/tmux-session-picker-v2` - Session picker source (with placeholder paths)
+- `home/files/bin/tmux-session-picker` - Session picker source (with placeholder paths)
 - `home/modules/validated-scripts/bash.nix` - Build system with path substitution for robust plugin integration
 - `~/.config/tmux/tmux.conf` - Generated tmux config with correct Nix store paths (read-only)
 - `~/.local/share/tmux/resurrect/` - Saved session storage

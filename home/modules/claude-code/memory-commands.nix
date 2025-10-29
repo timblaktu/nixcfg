@@ -4,10 +4,10 @@ with lib;
 
 let
   cfg = config.programs.claude-code;
-  
+
   # Path to the user's global memory file in nixcfg  
   userGlobalMemoryPath = "${cfg.nixcfgPath}/claude-runtime/.claude-\${CLAUDE_ACCOUNT:-max}/CLAUDE.md";
-  
+
   # Create the memory editing script
   nixMemoryScript = pkgs.writeScript "nixmemory" ''
     #!/usr/bin/env bash
@@ -89,7 +89,7 @@ let
       ) &
     fi
   '';
-  
+
   # Create the remember script
   nixRememberScript = pkgs.writeScript "nixremember" ''
     #!/usr/bin/env bash
@@ -128,21 +128,22 @@ let
     echo "✅ Added to memory: $*"
   '';
 
-in {
+in
+{
   options.programs.claude-code.memoryCommands = {
     enable = mkOption {
       type = types.bool;
       default = true;
       description = "Enable custom memory management commands for Nix-managed Claude Code";
     };
-    
+
     makeWritable = mkOption {
       type = types.bool;
       default = true;
       description = "Make CLAUDE.md files writable (mode 644 instead of 444)";
     };
   };
-  
+
   config = mkIf (cfg.enable && cfg.memoryCommands.enable) {
     # Add custom slash commands
     programs.claude-code.slashCommands.custom = {
@@ -150,21 +151,21 @@ in {
         description = "Edit user-global memory file (Nix-aware)";
         usage = "/nixmemory";
         handler = "${nixMemoryScript}";
-        aliases = ["usermemory" "globalmemory"];
-        permissions = [];
+        aliases = [ "usermemory" "globalmemory" ];
+        permissions = [ ];
       };
-      
+
       nixremember = {
         description = "Append content to user-global memory (Nix-aware)";
         usage = "/nixremember <content>";
         handler = "${nixRememberScript}";
-        aliases = ["userremember" "globalremember"];
-        permissions = [];
+        aliases = [ "userremember" "globalremember" ];
+        permissions = [ ];
       };
     };
-    
+
     # Override the CLAUDE.md file permissions in activation script
-    home.activation.claudeMemoryPermissions = lib.hm.dag.entryAfter ["claudeConfigTemplates"] (mkIf cfg.memoryCommands.makeWritable ''
+    home.activation.claudeMemoryPermissions = lib.hm.dag.entryAfter [ "claudeConfigTemplates" ] (mkIf cfg.memoryCommands.makeWritable ''
       echo "🔓 Setting writable permissions for CLAUDE.md files..."
       
       # Update permissions for all account CLAUDE.md files
@@ -179,7 +180,7 @@ in {
       '') cfg.accounts)}
       
       # Update base directory if needed
-      ${optionalString (cfg.accounts == {} || cfg.defaultAccount != null) ''
+      ${optionalString (cfg.defaultAccount != null) ''
         baseDir="${cfg.nixcfgPath}/claude-runtime/.claude"
         if [[ -f "$baseDir/CLAUDE.md" ]]; then
           $DRY_RUN_CMD chmod 644 "$baseDir/CLAUDE.md"  
@@ -187,115 +188,117 @@ in {
         fi
       ''}
     '');
-    
+
     # Deploy command files to each account's commands directory
     # Only create symlinks if static commands are NOT enabled
-    home.file = lib.mkMerge (lib.flatten (mapAttrsToList (name: account: 
-      if account.enable && !cfg.staticCommands.enable then [{
-        # nixmemory command files
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixmemory.sh" = {
-          source = nixMemoryScript;
-          executable = true;
-        };
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixmemory.md" = {
-          text = ''
-            # /nixmemory - Edit User Memory
+    home.file = lib.mkMerge (lib.flatten (mapAttrsToList
+      (name: account:
+        if account.enable && !cfg.staticCommands.enable then [{
+          # nixmemory command files
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixmemory.sh" = {
+            source = nixMemoryScript;
+            executable = true;
+          };
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixmemory.md" = {
+            text = ''
+              # /nixmemory - Edit User Memory
             
-            Opens the user-global memory file in your default editor.
+              Opens the user-global memory file in your default editor.
             
-            ## Usage
-            ```
-            /nixmemory
-            ```
+              ## Usage
+              ```
+              /nixmemory
+              ```
             
-            ## Aliases
-            - /usermemory
-            - /globalmemory
+              ## Aliases
+              - /usermemory
+              - /globalmemory
             
-            ## Description
-            This command opens the Nix-managed user memory file for the current Claude Code account.
+              ## Description
+              This command opens the Nix-managed user memory file for the current Claude Code account.
             
-            **Behavior:**
-            1. **If in tmux**: Opens editor in a horizontal pane below
-            2. **Not in tmux**: Shows file location for manual editing  
-            3. **No tmux**: Provides direct editing instructions
+              **Behavior:**
+              1. **If in tmux**: Opens editor in a horizontal pane below
+              2. **Not in tmux**: Shows file location for manual editing  
+              3. **No tmux**: Provides direct editing instructions
             
-            **Note:** Unlike /memory, terminal editors cannot open directly from Claude Code commands.
-            This command uses tmux split-pane integration to work around this limitation.
+              **Note:** Unlike /memory, terminal editors cannot open directly from Claude Code commands.
+              This command uses tmux split-pane integration to work around this limitation.
             
-            ## Environment Variables
-            - EDITOR: The text editor to use (defaults to vi)
-            - CLAUDE_ACCOUNT: The current account (defaults to max)
-            - CLAUDE_CONFIG_DIR: The configuration directory path
-            - TMUX: Detected automatically to enable tmux integration
-          '';
-        };
-        
-        # nixremember command files
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixremember.sh" = {
-          source = nixRememberScript;
-          executable = true;
-        };
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixremember.md" = {
-          text = ''
-            # /nixremember - Add to User Memory
+              ## Environment Variables
+              - EDITOR: The text editor to use (defaults to vi)
+              - CLAUDE_ACCOUNT: The current account (defaults to max)
+              - CLAUDE_CONFIG_DIR: The configuration directory path
+              - TMUX: Detected automatically to enable tmux integration
+            '';
+          };
+
+          # nixremember command files
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixremember.sh" = {
+            source = nixRememberScript;
+            executable = true;
+          };
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/nixremember.md" = {
+            text = ''
+              # /nixremember - Add to User Memory
             
-            Appends content to the user-global memory file.
+              Appends content to the user-global memory file.
             
-            ## Usage
-            ```
-            /nixremember <content to remember>
-            ```
+              ## Usage
+              ```
+              /nixremember <content to remember>
+              ```
             
-            ## Aliases
-            - /userremember
-            - /globalremember
+              ## Aliases
+              - /userremember
+              - /globalremember
             
-            ## Description
-            This command appends the provided content to the Nix-managed user memory file
-            with a timestamp. The file is made temporarily writable during the operation.
+              ## Description
+              This command appends the provided content to the Nix-managed user memory file
+              with a timestamp. The file is made temporarily writable during the operation.
             
-            ## Examples
-            ```
-            /nixremember This project uses TypeScript with React
-            /nixremember Important: Always run tests before committing
-            ```
-          '';
-        };
-        
-        # Alias command files
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/usermemory.sh" = {
-          source = nixMemoryScript;
-          executable = true;
-        };
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/usermemory.md" = {
-          text = "See /nixmemory";
-        };
-        
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalmemory.sh" = {
-          source = nixMemoryScript;
-          executable = true;
-        };
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalmemory.md" = {
-          text = "See /nixmemory";
-        };
-        
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/userremember.sh" = {
-          source = nixRememberScript;
-          executable = true;
-        };
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/userremember.md" = {
-          text = "See /nixremember";
-        };
-        
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalremember.sh" = {
-          source = nixRememberScript;
-          executable = true;
-        };
-        "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalremember.md" = {
-          text = "See /nixremember";
-        };
-      }] else []
-    ) cfg.accounts));
+              ## Examples
+              ```
+              /nixremember This project uses TypeScript with React
+              /nixremember Important: Always run tests before committing
+              ```
+            '';
+          };
+
+          # Alias command files
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/usermemory.sh" = {
+            source = nixMemoryScript;
+            executable = true;
+          };
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/usermemory.md" = {
+            text = "See /nixmemory";
+          };
+
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalmemory.sh" = {
+            source = nixMemoryScript;
+            executable = true;
+          };
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalmemory.md" = {
+            text = "See /nixmemory";
+          };
+
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/userremember.sh" = {
+            source = nixRememberScript;
+            executable = true;
+          };
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/userremember.md" = {
+            text = "See /nixremember";
+          };
+
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalremember.sh" = {
+            source = nixRememberScript;
+            executable = true;
+          };
+          "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/globalremember.md" = {
+            text = "See /nixremember";
+          };
+        }] else [ ]
+      )
+      cfg.accounts));
   };
 }
