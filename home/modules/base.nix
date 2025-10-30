@@ -77,6 +77,7 @@ in
         tree
         ueberzugpp
         unzip
+        yt-dlp
         zoxide
         p7zip
 
