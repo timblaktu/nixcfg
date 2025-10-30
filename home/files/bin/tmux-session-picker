@@ -7,11 +7,11 @@ set -euo pipefail
 
 # Source utility libraries
 # shellcheck disable=SC1091
-source terminal-utils
+source "$HOME/.local/lib/terminal-utils.bash"
 # shellcheck disable=SC1091
-source color-utils  
+source "$HOME/.local/lib/color-utils.bash"  
 # shellcheck disable=SC1091
-source path-utils
+source "$HOME/.local/lib/path-utils.bash"
 
 # Inlined tmux-resurrect file parser (was tmux-parser-optimized)
 parse_single_file() {
