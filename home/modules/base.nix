@@ -14,7 +14,9 @@ in
     ../common/zsh.nix
     ../common/environment.nix
     ../common/aliases.nix
+    # Import both files modules - they will be conditionally enabled
     ./files
+    ../files
     ../common/development.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./claude-code.nix # Claude Code MCP servers configuration
@@ -142,6 +144,12 @@ in
       type = types.bool;
       default = true;
       description = "Enable nix-writers based validated script management";
+    };
+
+    useUnifiedFilesModule = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Use the new unified files module (hybrid autoWriter + enhanced libraries) instead of the legacy files module";
     };
 
     enableClaudeCode = mkOption {
@@ -282,8 +290,8 @@ in
         warnOnMisconfiguration = cfg.terminalVerification.warnOnMisconfiguration;
       };
 
-      # Pass validated scripts configuration to the module
-      validatedScripts = {
+      # Pass validated scripts configuration to the module (conditional)
+      validatedScripts = mkIf cfg.enableValidatedScripts {
         enable = cfg.enableValidatedScripts;
         enableBashScripts = cfg.enableValidatedScripts; # Ensure bash scripts are enabled
         # Enable PowerShell scripts on WSL systems where they can coordinate with Windows
@@ -360,6 +368,9 @@ in
           dc = "podman-compose";
         };
       };
+
+      # Unified files module configuration (conditional)
+      homeFiles.enable = cfg.useUnifiedFilesModule;
     }
   ];
 }
