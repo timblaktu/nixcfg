@@ -55,6 +55,7 @@ in
         dua
         fd
         ffmpeg
+        ffmpegthumbnailer
         file
         fzf
         glow
@@ -72,6 +73,7 @@ in
         speedtest
         stress-ng
         tree
+        ueberzugpp
         unzip
         zoxide
         p7zip
@@ -321,6 +323,11 @@ in
           glow = pkgs.yaziPlugins.glow;
           miller = pkgs.yaziPlugins.miller;
           ouch = pkgs.yaziPlugins.ouch;
+          # Additional useful plugins
+          chmod = pkgs.yaziPlugins.chmod;
+          full-border = pkgs.yaziPlugins.full-border;
+          git = pkgs.yaziPlugins.git;
+          smart-enter = pkgs.yaziPlugins.smart-enter;
         };
         initLua = ../files/yazi-init.lua;
         settings = {
@@ -338,6 +345,41 @@ in
             sort_reverse = true;
             sort_sensitive = true;
             mouse_events = [ "click" "scroll" "touch" "move" ];
+          };
+          preview = {
+            tab_size = 2;
+            max_width = 600;
+            max_height = 900;
+            cache_dir = "";
+            image_delay = 30;
+            image_filter = "triangle";
+            image_quality = 75;
+            wrap = "no";
+          };
+          plugin = {
+            prepend_previewers = [
+              {
+                name = "*.md";
+                run = "glow";
+              }
+            ];
+          };
+          opener = {
+            edit = [
+              {
+                run = ''$EDITOR "$1"'';
+                desc = "$EDITOR";
+                block = true;
+                for = "unix";
+              }
+            ];
+            open = [
+              {
+                run = ''explorer.exe "$1"'';
+                desc = "Open in Windows Explorer";
+                for = "unix";
+              }
+            ];
           };
         };
         keymap = {
@@ -362,6 +404,22 @@ in
               on = "cn";
               run = [ ''shell -- echo "$1" | clip.exe'' "copy name_without_ext" ];
               desc = "Copy name without extension to Windows clipboard";
+            }
+            # Additional useful keybindings
+            {
+              on = "T";
+              run = "plugin --sync toggle-pane";
+              desc = "Toggle preview pane";
+            }
+            {
+              on = "<C-s>";
+              run = "plugin --sync smart-enter";
+              desc = "Smart enter (enter dir or open file)";
+            }
+            {
+              on = "cM";
+              run = "plugin --sync chmod";
+              desc = "Change file permissions";
             }
           ];
         };

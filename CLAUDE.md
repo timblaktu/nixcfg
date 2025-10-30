@@ -59,8 +59,8 @@ tmux-session-picker = pkgs.writeShellApplication {
 **🏗️ IMPLEMENTATION ROADMAP** (Priority Order):
 
 **📋 IMMEDIATE: Module-Based Migration Following tmux.nix Pattern**
-1. **git.nix** - Extract `syncfork.sh`, `gitfuncs.sh` (2 scripts)
-2. **development.nix** - Extract `claudevloop`, `restart_claude*`, `mkclaude_desktop_config` (4 scripts)  
+1. ✅ **git.nix** - Extract `syncfork.sh`, `gitfuncs.sh` (2 scripts) **COMPLETE**
+2. ✅ **development.nix** - Extract `claudevloop`, `restart_claude`, `mkclaude_desktop_config` (3 scripts) **COMPLETE**  
 3. **terminal.nix** - Extract `setup-terminal-fonts`, `check-terminal-setup`, `diagnose-emoji-rendering`, `is_terminal_background_light_or_dark.sh` (4 scripts)
 4. **system.nix** - Extract `bootstrap-*.sh`, `build-wsl-tarball` (3 scripts)
 5. **shell-utils.nix** - Extract all `/lib/*.bash` libraries + `mytree.sh`, `colorfuncs.sh` (11 libraries + 2 utilities)
@@ -84,15 +84,18 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 ### 📚 SESSION HANDOFF SUMMARY (2025-10-30)
 
 **🎯 IMPLEMENTATION SUCCESS**: development.nix module-based organization completed successfully
-- **✅ development.nix Complete**: claudevloop, restart_claude, mkclaude_desktop_config extracted using writeShellApplication pattern
-- **✅ Shellcheck Fix**: Fixed read -r warning in claudevloop script
-- **✅ Quality Assurance**: Verified scripts build successfully in home-manager dry-run
-- **✅ Pattern Validated**: writeShellApplication with proper runtimeInputs (neovim, jq, coreutils, findutils) works perfectly
+- **✅ development.nix Complete**: 3 Claude workflow scripts extracted using writeShellApplication pattern:
+  - `claudevloop` (nvim development loop) with neovim runtime dependency
+  - `restart_claude` (Claude Desktop restart automation) with jq, findutils, coreutils
+  - `mkclaude_desktop_config` (Desktop config generation) with jq, coreutils
+- **✅ Quality Assurance**: Scripts build successfully in home-manager, included in package list
+- **✅ Pattern Validated**: writeShellApplication with proper runtimeInputs works perfectly
+- **✅ Integration Success**: Extended existing development.nix module seamlessly
 
 **🔄 ARCHITECTURAL TRANSFORMATION PROGRESS**: From dumping ground to intentional organization
 - **✅ tmux.nix**: 6 scripts extracted (COMPLETE)
 - **✅ git.nix**: 2 scripts extracted (COMPLETE)
-- **✅ development.nix**: 3 scripts extracted (COMPLETE)
+- **✅ development.nix**: 3 scripts extracted (COMPLETE) ← **JUST COMPLETED**
 - **Remaining**: terminal.nix, system.nix, shell-utils.nix (12 scripts + 11 libraries)
 
 **📋 NEXT SESSION TASK QUEUE**: Continue module-based organization implementation
@@ -111,21 +114,23 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 ```nix
 # home/common/terminal.nix 
 { config, lib, pkgs, ... }: {
-  home.packages = with pkgs; [
-    (pkgs.writeShellApplication {
-      name = "script-name";
-      text = builtins.readFile ../files/bin/script-name;
-      runtimeInputs = with pkgs; [ dependencies ];
-    })
-  ];
+  config = mkIf cfg.enableTerminal {
+    home.packages = with pkgs; [
+      (pkgs.writeShellApplication {
+        name = "script-name";
+        text = builtins.readFile ../files/bin/script-name;
+        runtimeInputs = with pkgs; [ dependencies ];
+      })
+    ];
+  };
 }
 ```
 
-**📊 MIGRATION PROGRESS TRACKER**:
+**📊 MIGRATION PROGRESS TRACKER** (11 of 22 scripts complete):
 - ✅ tmux.nix: 6 scripts (COMPLETE)
 - ✅ git.nix: 2 scripts (COMPLETE) 
-- ✅ development.nix: 3 scripts (COMPLETE)
-- 🎯 terminal.nix: 4 scripts (NEXT)
+- ✅ development.nix: 3 scripts (COMPLETE) ← **JUST COMPLETED**
+- 🎯 terminal.nix: 4 scripts (NEXT SESSION PRIORITY)
 - ⏳ system.nix: 3 scripts (PENDING)
 - ⏳ shell-utils.nix: 11 libraries + 2 utilities (FINAL)
 
