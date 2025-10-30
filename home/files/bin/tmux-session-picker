@@ -10,6 +10,127 @@ source terminal-utils
 source color-utils  
 source path-utils
 
+# Inlined tmux-resurrect file parser (was tmux-parser-optimized)
+parse_single_file() {
+    local file="$1" 
+    local current_file="$2"
+  
+    [[ ! -f "$file" ]] && return 1
+    [[ ! -r "$file" ]] && return 1
+  
+    # Enhanced parsing using basic tools
+    local session=""
+    local window_count=0
+    local pane_count=0
+    local -a paths=()
+    local -a commands=()
+    
+    # Single pass through file to extract all data (robust field handling)
+    while IFS=$'\t' read -r type session_name rest || [[ -n "$type" ]]; do
+        case "$type" in
+            window)
+                window_count=$((window_count + 1))
+                [[ -z "$session" ]] && session="$session_name"
+                ;;
+            pane)
+                pane_count=$((pane_count + 1))
+                [[ -z "$session" ]] && session="$session_name"
+                
+                # For paths and commands, we need to split the rest fields
+                # This is a simplified approach that handles variable field counts
+                if [[ -n "$rest" ]]; then
+                    # Split the rest into an array
+                    local -a fields
+                    IFS=$'\t' read -r -a fields <<< "$rest"
+                    
+                    # Extract path (field 5 in rest, after type and session_name)
+                    if [[ ${#fields[@]} -gt 5 ]]; then
+                        local path="${fields[5]#:}"
+                        [[ -n "$path" && "$path" != "" ]] && paths+=("$path")
+                    fi
+                    
+                    # Extract commands (fields 7 and 8 in rest)
+                    local cmd=""
+                    if [[ ${#fields[@]} -gt 8 ]]; then
+                        cmd="${fields[8]#:}"  # Try full command first
+                    fi
+                    if [[ -z "$cmd" || "$cmd" == "" ]] && [[ ${#fields[@]} -gt 7 ]]; then
+                        cmd="${fields[7]#:}"  # Fallback to basic command
+                    fi
+                    [[ -n "$cmd" && "$cmd" != "" && "$cmd" != "bash" && "$cmd" != "zsh" && "$cmd" != "sh" ]] && commands+=("$cmd")
+                fi
+                ;;
+        esac
+    done < "$file"
+  
+    # Must have a session and at least one window
+    [[ -z "$session" || $window_count -eq 0 ]] && return 1
+  
+    # Extract timestamp from filename
+    local filename="${file##*/}"
+    local timestamp="${filename#tmux_resurrect_}"
+    timestamp="${timestamp%.txt}"
+    
+    # Create enhanced summary with paths and commands
+    local paths_str=""
+    local commands_str=""
+    if [[ ${#paths[@]} -gt 0 ]]; then
+        # Get unique paths, abbreviated
+        local -A unique_paths=()
+        for path in "${paths[@]}"; do
+            # Abbreviate path
+            local abbrev_path="${path/#$HOME/~}"
+            unique_paths["$abbrev_path"]=1
+        done
+        paths_str=$(printf "%s:" "${!unique_paths[@]}")
+        paths_str="${paths_str%:}"  # Remove trailing colon
+    fi
+    
+    if [[ ${#commands[@]} -gt 0 ]]; then
+        # Get unique commands
+        local -A unique_commands=()
+        for cmd in "${commands[@]}"; do
+            unique_commands["$cmd"]=1
+        done
+        commands_str=$(printf "%s:" "${!unique_commands[@]}")
+        commands_str="${commands_str%:}"  # Remove trailing colon
+    fi
+    
+    # Format summary with last tokens only
+    local tokens=()
+    if [[ -n "$paths_str" ]]; then
+        IFS=':' read -ra path_arr <<< "$paths_str"
+        for p in "${path_arr[@]}"; do
+            tokens+=("${p##*/}")
+        done
+    fi
+    if [[ -n "$commands_str" ]]; then
+        IFS=':' read -ra cmd_arr <<< "$commands_str"
+        for c in "${cmd_arr[@]}"; do
+            tokens+=("$c")
+        done
+    fi
+    local window_summary
+    if [[ ${#tokens[@]} -gt 0 ]]; then
+        window_summary="${tokens[*]}"
+    else
+        window_summary="${window_count}w ${pane_count}p"
+    fi
+  
+    # Check if current
+    local is_current="false"
+    [[ "$file" == "$current_file" ]] && is_current="true"
+  
+    # Output result using ASCII Unit Separator (US) to avoid conflicts with user content
+    printf "%s\x1F%d\x1F%d\x1F%s\x1F%s\x1F%s\n" \
+        "$session" \
+        "$window_count" \
+        "$pane_count" \
+        "$timestamp" \
+        "$window_summary" \
+        "$is_current"
+}
+
 RESURRECT_DIR="${HOME}/.local/share/tmux/resurrect"
 SCRIPT_PATH="$0"
 
@@ -443,9 +564,9 @@ process_session_file_complete() {
     local YELLOW='\033[33m' CYAN='\033[36m' BLUE='\033[34m' 
     local GREEN='\033[32m' MAGENTA='\033[35m'
     
-    # Parse file using optimized parser (self-contained)
+    # Parse file using inlined parser (self-contained)
     local parser_output parser_exit_code
-    parser_output=$(tmux-parser-optimized "$session_file" "$current_session_file" 2>/dev/null)
+    parser_output=$(parse_single_file "$session_file" "$current_session_file" 2>/dev/null)
     parser_exit_code=$?
     
     if [[ $parser_exit_code -ne 0 ]] || [[ -z "$parser_output" ]]; then
@@ -705,9 +826,9 @@ generate_preview() {
         return
     fi
     
-    # Parse file using optimized parser
+    # Parse file using inlined parser
     local file_data
-    file_data=$(tmux-parser-optimized "$file" "$current_session_file" 2>/dev/null) || {
+    file_data=$(parse_single_file "$file" "$current_session_file" 2>/dev/null) || {
         echo "╔══════════════════════════════════════════════╗"
         echo "║         CORRUPTED SESSION FILE               ║"
         echo "╚══════════════════════════════════════════════╝"
