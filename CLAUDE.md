@@ -21,109 +21,72 @@
 2. /home/tim/src/home-manager
 3. /home/tim/src/NixOS-WSL
 
-## 📋 CURRENT STATUS: HYBRID UNIFIED FILES MODULE - PRODUCTION VALIDATED ✅
+## 📋 CURRENT STATUS: VALIDATED-SCRIPTS REMOVAL COMPLETED - ARCHITECTURE REDESIGN NEEDED
 
-### 🎯 COMPLETED: Complete Production Validation + Multi-Machine Deployment Ready
+### 🎯 COMPLETED: Validated-Scripts Module Removal (2025-10-30)
 
-**PRODUCTION VALIDATION ACHIEVED**: 
-1. ✅ **All machine configs validated** - thinky-ubuntu, mbp, thinky-nixos all pass dry-run deployment
-2. ✅ **Build system verified** - All configurations compile cleanly without errors
-3. ✅ **Full test suite passing** - All 38 flake checks pass across hybrid architecture  
-4. ✅ **Script execution confirmed** - claude, tmux-session-picker, onedrive-status all functional
-5. ✅ **Zero regressions detected** - Legacy and unified systems coexist perfectly
+**REMOVAL ACHIEVED**: 
+1. ✅ **enableValidatedScripts option removed** - No longer exists in base.nix
+2. ✅ **validated-scripts module import removed** - Direct import from base.nix eliminated  
+3. ✅ **ESP-IDF tools migrated** - 4 scripts moved to wsl-home-files.nix
+4. ✅ **Claude binary references fixed** - All wrappers use proper nix store paths
 
-**PRODUCTION ARCHITECTURE VALIDATED**:
-- **home/files/default.nix**: Production-ready hybrid module with autoWriter + fallbacks
-- **home/migration/remaining-scripts-unified-files.nix**: Complete migration artifact with 11 scripts  
-- **home/modules/base.nix**: Enhanced with conditional loading and compatibility layer
-- **All 3 machines configured**: useUnifiedFilesModule = true for thinky-nixos, thinky-ubuntu, mbp
+### 🚨 **CRITICAL ARCHITECTURAL GAP DISCOVERED (2025-10-30)**
 
-**DEPLOYMENT READINESS STATUS**: 
-- ✅ **Cross-machine validation complete** - All target machines build and deploy successfully
-- ✅ **Dependency architecture proven** - autoWriter + validated-scripts hybrid functional
-- ✅ **Performance architecture validated** - Build efficiency gains confirmed 
-- ✅ **Migration strategy complete** - All scripts migrated to unified system
-
-**PRODUCTION DEPLOYMENT READY**: ✅ System validated across all machines, zero blockers for live deployment
-
-## 📋 SESSION PROGRESS (Oct 29, 2024) - MIGRATION COMPLETE ✅
-
-### 🎉 COMPLETED: Final Migration Architecture Implementation
-
-**✅ MIGRATION FILE CLEANUP COMPLETE:**
-- **All scripts migrated**: 11 scripts from `remaining-scripts-unified-files.nix` successfully moved to permanent machine configurations
-- **Machine-specific configs created**: thinky-ubuntu-unified-files.nix and mbp-unified-files.nix with full script sets
-- **Migration artifacts removed**: Obsolete `remaining-scripts-unified-files.nix` file deleted
-
-**✅ ESP-IDF VALIDATION COMPLETE:**
-- **ESP tools functional**: All 4 scripts (esp-idf-install, esp-idf-shell, esp-idf-export, idf.py) verified in validated-scripts module
-- **Configuration corrected**: Re-enabled `enableValidatedScripts = true` for thinky-nixos to ensure ESP-IDF access
-- **Architecture preserved**: ESP-IDF development environment remains fully functional
-
-**✅ SYSTEM VALIDATION COMPLETE:**
-- **All tests passing**: `nix flake check` completes successfully across all 38 flake checks
-- **Cross-machine compatibility**: thinky-nixos, thinky-ubuntu, mbp all build cleanly
-- **Zero regressions**: ESP-IDF tools and unified files coexist perfectly
-
-**✅ PRODUCTION ARCHITECTURE FINALIZED:**
-- **Hybrid model proven**: autoWriter + validated-scripts dependency injection stable
-- **Migration strategy complete**: All general scripts moved to unified files, ESP tools retained strategically
-- **Build system validated**: All configurations compile and deploy successfully
-
-### 🎯 NEXT SESSION TASK QUEUE (DEPLOYMENT READY)
-
-**✅ OS-SPECIFIC ARCHITECTURE COMPLETED** 
-
-**OS-Specific Files Successfully Created:**
-- **wsl-home-files.nix**: 11 scripts (9 universal Linux + 2 WSL-specific OneDrive tools)
-- **linux-home-files.nix**: 9 universal Linux scripts (excludes WSL-specific tools)
-- **darwin-home-files.nix**: 9 universal scripts with macOS adaptations (curl vs wget, ~/Library/Fonts vs ~/.local/share/fonts)
-
-**Machine Import Configuration Updated:**
-- **thinky-ubuntu**: Uses wsl-home-files.nix ✅
-- **thinky-nixos**: Uses wsl-home-files.nix ✅  
-- **mbp**: Uses darwin-home-files.nix ✅
-
-**Validation Complete:**
-- All machine configurations build successfully ✅
-- Nix flake check passes (38/38 tests pass, only unrelated tmux test failures) ✅
-- Zero regressions in unified files system ✅
-
-**🚀 PRIORITY 1: Live Production Deployment (READY)**
-- Deploy to thinky-ubuntu: `nix run home-manager -- switch --flake '.#tim@thinky-ubuntu'`
-- Deploy to thinky-nixos: `nix run home-manager -- switch --flake '.#tim@thinky-nixos'`  
-- Deploy to mbp: `nix run home-manager -- switch --flake '.#tim@mbp'`
-- Real-world testing of all 11 WSL scripts and 9 macOS scripts
-- Performance measurement vs legacy system
-- Document any deployment issues and user experience improvements
-
-### 📚 IMPLEMENTATION MEMORY FOR NEXT SESSION (Updated Oct 30, 2024 - OS-SPECIFIC REFACTOR COMPLETE ✅)
-
-**🎉 UNIFIED FILES MODULE: OS-SPECIFIC ARCHITECTURE COMPLETE ✅**
-- **✅ All scripts migrated**: 11 scripts successfully distributed across OS-specific configurations
-- **✅ ESP-IDF preserved**: All 4 ESP tools remain functional in validated-scripts module  
-- **✅ Build system verified**: All configurations compile cleanly, 38 flake checks pass
-- **✅ Zero regression testing**: ESP-IDF tools and unified files coexist perfectly
-- **✅ OS-specific refactor complete**: No more duplication, proper platform separation achieved
-
-**✅ FINAL PRODUCTION ARCHITECTURE:**
+**Issue**: Test failures reveal incomplete migration - `nix flake check` fails with:
 ```
-home/migration/wsl-home-files.nix     ← WSL environments (11 scripts: 9 universal + 2 OneDrive)
-home/migration/linux-home-files.nix   ← Generic Linux (9 universal scripts only)
-home/migration/darwin-home-files.nix  ← macOS (9 universal scripts with platform adaptations)
+error: attribute 'validatedScripts' missing
+at flake-modules/tests.nix:502:42: tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
 ```
 
-**📋 SCRIPT DISTRIBUTION VALIDATED:**
-- **WSL-specific scripts (2)**: onedrive-force-sync, onedrive-status (WSLInterop + powershell.exe)
-- **Universal Linux scripts (9)**: smart-nvimdiff, setup-terminal-fonts, mergejson, diagnose-emoji-rendering, claude wrappers
-- **macOS adaptations**: curl vs wget, ~/Library/Fonts vs ~/.local/share/fonts, brew vs apt references
+**Root Problem**: **Architectural pattern mismatch**
+- ❌ **Current**: Manual OS-specific imports (`darwin-home-files.nix`, `wsl-home-files.nix`) 
+- ✅ **Intended**: Automatic OS detection through `home/files` module with script classification (`linux`, `wsl`, `darwin`)
+- ❌ **Missing**: `tmux-session-picker` should be classified as a "linux" script but isn't available in any OS collection
+- ❌ **Tests**: Still reference old `validatedScripts` paths instead of proper `home/files` module paths
 
-**🔧 MACHINE IMPORT CONFIGURATION ACTIVE:**
-- **thinky-ubuntu, thinky-nixos**: Import wsl-home-files.nix ✅
-- **mbp**: Import darwin-home-files.nix ✅  
-- **Future generic Linux**: Import linux-home-files.nix (ready for use)
+**Key Insight**: The current migration is **incomplete** - we removed validated-scripts but didn't properly implement the intended OS-based script architecture.
 
-**✅ PRODUCTION DEPLOYMENT READY**: All functional testing complete, OS abstraction implemented, zero architectural blockers
+
+### 🎯 NEXT SESSION TASK QUEUE - **FOCUS ON DESIGN & DISCOVERY BEFORE IMPLEMENTATION**
+
+**🔍 PRIORITY 1: DISCOVERY - Understand Current Architecture**
+- **Investigate**: How does `home/files` module currently work and detect target OS?
+- **Map**: Current script organization and access patterns in the existing system
+- **Document**: What module paths should tests use to access scripts?
+- **Identify**: Where/how OS-based script collections (`linux`, `wsl`, `darwin`) should be implemented
+
+**💭 PRIORITY 2: DESIGN - OS-Based Script Architecture** 
+- **Design**: Proper integration pattern for `tmux-session-picker` as a "linux" script
+- **Define**: Correct module paths for accessing scripts (e.g., `config.homeFiles.scripts.tmux-session-picker`?)
+- **Plan**: How automatic OS detection should work vs manual imports (`darwin-home-files.nix`, `wsl-home-files.nix`)
+- **Specify**: Migration strategy from current manual approach to automatic detection
+
+**💬 PRIORITY 3: DISCUSSION - Architecture Decisions**
+- **Question**: Should we keep manual OS-specific imports or move to full automation?
+- **Question**: What's the intended final architecture for script organization and access?
+- **Question**: How should tests reference scripts in the new system?
+- **Question**: What's the relationship between `home/files` module and `home/migration/*-home-files.nix`?
+
+**⚠️ CRITICAL**: **DO NOT MAKE IMPLEMENTATION CHANGES** until architecture design is clarified through discussion
+
+### 📚 SESSION HANDOFF SUMMARY (2025-10-30)
+
+**🎯 ISSUE IDENTIFIED**: Incomplete migration from validated-scripts to unified files system
+- **Immediate Blocker**: `nix flake check` fails - tests reference non-existent `validatedScripts` attributes
+- **Root Cause**: Architecture mismatch between intended OS-based automatic detection and current manual imports
+- **Key Finding**: `tmux-session-picker` exists but isn't classified/accessible as a "linux" script
+
+**🔄 TRANSITION STATE**: Between old system (removed) and new system (incomplete)
+- **Old System**: ❌ `validated-scripts` module (removed from base.nix)
+- **Current System**: ⚠️ Manual OS-specific imports (`*-home-files.nix`) 
+- **Intended System**: ✅ Automatic OS detection through `home/files` module (not implemented)
+
+**📋 NEXT SESSION APPROACH**: **DISCOVERY → DESIGN → DISCUSSION → IMPLEMENTATION**
+- Focus on understanding current `home/files` module architecture 
+- Design proper OS-based script classification system
+- Clarify architectural decisions before making changes
+- Ensure tests use correct module paths in new system
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.

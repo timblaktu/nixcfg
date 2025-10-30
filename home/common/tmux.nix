@@ -9,7 +9,7 @@ let
 
   # Fixed conditional logic using >= comparisons instead of < to avoid nesting issues
   cpuRamSection = ''
-    #{?#{>=:#{client_width},${mediumWidth}},#(${config.home.homeDirectory}/bin/tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(${config.home.homeDirectory}/bin/tmux-cpu-mem medium),#(${config.home.homeDirectory}/bin/tmux-cpu-mem narrow)}}
+    #{?#{>=:#{client_width},${mediumWidth}},#(tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(tmux-cpu-mem medium),#(tmux-cpu-mem narrow)}}
   '';
 
   # System info - load average now included in script
@@ -272,6 +272,41 @@ in
   home.packages = with pkgs; [
     procps # Provides tools like ps, top, free for system monitoring
     bc # Basic calculator
+
+    # Tmux session picker - the main interactive session selector
+    (pkgs.writeShellApplication {
+      name = "tmux-session-picker";
+      text = builtins.readFile ../files/bin/tmux-session-picker;
+      runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+    })
+
+    # Tmux session picker profiled version (performance testing)
+    (pkgs.writeShellApplication {
+      name = "tmux-session-picker-profiled";
+      text = builtins.readFile ../files/bin/tmux-session-picker-profiled;
+      runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep time ];
+    })
+
+    # Tmux CPU/memory status display with colored braille indicators
+    (pkgs.writeShellApplication {
+      name = "tmux-cpu-mem";
+      text = builtins.readFile ../files/bin/tmux-cpu-mem;
+      runtimeInputs = with pkgs; [ procps coreutils ];
+    })
+
+    # Tmux auto-attach logic for shell startup
+    (pkgs.writeShellApplication {
+      name = "tmux-auto-attach";
+      text = builtins.readFile ../files/bin/tmux-auto-attach;
+      runtimeInputs = with pkgs; [ tmux procps ];
+    })
+
+    # Tmux test data generator for testing session picker
+    (pkgs.writeShellApplication {
+      name = "tmux-test-data-generator";
+      text = builtins.readFile ../files/bin/tmux-test-data-generator;
+      runtimeInputs = with pkgs; [ coreutils ];
+    })
 
     # Custom tmux window status format script with proper Nix path substitution
     (pkgs.writers.writeBashBin "tmux-window-status-format" (builtins.replaceStrings

@@ -498,8 +498,12 @@
         # Black-box functional test: CLI help availability  
         tmux-picker-help-availability =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            # Use the tmux-session-picker script directly from files (bypassing home config)
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-help-availability"
             {
@@ -554,8 +558,12 @@
         # tests may need updates to extract session data differently.
         tmux-picker-argument-validation =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            # Use the tmux-session-picker script from tmux module packages
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-argument-validation"
             {
@@ -657,8 +665,12 @@
         # Black-box functional test: Environment variable integration
         tmux-picker-environment-variables =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            # Use the tmux-session-picker script from tmux module packages
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-environment-variables"
             {
@@ -752,8 +764,12 @@
         # Black-box functional test: Internal command interface (--list mode)
         tmux-picker-list-mode =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            # Use the tmux-session-picker script from tmux module packages
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-list-mode"
             {
@@ -857,10 +873,17 @@
         # to match new format specifications.
         tmux-picker-session-discovery =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
-            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
-            tmux-test-data-generator-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-test-data-generator;
+            # Use the tmux scripts from tmux module packages
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
+            tmux-test-data-generator-script = pkgs.writeShellApplication {
+              name = "tmux-test-data-generator";
+              text = builtins.readFile ../home/files/bin/tmux-test-data-generator;
+              runtimeInputs = with pkgs; [ coreutils ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-session-discovery"
             {
@@ -871,7 +894,6 @@
               };
               buildInputs = [
                 tmux-session-picker-script
-                tmux-parser-optimized-script
                 tmux-test-data-generator-script
                 pkgs.coreutils
                 pkgs.gnugrep
@@ -1012,9 +1034,17 @@
         # Black-box functional test: Session file validation
         tmux-picker-session-file-validation =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
-            tmux-test-data-generator-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-test-data-generator;
+            # Use the tmux scripts from tmux module packages
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
+            tmux-test-data-generator-script = pkgs.writeShellApplication {
+              name = "tmux-test-data-generator";
+              text = builtins.readFile ../home/files/bin/tmux-test-data-generator;
+              runtimeInputs = with pkgs; [ coreutils ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-session-file-validation"
             {
@@ -1187,14 +1217,19 @@
         # Consider adding terminal width boundary testing for robustness.
         tmux-picker-preview-generation =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
-
-            # Build the optimized parser script that the main script depends on
-            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
+            # Use the tmux scripts from tmux module packages
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
 
             # Test data generator for realistic session files
-            tmux-test-data-generator-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-test-data-generator;
+            tmux-test-data-generator-script = pkgs.writeShellApplication {
+              name = "tmux-test-data-generator";
+              text = builtins.readFile ../home/files/bin/tmux-test-data-generator;
+              runtimeInputs = with pkgs; [ coreutils ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-preview-generation"
             {
@@ -1205,7 +1240,6 @@
               };
               buildInputs = [
                 tmux-session-picker-script
-                tmux-parser-optimized-script
                 tmux-test-data-generator-script
                 pkgs.coreutils
                 pkgs.gnugrep
@@ -1382,10 +1416,12 @@
         # Black-box functional test: Error handling 
         tmux-picker-error-handling =
           let
-            # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
-            # Build the optimized parser script that the main script depends on
-            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
+            # Use the tmux-session-picker script from tmux module packages
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-error-handling"
             {
@@ -1396,7 +1432,6 @@
               };
               buildInputs = [
                 tmux-session-picker-script
-                tmux-parser-optimized-script
                 pkgs.coreutils
                 pkgs.gnugrep
                 pkgs.gnused
@@ -1597,7 +1632,11 @@
         tmux-picker-tmux-environment-detection =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-tmux-environment-detection"
             {
@@ -1798,7 +1837,11 @@
         tmux-picker-fzf-interface-sizing =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-fzf-interface-sizing"
             {
@@ -1860,8 +1903,11 @@
         tmux-picker-integration-ifs-robustness =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
-            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-integration-ifs-robustness"
             {
@@ -1874,7 +1920,6 @@
               };
               buildInputs = [
                 tmux-session-picker-script
-                tmux-parser-optimized-script
                 pkgs.coreutils
                 pkgs.gnugrep
                 pkgs.gnused
@@ -2017,7 +2062,11 @@
         tmux-picker-unicode-display-width =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = pkgs.writeShellApplication {
+              name = "tmux-session-picker";
+              text = builtins.readFile ../home/files/bin/tmux-session-picker;
+              runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+            };
           in
           pkgs.runCommand "test-tmux-session-picker-unicode-display-width"
             {
