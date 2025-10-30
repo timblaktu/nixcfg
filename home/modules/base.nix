@@ -340,6 +340,31 @@ in
             mouse_events = [ "click" "scroll" "touch" "move" ];
           };
         };
+        keymap = {
+          mgr.prepend_keymap = [
+            # WSL2 clipboard integration - override default copy commands to use clip.exe
+            {
+              on = "cc";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy path" ];
+              desc = "Copy absolute path to Windows clipboard";
+            }
+            {
+              on = "cd";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy dirname" ];
+              desc = "Copy directory path to Windows clipboard";
+            }
+            {
+              on = "cf";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy filename" ];
+              desc = "Copy filename to Windows clipboard";
+            }
+            {
+              on = "cn";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy name_without_ext" ];
+              desc = "Copy name without extension to Windows clipboard";
+            }
+          ];
+        };
       };
 
       # Container tools configuration (conditional)
