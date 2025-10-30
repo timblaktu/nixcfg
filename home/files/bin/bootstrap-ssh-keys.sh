@@ -213,13 +213,17 @@ generate_new_keys() {
     
     # Backup existing keys if they exist
     if [[ -f "$private_key" ]]; then
-        local backup="${private_key}.backup.$(date +%Y%m%d_%H%M%S)"
+        local timestamp
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup="${private_key}.backup.${timestamp}"
         log_warn "Backing up existing private key to: $backup"
         mv "$private_key" "$backup"
     fi
     
     if [[ -f "$public_key" ]]; then
-        local backup="${public_key}.backup.$(date +%Y%m%d_%H%M%S)"
+        local timestamp
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup="${public_key}.backup.${timestamp}"
         log_warn "Backing up existing public key to: $backup"
         mv "$public_key" "$backup"
     fi
