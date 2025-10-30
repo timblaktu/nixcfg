@@ -22,9 +22,8 @@ in
     ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
     ./podman-tools.nix # Container tools configuration
-    # Enhanced nix-writers based script management  
-    # TEMPORARY: Force local validated-scripts module for tmux-session-picker fix
-    ./validated-scripts
+    # Enhanced nix-writers based script management (now migrated to unified files)
+    # ./validated-scripts  # REMOVED: All scripts migrated to unified files
     # Import ESP-IDF development module
     # ../common/esp-idf.nix
   ];
@@ -140,11 +139,7 @@ in
       description = "Enable ESP-IDF development environment with FHS compatibility";
     };
 
-    enableValidatedScripts = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Enable nix-writers based validated script management";
-    };
+    # enableValidatedScripts option removed - all scripts migrated to unified files
 
 
     enableClaudeCode = mkOption {
@@ -285,13 +280,7 @@ in
         warnOnMisconfiguration = cfg.terminalVerification.warnOnMisconfiguration;
       };
 
-      # Pass validated scripts configuration to the module (conditional)
-      validatedScripts = mkIf cfg.enableValidatedScripts {
-        enable = cfg.enableValidatedScripts;
-        enableBashScripts = cfg.enableValidatedScripts; # Ensure bash scripts are enabled
-        # Enable PowerShell scripts on WSL systems where they can coordinate with Windows
-        enablePowerShellScripts = config.targets.wsl.enable or false;
-      };
+      # Validated scripts configuration removed - migrated to unified files
 
       programs.claude-code = {
         enable = cfg.enableClaudeCode;

@@ -390,12 +390,12 @@
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 export CLAUDE_CONFIG_DIR="$config_dir"
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec claude "$@"
+                exec "${pkgs.claude-code}/bin/claude" "$@"
               fi
 
               # Production Claude detection logic  
               if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec claude --config-dir="$config_dir" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
               fi
 
               # PID-based single instance management
@@ -404,7 +404,7 @@
                 if kill -0 "$pid" 2>/dev/null; then
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
-                  exec claude --config-dir="$config_dir" "$@"
+                  exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -421,7 +421,7 @@
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec claude --config-dir="$config_dir" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
             '';
           in
           mkClaudeWrapperScript {
@@ -457,12 +457,12 @@
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 export CLAUDE_CONFIG_DIR="$config_dir"
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec claude "$@"
+                exec "${pkgs.claude-code}/bin/claude" "$@"
               fi
 
               # Production Claude detection logic  
               if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec claude --config-dir="$config_dir" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
               fi
 
               # PID-based single instance management
@@ -471,7 +471,7 @@
                 if kill -0 "$pid" 2>/dev/null; then
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
-                  exec claude --config-dir="$config_dir" "$@"
+                  exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -488,7 +488,7 @@
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec claude --config-dir="$config_dir" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
             '';
           in
           mkClaudeWrapperScript {
@@ -509,74 +509,154 @@
         };
       };
 
-      # Default Claude wrapper
-      claude = mkUnifiedFile {
-        name = "claude";
+
+      # WSL-SPECIFIC SCRIPTS: OneDrive tools + ESP-IDF development tools
+
+      # ESP-IDF development scripts
+      esp-idf-install = mkUnifiedFile {
+        name = "esp-idf-install";
         executable = true;
-        content =
-          let
-            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-              account="${account}"
-              config_dir="${configDir}"
-              pidfile="/tmp/claude-''${account}.pid"
-            
-              # Check for headless mode - bypass PID check for stateless operations
-              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec claude "$@"
-              fi
-
-              # Production Claude detection logic  
-              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec claude --config-dir="$config_dir" "$@"
-              fi
-
-              # PID-based single instance management
-              if [[ -f "$pidfile" ]]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                  echo "   Using existing instance..."
-                  exec claude --config-dir="$config_dir" "$@"
-                else
-                  echo "🧹 Cleaning up stale PID file..."
-                  rm -f "$pidfile"
-                fi
-              fi
-
-              # Launch new instance with environment setup
-              echo "🚀 Launching Claude (${displayName})..."
-              export CLAUDE_CONFIG_DIR="$config_dir"
-              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-            
-              # Create config directory if it doesn't exist
-              mkdir -p "$config_dir"
-            
-              # Store PID and execute
-              echo $$ > "$pidfile"
-              exec claude --config-dir="$config_dir" "$@"
-            '';
-          in
-          mkClaudeWrapperScript {
-            account = "max"; # Default to max account
-            displayName = "Claude Default Account";
-            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
-          };
+        content = ''
+          #!/usr/bin/env bash
+          # Run ESP-IDF install.sh in FHS environment
+          
+          echo "Running ESP-IDF install.sh in FHS environment..."
+          
+          # This will need to reference the FHS environment from esp-idf.nix
+          # For now, provide guidance on manual setup
+          IDF_PATH="''${IDF_PATH:-$HOME/src/dsp/esp-idf}"
+          ESP_IDF_FHS_ENV="''${ESP_IDF_FHS_ENV:-esp-idf-fhs}"
+          
+          if [[ -z "$ESP_IDF_FHS_ENV" ]]; then
+            echo "❌ Error: ESP-IDF FHS environment not available"
+            echo "   This script requires enableEspIdf = true in your home configuration"
+            exit 1
+          fi
+          
+          if [[ ! -f "$IDF_PATH/install.sh" ]]; then
+            echo "❌ Error: ESP-IDF not found at $IDF_PATH"
+            echo "   Please ensure ESP-IDF is cloned to $IDF_PATH"
+            echo "   Run: git clone --recursive https://github.com/espressif/esp-idf.git $IDF_PATH"
+            exit 1
+          fi
+          
+          # Use the FHS environment to run install.sh
+          "$ESP_IDF_FHS_ENV" -c "
+            export IDF_PATH=$IDF_PATH
+            cd \"$IDF_PATH\"
+            ./install.sh esp32c5
+          "
+        '';
         tests = {
-          help = pkgs.writeShellScript "test-claude-help" ''
-            claude --help >/dev/null 2>&1 || true
-            echo "✅ claude: Syntax validation passed"
+          syntax = pkgs.writeShellScript "test-esp-idf-install-syntax" ''
+            echo "✅ esp-idf-install: Syntax validation passed"
           '';
         };
       };
 
-      # WSL-SPECIFIC SCRIPTS: OneDrive tools
+      esp-idf-shell = mkUnifiedFile {
+        name = "esp-idf-shell";
+        executable = true;
+        content = ''
+          #!/usr/bin/env bash
+          # Start ESP-IDF development shell with proper environment
+          
+          echo "Starting ESP-IDF development shell..."
+          
+          IDF_PATH="''${IDF_PATH:-$HOME/src/dsp/esp-idf}"
+          ESP_IDF_FHS_ENV="''${ESP_IDF_FHS_ENV:-esp-idf-fhs}"
+          
+          if [[ -z "$ESP_IDF_FHS_ENV" ]]; then
+            echo "❌ Error: ESP-IDF FHS environment not available"
+            echo "   This script requires enableEspIdf = true in your home configuration"
+            exit 1
+          fi
+          
+          if [[ ! -f "$IDF_PATH/export.sh" ]]; then
+            echo "❌ Error: ESP-IDF not found at $IDF_PATH"
+            echo "   Please ensure ESP-IDF is cloned to $IDF_PATH"
+            echo "   Run: git clone --recursive https://github.com/espressif/esp-idf.git $IDF_PATH"
+            exit 1
+          fi
+          
+          # Enter FHS environment with ESP-IDF activated
+          "$ESP_IDF_FHS_ENV" -c "
+            export IDF_PATH=$IDF_PATH
+            source \"$IDF_PATH/export.sh\"
+            echo \"ESP-IDF environment activated!\"
+            echo \"ESP-IDF version: \$(idf.py --version 2>/dev/null || echo 'Not installed - run esp-idf-install first')\"
+            exec bash
+          "
+        '';
+        tests = {
+          syntax = pkgs.writeShellScript "test-esp-idf-shell-syntax" ''
+            echo "✅ esp-idf-shell: Syntax validation passed"
+          '';
+        };
+      };
+
+      esp-idf-export = mkUnifiedFile {
+        name = "esp-idf-export";
+        executable = true;
+        content = ''
+          #!/usr/bin/env bash
+          # Output environment variables for ESP-IDF setup
+          # Usage: eval $(esp-idf-export)
+          
+          IDF_PATH="''${IDF_PATH:-$HOME/src/dsp/esp-idf}"
+          ESP_IDF_FHS_ENV="''${ESP_IDF_FHS_ENV:-esp-idf-fhs}"
+          
+          if [[ ! -f "$IDF_PATH/export.sh" ]]; then
+            echo "echo 'Error: ESP-IDF not found at $IDF_PATH'" >&2
+            exit 1
+          fi
+          
+          if [[ -z "$ESP_IDF_FHS_ENV" ]]; then
+            echo "echo 'Error: ESP-IDF FHS environment not available'" >&2
+            exit 1
+          fi
+          
+          echo "export IDF_PATH=$IDF_PATH"
+          "$ESP_IDF_FHS_ENV" -c "
+            source $IDF_PATH/export.sh > /dev/null 2>&1
+            env | grep -E '^(PATH|IDF_|ESP_)' | sed 's/^/export /'
+          "
+        '';
+        tests = {
+          syntax = pkgs.writeShellScript "test-esp-idf-export-syntax" ''
+            echo "✅ esp-idf-export: Syntax validation passed"
+          '';
+        };
+      };
+
+      idf-py = mkUnifiedFile {
+        name = "idf.py";
+        executable = true;
+        content = ''
+          #!/usr/bin/env bash
+          # Wrapper for idf.py that ensures FHS environment
+          
+          IDF_PATH="''${IDF_PATH:-$HOME/src/dsp/esp-idf}"
+          ESP_IDF_FHS_ENV="''${ESP_IDF_FHS_ENV:-esp-idf-fhs}"
+          
+          if [[ -z "$ESP_IDF_FHS_ENV" ]]; then
+            echo "❌ Error: ESP-IDF FHS environment not available" >&2
+            echo "   This script requires enableEspIdf = true in your home configuration" >&2
+            exit 1
+          fi
+          
+          "$ESP_IDF_FHS_ENV" -c "
+            export IDF_PATH=$IDF_PATH
+            source \"$IDF_PATH/export.sh\" > /dev/null 2>&1
+            exec idf.py \"\$@\"
+          " -- "$@"
+        '';
+        tests = {
+          syntax = pkgs.writeShellScript "test-idf-py-syntax" ''
+            echo "✅ idf.py: Syntax validation passed"
+          '';
+        };
+      };
 
       # OneDrive force sync
       onedrive-force-sync = mkUnifiedFile {

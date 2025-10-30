@@ -91,7 +91,6 @@
                 homeDirectory = "/home/tim";
                 enableDevelopment = true;
                 enableEspIdf = true;
-                enableValidatedScripts = true; # Required for ESP-IDF tools
                 environmentVariables = {
                   WSL_DISTRO = "nixos";
                   EDITOR = "nvim";

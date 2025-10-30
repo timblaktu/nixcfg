@@ -1436,7 +1436,7 @@ in
       # Additional scripts defined directly in config to work around evaluation issue
       # Claude Code wrapper - migrated from home/common/claude-code.nix
       claude-code-wrapper = mkBashScript {
-        name = "claude";
+        name = "claude-code-wrapper";
         deps = with pkgs; [ nodejs_22 coreutils ];
         text = /* bash */ ''
           #!/usr/bin/env bash
