@@ -283,6 +283,10 @@ let
     # Terminal scripts moved to terminal.nix module:
     # "setup-terminal-fonts" - now in terminal.nix
     # "diagnose-emoji-rendering" - now in terminal.nix  
+    # System scripts moved to system.nix module:
+    "bootstrap-secrets.sh"
+    "bootstrap-ssh-keys.sh"
+    "build-wsl-tarball"
     "esp-idf-install"
     "esp-idf-shell"
     "esp-idf-export"
