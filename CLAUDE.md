@@ -97,12 +97,32 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 - **✅ system.nix**: 3 scripts extracted (COMPLETE)
 - **✅ shell-utils.nix**: 9 libraries + 2 utilities extracted (COMPLETE) ← **JUST COMPLETED**
 
-**📋 NEXT SESSION TASK QUEUE**: Script Quality and Platform Improvements
+**🚨 CRITICAL WORKAROUND ANALYSIS - MUST ADDRESS BEFORE NEXT SESSION**
 
-**🎯 IMMEDIATE PRIORITY 1**: Re-enable Tmux Session Picker Scripts ✅ MAJOR SUCCESS ABOVE
-1. **Fix remaining shellcheck warnings** in tmux-session-picker and tmux-session-picker-profiled (temporarily disabled)
-2. **Address SC2155, SC2034, SC2046, SC2154 warnings** in session picker scripts  
-3. **Re-enable scripts** once shellcheck compliant
+**❌ WORKAROUND #1: Unicode Character Changes in colorfuncs.sh**
+- **Issue**: Changed Unicode emojis to ASCII to fix Nix build encoding errors
+- **Root Cause**: Nix build environment lacks proper Unicode locale support
+- **Problem**: May have invalidated Unicode testing functionality since script has conditional Unicode detection
+- **Fix Needed**: Investigate Nix build environment locale configuration instead of character changes
+
+**❌ WORKAROUND #2: Disabled tmux-session-picker Scripts**  
+- **Issue**: Commented out core tmux functionality scripts to avoid shellcheck warnings
+- **Root Cause**: Multiple shellcheck warnings (SC2155, SC2034, SC2046, SC2154)
+- **Problem**: Removed important user functionality instead of fixing warnings
+- **Fix Needed**: Address shellcheck warnings properly and re-enable scripts
+
+**❌ WORKAROUND #3: Missing claudemax Script**
+- **Issue**: Disabled migration files removed dynamic `claudemax` wrapper script
+- **Root Cause**: Script was generated in migration files, not migrated to modules
+- **Problem**: Lost Claude Code account management functionality
+- **Fix Needed**: Migrate `claudemax` wrapper to development.nix module
+
+**📋 REVISED PRIORITY TASK QUEUE**:
+
+**🎯 IMMEDIATE PRIORITY 1**: Fix Root Causes, Not Symptoms
+1. **Restore claudemax functionality** - migrate Claude wrapper script to development.nix
+2. **Fix Unicode build environment** - investigate Nix locale support vs character workarounds  
+3. **Re-enable tmux scripts** - fix shellcheck warnings instead of disabling functionality
 
 **🎯 IMMEDIATE PRIORITY 2**: OS/Platform-Specific Code Survey and Conditional Guards  
 1. **Survey nixcfg** for hardcoded OS/platform-specific implementations that lack proper conditional guards
