@@ -21,7 +21,35 @@
 2. /home/tim/src/home-manager
 3. /home/tim/src/NixOS-WSL
 
-## 📋 CURRENT STATUS: MODULE-BASED SCRIPT ORGANIZATION BREAKTHROUGH (2025-10-30)
+## 📋 CURRENT STATUS: CRITICAL TEST VALIDATION BREAKTHROUGH (2025-10-30 Session 2)
+
+### 🎯 HIGH-PRIORITY TASK SESSION RESULTS
+
+**🚨 CRITICAL ISSUE DISCOVERED**: Comprehensive validation revealed major test environment architectural flaw causing 12 tmux test failures despite CLAUDE.md claiming "complete success".
+
+**✅ ROOT CAUSE IDENTIFIED**: tmux-session-picker tests failing due to missing shell-utils library dependencies in isolated test build environment:
+- Tests create script copies but lack terminal-utils.bash, color-utils.bash, path-utils.bash
+- Script correctly sources libraries with full paths but test environment has no writable HOME
+- Architectural gap: test environment ≠ runtime environment
+
+**✅ SOLUTION IMPLEMENTED & VALIDATED**: 
+- Added library setup pattern to test environment using writable HOME directory
+- Pattern: `export HOME="$PWD/test-home"` + `mkdir -p $HOME/.local/lib` + copy required libraries
+- Successfully fixed 3 of 12 tests: help-availability, argument-validation, environment-variables
+
+**🔧 ESTABLISHED WORKING FIX PATTERN** for remaining 9 tests:
+```bash
+# Set up library dependencies in test environment
+export HOME="$PWD/test-home"
+mkdir -p $HOME/.local/lib
+cp ${../home/files/lib/terminal-utils.bash} $HOME/.local/lib/terminal-utils.bash
+cp ${../home/files/lib/color-utils.bash} $HOME/.local/lib/color-utils.bash
+cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
+```
+
+**📊 PROGRESS**: ✅ 3/12 tmux tests fixed and passing • ⏳ 9/12 tests need same fix applied
+
+## 📋 PREVIOUS STATUS: MODULE-BASED SCRIPT ORGANIZATION BREAKTHROUGH (2025-10-30)
 
 ### 🎯 COMPLETED: Architectural Issue Resolution via Module-Based Organization
 
@@ -110,11 +138,13 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 - **✅ FUNCTIONALITY RESTORED**: Core tmux session picker and Claude Code wrappers working
 - **✅ BUILD QUALITY**: Shellcheck compliance maintained without sacrificing functionality
 
-**🚨 CRITICAL BUG FOUND & FIXED**: tmux-session-picker library path resolution
-- **Bug**: Script was sourcing libraries by name without full paths, failed at runtime despite passing flake checks
-- **Root Cause**: Libraries installed as `~/.local/lib/*.bash` but script expected bare names like `terminal-utils`
-- **Fix**: Updated source statements to use absolute paths: `source "$HOME/.local/lib/terminal-utils.bash"`
-- **Gap**: Flake checks validate in build environment, not runtime environment - need integration tests
+**🚨 CRITICAL BUG FOUND & PARTIALLY FIXED**: tmux-session-picker test environment library dependencies (2025-10-30)
+- **Bug**: 12 tmux-session-picker tests failing due to missing library dependencies in isolated test environment
+- **Root Cause**: Tests create tmux-session-picker script copy but don't include shell-utils libraries (terminal-utils.bash, color-utils.bash, path-utils.bash) in test environment
+- **Discovery**: Script correctly sources libraries with full paths (`source "$HOME/.local/lib/terminal-utils.bash"`) but test environment has no writable HOME directory
+- **Fix Applied**: 3 of 12 tests fixed by adding library setup to test environment with writable HOME directory
+- **Status**: ✅ WORKING PATTERN established for remaining 9 tests
+- **Architecture Gap**: Test vs runtime environment discrepancy - tests need library files present for script execution
 
 **📋 NEXT PRIORITY TASKS**:
 
