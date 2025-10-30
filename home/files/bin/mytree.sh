@@ -6,8 +6,12 @@
 # Usage (if sourced): mytree FILE1 [FILE2 ...]
 
 mytree() {
-    if [ $# -eq 0 ]; then
+    if [ $# -eq 0 ] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
         echo "Usage: mytree FILE1 [FILE2 ...]"
+        echo "Groups files by directory and displays them using tree command"
+        echo ""
+        echo "Options:"
+        echo "  -h, --help    Show this help message"
         return 1
     fi
 

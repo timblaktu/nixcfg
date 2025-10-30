@@ -24,6 +24,12 @@
    - Conditional loading allows gradual machine-by-machine migration
    - Backward compatibility essential during transition periods
 
+5. **Build-time validation ≠ Runtime validation**
+   - `nix flake check` validates build correctness but not script functionality
+   - Dry-runs test configuration parsing but don't execute actual scripts
+   - Runtime bugs (like `mytree --help` showing `dirname` help) require functional testing
+   - Need both: build validation AND functional testing of deployed scripts
+
 ### Migration Architecture Success
 
 - **Hybrid autoWriter + enhanced libraries** successfully deployed to production
