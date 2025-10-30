@@ -256,7 +256,7 @@ in
   options.homeFiles = {
     enable = mkOption {
       type = types.bool;
-      default = true;
+      default = false;
       description = "Enable unified home files module with autoWriter integration";
     };
 
@@ -311,9 +311,11 @@ in
   };
 
   config = mkIf cfg.enable {
-    # Make helper functions available
+    # Make helper functions available (use unified prefix to avoid conflicts)
     _module.args = {
-      inherit mkValidatedFile mkScriptLibrary mkClaudeWrapper;
+      mkUnifiedFile = mkValidatedFile;
+      mkUnifiedLibrary = mkScriptLibrary;
+      inherit mkClaudeWrapper;
       inherit autoWriter autoWriterBin debugAutoWriter;
     };
 

@@ -499,7 +499,7 @@
         tmux-picker-help-availability =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
           in
           pkgs.runCommand "test-tmux-session-picker-help-availability"
             {
@@ -555,7 +555,7 @@
         tmux-picker-argument-validation =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
           in
           pkgs.runCommand "test-tmux-session-picker-argument-validation"
             {
@@ -658,7 +658,7 @@
         tmux-picker-environment-variables =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
           in
           pkgs.runCommand "test-tmux-session-picker-environment-variables"
             {
@@ -753,7 +753,7 @@
         tmux-picker-list-mode =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
           in
           pkgs.runCommand "test-tmux-session-picker-list-mode"
             {
@@ -858,9 +858,9 @@
         tmux-picker-session-discovery =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
-            tmux-parser-optimized-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-parser-optimized;
-            tmux-test-data-generator-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-test-data-generator;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
+            tmux-test-data-generator-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-test-data-generator;
           in
           pkgs.runCommand "test-tmux-session-picker-session-discovery"
             {
@@ -1013,8 +1013,8 @@
         tmux-picker-session-file-validation =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
-            tmux-test-data-generator-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-test-data-generator;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-test-data-generator-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-test-data-generator;
           in
           pkgs.runCommand "test-tmux-session-picker-session-file-validation"
             {
@@ -1188,13 +1188,13 @@
         tmux-picker-preview-generation =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
 
             # Build the optimized parser script that the main script depends on
-            tmux-parser-optimized-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-parser-optimized;
+            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
 
             # Test data generator for realistic session files
-            tmux-test-data-generator-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-test-data-generator;
+            tmux-test-data-generator-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-test-data-generator;
           in
           pkgs.runCommand "test-tmux-session-picker-preview-generation"
             {
@@ -1383,9 +1383,9 @@
         tmux-picker-error-handling =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
             # Build the optimized parser script that the main script depends on
-            tmux-parser-optimized-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-parser-optimized;
+            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
           in
           pkgs.runCommand "test-tmux-session-picker-error-handling"
             {
@@ -1597,7 +1597,7 @@
         tmux-picker-tmux-environment-detection =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
           in
           pkgs.runCommand "test-tmux-session-picker-tmux-environment-detection"
             {
@@ -1798,7 +1798,7 @@
         tmux-picker-fzf-interface-sizing =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
           in
           pkgs.runCommand "test-tmux-session-picker-fzf-interface-sizing"
             {
@@ -1860,8 +1860,8 @@
         tmux-picker-integration-ifs-robustness =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
-            tmux-parser-optimized-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-parser-optimized;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-parser-optimized-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-parser-optimized;
           in
           pkgs.runCommand "test-tmux-session-picker-integration-ifs-robustness"
             {
@@ -2017,7 +2017,7 @@
         tmux-picker-unicode-display-width =
           let
             # Use the properly built script from validated-scripts module
-            tmux-session-picker-script = self.homeConfigurations."tim@thinky-nixos".config.validatedScripts.bashScripts.tmux-session-picker;
+            tmux-session-picker-script = self.homeConfigurations."tim@mbp".config.validatedScripts.bashScripts.tmux-session-picker;
           in
           pkgs.runCommand "test-tmux-session-picker-unicode-display-width"
             {

@@ -89,6 +89,8 @@
                 homeDirectory = "/home/tim";
                 enableDevelopment = true;
                 enableEspIdf = true;
+                useUnifiedFilesModule = true; # Enable new unified files module
+                enableValidatedScripts = false; # Disable legacy validated scripts
                 environmentVariables = {
                   WSL_DISTRO = "nixos";
                   EDITOR = "nvim";
@@ -116,6 +118,7 @@
                 bindMountRoot.enable = false;
               };
             }
+            ../home/migration/thinky-nixos-unified-files.nix # Migration configuration for unified files
             ../home/modules/mcp-servers.nix
             # ../home/modules/autovalidate-demo.nix  # Disabled - requires home-manager autoValidate integration
           ];
