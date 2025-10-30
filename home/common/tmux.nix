@@ -273,12 +273,12 @@ in
     procps # Provides tools like ps, top, free for system monitoring
     bc # Basic calculator
 
-    # Tmux session picker - the main interactive session selector - TEMPORARILY DISABLED due to shellcheck warnings
-    # (pkgs.writeShellApplication {
-    #   name = "tmux-session-picker";
-    #   text = builtins.readFile ../files/bin/tmux-session-picker;
-    #   runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
-    # })
+    # Tmux session picker - the main interactive session selector
+    (pkgs.writeShellApplication {
+      name = "tmux-session-picker";
+      text = builtins.readFile ../files/bin/tmux-session-picker;
+      runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
+    })
 
     # Tmux session picker profiled version (performance testing) - TEMPORARILY DISABLED due to shellcheck warnings
     # (pkgs.writeShellApplication {
