@@ -52,45 +52,52 @@ tmux-session-picker = pkgs.writeShellApplication {
 ```
 
 
-### 🎯 NEXT SESSION TASK QUEUE - **EXTEND MODULE-BASED ORGANIZATION PRINCIPLE**
+### 🎯 NEXT SESSION IMPLEMENTATION QUEUE - **MODULE-BASED ORGANIZATION EXTENSION**
 
-**🔍 PRIORITY 1: STRATEGIC ANALYSIS - home/files Future Architecture**
-- **Audit remaining home/files/bin scripts** for functional module extraction opportunities  
-- **Analyze home/files/lib bash libraries** for shell package management integration
-- **Evaluate whether home/files "dumping ground" should be eliminated entirely**
-- **Design intentional packaging strategy** for general utilities vs functional domain scripts
+**✅ STRATEGIC ANALYSIS COMPLETE**: Research confirms home/files dumping ground should be eliminated entirely following nixpkgs patterns.
 
-**💭 PRIORITY 2: PACKAGING PATTERN RESEARCH**
-- **Study nixpkgs script organization patterns** for bash/python/etc utilities
-- **Create decision framework** for script categorization and placement
-- **Investigate shell package management** for bash library organization
-- **Define criteria** for "general utility" vs "domain-specific" classification
+**🏗️ IMPLEMENTATION ROADMAP** (Priority Order):
 
-**🔧 PRIORITY 3: IMPLEMENTATION OPPORTUNITIES**
-- **Extract git-related scripts** to `git.nix` module (following tmux pattern)
-- **Extract development tools** to appropriate modules (`development.nix`, etc.)
-- **Consider bash library packaging** in dedicated shell utilities module
-- **Evaluate Claude wrapper scripts** for dedicated claude-code module
+**📋 IMMEDIATE: Module-Based Migration Following tmux.nix Pattern**
+1. **git.nix** - Extract `syncfork.sh`, `gitfuncs.sh` (2 scripts)
+2. **development.nix** - Extract `claudevloop`, `restart_claude*`, `mkclaude_desktop_config` (4 scripts)  
+3. **terminal.nix** - Extract `setup-terminal-fonts`, `check-terminal-setup`, `diagnose-emoji-rendering`, `is_terminal_background_light_or_dark.sh` (4 scripts)
+4. **system.nix** - Extract `bootstrap-*.sh`, `build-wsl-tarball` (3 scripts)
+5. **shell-utils.nix** - Extract all `/lib/*.bash` libraries + `mytree.sh`, `colorfuncs.sh` (11 libraries + 2 utilities)
 
-**💡 STRATEGIC QUESTION**: Should `home/files` exist at all, or should everything be intentionally packaged with functional domains following standard Linux/Nix packaging principles?
+**🎯 ARCHITECTURAL DECISIONS FINALIZED**:
+- ✅ **Module-based organization** confirmed as correct approach (following Linux packaging principles)
+- ✅ **home/files elimination** validated by nixpkgs research - no dumping ground directories
+- ✅ **shell-utils.nix consolidation** - text utilities belong with shell utilities, not separate module
+- ✅ **Function-over-implementation** - organize by purpose, not language/OS
+
+**🔧 PROVEN PATTERN** (from tmux.nix success):
+```nix
+# home/common/DOMAIN.nix
+SCRIPT-NAME = pkgs.writeShellApplication {
+  name = "script-name";
+  text = builtins.readFile ../files/bin/script-name;
+  runtimeInputs = with pkgs; [ dependencies ];
+};
+```
 
 ### 📚 SESSION HANDOFF SUMMARY (2025-10-30)
 
-**🎯 BREAKTHROUGH ACHIEVED**: Resolved architectural crisis through **module-based organization**
-- **Immediate Success**: `nix flake check` now passes - eliminated all `validatedScripts` missing attribute errors
-- **Root Solution**: Moved scripts to their **functional modules** (tmux scripts → `tmux.nix`) following Linux packaging principles
-- **Key Discovery**: OS-based classification was the **wrong approach** - function-based organization is correct
+**🎯 COMPREHENSIVE ANALYSIS COMPLETED**: Extended module-based organization principle to entire system
+- **Strategic Research**: Validated approach against nixpkgs patterns - no dumping ground directories exist
+- **Script Audit**: Categorized all remaining home/files content by functional domain  
+- **Architecture Decision**: home/files elimination confirmed - follows Linux packaging principles
+- **Implementation Plan**: 5-module migration roadmap established with proven tmux.nix pattern
 
-**🔄 TRANSITION COMPLETED**: From broken state to working architecture
-- **Old System**: ❌ `validated-scripts` module (successfully removed)
-- **Failed Approach**: ❌ OS-based script collections (`linux-home-files.nix`, etc.)
-- **New System**: ✅ **Module-based organization** (`tmux.nix` contains tmux scripts, etc.)
+**🔄 ARCHITECTURAL TRANSFORMATION**: From dumping ground to intentional organization
+- **Previous**: ❌ Arbitrary script collections in home/files
+- **Validated**: ✅ Function-based modules (git.nix, development.nix, terminal.nix, system.nix, shell-utils.nix)
+- **Pattern**: ✅ Each module owns its scripts as `writeShellApplication` packages
 
-**📋 NEXT SESSION FOCUS**: **EXTEND MODULE-BASED PRINCIPLE TO ALL SCRIPTS**
-- Audit remaining `home/files` content for similar extraction opportunities
-- Question whether `home/files` "dumping ground" should exist at all
-- Design intentional packaging strategy following established Linux/Nix patterns
-- Consider complete elimination of arbitrary script collections in favor of purposeful module organization
+**📋 READY FOR IMPLEMENTATION**: Clear roadmap with prioritized module extraction
+- git.nix → development.nix → terminal.nix → system.nix → shell-utils.nix
+- Each follows proven tmux.nix pattern with proper dependency management
+- Complete elimination of home/files dumping ground as final goal
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
