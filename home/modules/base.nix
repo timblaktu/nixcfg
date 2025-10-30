@@ -18,6 +18,7 @@ in
     ./files
     ../files
     ../common/development.nix
+    ../common/terminal.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
@@ -133,6 +134,12 @@ in
       type = types.bool;
       default = false;
       description = "Enable development packages and tools";
+    };
+
+    enableTerminal = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable terminal configuration and font setup tools";
     };
 
     enableEspIdf = mkOption {
