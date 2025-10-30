@@ -44,8 +44,8 @@ echo
 echo "=== WSL Font Configuration ==="
 echo "Checking NixOS fontconfig..."
 if command -v fc-list >/dev/null 2>&1; then
-    CASCADIA_COUNT=$(fc-list | grep -iE "caskaydia.*mono.*nerd" | wc -l)
-    EMOJI_COUNT=$(fc-list | grep -iE "(emoji|color)" | wc -l)
+    CASCADIA_COUNT=$(fc-list | grep -icE "caskaydia.*mono.*nerd")
+    EMOJI_COUNT=$(fc-list | grep -icE "(emoji|color)")
     
     if [[ "$CASCADIA_COUNT" -gt 0 ]]; then
         echo "  ✅ CascadiaMono Nerd Font: $CASCADIA_COUNT variants found"
