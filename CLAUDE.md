@@ -110,12 +110,19 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 - **✅ FUNCTIONALITY RESTORED**: Core tmux session picker and Claude Code wrappers working
 - **✅ BUILD QUALITY**: Shellcheck compliance maintained without sacrificing functionality
 
+**🚨 CRITICAL BUG FOUND & FIXED**: tmux-session-picker library path resolution
+- **Bug**: Script was sourcing libraries by name without full paths, failed at runtime despite passing flake checks
+- **Root Cause**: Libraries installed as `~/.local/lib/*.bash` but script expected bare names like `terminal-utils`
+- **Fix**: Updated source statements to use absolute paths: `source "$HOME/.local/lib/terminal-utils.bash"`
+- **Gap**: Flake checks validate in build environment, not runtime environment - need integration tests
+
 **📋 NEXT PRIORITY TASKS**:
 
-**🎯 PRIORITY 1: Test Quality Improvements**
-1. **Investigate tmux-session-picker test failures** - Some functional tests still failing despite shellcheck compliance
-2. **Enhance test robustness** - Improve test environment setup and dependency management  
-3. **Cross-platform testing** - Validate functionality across different environments
+**🎯 PRIORITY 1: Test Quality & Integration Improvements**
+1. **Add runtime integration tests** - Test scripts in actual home-manager environment, not just build environment
+2. **Validate library sourcing patterns** - Ensure all scripts properly reference library paths  
+3. **Post-installation functional tests** - Test that scripts work after home-manager switch
+4. **Cross-platform testing** - Validate functionality across different environments
 
 **🎯 PRIORITY 2: OS/Platform-Specific Code Survey and Conditional Guards**  
 1. **Survey nixcfg** for hardcoded OS/platform-specific implementations that lack proper conditional guards
@@ -134,9 +141,16 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 
 **🔧 PROVEN IMPLEMENTATION PATTERNS** (Final Reference):
 - **Scripts**: writeShellApplication with runtimeInputs dependencies  
-- **Libraries**: writeText for non-executable bash libraries
+- **Libraries**: writeText for non-executable bash libraries, installed to `~/.local/lib/*.bash`
+- **Library Sourcing**: Always use absolute paths: `source "$HOME/.local/lib/library-name.bash"`
 - **Integration**: Import + enableOption in base.nix
 - **Quality**: shellcheck compliance required for builds
+
+**⚠️ CRITICAL VALIDATION GAPS IDENTIFIED**:
+- **Build vs Runtime**: flake checks validate in build environment, not actual runtime environment
+- **Library Resolution**: Source statements must use full paths, not bare names
+- **Integration Testing**: Need post-installation functional tests in real home-manager environment
+- **PATH Dependencies**: Scripts using external libraries need careful path management
 
 **📊 MIGRATION PROGRESS TRACKER** (22 of 22 items complete - 100%):
 - ✅ tmux.nix: 6 scripts (COMPLETE)
