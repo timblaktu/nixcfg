@@ -101,9 +101,9 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 - **✅ system.nix**: 3 scripts extracted (COMPLETE) ← **JUST COMPLETED**
 - **Remaining**: shell-utils.nix (11 libraries + 2 utilities)
 
-**📋 NEXT SESSION TASK QUEUE**: Complete module-based organization implementation
+**📋 NEXT SESSION TASK QUEUE**: Complete architectural improvements
 
-**🎯 IMMEDIATE PRIORITY**: shell-utils.nix module creation (FINAL MODULE)
+**🎯 IMMEDIATE PRIORITY 1**: shell-utils.nix module creation (FINAL MODULE)
 1. **Create home/common/shell-utils.nix** following established pattern
 2. **Extract remaining items**:
    - 11 shell libraries from `/lib/*.bash` → mkScriptLibrary pattern for non-executable sourcing
@@ -111,6 +111,21 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 3. **Remove final references** from migration files  
 4. **Complete elimination** of home/files dumping ground
 5. **Final validation** with full nix flake check + home-manager integration
+
+**🎯 IMMEDIATE PRIORITY 2**: OS/Platform-Specific Code Survey and Conditional Guards
+1. **Survey nixcfg** for hardcoded OS/platform-specific implementations that lack proper conditional guards
+2. **Implement conditional platform detection pattern**:
+   ```nix
+   let
+     isWSL = config.targets.wsl.enable or false;
+     isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+     isLinux = pkgs.stdenv.hostPlatform.isLinux;
+   in {
+     # Platform-specific configurations with proper conditionals
+   }
+   ```
+3. **Fix hardcoded platform-specific code** to be properly conditional (e.g., `explorer.exe` vs `open` vs `xdg-open`)
+4. **Validate cross-platform compatibility** with multiple home configurations
 
 **🔧 PROVEN IMPLEMENTATION PATTERNS**:
 - **Scripts**: writeShellApplication with runtimeInputs dependencies
