@@ -51,31 +51,55 @@
 
 **DEPLOYMENT READY**: ✅ Production migration pathway established and validated
 
-## 📋 NEXT SESSION TASK QUEUE
+## 📋 NEXT SESSION TASK QUEUE (Updated Oct 29, 2024)
 
-### 🎯 PRIORITY 1: Expand Production Migration ✅ READY
-1. **Migrate additional machines** - Update thinky-ubuntu, mbp to use unified files module
-2. **Enhanced script migration** - Add missing scripts (bootstrap-secrets, bootstrap-ssh-keys)  
-3. **Library system expansion** - Migrate colorUtils, gitUtils from legacy files
-4. **Domain generators deployment** - Deploy tmux-session-picker, OneDrive helpers
+### 🎯 PRIORITY 1: Complete Script Migration ✅ READY
+**MIGRATE ALL REMAINING SCRIPTS EXCEPT:**
+- `simple-test`, `hello-validated` (test scripts - remove these)
+- `esp-idf-*`, `idf-py` (ESP-IDF tools - keep in validated-scripts)
 
-### 🎯 PRIORITY 2: Cleanup & Optimization  
-1. **Remove deprecated modules** - Clean up validated-scripts after successful migration of all machines
-2. **Shell completion validation** - Ensure auto-completions work with unified module structure  
-3. **Content structure finalization** - Complete migration from home/files/bin to organized content structure
-4. **Final validation** - End-to-end testing and performance benchmarking across all configurations
+**SCRIPTS TO MIGRATE (11 items):**
+1. **Core Tools**: `smart-nvimdiff`, `setup-terminal-fonts`, `mergejson`, `diagnose-emoji-rendering`
+2. **Claude Integration**: `claude-code-wrapper`, `claude-code-update`, `claudemax`, `claudepro`, `claude`  
+3. **OneDrive Tools**: `onedrive-force-sync`, `onedrive-status`
 
-### 📚 IMPLEMENTATION MEMORY FOR NEXT SESSION  
-- **Production migration complete on thinky-nixos** - First machine successfully running unified files module
-- **Coexistence system deployed**: validated-scripts and unified files work together via conditional loading
-- **Function naming resolved**: mkUnifiedFile/mkUnifiedLibrary prevents conflicts with legacy mkScriptLibrary
-- **Test integration validated**: All 38 flake checks pass, tim@mbp used for validated-scripts tests  
-- **Migration pattern established**: useUnifiedFilesModule flag + migration configuration files
-- **Script catalog migrated**: mytree, stress, syncfork, is-terminal-background-light-or-dark, claude-max
-- **Library system working**: terminalUtils library with basic functions deployed and tested
-- **Domain generators ready**: mkClaudeWrapper functional, tmux/OneDrive generators available but not yet deployed
+**CLEANUP TASKS:**
+1. **Verify tmux-parser-optimized** - Confirm bash.nix version is obsolete vs home/files version
+2. **Remove obsolete scripts** - Delete `simple-test`, `hello-validated`, old `tmux-parser-optimized`
 
-**CRITICAL**: Production deployment pathway validated - ready for expansion to remaining machines (thinky-ubuntu, mbp)
+### 🎯 PRIORITY 2: Machine Migration ✅ READY  
+1. **thinky-ubuntu** - Switch to `useUnifiedFilesModule = true`
+2. **mbp** - Switch to `useUnifiedFilesModule = true`  
+3. **Validation** - Test unified system on all machines
+
+### 🎯 PRIORITY 3: Final Cleanup & Validation
+1. **Remove validated-scripts** - Clean up module after migration complete
+2. **Shell completion validation** - Ensure auto-completions work with unified module
+3. **End-to-end testing** - Performance and functionality validation
+
+### 📚 IMPLEMENTATION MEMORY FOR NEXT SESSION (Updated Oct 29, 2024)
+
+**🎉 MAJOR PROGRESS ACHIEVED:**
+- **✅ Git workflow fixed** - All migration work properly on dev branch, main clean
+- **✅ Major migration complete** - 28 scripts + 11 libraries successfully moved to home/files
+- **✅ System stability proven** - nix flake check passes, no regressions
+- **✅ Coexistence working** - validated-scripts and home/files work together via conditional loading
+
+**📋 CURRENT INVENTORY:**
+- **✅ In home/files**: 28 scripts + 11 libraries (tmux tools, Claude tools, utilities, libraries)
+- **❌ Remaining in validated-scripts**: 21 scripts (11 to migrate, 4 to remove, 6 ESP-IDF to keep)
+- **🏠 Machine status**: All using validated-scripts by default, ready for unified system migration
+
+**🎯 NEXT SESSION PRIORITIES:**
+1. **Script migration** - Move 11 remaining scripts (smart-nvimdiff, Claude wrappers, OneDrive tools, etc.)
+2. **Cleanup** - Remove obsolete test scripts and old tmux-parser-optimized
+3. **Machine migration** - Switch thinky-ubuntu and mbp to `useUnifiedFilesModule = true`
+4. **Final validation** - Test end-to-end functionality across all machines
+
+**🔧 TECHNICAL NOTES:**
+- **Migration pattern proven**: home/files/bin → homeFilesScripts derivations working
+- **Library injection working**: bash script + library replacement pattern functional
+- **Test compatibility**: All 38 flake checks pass with hybrid system
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
