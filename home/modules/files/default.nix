@@ -280,7 +280,9 @@ let
     "simple-test"
     "hello-validated"
     "smart-nvimdiff"
-    "setup-terminal-fonts"
+    # Terminal scripts moved to terminal.nix module:
+    # "setup-terminal-fonts" - now in terminal.nix
+    # "diagnose-emoji-rendering" - now in terminal.nix  
     "esp-idf-install"
     "esp-idf-shell"
     "esp-idf-export"
@@ -291,7 +293,6 @@ let
     "tmux-auto-attach"
     "colorfuncs"
     "mergejson"
-    "diagnose-emoji-rendering"
     "onedrive-status"
     "tmux-session-picker" # This is the key one we want to exclude
   ];
