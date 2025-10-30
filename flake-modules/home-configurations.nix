@@ -24,6 +24,7 @@
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
+                useUnifiedFilesModule = true; # Enable new unified files module
               };
             }
             ../home/modules/mcp-servers.nix
@@ -46,6 +47,7 @@
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
+                useUnifiedFilesModule = true; # Enable new unified files module
                 environmentVariables = {
                   WSL_DISTRO = "ubuntu";
                   EDITOR = "nvim";
