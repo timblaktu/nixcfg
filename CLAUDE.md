@@ -83,56 +83,47 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 
 ### 📚 SESSION HANDOFF SUMMARY (2025-10-30)
 
-**🎯 IMPLEMENTATION SUCCESS**: terminal.nix module-based organization completed successfully
-- **✅ terminal.nix Complete**: 4 terminal utility scripts extracted using writeShellApplication pattern:
-  - `setup-terminal-fonts` (WSL terminal font configuration) with jq, coreutils, util-linux dependencies
-  - `check-terminal-setup` (terminal alignment verification) with jq, coreutils dependencies  
-  - `diagnose-emoji-rendering` (comprehensive terminal diagnostics) with xxd, coreutils, util-linux dependencies
-  - `is_terminal_background_light_or_dark` (background detection utility) with coreutils, util-linux dependencies
-- **✅ Quality Assurance**: All scripts build successfully in home-manager after fixing shellcheck warnings
-- **✅ Integration Success**: Added terminal.nix import to base.nix with enableTerminal option (default: true)
-- **✅ Migration Cleanup**: Removed terminal script references from zsh.nix overrides and files/default.nix exclusions
+**🎯 IMPLEMENTATION SUCCESS**: system.nix module-based organization completed successfully
+- **✅ system.nix Complete**: 3 system administration scripts extracted using writeShellApplication pattern:
+  - `bootstrap-secrets` (SOPS key retrieval from Bitwarden) with rbw, nix, coreutils, age dependencies
+  - `bootstrap-ssh-keys` (SSH keypair management via Bitwarden) with rbw, openssh, coreutils, util-linux dependencies
+  - `build-wsl-tarball` (NixOS-WSL tarball builder) with nix, coreutils, util-linux dependencies
+- **✅ Quality Assurance**: All scripts build successfully in home-manager after fixing shellcheck warnings (SC2155)
+- **✅ Integration Success**: Added system.nix import to base.nix with enableSystem option (default: true)
+- **✅ Migration Cleanup**: Added system script exclusions to files/default.nix validatedScriptNames list
+- **✅ End-to-End Verification**: Scripts appear correctly in homeConfigurations package list
 
 **🔄 ARCHITECTURAL TRANSFORMATION PROGRESS**: From dumping ground to intentional organization
 - **✅ tmux.nix**: 6 scripts extracted (COMPLETE)
 - **✅ git.nix**: 2 scripts extracted (COMPLETE)
 - **✅ development.nix**: 3 scripts extracted (COMPLETE)
-- **✅ terminal.nix**: 4 scripts extracted (COMPLETE) ← **JUST COMPLETED**
-- **Remaining**: system.nix, shell-utils.nix (8 scripts + 11 libraries)
+- **✅ terminal.nix**: 4 scripts extracted (COMPLETE)
+- **✅ system.nix**: 3 scripts extracted (COMPLETE) ← **JUST COMPLETED**
+- **Remaining**: shell-utils.nix (11 libraries + 2 utilities)
 
-**📋 NEXT SESSION TASK QUEUE**: Continue module-based organization implementation
+**📋 NEXT SESSION TASK QUEUE**: Complete module-based organization implementation
 
-**🎯 IMMEDIATE PRIORITY**: system.nix module creation
-1. **Create home/common/system.nix** following terminal.nix pattern
-2. **Extract 3 system scripts**:
-   - `bootstrap-*.sh` scripts → writeShellApplication with appropriate dependencies
-   - `build-wsl-tarball` → writeShellApplication with build tools
-3. **Remove references** from migration files
-4. **Test integration** with nix flake check + home-manager dry-run
+**🎯 IMMEDIATE PRIORITY**: shell-utils.nix module creation (FINAL MODULE)
+1. **Create home/common/shell-utils.nix** following established pattern
+2. **Extract remaining items**:
+   - 11 shell libraries from `/lib/*.bash` → mkScriptLibrary pattern for non-executable sourcing
+   - 2 utility scripts (`mytree.sh`, `colorfuncs.sh`) → writeShellApplication pattern
+3. **Remove final references** from migration files  
+4. **Complete elimination** of home/files dumping ground
+5. **Final validation** with full nix flake check + home-manager integration
 
-**🔧 PROVEN IMPLEMENTATION PATTERN** (from terminal.nix success):
-```nix
-# home/common/system.nix 
-{ config, lib, pkgs, ... }: {
-  config = mkIf cfg.enableSystem {
-    home.packages = with pkgs; [
-      (pkgs.writeShellApplication {
-        name = "script-name";
-        text = builtins.readFile ../files/bin/script-name;
-        runtimeInputs = with pkgs; [ dependencies ];
-      })
-    ];
-  };
-}
-```
+**🔧 PROVEN IMPLEMENTATION PATTERNS**:
+- **Scripts**: writeShellApplication with runtimeInputs dependencies
+- **Libraries**: mkScriptLibrary for non-executable bash libraries
+- **Integration**: Import + enableOption in base.nix + exclusions in files/default.nix
 
-**📊 MIGRATION PROGRESS TRACKER** (15 of 22 scripts complete - 68%):
+**📊 MIGRATION PROGRESS TRACKER** (18 of 22 items complete - 82%):
 - ✅ tmux.nix: 6 scripts (COMPLETE)
 - ✅ git.nix: 2 scripts (COMPLETE) 
 - ✅ development.nix: 3 scripts (COMPLETE)
-- ✅ terminal.nix: 4 scripts (COMPLETE) ← **JUST COMPLETED**
-- 🎯 system.nix: 3 scripts (NEXT SESSION PRIORITY)
-- ⏳ shell-utils.nix: 11 libraries + 2 utilities (FINAL PHASE)
+- ✅ terminal.nix: 4 scripts (COMPLETE)
+- ✅ system.nix: 3 scripts (COMPLETE) ← **JUST COMPLETED**
+- 🎯 shell-utils.nix: 11 libraries + 2 utilities (FINAL MODULE - 4 items remaining)
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
