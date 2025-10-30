@@ -70,49 +70,74 @@
 - **Migration strategy complete**: All general scripts moved to unified files, ESP tools retained strategically
 - **Build system validated**: All configurations compile and deploy successfully
 
-### 🎯 NEXT SESSION PRIORITIES (DEPLOYMENT READY)
+### 🎯 NEXT SESSION TASK QUEUE (OS-SPECIFIC REFACTOR)
 
-**🚀 PRIORITY 1: Live Deployment (READY)**
-1. **Production deployment**: Deploy to thinky-ubuntu and mbp (commands validated and ready)
-2. **Real-world testing**: Verify scripts function in actual usage scenarios  
-3. **Performance measurement**: Document build time improvements vs legacy system
+**🚀 PRIORITY 1: OS-Specific Architecture Implementation (CRITICAL)**
 
-**🧹 PRIORITY 2: System Optimization (OPTIONAL)**
-1. **Migration cleanup**: Move remaining migration files to permanent homeFiles structure
-2. **Documentation updates**: Update architecture docs to reflect completed unified system
-3. **Performance analysis**: Measure and document efficiency gains from unified architecture
+**Step 1: Create OS-Specific Files**
+1. **Create wsl-home-files.nix**: 
+   - Include all 9 universal Linux scripts (smart-nvimdiff, setup-terminal-fonts, mergejson, diagnose-emoji-rendering, claude wrappers)
+   - Add 2 WSL-specific scripts (onedrive-force-sync, onedrive-status)
+   - Total: 11 scripts for WSL environments
 
-**✅ COMPLETED: Final Architecture Cleanup**
-- ✅ Migration file cleanup complete
-- ✅ ESP-IDF validation complete
-- ✅ All flake checks passing
-- ✅ All machines ready for deployment
+2. **Create linux-home-files.nix**:
+   - Include 9 universal Linux scripts only
+   - Exclude WSL-specific OneDrive scripts
+   - For generic Linux environments  
 
-### 📚 IMPLEMENTATION MEMORY FOR NEXT SESSION (Updated Oct 29, 2024 - PRODUCTION VALIDATED)
+3. **Create darwin-home-files.nix**:
+   - Include 9 universal scripts with macOS adaptations
+   - Font directory: `~/Library/Fonts` instead of `~/.local/share/fonts`
+   - Package manager references adapted for macOS
+   - Exclude WSL-specific scripts
 
-**🎉 UNIFIED FILES MODULE: PRODUCTION VALIDATION COMPLETE ✅**
-- **✅ Cross-machine validation**: thinky-ubuntu, mbp, thinky-nixos all pass dry-run deployment  
+**Step 2: Update Machine Imports**
+4. **Update home configurations**: 
+   - thinky-ubuntu: Import wsl-home-files.nix
+   - thinky-nixos: Import wsl-home-files.nix  
+   - mbp: Import darwin-home-files.nix
+
+**Step 3: Cleanup**
+5. **Remove duplicate files**: Delete thinky-ubuntu-unified-files.nix, thinky-nixos-unified-files.nix, mbp-unified-files.nix
+6. **Validate**: Run `nix flake check` to ensure no regressions
+
+**🚀 PRIORITY 2: Live Deployment (READY AFTER REFACTOR)**
+- Production deployment to all machines
+- Real-world testing of script functionality
+- Performance measurement vs legacy system
+
+### 📚 IMPLEMENTATION MEMORY FOR NEXT SESSION (Updated Oct 30, 2024 - OS-SPECIFIC REFACTOR NEEDED)
+
+**🎉 UNIFIED FILES MODULE: MIGRATION FUNCTIONALLY COMPLETE ✅**
+- **✅ All scripts migrated**: 11 scripts successfully moved from remaining-scripts-unified-files.nix to machine configs
+- **✅ ESP-IDF preserved**: All 4 ESP tools remain functional in validated-scripts module  
 - **✅ Build system verified**: All configurations compile cleanly, 38 flake checks pass
-- **✅ Script execution confirmed**: claude, tmux-session-picker, onedrive-status functional
-- **✅ Zero regression testing**: Legacy + unified systems coexist perfectly
+- **✅ Zero regression testing**: ESP-IDF tools and unified files coexist perfectly
 
-**📋 DEPLOYMENT STATUS:**
-- **✅ Ready for live deployment**: All machines validated, zero blockers identified
-- **✅ Migration artifacts complete**: `home/migration/remaining-scripts-unified-files.nix` with 11 scripts
-- **✅ Hybrid architecture proven**: autoWriter + validated-scripts dependency injection stable
-- **✅ Performance architecture confirmed**: Build efficiency gains ready for measurement
+**⚠️ ARCHITECTURE ISSUE: MACHINE-SPECIFIC vs OS-SPECIFIC**
+Current problematic structure:
+```
+home/migration/thinky-ubuntu-unified-files.nix  ← WSL scripts (11 total)
+home/migration/thinky-nixos-unified-files.nix   ← DUPLICATE WSL scripts  
+home/migration/mbp-unified-files.nix            ← Linux scripts (9 total, excludes OneDrive)
+```
 
-**🎯 NEXT SESSION: LIVE DEPLOYMENT**
-1. **Production deployment** - Deploy to thinky-ubuntu and mbp (commands validated)
-2. **Real-world testing** - Verify scripts function in actual usage scenarios  
-3. **Performance measurement** - Document build time improvements vs legacy
-4. **System optimization** - Clean up migration artifacts and legacy components
+**📋 SCRIPT ANALYSIS COMPLETE:**
+- **WSL-specific scripts (2)**: onedrive-force-sync, onedrive-status (require WSLInterop + powershell.exe)
+- **Universal Linux scripts (9)**: smart-nvimdiff, setup-terminal-fonts, mergejson, diagnose-emoji-rendering, claude wrappers
+- **Current duplication**: thinky-ubuntu and thinky-nixos contain identical WSL script sets
 
-**🔧 CRITICAL DEPLOYMENT NOTES:**
-- **Deployment commands validated**: `home-manager switch --flake '.#tim@TARGET'` tested
-- **Backward compatibility confirmed**: Can safely deploy without breaking existing systems
-- **Architecture stable**: autoWriter + enhanced libraries hybrid fully functional
-- **Migration pathway proven**: Incremental deployment strategy validated across all machines
+**🎯 REQUIRED OS-SPECIFIC REFACTOR:**
+1. **wsl-home-files.nix**: Universal Linux scripts + WSL-specific OneDrive scripts (11 total)
+2. **linux-home-files.nix**: Universal Linux scripts only (9 total) 
+3. **darwin-home-files.nix**: Linux scripts with macOS adaptations (font paths, package managers)
+
+**🔧 MACHINE IMPORT STRATEGY:**
+- **thinky-ubuntu, thinky-nixos**: Import wsl-home-files.nix
+- **mbp**: Import darwin-home-files.nix  
+- **Generic Linux**: Import linux-home-files.nix
+
+**✅ READY FOR DEPLOYMENT AFTER REFACTOR**: All functional testing complete, just needs proper OS abstraction
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
