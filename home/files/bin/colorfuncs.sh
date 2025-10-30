@@ -19,10 +19,10 @@ if ! command -v tput >/dev/null 2>&1 || [[ ! -t 1 ]] || [[ $(tput colors 2>/dev/
     function cf_white() { echo "$*"; }
     function cf_black() { echo "$*"; }
     function cf_reset() { echo "$*"; }
-    function cf_clear_line() { echo "$*"; }
+    function cf_clear_line() { true; }
     function cf_move_up() { echo "$*"; }
-    function cf_hide_cursor() { echo "$*"; }
-    function cf_show_cursor() { echo "$*"; }
+    function cf_hide_cursor() { true; }
+    function cf_show_cursor() { true; }
     return 0
 fi
 
@@ -151,49 +151,49 @@ function cf_show_cursor() {
 if [[ "$LANG" =~ UTF-8 ]] && [[ "$TERM" != "linux" ]] && locale -k LC_CTYPE 2>/dev/null | grep -q 'charmap="UTF-8"'; then
     # Unicode icons for compatible terminals
     function cf_info() {
-        echo "$(cf_blue "ℹ️  $*")"
+        cf_blue "i  $*"
     }
     
     function cf_success() {
-        echo "$(cf_green "✅ $*")"
+        cf_green "✓ $*"
     }
     
     function cf_warning() {
-        echo "$(cf_yellow "⚠️  $*")"
+        cf_yellow "⚠  $*"
     }
     
     function cf_error() {
-        echo "$(cf_red "❌ $*")"
+        cf_red "✗ $*"
     }
     
     function cf_step() {
-        echo "$(cf_cyan "📋 $*")"
+        cf_cyan "» $*"
     }
 else
     # ASCII alternatives for compatibility
     function cf_info() {
-        echo "$(cf_blue "[INFO] $*")"
+        cf_blue "[INFO] $*"
     }
     
     function cf_success() {
-        echo "$(cf_green "[OK] $*")"
+        cf_green "[OK] $*"
     }
     
     function cf_warning() {
-        echo "$(cf_yellow "[WARN] $*")"
+        cf_yellow "[WARN] $*"
     }
     
     function cf_error() {
-        echo "$(cf_red "[ERROR] $*")"
+        cf_red "[ERROR] $*"
     }
     
     function cf_step() {
-        echo "$(cf_cyan "[STEP] $*")"
+        cf_cyan "[STEP] $*"
     }
 fi
 
 function cf_header() {
-    echo "$(cf_bold_blue "$*")"
+    cf_bold_blue "$*"
 }
 
 # Progress indication
@@ -209,7 +209,7 @@ function cf_spinner() {
         printf "\r$(cf_cyan "%s") %s" "$temp" "${2:-Working...}"
         sleep $delay
     done
-    printf "\r$(cf_clear_line)"
+    printf "\r%s" "$(cf_clear_line)"
     cf_show_cursor
 }
 

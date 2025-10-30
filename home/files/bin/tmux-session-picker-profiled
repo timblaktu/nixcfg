@@ -403,7 +403,8 @@ generate_preview() {
                     if [[ "$ptype" == "pane" && "$psession" == "$session_name" && "$pwindow" == "$window_idx" ]]; then
                         local cmd_display="$command"
                         [[ ${#cmd_display} -gt 40 ]] && cmd_display="${cmd_display:0:37}..."
-                        local path_display=$(abbreviate_path "$path")
+                        local path_display
+                        path_display=$(abbreviate_path "$path")
                         
                         if [[ "$pactive" == "1" ]]; then
                             echo -e "  ${YELLOW}Pane $pane_idx (active): ${DIM}$path_display${RESET} ${GREEN}→ $cmd_display${RESET}"
@@ -433,7 +434,8 @@ get_session_list() {
     
     prof_checkpoint "SESSION_FILES_DISCOVERY" "Finding session files"
     # Find session files, sorted by modification time (newest first)
-    local session_files=($(prof_time "find_session_files" find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -type f | sort -r))
+    local session_files
+    readarray -t session_files < <(prof_time "find_session_files" find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -type f | sort -r)
     
     if [[ ${#session_files[@]} -eq 0 ]]; then
         echo "No tmux session files found in $RESURRECT_DIR"
@@ -544,7 +546,9 @@ main() {
     prof_checkpoint "MAIN_SESSION_SELECTION" "Getting session list and running fzf"
     # Use fzf with configurable layout
     local selected
-    prof_time "main_session_selection" selected=$(get_session_list | grep -v "##HEADER\|##SEPARATOR" | build_fzf_command "$LAYOUT" "$PREVIEW_SIZE") || {
+    local selection_output
+    selection_output=$(get_session_list | grep -v "##HEADER\|##SEPARATOR")
+    selected=$(prof_time "main_session_selection" echo "$selection_output" | build_fzf_command "$LAYOUT" "$PREVIEW_SIZE") || {
         echo "No session selected"
         prof_section_end "MAIN"
         exit 0
@@ -552,7 +556,8 @@ main() {
     
     prof_checkpoint "MAIN_FILE_PROCESSING" "Processing selected session"
     # Extract timestamp from the tab-delimited line (last field)
-    local timestamp=$(echo "$selected" | cut -d$'\t' -f2)
+    local timestamp
+    timestamp=$(echo "$selected" | cut -d$'\t' -f2)
     local selected_file="$RESURRECT_DIR/tmux_resurrect_${timestamp}.txt"
     
     if [[ ! -f "$selected_file" ]]; then
