@@ -388,6 +388,76 @@
           touch $out
         '';
 
+        # === HYBRID UNIFIED FILES MODULE TEST ===
+        hybrid-files-module-test = pkgs.runCommand "hybrid-files-module-test"
+          {
+            meta = {
+              description = "Test hybrid unified files module (autoWriter + enhanced libraries)";
+              maintainers = [ ];
+              timeout = 30;
+            };
+          } ''
+          echo "Testing hybrid unified files module..."
+          
+          # Test that the module file exists and can be imported
+          if [ -f "${../home/files/default.nix}" ]; then
+            echo "✅ Hybrid module file exists"
+          else
+            echo "❌ Hybrid module file missing"
+            exit 1
+          fi
+          
+          # Test autoWriter availability in current nixpkgs  
+          ${if pkgs.writers ? autoWriter then ''
+            echo "✅ autoWriter available in nixpkgs"
+          '' else ''
+            echo "⚠️  autoWriter fallback will be used"
+          ''}
+          
+          ${if pkgs.writers ? autoWriterBin then ''
+            echo "✅ autoWriterBin available in nixpkgs"
+          '' else ''
+            echo "⚠️  autoWriterBin fallback will be used"
+          ''}
+          
+          # Test that basic writer functions work (the foundation of our hybrid module)
+          ${pkgs.writers.writeBashBin "test-basic-writer" ''
+            #!/bin/bash
+            echo "Basic writer test successful"
+          ''}/bin/test-basic-writer > writer-test.out
+          
+          if grep -q "Basic writer test successful" writer-test.out; then
+            echo "✅ Basic writer functionality works"
+          else
+            echo "❌ Basic writer functionality failed"
+            exit 1
+          fi
+          
+          # Test that the hybrid module can be imported (test as part of derivation evaluation)
+          ${
+            let
+              lib = pkgs.lib;
+              moduleFile = import (../home/files/default.nix) { 
+                config = { homeFiles = {}; }; 
+                inherit lib pkgs; 
+              };
+              success = builtins.isAttrs moduleFile;
+              hasOptions = builtins.hasAttr "options" moduleFile;
+              hasConfig = builtins.hasAttr "config" moduleFile;
+            in
+            if success && hasOptions && hasConfig then ''
+              echo "✅ Hybrid module imports and evaluates correctly"
+            '' else ''
+              echo "❌ Hybrid module import failed"
+              echo "  success: ${toString success}, hasOptions: ${toString hasOptions}, hasConfig: ${toString hasConfig}"
+              exit 1
+            ''
+          }
+          
+          echo "✅ Hybrid unified files module test passed"
+          touch $out
+        '';
+
         # === VALIDATED SCRIPTS TESTS ===
         # Test that validates single source of truth implementation
         tmux-picker-syntax = pkgs.runCommand "test-tmux-session-picker-syntax"
@@ -2083,7 +2153,7 @@
                       module-base-integration module-wsl-common-integration \
                       ssh-service-configured user-tim-configured \
                       build-thinky-nixos-dryrun build-nixos-wsl-minimal-dryrun \
-                      files-module-test \
+                      files-module-test hybrid-files-module-test \
                       sops-simple-test ssh-simple-test \
                       ssh-integration-test sops-integration-test; do
             TOTAL=$((TOTAL + 1))
