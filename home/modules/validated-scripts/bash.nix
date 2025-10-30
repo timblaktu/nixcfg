@@ -69,69 +69,11 @@ let
   '';
 
   # Split scripts into multiple groups to avoid evaluation issues
-  # Group 1: Test and example scripts
-  testScripts = {
-    # Test simple script to verify module evaluation
-    simple-test = mkBashScript {
-      name = "simple-test";
-      deps = with pkgs; [ coreutils ];
-      text = ''
-        #!/usr/bin/env bash
-        echo "Simple test"
-      '';
-      tests = { };
-    };
-
-    # Example script to demonstrate the infrastructure
-    hello-validated = mkBashScript {
-      name = "hello-validated";
-      deps = with pkgs; [ coreutils ];
-      text = /* bash */ ''
-        #!/usr/bin/env bash
-        set -euo pipefail
-        
-        # Example validated script with proper dependency management
-        echo "🎉 Hello from validated bash script!"
-        echo "Current time: $(date)"
-        echo "Running with these dependencies:"
-        echo "  - coreutils: $(dirname "$(which echo)")"
-        
-        # Show script validation info
-        if [[ "''${1:-}" == "--info" ]]; then
-          echo
-          echo "Script validation info:"
-          echo "  Language: bash"
-          echo "  Dependencies: coreutils"
-          echo "  Validated: ✅ at build time"
-          echo "  Tests: Available via 'nix flake check'"
-        fi
-      '';
-      tests = {
-        help = writers.testBash "test-hello-validated-help" ''
-          # Test help output - we'll build the script dynamically in tests
-          echo "✅ Help test passed (placeholder)"
-        '';
-        basic = writers.testBash "test-hello-validated-basic" ''
-          # Test basic execution - we'll build the script dynamically in tests
-          echo "✅ Basic execution test passed (placeholder)"
-        '';
-      };
-    };
-  };
+  # Note: Test scripts (simple-test, hello-validated) removed as they're being migrated to home/files
+  testScripts = { };
 
   # Main scripts collection (previously lines 24-1090)
   mainScripts = {
-    # Test simple script to verify module evaluation (moved here from testScripts)
-    simple-test = mkBashScript {
-      name = "simple-test";
-      deps = with pkgs; [ coreutils ];
-      text = ''
-        #!/usr/bin/env bash
-        echo "Simple test"
-      '';
-      tests = { };
-    };
-
     # Claude Code wrapper scripts - migrated from claude-code.nix
     # Dynamic generation based on enabled accounts
   } // (lib.optionalAttrs false {
@@ -1563,16 +1505,6 @@ in
             echo "Γ£à NPM check test passed (placeholder)"
           '';
         };
-      };
-
-      simple-test = mkBashScript {
-        name = "simple-test";
-        deps = with pkgs; [ coreutils ];
-        text = ''
-          #!/usr/bin/env bash
-          echo "Simple test script"
-        '';
-        tests = { };
       };
 
       onedrive-status = mkBashScript {
