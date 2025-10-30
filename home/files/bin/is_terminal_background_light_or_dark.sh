@@ -1,11 +1,11 @@
 #!/bin/bash
 old_settings=$(stty -g)
 stty raw -echo min 0 time 1
-printf '\033]11;?\033\\\\'
+printf '\033]11;?\033\\'
 response=""
 while IFS= read -r -n1 char; do
     response+="$char"
-    [[ $char == '\\' ]] && break
+    [[ $char == $'\134' ]] && break  # ASCII 134 (octal) = backslash
 done
 stty "$old_settings"
 
