@@ -525,6 +525,13 @@
               ];
             } ''
             echo "Testing tmux-session-picker CLI help availability..."
+            
+            # Set up library dependencies in test environment
+            export HOME="$PWD/test-home"
+            mkdir -p $HOME/.local/lib
+            cp ${../home/files/lib/terminal-utils.bash} $HOME/.local/lib/terminal-utils.bash
+            cp ${../home/files/lib/color-utils.bash} $HOME/.local/lib/color-utils.bash
+            cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
           
             # Test 1.1: Help information is available and comprehensive
             # Expected: Help output contains key sections (usage, options, environment variables)
@@ -585,6 +592,13 @@
               ];
             } ''
             echo "Testing tmux-session-picker argument validation..."
+            
+            # Set up library dependencies in test environment
+            export HOME="$PWD/test-home"
+            mkdir -p $HOME/.local/lib
+            cp ${../home/files/lib/terminal-utils.bash} $HOME/.local/lib/terminal-utils.bash
+            cp ${../home/files/lib/color-utils.bash} $HOME/.local/lib/color-utils.bash
+            cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
           
             # Test 2.1: Valid layout arguments are accepted
             echo "Testing valid layout arguments..."
@@ -692,6 +706,13 @@
               ];
             } ''
             echo "Testing tmux-session-picker environment variable integration..."
+            
+            # Set up library dependencies in test environment
+            export HOME="$PWD/test-home"
+            mkdir -p $HOME/.local/lib
+            cp ${../home/files/lib/terminal-utils.bash} $HOME/.local/lib/terminal-utils.bash
+            cp ${../home/files/lib/color-utils.bash} $HOME/.local/lib/color-utils.bash
+            cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
           
             # Test 3.1: TMUX_SESSION_PICKER_LAYOUT environment variable is respected
             echo "Testing TMUX_SESSION_PICKER_LAYOUT environment variable..."
