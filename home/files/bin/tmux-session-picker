@@ -6,8 +6,11 @@
 set -euo pipefail
 
 # Source utility libraries
+# shellcheck disable=SC1091
 source terminal-utils
+# shellcheck disable=SC1091
 source color-utils  
+# shellcheck disable=SC1091
 source path-utils
 
 # Inlined tmux-resurrect file parser (was tmux-parser-optimized)
@@ -178,7 +181,8 @@ truncate_to_display_width() {
     local max_width="$2"
     local ellipsis="${3:-…}"
     
-    local current_width=$(get_display_width "$text")
+    local current_width
+    current_width=$(get_display_width "$text")
     
     # If it fits, return as-is
     if [[ $current_width -le $max_width ]]; then
@@ -186,7 +190,8 @@ truncate_to_display_width() {
         return
     fi
     
-    local ellipsis_width=$(get_display_width "$ellipsis")
+    local ellipsis_width
+    ellipsis_width=$(get_display_width "$ellipsis")
     local target_width=$((max_width - ellipsis_width))
     
     # For ASCII-only text, use simple calculation
@@ -206,7 +211,8 @@ truncate_to_display_width() {
     local best_len=0
     for (( len=estimated_start; len >= 0; len-- )); do
         local substring="${text:0:$len}"
-        local sub_width=$(get_display_width "$substring")
+        local sub_width
+        sub_width=$(get_display_width "$substring")
         
         if [[ $sub_width -le $target_width ]]; then
             best_len=$len
@@ -388,7 +394,8 @@ abbreviate_path() {
     
     # If still too long, show last two segments (using display width)
     if [[ $(get_display_width "$path") -gt 20 ]]; then
-        local segments=(${path//\// })
+        local -a segments
+        IFS='/' read -ra segments <<< "$path"
         local count=${#segments[@]}
         if [[ $count -gt 2 ]]; then
             path="…/${segments[$count-2]}/${segments[$count-1]}"
@@ -441,7 +448,8 @@ _format_session_row() {
     
     # Truncate session name if needed
     local display_session="$session"
-    local session_display_width=$(get_display_width "$display_session")
+    local session_display_width
+    session_display_width=$(get_display_width "$display_session")
     if [[ $session_display_width -gt $session_width ]]; then
         display_session=$(truncate_to_display_width "$display_session" $session_width)
     fi
@@ -461,6 +469,7 @@ _format_session_row() {
             # Prioritized token display strategy for readability
             local abbreviated_tokens=()
             local space_used=0
+            # shellcheck disable=SC2034  # Reserved for future session width optimization
             local min_readable_width=12
             local max_token_width=18
             local tokens_shown=0
@@ -544,9 +553,12 @@ process_session_file_complete() {
     fi
     
     # Self-contained context discovery (zero environment dependencies)
-    local resurrect_dir=$(dirname "$session_file")
-    local current_session_file=$(readlink -f "$resurrect_dir/last" 2>/dev/null || echo "")
-    local timestamp=$(basename "$session_file" | sed 's/tmux_resurrect_\(.*\)\.txt/\1/')
+    local resurrect_dir
+    resurrect_dir=$(dirname "$session_file")
+    local current_session_file
+    current_session_file=$(readlink -f "$resurrect_dir/last" 2>/dev/null || echo "")
+    local timestamp
+    timestamp=$(basename "$session_file" | sed 's/tmux_resurrect_\(.*\)\.txt/\1/')
     
     # Validate file exists and is readable
     if [[ ! -f "$session_file" ]]; then
@@ -587,7 +599,8 @@ process_session_file_complete() {
     [[ -z "$is_current" ]] && is_current="false"
     
     # Use shared formatting function
-    local display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$parsed_timestamp" "$window_summary" "$is_current" "$terminal_width")
+    local display_line
+    display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$parsed_timestamp" "$window_summary" "$is_current" "$terminal_width")
     
     # Output structured format for GNU parallel collection:
     # Line 1: Formatted session data for fzf display (with tab + timestamp)
@@ -602,7 +615,7 @@ process_session_file_complete() {
     fi
     
     # Generate preview content
-    while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+    while IFS=$'\t' read -r type session_name window_idx window_name active _flags layout; do
         # Skip windows that don't belong to our target session
         [[ "$session_name" != "$session" ]] && continue
         
@@ -613,8 +626,8 @@ process_session_file_complete() {
         echo -e "  ${marker} ${CYAN}${BOLD}Window ${window_idx}: ${window_name}${RESET}"
         
         # Show panes for this window
-        grep "^pane" "$session_file" | while IFS=$'\t' read -r ptype psession pwindow pane_idx pwindow_name pane_id title path focused command args; do
-            if [[ "$psession" == "$session_name" && "$pwindow" == "$window_idx" ]]; then
+        grep "^pane" "$session_file" | while IFS=$'\t' read -r _ptype _psession _pwindow pane_idx _pwindow_name _pane_id title path focused command args; do
+            if [[ "$_psession" == "$session_name" && "$_pwindow" == "$window_idx" ]]; then
                 local pmarker=" "
                 [[ "$focused" == "1" ]] && pmarker="▸"
                 
@@ -668,7 +681,8 @@ parse_all_files_parallel() {
     local -a session_files=("$@")
     
     # Detect terminal width once in main process for consistent formatting
-    local terminal_width=$(get_terminal_width)
+    local terminal_width
+    terminal_width=$(get_terminal_width)
     
     # Create debug directory for stderr capture
     local debug_dir="/tmp/tmux-session-picker-debug-$$"
@@ -693,14 +707,14 @@ parse_all_files_parallel() {
     # Capture stderr to individual files for debugging (only when debugging is needed)
     if [[ "${TMUX_PICKER_DEBUG:-false}" == "true" ]]; then
         printf '%s\n' "${session_files[@]}" | \
-            parallel $parallel_flags \
+            parallel "$parallel_flags" \
                 'process_session_file_complete {} '"$terminal_width"' 2>'"$debug_dir"'/worker-{#}.stderr | head -n 1'
         echo "Debug files preserved in: $debug_dir" >&2
         echo "Worker stderr files: $debug_dir/worker-*.stderr" >&2
     else
         # Normal mode: send stderr to /dev/null for clean operation
         printf '%s\n' "${session_files[@]}" | \
-            parallel $parallel_flags \
+            parallel "$parallel_flags" \
                 'process_session_file_complete {} '"$terminal_width"' 2>/dev/null | head -n 1'
         # Clean up debug directory in normal mode
         rm -rf "$debug_dir"
@@ -721,7 +735,8 @@ format_single_session_row() {
     IFS=$'\x1E' read -r session window_count pane_count timestamp summary is_active <<< "$session_entry"
     
     # Use shared formatting function
-    local display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_active" "$terminal_width")
+    local display_line
+    display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_active" "$terminal_width")
     
     # Output as single field + tab + timestamp
     printf "%s\t%s\n" "$display_line" "$timestamp"
@@ -741,7 +756,7 @@ _generate_preview_content() {
     fi
     
     # Show detailed window and pane information (only for the detected session)
-    while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+    while IFS=$'\t' read -r type session_name window_idx window_name active _flags layout; do
         # Skip windows that don't belong to our target session
         [[ "$session_name" != "$session" ]] && continue
         
@@ -752,8 +767,8 @@ _generate_preview_content() {
         echo -e "  ${marker} ${CYAN}${BOLD}Window ${window_idx}: ${window_name}${RESET}"
         
         # Show panes for this window - cleaned up separators
-        grep "^pane" "$file" | while IFS=$'\t' read -r ptype psession pwindow pane_idx pwindow_name pane_id title path focused command args; do
-            if [[ "$psession" == "$session_name" && "$pwindow" == "$window_idx" ]]; then
+        grep "^pane" "$file" | while IFS=$'\t' read -r _ptype _psession _pwindow pane_idx _pwindow_name _pane_id title path focused command args; do
+            if [[ "$_psession" == "$session_name" && "$_pwindow" == "$window_idx" ]]; then
                 local pmarker=" "
                 [[ "$focused" == "1" ]] && pmarker="▸"
                 
@@ -783,15 +798,21 @@ _generate_preview_content() {
                 path=$(abbreviate_path "$path")
                 
                 # Use unicode-aware truncation and padding for proper column alignment
-                local truncated_title=$(truncate_to_display_width "$title" 20)
+                local truncated_title
+                truncated_title=$(truncate_to_display_width "$title" 20)
                 # Increase command column width to accommodate richer command+args info
-                local truncated_command=$(truncate_to_display_width "$command" 20)
+                local truncated_command
+                truncated_command=$(truncate_to_display_width "$command" 20)
                 
                 # Manually pad to exact display width since printf doesn't understand unicode width
-                local title_width=$(get_display_width "$truncated_title")
-                local command_width=$(get_display_width "$truncated_command")
-                local title_padding=$(printf "%*s" $((20 - title_width)) "")
-                local command_padding=$(printf "%*s" $((20 - command_width)) "")
+                local title_width
+                title_width=$(get_display_width "$truncated_title")
+                local command_width
+                command_width=$(get_display_width "$truncated_command")
+                local title_padding
+                title_padding=$(printf "%*s" $((20 - title_width)) "")
+                local command_padding
+                command_padding=$(printf "%*s" $((20 - command_width)) "")
                 
                 printf "    %s \033[35m%s%s\033[0m \033[34m%s%s\033[0m %s\n" \
                     "$pmarker" "$truncated_title" "$title_padding" "$truncated_command" "$command_padding" "$path"
@@ -805,7 +826,8 @@ generate_preview() {
     local file="$1"
     
     # Initialize current session file reference
-    local current_session_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
+    local current_session_file
+    current_session_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
     
     # Validate file exists and is readable before parsing
     if [[ ! -f "$file" ]]; then
@@ -1039,7 +1061,8 @@ main() {
     }
     
     # Extract timestamp from the tab-delimited line (last field)
-    local timestamp=$(echo "$selected" | cut -d$'\t' -f2)
+    local timestamp
+    timestamp=$(echo "$selected" | cut -d$'\t' -f2)
     local selected_file="$RESURRECT_DIR/tmux_resurrect_${timestamp}.txt"
     
     if [[ ! -f "$selected_file" ]]; then
