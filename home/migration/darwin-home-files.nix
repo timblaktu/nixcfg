@@ -1,5 +1,5 @@
-# Migration configuration for thinky-ubuntu using unified files module
-# This replaces the current files module with the new hybrid autoWriter + enhanced libraries
+# macOS (Darwin) unified files configuration
+# Universal scripts adapted for macOS (font paths, package managers, etc.)
 { config, lib, pkgs, mkUnifiedFile, mkUnifiedLibrary, mkClaudeWrapper, ... }:
 
 {
@@ -8,7 +8,7 @@
     enableTesting = true;
     enableCompletions = true;
 
-    # All scripts including migrated ones from remaining-scripts-unified-files.nix
+    # Universal scripts adapted for macOS (9 total, excludes WSL-specific OneDrive tools)
     scripts = {
       # Essential utility scripts - using autoWriter directly
       mytree = mkUnifiedFile {
@@ -65,18 +65,19 @@
         };
       };
 
-      # Terminal font setup
+      # Terminal font setup - adapted for macOS
       setup-terminal-fonts = mkUnifiedFile {
         name = "setup-terminal-fonts";
         executable = true;
         content = ''
           #!/usr/bin/env bash
-          # Terminal font setup script
+          # Terminal font setup script for macOS
           # Downloads and installs Nerd Fonts for terminal usage
           
           set -euo pipefail
           
-          FONT_DIR="$HOME/.local/share/fonts"
+          # macOS uses ~/Library/Fonts for user fonts
+          FONT_DIR="$HOME/Library/Fonts"
           FONTS_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2"
           
           # Fonts to install
@@ -87,19 +88,19 @@
             "SourceCodePro"
           )
           
-          echo "🔤 Setting up terminal fonts..."
+          echo "🔤 Setting up terminal fonts for macOS..."
           mkdir -p "$FONT_DIR"
           
           for font in "''${FONTS[@]}"; do
             echo "📦 Installing $font..."
-            wget -q "$FONTS_URL/$font.zip" -O "/tmp/$font.zip"
+            curl -sL "$FONTS_URL/$font.zip" -o "/tmp/$font.zip"
             unzip -q -o "/tmp/$font.zip" -d "$FONT_DIR"
             rm "/tmp/$font.zip"
           done
           
-          # Update font cache
-          fc-cache -fv "$FONT_DIR"
+          # macOS automatically handles font cache updates
           echo "✅ Terminal fonts installed successfully"
+          echo "   Restart your terminal to see the new fonts"
         '';
         tests = {
           syntax = pkgs.writeShellScript "test-setup-terminal-fonts" ''
@@ -209,19 +210,19 @@
         };
       };
 
-      # Emoji rendering diagnostics
+      # Emoji rendering diagnostics - adapted for macOS
       diagnose-emoji-rendering = mkUnifiedFile {
         name = "diagnose-emoji-rendering";
         executable = true;
         content = ''
           #!/usr/bin/env bash
-          # Emoji rendering diagnostic tool
+          # Emoji rendering diagnostic tool for macOS
           # Tests various emoji rendering scenarios in the terminal
           
           set -euo pipefail
           
-          echo "🔍 Emoji Rendering Diagnostics"
-          echo "=============================="
+          echo "🔍 Emoji Rendering Diagnostics (macOS)"
+          echo "======================================"
           echo
           
           # Test basic emoji support
@@ -237,11 +238,12 @@
           echo "  LANG: $LANG"
           echo "  Font capabilities:"
           
-          if command -v fc-list >/dev/null 2>&1; then
-            echo "    Available emoji fonts:"
-            fc-list | grep -i emoji | head -3 || echo "    No emoji fonts found"
+          # Check for system emoji fonts on macOS
+          if ls /System/Library/Fonts/*Emoji* >/dev/null 2>&1; then
+            echo "    System emoji fonts:"
+            ls /System/Library/Fonts/*Emoji* 2>/dev/null | head -3
           else
-            echo "    fontconfig not available"
+            echo "    No system emoji fonts found"
           fi
           echo
           
@@ -263,8 +265,8 @@
           echo "✅ Diagnostics complete"
           echo "   If emojis don't render correctly, check:"
           echo "   1. Terminal emoji font support"
-          echo "   2. Locale settings (UTF-8)"
-          echo "   3. Font configuration"
+          echo "   2. Terminal.app or iTerm2 settings"
+          echo "   3. Locale settings (UTF-8)"
         '';
         tests = {
           basic = pkgs.writeShellScript "test-diagnose-emoji" ''
@@ -339,13 +341,13 @@
         };
       };
 
-      # Claude Code update script
+      # Claude Code update script - adapted for macOS
       claude-code-update = mkUnifiedFile {
         name = "claude-code-update";
         executable = true;
         content = ''
           #!/usr/bin/env bash
-          # Claude Code update script
+          # Claude Code update script for macOS
           # Updates Claude Code installation across all accounts
           
           set -euo pipefail
@@ -353,15 +355,17 @@
           echo "🔄 Updating Claude Code..."
           
           # Update via package manager if available
-          if command -v nix >/dev/null 2>&1; then
-            echo "📦 Updating via Nix..."
-            nix profile upgrade
-          elif command -v brew >/dev/null 2>&1; then
+          if command -v brew >/dev/null 2>&1; then
             echo "🍺 Updating via Homebrew..."
             brew upgrade claude
+          elif command -v nix >/dev/null 2>&1; then
+            echo "📦 Updating via Nix..."
+            nix profile upgrade
           else
             echo "⚠️  No supported package manager found"
-            echo "   Please update Claude Code manually"
+            echo "   Please update Claude Code manually via:"
+            echo "   - Homebrew: brew upgrade claude"
+            echo "   - Manual download from anthropic.com"
             exit 1
           fi
           
@@ -566,110 +570,6 @@
           help = pkgs.writeShellScript "test-claude-help" ''
             claude --help >/dev/null 2>&1 || true
             echo "✅ claude: Syntax validation passed"
-          '';
-        };
-      };
-
-      # OneDrive force sync
-      onedrive-force-sync = mkUnifiedFile {
-        name = "onedrive-force-sync";
-        executable = true;
-        content = ''
-          #!/usr/bin/env bash
-          # OneDrive force sync utility for WSL environments
-          # Forces OneDrive synchronization via Windows COM interface
-          
-          set -euo pipefail
-          
-          if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-            echo "❌ This script requires WSL environment" >&2
-            exit 1
-          fi
-          
-          echo "🔄 Forcing OneDrive synchronization..."
-          
-          # Use PowerShell to trigger OneDrive sync
-          powershell.exe -Command "
-            try {
-              \$oneDrive = New-Object -ComObject OneDrive.SyncEngine
-              \$oneDrive.ForceSyncNow()
-              Write-Host '✅ OneDrive sync triggered successfully'
-            } catch {
-              Write-Host '⚠️  OneDrive COM interface not available'
-              Write-Host '   Trying alternative method...'
-              Start-Process 'onedrive' -ArgumentList '/sync' -NoNewWindow -Wait
-              Write-Host '✅ OneDrive sync command sent'
-            }
-          "
-          
-          echo "🔄 Sync request completed"
-          echo "   Check OneDrive status for progress"
-        '';
-        tests = {
-          syntax = pkgs.writeShellScript "test-onedrive-force-sync" ''
-            echo "✅ onedrive-force-sync: Syntax validation passed"
-          '';
-        };
-      };
-
-      # OneDrive status checker
-      onedrive-status = mkUnifiedFile {
-        name = "onedrive-status";
-        executable = true;
-        content = ''
-          #!/usr/bin/env bash
-          # OneDrive status checker for WSL environments
-          # Reports OneDrive synchronization status and statistics
-          
-          set -euo pipefail
-          
-          if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-            echo "❌ This script requires WSL environment" >&2
-            exit 1
-          fi
-          
-          echo "📊 OneDrive Status Report"
-          echo "========================"
-          echo
-          
-          # Get OneDrive status via PowerShell
-          powershell.exe -Command "
-            try {
-              \$status = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\OneDrive\Accounts\*' -ErrorAction SilentlyContinue
-              if (\$status) {
-                Write-Host '📁 OneDrive Accounts:'
-                \$status | ForEach-Object {
-                  Write-Host \"   Account: \$(\$_.UserName)\"
-                  Write-Host \"   Path: \$(\$_.UserFolder)\"
-                  Write-Host \"   Status: \$(\$_.SyncStatus)\"
-                  Write-Host ''
-        }
-        } else {
-        Write-Host '⚠️  No OneDrive accounts found in registry'
-        }
-
-        # Check OneDrive process status
-        \$processes = Get-Process -Name 'OneDrive' -ErrorAction SilentlyContinue
-        if (\$processes) {
-        Write-Host '🔄 OneDrive Processes:'
-        \$processes | ForEach-Object {
-        Write-Host \"   PID: \$(\$_.Id) - Started: \$(\$_.StartTime)\"
-              }
-            } else {
-              Write-Host '❌ OneDrive is not running'
-            }
-            
-          } catch {
-            Write-Host \"❌ Error checking OneDrive status: \$(\$_.Exception.Message)\"
-          }
-        "
-
-        echo
-        echo "✅ Status report complete"
-        '';
-        tests = {
-          syntax = pkgs.writeShellScript "test-onedrive-status" ''
-          echo "✅ onedrive-status: Syntax validation passed"
           '';
         };
       };

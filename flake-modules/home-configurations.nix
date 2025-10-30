@@ -26,7 +26,7 @@
                 homeDirectory = "/home/tim";
               };
             }
-            ../home/migration/mbp-unified-files.nix # Migration configuration for unified files
+            ../home/migration/darwin-home-files.nix # macOS-specific unified files configuration
             ../home/modules/mcp-servers.nix
           ];
           extraSpecialArgs = {
@@ -68,7 +68,7 @@
               };
             }
             ../hosts/thinky-ubuntu
-            ../home/migration/thinky-ubuntu-unified-files.nix # Migration configuration for unified files
+            ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration
             ../home/modules/mcp-servers.nix
           ];
           extraSpecialArgs = {
@@ -119,7 +119,7 @@
                 bindMountRoot.enable = false;
               };
             }
-            ../home/migration/thinky-nixos-unified-files.nix # Migration configuration for unified files
+            ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration
             ../home/modules/mcp-servers.nix
             # ../home/modules/autovalidate-demo.nix  # Disabled - requires home-manager autoValidate integration
           ];
