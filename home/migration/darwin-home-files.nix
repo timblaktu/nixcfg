@@ -23,11 +23,6 @@
         executable = true;
       };
 
-      syncfork = mkUnifiedFile {
-        name = "syncfork";
-        source = ../files/bin/syncfork.sh;
-        executable = true;
-      };
 
       # Background detection utility
       is-terminal-background-light-or-dark = mkUnifiedFile {

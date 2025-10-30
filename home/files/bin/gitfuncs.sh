@@ -51,7 +51,8 @@ EOF
     local base_commit="HEAD~$commits_back"
     
     # Get list of changed files (portable method)
-    local changed_files_list=$(git diff --name-only "$base_commit" HEAD)
+    local changed_files_list
+    changed_files_list=$(git diff --name-only "$base_commit" HEAD)
     
     if [[ -z "$changed_files_list" ]]; then
         echo "No files changed."
@@ -59,7 +60,8 @@ EOF
     fi
     
     # Count files
-    local file_count=$(echo "$changed_files_list" | wc -l)
+    local file_count
+    file_count=$(echo "$changed_files_list" | wc -l)
     echo "Changed files: $file_count"
     
     # Loop through each file

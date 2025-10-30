@@ -166,5 +166,19 @@
     git-crypt # For encrypting sensitive files in git repos
     # gitui      # Terminal UI for git - temporarily disabled due to build failure
     lazygit # Another terminal UI for git
+
+    # Git workflow scripts
+    (pkgs.writeShellApplication {
+      name = "syncfork";
+      text = builtins.readFile ../files/bin/syncfork.sh;
+      runtimeInputs = with pkgs; [ git ];
+    })
+
+    # Git functions and utilities
+    (pkgs.writeShellApplication {
+      name = "git-functions";
+      text = builtins.readFile ../files/bin/gitfuncs.sh;
+      runtimeInputs = with pkgs; [ git neovim ];
+    })
   ];
 }
