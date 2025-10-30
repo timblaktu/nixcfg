@@ -5,7 +5,8 @@ with lib;
 
 let
   cfg = config.homeBase;
-in {
+in
+{
   config = mkIf cfg.enableDevelopment {
     # Development-specific packages
     home.packages = with pkgs; [
@@ -39,18 +40,37 @@ in {
       libffi
       openssl
       ncurses
-      
+
       podman
       podman-compose
       kubectl
       k9s
-      
+
       fzf
       bat
-      eza  # Modern ls replacement (formerly exa)
-      delta  # better git diff
+      eza # Modern ls replacement (formerly exa)
+      delta # better git diff
       bottom # system monitoring
       miller # Command-line CSV/TSV/JSON processor
+
+      # Claude development workflow scripts
+      (pkgs.writeShellApplication {
+        name = "claudevloop";
+        text = builtins.readFile ../files/bin/claudevloop;
+        runtimeInputs = with pkgs; [ neovim ];
+      })
+
+      (pkgs.writeShellApplication {
+        name = "restart_claude";
+        text = builtins.readFile ../files/bin/restart_claude;
+        runtimeInputs = with pkgs; [ jq findutils coreutils ];
+      })
+
+      (pkgs.writeShellApplication {
+        name = "mkclaude_desktop_config";
+        text = builtins.readFile ../files/bin/mkclaude_desktop_config;
+        runtimeInputs = with pkgs; [ jq coreutils ];
+      })
     ];
   };
 }

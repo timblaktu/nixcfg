@@ -6,6 +6,6 @@ cd "$CLAUDE_DIR"
 until ! nvim -S; do
     "$SCRIPT_TO_RUN"
     echo "Hit <Enter> to resume devloop, <Ctrl-c> to exit now, also exiting nvim later with :cq will exit devloop script"
-    read sel
+    read -r
 done
 cd -
