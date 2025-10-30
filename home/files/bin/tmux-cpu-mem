@@ -21,7 +21,8 @@ get_cpu_usage() {
     current_stat=$(grep '^cpu ' /proc/stat)
     
     # Parse current values (user nice system idle iowait irq softirq steal guest guest_nice)
-    local cpu_now=($current_stat)
+    local cpu_now
+    read -ra cpu_now <<< "$current_stat"
     
     # Calculate current totals
     local cur_user="${cpu_now[1]}"
@@ -45,7 +46,8 @@ get_cpu_usage() {
         # Read previous values
         local prev_stat
         prev_stat=$(cat "$stat_file")
-        local cpu_prev=($prev_stat)
+        local cpu_prev
+        read -ra cpu_prev <<< "$prev_stat"
         
         # Parse previous values
         local prev_user="${cpu_prev[1]}"

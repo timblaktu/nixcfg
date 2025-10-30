@@ -48,7 +48,8 @@ check_windows_font() {
 # Check NixOS fonts silently  
 check_nixos_font() {
     local pattern="$1"
-    local count=$(fc-list 2>/dev/null | grep -iE "$pattern" | wc -l)
+    local count
+    count=$(fc-list 2>/dev/null | grep -icE "$pattern")
     if [[ "$count" -gt 0 ]]; then
         echo "installed ($count variants)"
     else
@@ -63,7 +64,7 @@ check_wt_config() {
     if [[ -n "${WINDOWS_USERNAME:-}" ]]; then
         win_user="$WINDOWS_USERNAME"
     elif command -v powershell.exe >/dev/null 2>&1; then
-        win_user=$(powershell.exe -Command 'Write-Host $env:USERNAME' 2>/dev/null | tr -d '\r\n')
+        win_user=$(powershell.exe -Command "Write-Host \$env:USERNAME" 2>/dev/null | tr -d '\r\n')
     fi
     
     # Try common Windows Terminal settings paths
@@ -80,7 +81,6 @@ check_wt_config() {
     # Also check for all users by scanning the Users directory
     for user_dir in /mnt/c/Users/*/; do
         if [[ -d "$user_dir" ]]; then
-            local username=$(basename "$user_dir")
             settings_paths+=(
                 "${user_dir}AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json"
                 "${user_dir}AppData/Local/Packages/Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe/LocalState/settings.json"
@@ -97,8 +97,10 @@ check_wt_config() {
     done
     
     if [[ -n "$settings_path" && -f "$settings_path" ]]; then
-        local font_face=$(jq -r '.profiles.defaults.font.face // "not configured"' "$settings_path" 2>/dev/null)
-        local intense_style=$(jq -r '.profiles.defaults.intenseTextStyle // "bright"' "$settings_path" 2>/dev/null)
+        local font_face
+        local intense_style
+        font_face=$(jq -r '.profiles.defaults.font.face // "not configured"' "$settings_path" 2>/dev/null)
+        intense_style=$(jq -r '.profiles.defaults.intenseTextStyle // "bright"' "$settings_path" 2>/dev/null)
         echo "$font_face|$intense_style"
     else
         echo "not found|unknown"
@@ -209,7 +211,7 @@ if powershell.exe -ExecutionPolicy Bypass -File "$WINDOWS_SCRIPT_PATH"; then
         echo ""
         echo "🔄 Would you like to restart Windows Terminal now?"
         echo "   This will close all tabs and restart with new settings."
-        read -p "   Restart Windows Terminal? [Y/n]: " restart_choice
+        read -r -p "   Restart Windows Terminal? [Y/n]: " restart_choice
         
         if [[ "${restart_choice,,}" =~ ^(y|yes|)$ ]]; then
             echo "   Restarting Windows Terminal in 3 seconds..."
