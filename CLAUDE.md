@@ -61,7 +61,7 @@ tmux-session-picker = pkgs.writeShellApplication {
 **📋 IMMEDIATE: Module-Based Migration Following tmux.nix Pattern**
 1. ✅ **git.nix** - Extract `syncfork.sh`, `gitfuncs.sh` (2 scripts) **COMPLETE**
 2. ✅ **development.nix** - Extract `claudevloop`, `restart_claude`, `mkclaude_desktop_config` (3 scripts) **COMPLETE**  
-3. **terminal.nix** - Extract `setup-terminal-fonts`, `check-terminal-setup`, `diagnose-emoji-rendering`, `is_terminal_background_light_or_dark.sh` (4 scripts)
+3. ✅ **terminal.nix** - Extract `setup-terminal-fonts`, `check-terminal-setup`, `diagnose-emoji-rendering`, `is_terminal_background_light_or_dark.sh` (4 scripts) **COMPLETE**
 4. **system.nix** - Extract `bootstrap-*.sh`, `build-wsl-tarball` (3 scripts)
 5. **shell-utils.nix** - Extract all `/lib/*.bash` libraries + `mytree.sh`, `colorfuncs.sh` (11 libraries + 2 utilities)
 
@@ -83,38 +83,38 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 
 ### 📚 SESSION HANDOFF SUMMARY (2025-10-30)
 
-**🎯 IMPLEMENTATION SUCCESS**: development.nix module-based organization completed successfully
-- **✅ development.nix Complete**: 3 Claude workflow scripts extracted using writeShellApplication pattern:
-  - `claudevloop` (nvim development loop) with neovim runtime dependency
-  - `restart_claude` (Claude Desktop restart automation) with jq, findutils, coreutils
-  - `mkclaude_desktop_config` (Desktop config generation) with jq, coreutils
-- **✅ Quality Assurance**: Scripts build successfully in home-manager, included in package list
-- **✅ Pattern Validated**: writeShellApplication with proper runtimeInputs works perfectly
-- **✅ Integration Success**: Extended existing development.nix module seamlessly
+**🎯 IMPLEMENTATION SUCCESS**: terminal.nix module-based organization completed successfully
+- **✅ terminal.nix Complete**: 4 terminal utility scripts extracted using writeShellApplication pattern:
+  - `setup-terminal-fonts` (WSL terminal font configuration) with jq, coreutils, util-linux dependencies
+  - `check-terminal-setup` (terminal alignment verification) with jq, coreutils dependencies  
+  - `diagnose-emoji-rendering` (comprehensive terminal diagnostics) with xxd, coreutils, util-linux dependencies
+  - `is_terminal_background_light_or_dark` (background detection utility) with coreutils, util-linux dependencies
+- **✅ Quality Assurance**: All scripts build successfully in home-manager after fixing shellcheck warnings
+- **✅ Integration Success**: Added terminal.nix import to base.nix with enableTerminal option (default: true)
+- **✅ Migration Cleanup**: Removed terminal script references from zsh.nix overrides and files/default.nix exclusions
 
 **🔄 ARCHITECTURAL TRANSFORMATION PROGRESS**: From dumping ground to intentional organization
 - **✅ tmux.nix**: 6 scripts extracted (COMPLETE)
 - **✅ git.nix**: 2 scripts extracted (COMPLETE)
-- **✅ development.nix**: 3 scripts extracted (COMPLETE) ← **JUST COMPLETED**
-- **Remaining**: terminal.nix, system.nix, shell-utils.nix (12 scripts + 11 libraries)
+- **✅ development.nix**: 3 scripts extracted (COMPLETE)
+- **✅ terminal.nix**: 4 scripts extracted (COMPLETE) ← **JUST COMPLETED**
+- **Remaining**: system.nix, shell-utils.nix (8 scripts + 11 libraries)
 
 **📋 NEXT SESSION TASK QUEUE**: Continue module-based organization implementation
 
-**🎯 IMMEDIATE PRIORITY**: terminal.nix module creation
-1. **Create home/common/terminal.nix** following development.nix pattern
-2. **Extract 4 terminal scripts**:
-   - `setup-terminal-fonts` → writeShellApplication with dependencies
-   - `check-terminal-setup` → writeShellApplication
-   - `diagnose-emoji-rendering` → writeShellApplication
-   - `is_terminal_background_light_or_dark.sh` → writeShellApplication
+**🎯 IMMEDIATE PRIORITY**: system.nix module creation
+1. **Create home/common/system.nix** following terminal.nix pattern
+2. **Extract 3 system scripts**:
+   - `bootstrap-*.sh` scripts → writeShellApplication with appropriate dependencies
+   - `build-wsl-tarball` → writeShellApplication with build tools
 3. **Remove references** from migration files
 4. **Test integration** with nix flake check + home-manager dry-run
 
-**🔧 PROVEN IMPLEMENTATION PATTERN** (from development.nix success):
+**🔧 PROVEN IMPLEMENTATION PATTERN** (from terminal.nix success):
 ```nix
-# home/common/terminal.nix 
+# home/common/system.nix 
 { config, lib, pkgs, ... }: {
-  config = mkIf cfg.enableTerminal {
+  config = mkIf cfg.enableSystem {
     home.packages = with pkgs; [
       (pkgs.writeShellApplication {
         name = "script-name";
@@ -126,13 +126,13 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 }
 ```
 
-**📊 MIGRATION PROGRESS TRACKER** (11 of 22 scripts complete):
+**📊 MIGRATION PROGRESS TRACKER** (15 of 22 scripts complete - 68%):
 - ✅ tmux.nix: 6 scripts (COMPLETE)
 - ✅ git.nix: 2 scripts (COMPLETE) 
-- ✅ development.nix: 3 scripts (COMPLETE) ← **JUST COMPLETED**
-- 🎯 terminal.nix: 4 scripts (NEXT SESSION PRIORITY)
-- ⏳ system.nix: 3 scripts (PENDING)
-- ⏳ shell-utils.nix: 11 libraries + 2 utilities (FINAL)
+- ✅ development.nix: 3 scripts (COMPLETE)
+- ✅ terminal.nix: 4 scripts (COMPLETE) ← **JUST COMPLETED**
+- 🎯 system.nix: 3 scripts (NEXT SESSION PRIORITY)
+- ⏳ shell-utils.nix: 11 libraries + 2 utilities (FINAL PHASE)
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
