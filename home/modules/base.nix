@@ -146,11 +146,6 @@ in
       description = "Enable nix-writers based validated script management";
     };
 
-    useUnifiedFilesModule = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Use the new unified files module (hybrid autoWriter + enhanced libraries) instead of the legacy files module";
-    };
 
     enableClaudeCode = mkOption {
       type = types.bool;
@@ -369,8 +364,8 @@ in
         };
       };
 
-      # Unified files module configuration (conditional)
-      homeFiles.enable = cfg.useUnifiedFilesModule;
+      # Unified files module configuration (always enabled)
+      homeFiles.enable = true;
     }
   ];
 }

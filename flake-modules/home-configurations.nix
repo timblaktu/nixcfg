@@ -24,9 +24,9 @@
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
-                useUnifiedFilesModule = true; # Enable new unified files module
               };
             }
+            ../home/migration/mbp-unified-files.nix # Migration configuration for unified files
             ../home/modules/mcp-servers.nix
           ];
           extraSpecialArgs = {
@@ -47,7 +47,6 @@
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
-                useUnifiedFilesModule = true; # Enable new unified files module
                 environmentVariables = {
                   WSL_DISTRO = "ubuntu";
                   EDITOR = "nvim";
@@ -69,6 +68,7 @@
               };
             }
             ../hosts/thinky-ubuntu
+            ../home/migration/thinky-ubuntu-unified-files.nix # Migration configuration for unified files
             ../home/modules/mcp-servers.nix
           ];
           extraSpecialArgs = {
@@ -91,8 +91,7 @@
                 homeDirectory = "/home/tim";
                 enableDevelopment = true;
                 enableEspIdf = true;
-                useUnifiedFilesModule = true; # Enable new unified files module
-                enableValidatedScripts = false; # Disable legacy validated scripts
+                enableValidatedScripts = true; # Required for ESP-IDF tools
                 environmentVariables = {
                   WSL_DISTRO = "nixos";
                   EDITOR = "nvim";

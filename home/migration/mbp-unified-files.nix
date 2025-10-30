@@ -1,60 +1,42 @@
-# Migration configuration for remaining scripts from validated-scripts to unified files module
-# This completes the migration of all non-ESP-IDF scripts
+# Migration configuration for mbp using unified files module
+# This replaces the current files module with the new hybrid autoWriter + enhanced libraries
 { config, lib, pkgs, mkUnifiedFile, mkUnifiedLibrary, mkClaudeWrapper, ... }:
 
-let
-  # Helper function for Claude wrapper script generation (from validated-scripts)
-  mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-    account="${account}"
-    config_dir="${configDir}"
-    pidfile="/tmp/claude-''${account}.pid"
-    
-    # Check for headless mode - bypass PID check for stateless operations
-    if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-      export CLAUDE_CONFIG_DIR="$config_dir"
-      ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-      exec claude "$@"
-    fi
-
-    # Production Claude detection logic  
-    if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-      exec claude --config-dir="$config_dir" "$@"
-    fi
-
-    # PID-based single instance management
-    if [[ -f "$pidfile" ]]; then
-      pid=$(cat "$pidfile")
-      if kill -0 "$pid" 2>/dev/null; then
-        echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-        echo "   Using existing instance..."
-        exec claude --config-dir="$config_dir" "$@"
-      else
-        echo "🧹 Cleaning up stale PID file..."
-        rm -f "$pidfile"
-      fi
-    fi
-
-    # Launch new instance with environment setup
-    echo "🚀 Launching Claude (${displayName})..."
-    export CLAUDE_CONFIG_DIR="$config_dir"
-    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-    
-    # Create config directory if it doesn't exist
-    mkdir -p "$config_dir"
-    
-    # Store PID and execute
-    echo $$ > "$pidfile"
-    exec claude --config-dir="$config_dir" "$@"
-  '';
-
-in
 {
   homeFiles = {
     enable = true;
     enableTesting = true;
     enableCompletions = true;
 
+    # All scripts including migrated ones from remaining-scripts-unified-files.nix
+    # Note: OneDrive scripts excluded for macOS as they're WSL-specific
     scripts = {
+      # Essential utility scripts - using autoWriter directly
+      mytree = mkUnifiedFile {
+        name = "mytree";
+        source = ../files/bin/mytree.sh;
+        executable = true;
+      };
+
+      stress = mkUnifiedFile {
+        name = "stress";
+        source = ../files/bin/stress.sh;
+        executable = true;
+      };
+
+      syncfork = mkUnifiedFile {
+        name = "syncfork";
+        source = ../files/bin/syncfork.sh;
+        executable = true;
+      };
+
+      # Background detection utility
+      is-terminal-background-light-or-dark = mkUnifiedFile {
+        name = "is-terminal-background-light-or-dark";
+        source = ../files/bin/is_terminal_background_light_or_dark.sh;
+        executable = true;
+      };
+
       # Git smart merge tool
       smart-nvimdiff = mkUnifiedFile {
         name = "smart-nvimdiff";
@@ -398,16 +380,61 @@ in
       claudemax = mkUnifiedFile {
         name = "claudemax";
         executable = true;
-        content = mkClaudeWrapperScript {
-          account = "max";
-          displayName = "Claude Max Account";
-          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
-          extraEnvVars = {
-            DISABLE_TELEMETRY = "1";
-            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-            DISABLE_ERROR_REPORTING = "1";
+        content =
+          let
+            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
+              account="${account}"
+              config_dir="${configDir}"
+              pidfile="/tmp/claude-''${account}.pid"
+            
+              # Check for headless mode - bypass PID check for stateless operations
+              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
+                export CLAUDE_CONFIG_DIR="$config_dir"
+                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+                exec claude "$@"
+              fi
+
+              # Production Claude detection logic  
+              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
+                exec claude --config-dir="$config_dir" "$@"
+              fi
+
+              # PID-based single instance management
+              if [[ -f "$pidfile" ]]; then
+                pid=$(cat "$pidfile")
+                if kill -0 "$pid" 2>/dev/null; then
+                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+                  echo "   Using existing instance..."
+                  exec claude --config-dir="$config_dir" "$@"
+                else
+                  echo "🧹 Cleaning up stale PID file..."
+                  rm -f "$pidfile"
+                fi
+              fi
+
+              # Launch new instance with environment setup
+              echo "🚀 Launching Claude (${displayName})..."
+              export CLAUDE_CONFIG_DIR="$config_dir"
+              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+            
+              # Create config directory if it doesn't exist
+              mkdir -p "$config_dir"
+            
+              # Store PID and execute
+              echo $$ > "$pidfile"
+              exec claude --config-dir="$config_dir" "$@"
+            '';
+          in
+          mkClaudeWrapperScript {
+            account = "max";
+            displayName = "Claude Max Account";
+            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
           };
-        };
         tests = {
           help = pkgs.writeShellScript "test-claudemax-help" ''
             claudemax --help >/dev/null 2>&1 || true
@@ -420,16 +447,61 @@ in
       claudepro = mkUnifiedFile {
         name = "claudepro";
         executable = true;
-        content = mkClaudeWrapperScript {
-          account = "pro";
-          displayName = "Claude Pro Account";
-          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-pro";
-          extraEnvVars = {
-            DISABLE_TELEMETRY = "1";
-            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-            DISABLE_ERROR_REPORTING = "1";
+        content =
+          let
+            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
+              account="${account}"
+              config_dir="${configDir}"
+              pidfile="/tmp/claude-''${account}.pid"
+            
+              # Check for headless mode - bypass PID check for stateless operations
+              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
+                export CLAUDE_CONFIG_DIR="$config_dir"
+                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+                exec claude "$@"
+              fi
+
+              # Production Claude detection logic  
+              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
+                exec claude --config-dir="$config_dir" "$@"
+              fi
+
+              # PID-based single instance management
+              if [[ -f "$pidfile" ]]; then
+                pid=$(cat "$pidfile")
+                if kill -0 "$pid" 2>/dev/null; then
+                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+                  echo "   Using existing instance..."
+                  exec claude --config-dir="$config_dir" "$@"
+                else
+                  echo "🧹 Cleaning up stale PID file..."
+                  rm -f "$pidfile"
+                fi
+              fi
+
+              # Launch new instance with environment setup
+              echo "🚀 Launching Claude (${displayName})..."
+              export CLAUDE_CONFIG_DIR="$config_dir"
+              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+            
+              # Create config directory if it doesn't exist
+              mkdir -p "$config_dir"
+            
+              # Store PID and execute
+              echo $$ > "$pidfile"
+              exec claude --config-dir="$config_dir" "$@"
+            '';
+          in
+          mkClaudeWrapperScript {
+            account = "pro";
+            displayName = "Claude Pro Account";
+            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-pro";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
           };
-        };
         tests = {
           help = pkgs.writeShellScript "test-claudepro-help" ''
             claudepro --help >/dev/null 2>&1 || true
@@ -442,16 +514,61 @@ in
       claude = mkUnifiedFile {
         name = "claude";
         executable = true;
-        content = mkClaudeWrapperScript {
-          account = "max"; # Default to max account
-          displayName = "Claude Default Account";
-          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
-          extraEnvVars = {
-            DISABLE_TELEMETRY = "1";
-            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-            DISABLE_ERROR_REPORTING = "1";
+        content =
+          let
+            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
+              account="${account}"
+              config_dir="${configDir}"
+              pidfile="/tmp/claude-''${account}.pid"
+            
+              # Check for headless mode - bypass PID check for stateless operations
+              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
+                export CLAUDE_CONFIG_DIR="$config_dir"
+                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+                exec claude "$@"
+              fi
+
+              # Production Claude detection logic  
+              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
+                exec claude --config-dir="$config_dir" "$@"
+              fi
+
+              # PID-based single instance management
+              if [[ -f "$pidfile" ]]; then
+                pid=$(cat "$pidfile")
+                if kill -0 "$pid" 2>/dev/null; then
+                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+                  echo "   Using existing instance..."
+                  exec claude --config-dir="$config_dir" "$@"
+                else
+                  echo "🧹 Cleaning up stale PID file..."
+                  rm -f "$pidfile"
+                fi
+              fi
+
+              # Launch new instance with environment setup
+              echo "🚀 Launching Claude (${displayName})..."
+              export CLAUDE_CONFIG_DIR="$config_dir"
+              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+            
+              # Create config directory if it doesn't exist
+              mkdir -p "$config_dir"
+            
+              # Store PID and execute
+              echo $$ > "$pidfile"
+              exec claude --config-dir="$config_dir" "$@"
+            '';
+          in
+          mkClaudeWrapperScript {
+            account = "max"; # Default to max account
+            displayName = "Claude Default Account";
+            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
           };
-        };
         tests = {
           help = pkgs.writeShellScript "test-claude-help" ''
             claude --help >/dev/null 2>&1 || true
@@ -460,114 +577,41 @@ in
         };
       };
 
-      # OneDrive force sync
-      onedrive-force-sync = mkUnifiedFile {
-        name = "onedrive-force-sync";
-        executable = true;
+      # Note: OneDrive scripts excluded for macOS as they're WSL-specific
+    };
+
+    # Start with basic libraries
+    libraries = {
+      # Create simple terminal utils library
+      terminalUtils = mkUnifiedLibrary {
+        name = "terminalUtils";
         content = ''
-          #!/usr/bin/env bash
-          # OneDrive force sync utility for WSL environments
-          # Forces OneDrive synchronization via Windows COM interface
+          # Terminal utility functions
           
-          set -euo pipefail
+          # Check if we have a TTY
+          is_tty() {
+            [ -t 1 ]
+          }
           
-          if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-            echo "❌ This script requires WSL environment" >&2
-            exit 1
-          fi
+          # Basic output functions
+          info() {
+            echo "INFO: $*" >&2
+          }
           
-          echo "🔄 Forcing OneDrive synchronization..."
+          warn() {
+            echo "WARN: $*" >&2
+          }
           
-          # Use PowerShell to trigger OneDrive sync
-          powershell.exe -Command "
-            try {
-              \$oneDrive = New-Object -ComObject OneDrive.SyncEngine
-              \$oneDrive.ForceSyncNow()
-              Write-Host '✅ OneDrive sync triggered successfully'
-            } catch {
-              Write-Host '⚠️  OneDrive COM interface not available'
-              Write-Host '   Trying alternative method...'
-              Start-Process 'onedrive' -ArgumentList '/sync' -NoNewWindow -Wait
-              Write-Host '✅ OneDrive sync command sent'
-            }
-          "
-          
-          echo "🔄 Sync request completed"
-          echo "   Check OneDrive status for progress"
+          error() {
+            echo "ERROR: $*" >&2
+          }
         '';
-        tests = {
-          syntax = pkgs.writeShellScript "test-onedrive-force-sync" ''
-            echo "✅ onedrive-force-sync: Syntax validation passed"
-          '';
-        };
-      };
-
-      # OneDrive status checker
-      onedrive-status = mkUnifiedFile {
-        name = "onedrive-status";
-        executable = true;
-        content = ''
-          #!/usr/bin/env bash
-          # OneDrive status checker for WSL environments
-          # Reports OneDrive synchronization status and statistics
-          
-          set -euo pipefail
-          
-          if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-            echo "❌ This script requires WSL environment" >&2
-            exit 1
-          fi
-          
-          echo "📊 OneDrive Status Report"
-          echo "========================"
-          echo
-          
-          # Get OneDrive status via PowerShell
-          powershell.exe -Command "
-            try {
-              \$status = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\OneDrive\Accounts\*' -ErrorAction SilentlyContinue
-              if (\$status) {
-                Write-Host '📁 OneDrive Accounts:'
-                \$status | ForEach-Object {
-                  Write-Host \"   Account: \$(\$_.UserName)\"
-                  Write-Host \"   Path: \$(\$_.UserFolder)\"
-                  Write-Host \"   Status: \$(\$_.SyncStatus)\"
-                  Write-Host ''
-          }
-          } else {
-          Write-Host '⚠️  No OneDrive accounts found in registry'
-          }
-
-          # Check OneDrive process status
-          \$processes = Get-Process -Name 'OneDrive' -ErrorAction SilentlyContinue
-          if (\$processes) {
-          Write-Host '🔄 OneDrive Processes:'
-          \$processes | ForEach-Object {
-          Write-Host \"   PID: \$(\$_.Id) - Started: \$(\$_.StartTime)\"
-                }
-              } else {
-                Write-Host '❌ OneDrive is not running'
-              }
-              
-            } catch {
-              Write-Host \"❌ Error checking OneDrive status: \$(\$_.Exception.Message)\"
-            }
-          "
-
-          echo
-          echo "✅ Status report complete"
-          '';
-        tests = {
-          syntax = pkgs.writeShellScript "test-onedrive-status" ''
-          echo "✅ onedrive-status: Syntax validation passed"
-          '';
-        };
       };
     };
 
-    # Libraries remain minimal for now
-    libraries = {
-      # Basic utilities will be added as needed
+    # Static files for direct copying
+    staticFiles = {
+      # Note: yazi config removed due to conflict with legacy files module
     };
   };
 }

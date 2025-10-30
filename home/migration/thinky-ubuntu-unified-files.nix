@@ -1,4 +1,4 @@
-# Migration configuration for thinky-nixos using unified files module
+# Migration configuration for thinky-ubuntu using unified files module
 # This replaces the current files module with the new hybrid autoWriter + enhanced libraries
 { config, lib, pkgs, mkUnifiedFile, mkUnifiedLibrary, mkClaudeWrapper, ... }:
 
@@ -379,61 +379,59 @@
       claudemax = mkUnifiedFile {
         name = "claudemax";
         executable = true;
-        content =
-          let
-            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-              account="${account}"
-              config_dir="${configDir}"
-              pidfile="/tmp/claude-''${account}.pid"
+        content = let
+          mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
+            account="${account}"
+            config_dir="${configDir}"
+            pidfile="/tmp/claude-''${account}.pid"
             
-              # Check for headless mode - bypass PID check for stateless operations
-              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec claude "$@"
-              fi
-
-              # Production Claude detection logic  
-              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec claude --config-dir="$config_dir" "$@"
-              fi
-
-              # PID-based single instance management
-              if [[ -f "$pidfile" ]]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                  echo "   Using existing instance..."
-                  exec claude --config-dir="$config_dir" "$@"
-                else
-                  echo "🧹 Cleaning up stale PID file..."
-                  rm -f "$pidfile"
-                fi
-              fi
-
-              # Launch new instance with environment setup
-              echo "🚀 Launching Claude (${displayName})..."
+            # Check for headless mode - bypass PID check for stateless operations
+            if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
               export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-            
-              # Create config directory if it doesn't exist
-              mkdir -p "$config_dir"
-            
-              # Store PID and execute
-              echo $$ > "$pidfile"
+              exec claude "$@"
+            fi
+
+            # Production Claude detection logic  
+            if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
               exec claude --config-dir="$config_dir" "$@"
-            '';
-          in
-          mkClaudeWrapperScript {
-            account = "max";
-            displayName = "Claude Max Account";
-            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
+            fi
+
+            # PID-based single instance management
+            if [[ -f "$pidfile" ]]; then
+              pid=$(cat "$pidfile")
+              if kill -0 "$pid" 2>/dev/null; then
+                echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+                echo "   Using existing instance..."
+                exec claude --config-dir="$config_dir" "$@"
+              else
+                echo "🧹 Cleaning up stale PID file..."
+                rm -f "$pidfile"
+              fi
+            fi
+
+            # Launch new instance with environment setup
+            echo "🚀 Launching Claude (${displayName})..."
+            export CLAUDE_CONFIG_DIR="$config_dir"
+            ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+            
+            # Create config directory if it doesn't exist
+            mkdir -p "$config_dir"
+            
+            # Store PID and execute
+            echo $$ > "$pidfile"
+            exec claude --config-dir="$config_dir" "$@"
+          '';
+        in mkClaudeWrapperScript {
+          account = "max";
+          displayName = "Claude Max Account";
+          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
           };
+        };
         tests = {
           help = pkgs.writeShellScript "test-claudemax-help" ''
             claudemax --help >/dev/null 2>&1 || true
@@ -446,61 +444,59 @@
       claudepro = mkUnifiedFile {
         name = "claudepro";
         executable = true;
-        content =
-          let
-            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-              account="${account}"
-              config_dir="${configDir}"
-              pidfile="/tmp/claude-''${account}.pid"
+        content = let
+          mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
+            account="${account}"
+            config_dir="${configDir}"
+            pidfile="/tmp/claude-''${account}.pid"
             
-              # Check for headless mode - bypass PID check for stateless operations
-              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec claude "$@"
-              fi
-
-              # Production Claude detection logic  
-              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec claude --config-dir="$config_dir" "$@"
-              fi
-
-              # PID-based single instance management
-              if [[ -f "$pidfile" ]]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                  echo "   Using existing instance..."
-                  exec claude --config-dir="$config_dir" "$@"
-                else
-                  echo "🧹 Cleaning up stale PID file..."
-                  rm -f "$pidfile"
-                fi
-              fi
-
-              # Launch new instance with environment setup
-              echo "🚀 Launching Claude (${displayName})..."
+            # Check for headless mode - bypass PID check for stateless operations
+            if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
               export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-            
-              # Create config directory if it doesn't exist
-              mkdir -p "$config_dir"
-            
-              # Store PID and execute
-              echo $$ > "$pidfile"
+              exec claude "$@"
+            fi
+
+            # Production Claude detection logic  
+            if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
               exec claude --config-dir="$config_dir" "$@"
-            '';
-          in
-          mkClaudeWrapperScript {
-            account = "pro";
-            displayName = "Claude Pro Account";
-            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-pro";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
+            fi
+
+            # PID-based single instance management
+            if [[ -f "$pidfile" ]]; then
+              pid=$(cat "$pidfile")
+              if kill -0 "$pid" 2>/dev/null; then
+                echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+                echo "   Using existing instance..."
+                exec claude --config-dir="$config_dir" "$@"
+              else
+                echo "🧹 Cleaning up stale PID file..."
+                rm -f "$pidfile"
+              fi
+            fi
+
+            # Launch new instance with environment setup
+            echo "🚀 Launching Claude (${displayName})..."
+            export CLAUDE_CONFIG_DIR="$config_dir"
+            ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+            
+            # Create config directory if it doesn't exist
+            mkdir -p "$config_dir"
+            
+            # Store PID and execute
+            echo $$ > "$pidfile"
+            exec claude --config-dir="$config_dir" "$@"
+          '';
+        in mkClaudeWrapperScript {
+          account = "pro";
+          displayName = "Claude Pro Account";
+          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-pro";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
           };
+        };
         tests = {
           help = pkgs.writeShellScript "test-claudepro-help" ''
             claudepro --help >/dev/null 2>&1 || true
@@ -513,61 +509,59 @@
       claude = mkUnifiedFile {
         name = "claude";
         executable = true;
-        content =
-          let
-            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-              account="${account}"
-              config_dir="${configDir}"
-              pidfile="/tmp/claude-''${account}.pid"
+        content = let
+          mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
+            account="${account}"
+            config_dir="${configDir}"
+            pidfile="/tmp/claude-''${account}.pid"
             
-              # Check for headless mode - bypass PID check for stateless operations
-              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec claude "$@"
-              fi
-
-              # Production Claude detection logic  
-              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec claude --config-dir="$config_dir" "$@"
-              fi
-
-              # PID-based single instance management
-              if [[ -f "$pidfile" ]]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                  echo "   Using existing instance..."
-                  exec claude --config-dir="$config_dir" "$@"
-                else
-                  echo "🧹 Cleaning up stale PID file..."
-                  rm -f "$pidfile"
-                fi
-              fi
-
-              # Launch new instance with environment setup
-              echo "🚀 Launching Claude (${displayName})..."
+            # Check for headless mode - bypass PID check for stateless operations
+            if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
               export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-            
-              # Create config directory if it doesn't exist
-              mkdir -p "$config_dir"
-            
-              # Store PID and execute
-              echo $$ > "$pidfile"
+              exec claude "$@"
+            fi
+
+            # Production Claude detection logic  
+            if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
               exec claude --config-dir="$config_dir" "$@"
-            '';
-          in
-          mkClaudeWrapperScript {
-            account = "max"; # Default to max account
-            displayName = "Claude Default Account";
-            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
+            fi
+
+            # PID-based single instance management
+            if [[ -f "$pidfile" ]]; then
+              pid=$(cat "$pidfile")
+              if kill -0 "$pid" 2>/dev/null; then
+                echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+                echo "   Using existing instance..."
+                exec claude --config-dir="$config_dir" "$@"
+              else
+                echo "🧹 Cleaning up stale PID file..."
+                rm -f "$pidfile"
+              fi
+            fi
+
+            # Launch new instance with environment setup
+            echo "🚀 Launching Claude (${displayName})..."
+            export CLAUDE_CONFIG_DIR="$config_dir"
+            ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+            
+            # Create config directory if it doesn't exist
+            mkdir -p "$config_dir"
+            
+            # Store PID and execute
+            echo $$ > "$pidfile"
+            exec claude --config-dir="$config_dir" "$@"
+          '';
+        in mkClaudeWrapperScript {
+          account = "max"; # Default to max account
+          displayName = "Claude Default Account";
+          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
           };
+        };
         tests = {
           help = pkgs.writeShellScript "test-claude-help" ''
             claude --help >/dev/null 2>&1 || true
@@ -649,17 +643,17 @@
                   Write-Host \"   Path: \$(\$_.UserFolder)\"
                   Write-Host \"   Status: \$(\$_.SyncStatus)\"
                   Write-Host ''
-          }
-          } else {
-          Write-Host '⚠️  No OneDrive accounts found in registry'
-          }
+        }
+        } else {
+        Write-Host '⚠️  No OneDrive accounts found in registry'
+        }
 
-          # Check OneDrive process status
-          \$processes = Get-Process -Name 'OneDrive' -ErrorAction SilentlyContinue
-          if (\$processes) {
-          Write-Host '🔄 OneDrive Processes:'
-          \$processes | ForEach-Object {
-          Write-Host \"   PID: \$(\$_.Id) - Started: \$(\$_.StartTime)\"
+        # Check OneDrive process status
+        \$processes = Get-Process -Name 'OneDrive' -ErrorAction SilentlyContinue
+        if (\$processes) {
+        Write-Host '🔄 OneDrive Processes:'
+        \$processes | ForEach-Object {
+        Write-Host \"   PID: \$(\$_.Id) - Started: \$(\$_.StartTime)\"
               }
             } else {
               Write-Host '❌ OneDrive is not running'
@@ -670,9 +664,9 @@
           }
         "
 
-          echo
-          echo "✅ Status report complete"
-          '';
+        echo
+        echo "✅ Status report complete"
+        '';
         tests = {
           syntax = pkgs.writeShellScript "test-onedrive-status" ''
           echo "✅ onedrive-status: Syntax validation passed"
@@ -688,25 +682,25 @@
         name = "terminalUtils";
         content = ''
           # Terminal utility functions
-
+          
           # Check if we have a TTY
           is_tty() {
-          [ -t 1 ]
+            [ -t 1 ]
           }
-
+          
           # Basic output functions
           info() {
-          echo "INFO: $*" >&2
+            echo "INFO: $*" >&2
           }
-
+          
           warn() {
-          echo "WARN: $*" >&2
+            echo "WARN: $*" >&2
           }
-
+          
           error() {
-          echo "ERROR: $*" >&2
+            echo "ERROR: $*" >&2
           }
-          '';
+        '';
       };
     };
 
@@ -716,4 +710,3 @@
     };
   };
 }
-
