@@ -94,10 +94,38 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 - **✅ git.nix**: 2 scripts extracted (COMPLETE)
 - **Remaining**: development.nix, terminal.nix, system.nix, shell-utils.nix (15 scripts + 11 libraries)
 
-**📋 NEXT SESSION ROADMAP**: Continue module extraction following proven git.nix success pattern
-- development.nix → terminal.nix → system.nix → shell-utils.nix  
-- Each follows established writeShellApplication pattern with proper dependency management
-- Complete elimination of home/files dumping ground as final goal
+**📋 NEXT SESSION TASK QUEUE**: Continue module-based organization implementation
+
+**🎯 IMMEDIATE PRIORITY**: development.nix module creation
+1. **Create home/common/development.nix** following git.nix pattern
+2. **Extract 4 development scripts**:
+   - `claudevloop` → writeShellApplication with dependencies
+   - `restart_claude*` scripts → writeShellApplication 
+   - `mkclaude_desktop_config` → writeShellApplication
+3. **Remove references** from migration files
+4. **Test integration** with nix flake check + home-manager dry-run
+
+**🔧 PROVEN IMPLEMENTATION PATTERN** (from git.nix success):
+```nix
+# home/common/development.nix 
+{ config, lib, pkgs, ... }: {
+  home.packages = with pkgs; [
+    (pkgs.writeShellApplication {
+      name = "script-name";
+      text = builtins.readFile ../files/bin/script-name;
+      runtimeInputs = with pkgs; [ dependencies ];
+    })
+  ];
+}
+```
+
+**📊 MIGRATION PROGRESS TRACKER**:
+- ✅ tmux.nix: 6 scripts (COMPLETE)
+- ✅ git.nix: 2 scripts (COMPLETE) 
+- 🎯 development.nix: 4 scripts (NEXT)
+- ⏳ terminal.nix: 4 scripts (PENDING)
+- ⏳ system.nix: 3 scripts (PENDING)
+- ⏳ shell-utils.nix: 11 libraries + 2 utilities (FINAL)
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
