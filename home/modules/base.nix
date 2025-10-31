@@ -25,8 +25,7 @@ in
     ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
     ./podman-tools.nix # Container tools configuration
-    # Enhanced nix-writers based script management (now migrated to unified files)
-    # ./validated-scripts  # REMOVED: All scripts migrated to unified files
+    # Enhanced nix-writers based script management (migrated to unified files)
     # Import ESP-IDF development module
     ../common/esp-idf.nix
     # Import OneDrive utilities module (WSL-specific)
