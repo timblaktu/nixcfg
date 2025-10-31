@@ -61,31 +61,41 @@
 
 **🎯 ARCHITECTURAL IMPROVEMENTS** (Priority order for next sessions):
 
-### 🎯 **PRIORITY 1: Complete Module-Based Organization** ✅
-**STATUS**: **COMPLETE** - 32 of 34 items handled (94% complete)
+### 🎯 **PRIORITY 1: Complete Module-Based Organization** ❌
+**STATUS**: **INCOMPLETE** - Scripts migrated but deployment BROKEN
 
-**FINAL MODULE STATUS**:
-- ✅ tmux.nix: 8 scripts (COMPLETE - fixed profiled version, window-status-format)
-- ✅ git.nix: 2 scripts (COMPLETE)
-- ✅ development.nix: 3 scripts (COMPLETE)
-- ✅ terminal.nix: 4 scripts (COMPLETE)
-- ✅ system.nix: 7 items (5 scripts + 4 PowerShell docs) (COMPLETE)
-- ✅ shell-utils.nix: 17 items (9 libraries + 8 utilities) (COMPLETE - wifi scripts fixed)
+**CRITICAL ISSUE**: home-manager switch --dry-run FAILS due to shellcheck violations
+- Scripts structurally migrated to modules 
+- But writeShellApplication enforces strict shellcheck compliance
+- Multiple scripts fail to build with violations
 
-**COMPLETED PHASES**:
-- ✅ **Phase 1**: Fixed tmux scripts (re-enabled profiled version, fixed library paths)
-- ✅ **Phase 2**: Fixed wifi scripts (resolved dependency issues with bash runtime)  
-- ✅ **Phase 3**: Handled PowerShell scripts (preserved as Windows documentation)
-- ✅ **Cleanup**: Removed backup files (functions.sh~, restart_claude~)
+**FAILING SCRIPTS** (Confirmed):
+- ❌ tmux-session-picker-profiled: shellcheck violations
+- ❌ remote-wifi-analyzer: Multiple SC2086, SC2034, SC2064, SC2155 violations  
+- ❌ wifi-test-comparison: shellcheck violations
+- ❌ Other scripts likely failing (deployment blocked)
 
-**🎉 ACHIEVEMENT**: **Module-based organization complete!** Home/files dumping ground eliminated.
+**COMPLETED WORK**:
+- ✅ **Module Structure**: Scripts moved to appropriate modules
+- ✅ **PowerShell Handling**: Preserved as Windows documentation
+- ✅ **Some Fixes**: Fixed restart-usb*, soundcloud-dl, stress.sh shellcheck issues
+- ✅ **Cleanup**: Removed backup files
 
-### 🎯 **PRIORITY 2: Test Infrastructure Modernization** (NEXT)
-**CURRENT ISSUE**: Tests scattered across 3 locations, 2,412-line monolithic test file  
-**SOLUTION**: Implement nixpkgs `passthru.tests` pattern  
+**🚨 CRITICAL LESSON**: `nix flake check --no-build` is INSUFFICIENT validation
+- Must test `home-manager switch --dry-run` for real deployment validation
+- writeShellApplication enforces strict shellcheck compliance
+- Migration ≠ Working deployment
+
+**🔧 IMMEDIATE PRIORITY 1 COMPLETION TASKS**:
+1. **Fix tmux-session-picker-profiled shellcheck violations**
+2. **Fix remote-wifi-analyzer shellcheck violations** (SC2086, SC2034, SC2064, SC2155)
+3. **Fix wifi-test-comparison shellcheck violations**
+4. **Test home-manager switch --dry-run until SUCCESS**
+5. **Only then mark Priority 1 complete**
+
+### 🎯 **PRIORITY 2: Test Infrastructure Modernization** (BLOCKED)
+**STATUS**: Cannot proceed until Priority 1 deployment works
 **APPROACH**: Move tests from flake-modules/tests.nix to individual script derivations  
-**BENEFIT**: Cleaner architecture, co-located tests with code, reduced monolithic file
-
 **IMPLEMENTATION STEPS**:
 1. Research nixpkgs `passthru.tests` patterns
 2. Create test migration strategy for existing 38+ tests
