@@ -59,12 +59,12 @@
 - **commit 97cade2**: Attempted fix with absolute paths, but sandboxing still prevented runtime access
 - **Session 5 Solution**: Build-time library content substitution eliminates runtime dependency issues
 
-**🎯 VERIFICATION RESULTS**: Interactive fzf session picker now fully operational
+**🎯 VERIFICATION RESULTS**: Interactive fzf session picker now populated but preview mismatch identified
 - **Session List**: 28 sessions displayed with dates, times, window/pane counts, session summaries
 - **Color Coding**: Proper ANSI color formatting for different data fields  
 - **Current Session**: ★ marker correctly identifies active session
-- **Preview Window**: Ready for testing (user reported this was also broken)
-- **Status**: ✅ COMPLETE - User's original reported issue (empty fzf list) fully resolved
+- **⚠️ NEW ISSUE DISCOVERED**: Preview content doesn't match selected session (parallel ordering regression)
+- **Status**: ✅ LIST POPULATION FIXED - ⚠️ PREVIEW CORRELATION BROKEN
 
 ### 🎯 **SESSION 4 ACHIEVEMENTS (2025-10-30)**
 
@@ -313,24 +313,32 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 
 **📊 SESSION 5 HANDOFF STATUS (2025-10-30)**:
 
-**🎉 HIGH-PRIORITY TASK: CRITICAL FIXES COMPLETE**
-- ✅ **Core functionality restored** - Fixed undefined function error causing parallel worker failures
-- ✅ **Build system healthy** - All 13 tmux tests building, `nix flake check` passes
-- ✅ **Parallel infrastructure working** - GNU parallel shell quoting bug confirmed resolved
-- ✅ **All critical fixes deployed** - Home-manager rebuild successful, changes active
-- ✅ **All changes committed** - Work preserved in git with comprehensive documentation
+**🎉 MAJOR BREAKTHROUGH: Session List Population FULLY RESTORED**
+- ✅ **Root cause identified** - writeShellApplication sandboxing prevented library access (commit 0447990)
+- ✅ **Complete architecture fix** - writers.writeBashBin + build-time library inlining solution deployed
+- ✅ **28 sessions displaying** - Full session list with proper formatting, colors, metadata working
+- ✅ **All critical fixes deployed** - Home-manager rebuild successful, forensic analysis complete
+- ✅ **All changes committed** - Complete fix and documentation preserved in git
 
-**⚠️ REMAINING TECHNICAL ISSUE**: Session list population failure
-- **Root Cause**: Parallel workers failing to parse session files despite function fixes
-- **Impact**: Interactive session picker shows empty list but core operations work
-- **Investigation Needed**: Parallel worker library environment setup analysis
-- **Assessment**: Separate issue from original critical bug, requires deeper debugging
+**⚠️ NEW CRITICAL ISSUE DISCOVERED**: Preview/Selection Mismatch (Parallel Ordering Regression)
+- **Problem**: fzf preview shows wrong session content for selected session
+- **Evidence**: Selected session shows `1/1` windows/panes but preview shows different session data  
+- **Root Cause Hypothesis**: Parallel worker results no longer ordered, preview correlation broken
+- **Impact**: User cannot trust preview content matches selection for session restoration
+- **Severity**: HIGH - Functional interface but wrong session data correlation could cause incorrect restorations
 
-**🔧 NEXT SESSION RECOMMENDATIONS**:
-1. **Investigate parallel worker environment** - Debug why session file parsing fails in worker context
-2. **Library dependency analysis** - Check if utility libraries are properly available to workers  
-3. **Alternative approach consideration** - Evaluate if parallel processing is necessary for session list
-4. **Testing enhancement** - Add functional runtime tests for session list population
+**🔧 NEXT SESSION CRITICAL TASKS**:
+1. **Investigate parallel result ordering** - Analyze how session list and preview data correlation works
+2. **Debug preview generation** - Understand how fzf preview command maps to selected session data
+3. **Fix session data correlation** - Ensure preview content matches selected session metadata exactly
+4. **Validate ordering consistency** - Test that session selection and preview stay synchronized
+5. **Add correlation safeguards** - Implement mechanisms to prevent preview/selection mismatches
+
+**📋 TECHNICAL ANALYSIS REQUIRED**:
+- Review how `--preview` command receives session data from fzf selection
+- Analyze timestamp or session identifier correlation between list and preview
+- Check if parallel processing removed ordering guarantees needed for preview correlation
+- Investigate whether preview cache mechanism is mapping to wrong sessions
 
 **📊 SESSION 4 HANDOFF STATUS (2025-10-30)**:
 
