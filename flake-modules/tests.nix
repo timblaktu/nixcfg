@@ -521,13 +521,15 @@
         '';
 
         # Run integration tests only
-        test-integration = {
-          type = "app";
-          meta.description = "Run only integration tests (VM-based tests)";
-          program = "${pkgs.writers.writeBashBin "test-integration" ''
-          #!/usr/bin/env bash
-          set -e
-          
+        test-integration = pkgs.runCommand "test-integration"
+          {
+            meta = {
+              description = "Run only integration tests (VM-based tests)";
+              maintainers = [ ];
+              timeout = 300;
+            };
+            nativeBuildInputs = [ pkgs.nix ];
+          } ''
           echo "🔬 Running Integration Test Suite (VM-based)"
           echo "============================================"
           echo ""
@@ -568,24 +570,25 @@
           
           if [ $FAILED -eq 0 ]; then
             echo -e "\n''${GREEN}✅ All integration tests passed!''${NC}"
-            exit 0
+            touch $out
           else
             echo -e "\n''${YELLOW}⚠️  Some integration tests failed.''${NC}"
             echo "Run with -L flag for detailed output:"
             echo "  nix build .#checks.x86_64-linux.ssh-integration-test -L"
             exit 1
           fi
-        ''}/bin/test-integration";
-        };
+        '';
 
         # Quick regression test before major changes
-        regression-test = {
-          type = "app";
-          meta.description = "Run regression tests to verify all configurations still evaluate";
-          program = "${pkgs.writers.writeBashBin "regression-test" ''
-          #!/usr/bin/env bash
-          set -e
-          
+        regression-test = pkgs.runCommand "regression-test"
+          {
+            meta = {
+              description = "Run regression tests to verify all configurations still evaluate";
+              maintainers = [ ];
+              timeout = 120;
+            };
+            nativeBuildInputs = [ pkgs.nix ];
+          } ''
           echo "🔄 Running regression tests..."
           echo "This will test all configurations can still be evaluated and built."
           echo ""
@@ -593,13 +596,12 @@
           # Use --keep-going to run all tests even if some fail
           if nix flake check --keep-going; then
             echo "✅ All regression tests passed!"
-            exit 0
+            touch $out
           else
             echo "❌ Some regression tests failed. Review the output above."
             exit 1
           fi
-        ''}/bin/regression-test";
-        };
+        '';
       };
     };
 }
