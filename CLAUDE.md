@@ -102,6 +102,32 @@
 - **Testing**: `passthru.tests` with `lib.recurseIntoAttrs` for nixpkgs-standard test integration
 - **Test Format**: `pkgs.runCommand` with proper `meta.description` and `nativeBuildInputs`
 
+### 🎯 **VALIDATED-SCRIPTS ELIMINATION PHASE 1** ✅ COMPLETE
+**STATUS**: **TMUX MIGRATION COMPLETE** - Commit 4d5d04c (2025-10-31)
+
+**✅ PHASE 1 ACHIEVEMENTS**:
+- **tmux-test-data-generator**: Enhanced with comprehensive `passthru.tests` (syntax, help_availability, basic_generation)
+- **tmux-parser-optimized**: Fully migrated from validated-scripts with inline implementation + comprehensive test suite
+- **Conflict Resolution**: Avoided duplicating `tmux-session-picker` and `tmux-auto-attach` (already in unified files module)
+- **Home Manager Validation**: ✅ Dry-run and flake check SUCCESS
+
+**📈 MIGRATION PATTERN ESTABLISHED**:
+```nix
+(pkgs.writeShellApplication {
+  name = "script-name";
+  text = builtins.readFile ../files/bin/script-name;
+  runtimeInputs = with pkgs; [ dependencies ];
+  passthru.tests = {
+    syntax = pkgs.runCommand "test-script-syntax" { } ''...''';
+    functionality = pkgs.runCommand "test-script-func" { 
+      nativeBuildInputs = [ script-package ]; 
+    } ''...'';
+  };
+})
+```
+
+**🚀 READY FOR PHASE 2**: Claude/development tools migration (5 scripts identified)
+
 ### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ✅ **COMPLETED**
 **STATUS**: **ARCHITECTURAL SUCCESS - MAJOR OVERHAUL COMPLETED** 
 **ACHIEVEMENT**: 1,870+ lines of duplicated test code eliminated, infrastructure modernized
