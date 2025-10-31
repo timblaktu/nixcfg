@@ -358,3 +358,37 @@ validated-scripts/bash.nix          ← 72+ passthru.tests NEVER RUN
 ### 📝 **REFERENCE FOR NEXT SESSION**: 
 **CRITICAL**: Read TESTS.md lines 125-236 for complete architectural analysis before proceeding
 
+## 🎯 **SESSION HANDOFF SUMMARY** (2025-10-31) - **PHASE 3 COMPLETED**
+
+### ✅ **MAJOR SUCCESS: PHASE 3 CRITICAL FIXES COMPLETED**
+
+**CRITICAL DISCOVERIES & RESOLUTIONS**:
+- **OneDrive deployment failure was real**: Scripts technically migrated but not enabled in configuration
+- **Complete validation required**: Technical implementation ≠ working deployment
+- **Source cleanup was incomplete**: Migrated scripts remained in validated-scripts causing duplication
+
+### 📋 **PHASE 3 COMPLETION ACHIEVED** (2025-10-31):
+
+**✅ ALL CRITICAL ISSUES RESOLVED**:
+1. **OneDrive Configuration Fixed**: Added `enableOneDriveUtils = true;` to tim@thinky-nixos configuration (flake-modules/home-configurations.nix:94)
+2. **Shellcheck Compliance**: Fixed SC2012 violation in onedrive-status using `find` instead of `ls` + added `findutils` to runtimeInputs  
+3. **OneDrive Deployment Validated**: Scripts confirmed present in home-manager generation (`/nix/store/1j73dhibi1aalalkc4m4s819h7ppsm0n-onedrive-status.drv`, `/nix/store/dzkfaz4lvflgcrhhsf725gdwa6y4lhic-onedrive-force-sync.drv`)
+4. **Source Cleanup Completed**: Removed ALL ESP-IDF and OneDrive script definitions from validated-scripts/bash.nix (lines 360-521, 522-542, 1048-1135, 1237-1256)
+5. **Project Documentation Updated**: CLAUDE.md reflects accurate Phase 3 completion status
+6. **Changes Committed**: All fixes committed to git with proper attribution (commit 0b80f62)
+
+**✅ VALIDATION CONFIRMED**:
+- **Flake check**: ✅ PASSING
+- **Home-manager dry-run**: ✅ SUCCESS  
+- **OneDrive scripts present**: ✅ CONFIRMED in home.packages evaluation
+- **ESP-IDF scripts working**: ✅ CONFIRMED (4 scripts deployed)
+- **Source duplication eliminated**: ✅ CONFIRMED (no onedrive/esp-idf references in validated-scripts)
+
+### 🎯 **NEXT SESSION PRIORITIES**:
+
+**Phase 4: Remaining validated-scripts elimination** - Continue systematic migration of remaining 60+ utility scripts to appropriate home/common/*.nix modules using established patterns.
+
+**Current Branch**: `dev`  
+**System State**: ✅ **PHASE 3 COMPLETE** - Ready for Phase 4 validated-scripts elimination  
+**Priority**: Complete remaining script migrations from validated-scripts to standard nixpkgs patterns
+
