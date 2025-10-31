@@ -92,6 +92,7 @@
                 enableDevelopment = true;
                 enableEspIdf = true;
                 enableOneDriveUtils = true;
+                enableShellUtils = true;
                 enableTerminal = true;
                 environmentVariables = {
                   WSL_DISTRO = "nixos";

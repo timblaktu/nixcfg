@@ -313,55 +313,6 @@ with lib;
         jq
         uv # Python package manager with uvx for running Python MCP servers
         memoryUpdateScript # Add the memory update script
-        # JSON merging utility for selective field updates
-        (pkgs.writers.writeBashBin "mergejson" ''
-          #!/usr/bin/env bash
-          set -euo pipefail
-        
-          usage() {
-            echo "Usage: mergejson OLD_FILE NEW_FILE JQ_QUERY [--confirm]"
-            echo "  Merges selected fields from NEW_FILE into OLD_FILE"
-            echo "  JQ_QUERY: jq expression selecting fields to merge"
-            echo "  --confirm: prompt before applying changes"
-            exit 1
-          }
-        
-          [[ $# -lt 3 ]] && usage
-        
-          old_file="$1"
-          new_file="$2"
-          jq_query="$3"
-          confirm_flag="''${4:-}"
-        
-          [[ ! -f "$old_file" ]] && { echo "Error: $old_file not found"; exit 1; }
-          [[ ! -f "$new_file" ]] && { echo "Error: $new_file not found"; exit 1; }
-        
-          extract_tmp=$(mktemp)
-          ${jq}/bin/jq "$jq_query" "$new_file" > "$extract_tmp"
-        
-          ${jq}/bin/jq --slurpfile extract_data "$extract_tmp" \
-             '. + $extract_data[0]' \
-             "$old_file" > "$old_file.merged"
-        
-          if ! diff -q "$old_file" "$old_file.merged" >/dev/null 2>&1; then
-            if [[ "$confirm_flag" == "--confirm" ]]; then
-              echo "Changes detected in: $jq_query"
-              read -p "View diff? [y/N]: " choice
-              if [[ ''${choice,,} =~ ^y ]]; then
-                ${neovim}/bin/nvim -d "$old_file" "$old_file.merged"
-                read -p "Apply changes? [y/N]: " apply_choice
-                [[ ''${apply_choice,,} =~ ^y ]] || { rm -f "$extract_tmp" "$old_file.merged"; exit 1; }
-              fi
-            fi
-            mv "$old_file.merged" "$old_file"
-            # Only show message if running interactively with --confirm
-            [[ "$confirm_flag" == "--confirm" ]] && echo "Merged: $jq_query"
-          else
-            rm -f "$old_file.merged"
-          fi
-        
-          rm -f "$extract_tmp"
-        '')
         # Account-specific command scripts now provided by validated-scripts module
       ] ++ [
       ] ++ optionals (cfg.mcpServers.sequentialThinkingPython.enable or false) [

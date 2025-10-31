@@ -406,15 +406,20 @@ validated-scripts/bash.nix          ← 72+ passthru.tests NEVER RUN
 - **Tests**: Syntax validation + argument validation placeholders
 - **Validation**: ✅ Home-manager generation contains script, ✅ flake check passes
 
-**NEXT SESSION PRIORITIES**:
-1. **Category 2**: Migrate terminal utilities (setup-terminal-fonts, diagnose-emoji-rendering)
-2. **Category 3**: Migrate shell utilities (mergejson)  
-3. **Category 4**: Migrate library scripts (colorfuncs, tmux-auto-attach, utility libraries)
+**✅ TERMINAL UTILITIES MIGRATION COMPLETE**:
+- **setup-terminal-fonts** & **diagnose-emoji-rendering**: ✅ Already existed in `home/common/terminal.nix`
+- **Configuration Fixed**: Added `enableTerminal = true` to tim@thinky-nixos configuration (flake-modules/home-configurations.nix:95)
+- **Deployment Validation**: ✅ Scripts confirmed present in home-manager generation
+- **Source Cleanup**: ✅ Removed duplicate definitions from validated-scripts/bash.nix (lines 212-316, 669-898)
 
-**PROGRESS**: 1/7 Phase 4 scripts complete (14% done, 86% remaining)
+**NEXT SESSION PRIORITIES**:
+1. **Category 3**: Migrate shell utilities (mergejson)  
+2. **Category 4**: Migrate library scripts (colorfuncs, tmux-auto-attach, utility libraries)
+
+**PROGRESS**: 3/7 Phase 4 scripts complete (43% done, 57% remaining)
 
 ### 📝 **REFERENCE FOR NEXT SESSION**: 
-**FOCUS**: Continue Phase 4 migration with terminal utilities category (2 remaining scripts)
+**FOCUS**: Continue Phase 4 migration with shell utilities category (mergejson)
 
 ## 🎯 **PREVIOUS SESSION HANDOFF SUMMARY** (2025-10-31) - **PHASE 3 COMPLETED**
 
