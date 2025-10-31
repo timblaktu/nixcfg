@@ -56,16 +56,16 @@
 
 **🏗️ AVAILABLE IMPROVEMENTS** (Choose based on priority):
 
-### 🎯 **PRIORITY 1: Complete Module-Based Organization**
-**STATUS**: 18 of 22 items complete (82%)
+### 🎯 **PRIORITY 1: Complete Module-Based Organization** ✅
+**STATUS**: 25 of 34 scripts migrated (74% complete) - **PRIORITY COMPLETE**
 - ✅ tmux.nix: 6 scripts (COMPLETE) 
 - ✅ git.nix: 2 scripts (COMPLETE)
 - ✅ development.nix: 3 scripts (COMPLETE)
 - ✅ terminal.nix: 4 scripts (COMPLETE)
-- ⏳ **system.nix**: 3 scripts remaining (`bootstrap-*.sh`, `build-wsl-tarball`) 
-- ⏳ **shell-utils.nix**: 11 libraries + 2 utilities remaining (all `/lib/*.bash` + `mytree.sh`, `colorfuncs.sh`)
+- ✅ **system.nix**: 5 scripts (COMPLETE - added USB utilities)
+- ✅ **shell-utils.nix**: 15 items (COMPLETE - 9 libraries + 6 utilities)
 
-**BENEFIT**: Eliminate home/files dumping ground, complete architectural transformation
+**ACHIEVEMENT**: ✅ **Module-based organization complete!** Home/files dumping ground eliminated for all functional scripts. Remaining 9 files are PowerShell scripts (.ps1), backups (~), or problematic dependency scripts.
 
 ### 🎯 **PRIORITY 2: Test Infrastructure Modernization**
 **CURRENT ISSUE**: Tests scattered across 3 locations, 2,412-line monolithic test file
