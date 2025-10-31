@@ -63,11 +63,19 @@
 
 ### 🎯 **SESSION 7 ACHIEVEMENTS (2025-10-30) - CRITICAL CORRELATION ISSUE FIXED**
 
-**✅ CRITICAL ISSUE RESOLVED**: Preview/selection correlation fixed via fzf data passing correction
+**✅ CRITICAL ISSUES RESOLVED**: Both preview correlation and session counting fixed
+
+**Issue 1 - Preview/Selection Correlation**:
 - **User Report**: Selected fzf session does NOT appear in preview window (screenshot evidence)
-- **Root Cause Found**: fzf `--with-nth="1"` + `--preview="{}"` combination passed truncated data to preview command
+- **Root Cause**: fzf `--with-nth="1"` + `--preview="{}"` combination passed truncated data to preview command
 - **Technical Fix**: Changed fzf preview placeholder from `{}` to `{+}` to pass complete original line
-- **Status**: ✅ ISSUE FIXED - Preview command now receives full session data with timestamp
+- **Status**: ✅ FIXED - Preview command now receives full session data with timestamp
+
+**Issue 2 - Window/Pane Count Discrepancy**:
+- **User Report**: Sessions showing 12/20 in list but only 1 window in preview
+- **Root Cause**: Parser counted ALL sessions' windows/panes but attributed to first session only
+- **Technical Fix**: Added session name filtering to only count windows/panes per specific session
+- **Status**: ✅ FIXED - Each session shows accurate individual window/pane counts
 
 **📋 SESSION 7 INVESTIGATION FINDINGS**: Technical verification shows components working individually
 - **Isolated Testing Results**: All correlation mechanisms work correctly when tested separately
