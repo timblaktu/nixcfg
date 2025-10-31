@@ -21,7 +21,7 @@
 2. /home/tim/src/home-manager
 3. /home/tim/src/NixOS-WSL
 
-## 📋 CURRENT STATUS: PRIORITY 2 COMPLETE ✅
+## 📋 CURRENT STATUS: PRIORITY 2 INCOMPLETE ⚠️
 
 ### 🎯 **PRIORITY 1 SUCCESSFULLY COMPLETED**
 
@@ -102,50 +102,48 @@
 - **Testing**: `passthru.tests` with `lib.recurseIntoAttrs` for nixpkgs-standard test integration
 - **Test Format**: `pkgs.runCommand` with proper `meta.description` and `nativeBuildInputs`
 
-### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ✅ PHASE 1 COMPLETE
-**STATUS**: **PHASE 1 COMPLETED** - passthru.tests pattern successfully implemented
-**PHASE 1 IMPLEMENTATION COMPLETED**:
-1. ✅ **Research nixpkgs `passthru.tests` patterns** - Standard nixpkgs testing approaches documented
-2. ✅ **Create test migration strategy** - Comprehensive migration plan developed
-3. ✅ **Implement `passthru.tests` on script derivations** - Enhanced mkValidatedFile with proper test support
-4. ⚡ **Phase 2: Migrate existing tests** - Migrate tests from flake-modules/tests.nix to script-level tests
-5. ⚡ **Phase 2: Consolidate test infrastructure** - Reduce flake-modules/tests.nix to collection logic only
+### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ⚠️ INCOMPLETE
+**STATUS**: **CRITICAL ARCHITECTURAL ISSUES IDENTIFIED** - Previous "complete" assessment was incorrect
+**FUNDAMENTAL PROBLEM**: 72+ `passthru.tests` defined but never collected into flake checks
 
-**✅ ACHIEVEMENTS**:
+**🚨 ARCHITECTURAL ANTI-PATTERN DISCOVERED**:
+```
+❌ CURRENT BROKEN STATE:
+┌─────────────────────────────────────┐
+│ flake-modules/tests.nix (2,412 lines)│  ← All tests run here (MANUAL)
+│ - Lines 500-2412: Script tests      │  ← DUPLICATED FUNCTIONALITY
+│ - Manually recreated test logic     │  
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ validated-scripts/bash.nix          │  ← Tests defined but ORPHANED
+│ - 72+ test derivations              │  ← NEVER RUN!
+│ - passthru.tests = { ... }          │  ← collectScriptTests exists but unused
+└─────────────────────────────────────┘
+```
+
+**✅ PHASE 1 ACHIEVEMENTS** (Still Valid):
 - **Enhanced mkValidatedFile**: Supports nixpkgs `passthru.tests` pattern with `lib.recurseIntoAttrs`
 - **Automatic Testing**: All scripts get version/execution tests automatically
 - **Content-Based Tests**: Bash gets shellcheck, Python gets linting validation
 - **Library Testing**: mkScriptLibrary includes proper sourcing tests
-- **Standard Integration**: Tests integrate with `nix flake check` following nixpkgs patterns
 
-**🔧 TECHNICAL IMPLEMENTATION**:
-- **Test Format**: All tests use `pkgs.runCommand` with proper `meta.description`
-- **Dependencies**: Tests include script + deps in `nativeBuildInputs`
-- **User Tests**: Support string format, attribute format, or existing derivations
-- **Quality Assurance**: Flake check passes, home-manager switch successful
+**⚠️ PHASE 2 CRITICAL TASKS** (Breakdown for Next Session):
+1. **Research collectScriptTests function** in validated-scripts/default.nix
+2. **Identify orphaned tests** - Which passthru.tests are not in flake checks
+3. **Map test duplication** - Lines 500-2412 in flake-modules/tests.nix vs passthru.tests
+4. **Wire collection into flake checks** - Connect collectScriptTests to checks attribute
+5. **Test orphaned test execution** - Verify passthru.tests run via nix flake check
+6. **Remove duplicated manual tests** - Delete redundant tests from flake-modules/tests.nix
+7. **Verify file size reduction** - Confirm flake-modules/tests.nix shrinks to ~300-500 lines
+8. **Full validation** - Run nix flake check to ensure all tests pass after refactor
 
-### 🎯 **PRIORITY 2 PHASE 2: Test Migration** ✅ COMPLETE
-**STATUS**: **COMPLETED** - Test migration analysis complete, no migration needed
-**DISCOVERY**: Comprehensive audit revealed that test migration is already complete
-**ANALYSIS RESULTS**:
-1. ✅ **Audit completed** - Cataloged all 38+ tests in flake-modules/tests.nix
-2. ✅ **Script-test mapping completed** - Identified test categories and ownership
-3. ✅ **Migration already complete** - All script-specific tests already in `passthru.tests`
-4. ✅ **Validation confirmed** - Tests integrate properly with `nix flake check`
-5. ✅ **Centralized tests are system-level** - Remaining tests are correctly centralized
-
-**🔍 KEY FINDINGS**:
-- **tmux-session-picker**: All 13 tests already migrated to script-level `passthru.tests` ✅
-- **mergejson, onedrive-***: Already have comprehensive script-level tests ✅  
-- **SSH/SOPS tests**: System-level integration tests (correctly centralized) ✅
-- **Eval/Module tests**: Configuration evaluation tests (correctly centralized) ✅
-- **Infrastructure tests**: Build/validation tests (correctly centralized) ✅
-
-**🎯 ARCHITECTURAL SUCCESS**:
-- **Script-Level Testing**: All script-specific tests properly co-located
-- **System-Level Testing**: Integration tests appropriately centralized
-- **Standard Pattern**: Full compliance with nixpkgs `passthru.tests` conventions
-- **CI/CD Integration**: All tests integrated with `nix flake check`
+**🎯 SUCCESS CRITERIA** (Not Yet Met):
+- ✅ nixpkgs `passthru.tests` pattern implemented
+- ❌ **Orphaned tests connected to flake checks** - CRITICAL MISSING
+- ❌ **Test duplication eliminated** - CRITICAL MISSING  
+- ❌ **File size reduction achieved** - CRITICAL MISSING
+- ❌ **Full architectural compliance** - CRITICAL MISSING
 
 ### 🎯 **PRIORITY 3: Cross-Platform Validation**  
 **GOAL**: Survey and fix hardcoded OS/platform-specific code  
@@ -160,52 +158,57 @@
 **🔧 SYSTEM STATUS**: 
 - ✅ **All builds passing** - Complete unified files module deployment success
 - ✅ **All critical functionality operational** - 4 critical scripts working in production  
-- ✅ **Test Infrastructure Modernized** - passthru.tests pattern implemented
+- ⚠️ **Test Infrastructure Partially Modernized** - passthru.tests pattern implemented but not connected to flake checks
 - ✅ **Deployment validated** - Both dry-run and actual home-manager switch successful
 - ✅ **Quality assurance** - Strict shellcheck compliance + nixpkgs-standard testing
 
-**🎯 NEXT SESSION FOCUS**: Priority 3 - Cross-Platform Validation (survey and fix hardcoded OS/platform-specific code)
+**🎯 NEXT SESSION FOCUS**: Priority 2 Phase 2 - Fix orphaned test architecture and test duplication
 
-## 🎯 **SESSION HANDOFF SUMMARY** (2025-10-30)
+## 🎯 **SESSION HANDOFF SUMMARY** (2025-10-31)
 
-### ✅ **MAJOR MILESTONE ACHIEVED: PRIORITY 2 COMPLETE**
+### ⚠️ **CRITICAL DISCOVERY: PRIORITY 2 INCOMPLETE**
 
 **Session Accomplishments:**
-- **🔍 COMPREHENSIVE TEST AUDIT**: Complete analysis of 38+ tests in flake-modules/tests.nix
-- **✅ MIGRATION DISCOVERY**: Found that test migration is already complete - no migration needed
-- **🎯 ARCHITECTURAL VALIDATION**: Confirmed proper separation of script-level vs system-level tests
-- **📊 PROGRESS**: Priority 2 (Test Infrastructure Modernization) fully complete
+- **🔍 DEEP ARCHITECTURAL ANALYSIS**: Analyzed TESTS.md revealing fundamental test architecture problems
+- **🚨 CORRECTED ASSESSMENT**: Previous "Priority 2 Complete" status was incorrect - major work remains
+- **📋 TASK BREAKDOWN**: Created detailed 8-step breakdown for fixing orphaned test architecture
+- **📊 PROGRESS**: Priority 2 requires significant architectural work to achieve actual completion
 
-**🔍 KEY DISCOVERY: Test Migration Already Complete**
-- **tmux-session-picker**: All 13 tests already in script-level `passthru.tests` ✅
-- **Script-specific tests**: All scripts (mergejson, onedrive-*) already have proper script-level tests ✅
-- **System-level tests**: SSH/SOPS/eval/module tests correctly remain centralized ✅
-- **Test Architecture**: Perfect separation achieved between script-level and system-level testing ✅
+**🚨 CRITICAL DISCOVERY: Orphaned Test Architecture**
+- **72+ passthru.tests defined**: Tests exist in validated-scripts/bash.nix but NEVER RUN ❌
+- **Massive duplication**: Lines 500-2412 of flake-modules/tests.nix manually recreate passthru.tests ❌
+- **collectScriptTests function exists**: Available but never wired into flake checks ❌
+- **2,412-line anti-pattern**: Should be ~300-500 lines with proper collection ❌
 
-**🏗️ ARCHITECTURAL ANALYSIS**:
-- **Script-Level Testing**: All script-specific tests properly co-located with their scripts
-- **System-Level Testing**: Integration/configuration tests appropriately centralized
-- **nixpkgs Compliance**: Full adherence to nixpkgs `passthru.tests` patterns
-- **CI/CD Integration**: All tests integrate seamlessly with `nix flake check`
+**🏗️ ARCHITECTURAL PROBLEMS**:
+- **Broken Collection**: passthru.tests exist but are not collected into flake checks
+- **Manual Duplication**: Script tests manually recreated instead of auto-collected
+- **Size Bloat**: 2,412-line test file when nixpkgs pattern would be ~300-500 lines
+- **nixpkgs Non-Compliance**: Not following standard nixpkgs test organization patterns
 
 **Git Commits Created:**
-- No code changes needed - migration already complete
-- Documentation updated to reflect analysis findings
+- Updated CLAUDE.md to reflect corrected Priority 2 status
+- Updated task queue with detailed 8-step breakdown
 
 **Memory Bank Status:**
 - ✅ Priority 1 (Module-Based Organization) completed
-- ✅ Priority 2 (Test Infrastructure Modernization) completed  
-- ⚡ Ready for Priority 3 (Cross-Platform Validation)
-- ✅ System validated: proper test architecture confirmed
+- ⚠️ Priority 2 (Test Infrastructure Modernization) - CRITICAL WORK REQUIRED
+- 📋 8-step task breakdown created for fixing test architecture
+- ❌ NOT ready for Priority 3 until test architecture is fixed
 
 ### 🚀 **NEXT SESSION PRIORITIES**
 
-**IMMEDIATE NEXT TASKS** (Ready to execute):
-1. **Priority 3: Cross-Platform Validation** - Survey and fix hardcoded OS/platform-specific code
-2. **Priority 4: Enhanced Configuration Features** - Explore autoWriter integration and advanced shell features
-3. **Optional: Test Quality Improvements** - Address minor test failures (e.g., tmux session name truncation)
+**IMMEDIATE CRITICAL TASKS** (Must be completed before moving to Priority 3):
+1. **Research collectScriptTests function** in validated-scripts/default.nix
+2. **Identify orphaned tests** - Which passthru.tests are not in flake checks
+3. **Map test duplication** - Lines 500-2412 in flake-modules/tests.nix vs passthru.tests
+4. **Wire collection into flake checks** - Connect collectScriptTests to checks attribute
+5. **Test orphaned test execution** - Verify passthru.tests run via nix flake check
+6. **Remove duplicated manual tests** - Delete redundant tests from flake-modules/tests.nix
+7. **Verify file size reduction** - Confirm flake-modules/tests.nix shrinks to ~300-500 lines
+8. **Full validation** - Run nix flake check to ensure all tests pass after refactor
 
-**Current Branch**: `dev` (ready for continued development)  
-**System State**: Fully validated and operational with proper test architecture  
-**Blocking Issues**: None - clear path forward for cross-platform validation
+**Current Branch**: `dev` (ready for test architecture fixes)  
+**System State**: Functional but with architectural technical debt in test system  
+**Blocking Issues**: Test architecture must be fixed before proceeding to cross-platform validation
 
