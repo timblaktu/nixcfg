@@ -491,7 +491,7 @@ _format_session_row() {
                 if [[ $((space_used + needed_space)) -le $remaining_width ]]; then
                     # Add token (truncate if needed but keep readable)
                     if [[ $token_width -gt $max_token_width ]]; then
-                        abbreviated_tokens+=("$(truncate_middle_to_display_width "$token" "$max_token_width")")
+                        abbreviated_tokens+=("$(truncate_to_display_width "$token" "$max_token_width")")
                         space_used=$((space_used + max_token_width))
                     else
                         abbreviated_tokens+=("$token")
@@ -693,7 +693,6 @@ parse_all_files_parallel() {
     export -f _format_session_row
     export -f get_display_width
     export -f truncate_to_display_width  
-    export -f truncate_middle_to_display_width
     # Libraries sourced: terminal-utils, color-utils, path-utils
     
     
