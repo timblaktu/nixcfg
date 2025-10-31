@@ -32,16 +32,16 @@ parse_single_file() {
     while IFS=$'\t' read -r type session_name rest || [[ -n "$type" ]]; do
         case "$type" in
             window)
-                window_count=$((window_count + 1))
                 [[ -z "$session" ]] && session="$session_name"
+                [[ "$session_name" == "$session" ]] && window_count=$((window_count + 1))
                 ;;
             pane)
-                pane_count=$((pane_count + 1))
                 [[ -z "$session" ]] && session="$session_name"
+                [[ "$session_name" == "$session" ]] && pane_count=$((pane_count + 1))
                 
                 # For paths and commands, we need to split the rest fields
                 # This is a simplified approach that handles variable field counts
-                if [[ -n "$rest" ]]; then
+                if [[ -n "$rest" && "$session_name" == "$session" ]]; then
                     # Split the rest into an array
                     local -a fields
                     IFS=$'\t' read -r -a fields <<< "$rest"
