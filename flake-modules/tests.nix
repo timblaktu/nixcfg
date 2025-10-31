@@ -526,12 +526,17 @@
             } ''
             echo "Testing tmux-session-picker CLI help availability..."
             
+            # Set up library dependencies function for multiple HOME directories
+            setup_libraries() {
+              mkdir -p "$1/.local/lib"
+              cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+              cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+              cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+            }
+            
             # Set up library dependencies in test environment
             export HOME="$PWD/test-home"
-            mkdir -p $HOME/.local/lib
-            cp ${../home/files/lib/terminal-utils.bash} $HOME/.local/lib/terminal-utils.bash
-            cp ${../home/files/lib/color-utils.bash} $HOME/.local/lib/color-utils.bash
-            cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
+            setup_libraries "$HOME"
           
             # Test 1.1: Help information is available and comprehensive
             # Expected: Help output contains key sections (usage, options, environment variables)
@@ -593,12 +598,17 @@
             } ''
             echo "Testing tmux-session-picker argument validation..."
             
+            # Set up library dependencies function for multiple HOME directories
+            setup_libraries() {
+              mkdir -p "$1/.local/lib"
+              cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+              cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+              cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+            }
+            
             # Set up library dependencies in test environment
             export HOME="$PWD/test-home"
-            mkdir -p $HOME/.local/lib
-            cp ${../home/files/lib/terminal-utils.bash} $HOME/.local/lib/terminal-utils.bash
-            cp ${../home/files/lib/color-utils.bash} $HOME/.local/lib/color-utils.bash
-            cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
+            setup_libraries "$HOME"
           
             # Test 2.1: Valid layout arguments are accepted
             echo "Testing valid layout arguments..."
@@ -707,12 +717,17 @@
             } ''
             echo "Testing tmux-session-picker environment variable integration..."
             
+            # Set up library dependencies function for multiple HOME directories
+            setup_libraries() {
+              mkdir -p "$1/.local/lib"
+              cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+              cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+              cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+            }
+            
             # Set up library dependencies in test environment
             export HOME="$PWD/test-home"
-            mkdir -p $HOME/.local/lib
-            cp ${../home/files/lib/terminal-utils.bash} $HOME/.local/lib/terminal-utils.bash
-            cp ${../home/files/lib/color-utils.bash} $HOME/.local/lib/color-utils.bash
-            cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
+            setup_libraries "$HOME"
           
             # Test 3.1: TMUX_SESSION_PICKER_LAYOUT environment variable is respected
             echo "Testing TMUX_SESSION_PICKER_LAYOUT environment variable..."
@@ -812,6 +827,18 @@
               ];
             } ''
                       echo "Testing tmux-session-picker --list mode interface..."
+          
+                      # Set up library dependencies function for multiple HOME directories
+                      setup_libraries() {
+                        mkdir -p "$1/.local/lib"
+                        cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+                        cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+                        cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+                      }
+          
+                      # Set up library dependencies in test environment
+                      export HOME="$PWD/test-home"
+                      setup_libraries "$HOME"
           
                       # Test 4.1: --list mode exists and is accessible
                       echo "Testing --list mode accessibility..."
@@ -931,9 +958,18 @@
             } ''
             echo "Testing tmux-session-picker session discovery..."
           
+            # Set up library dependencies function for multiple HOME directories
+            setup_libraries() {
+              mkdir -p "$1/.local/lib"
+              cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+              cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+              cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+            }
+          
             # Set up test environment
             mkdir -p "$TMPDIR/.local/share/tmux/resurrect"
             export HOME="$TMPDIR"
+            setup_libraries "$HOME"
           
             # Test 5.1: Create multiple mock session files using tmux-test-data-generator
             echo "Creating mock tmux-resurrect session files with tmux-test-data-generator..."
