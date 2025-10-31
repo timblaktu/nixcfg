@@ -9,18 +9,18 @@ ESP32_DEVICE="${ESP32_DEVICE:-/dev/ttyFalconTX}"  # ESP32 serial device
 DSP_PROJECT_PATH="${DSP_PROJECT_PATH:-/home/tim/src/dsp}"  # Path to DSP project
 ROUTER_IP="${ROUTER_IP:-192.168.1.1}"        # OpenWRT router IP
 REMOTE_USER="${REMOTE_USER:-root}"            # Router SSH user
-TEST_TIMEOUT=60                               # Timeout for each test phase
+# TEST_TIMEOUT=60                               # Timeout for each test phase (unused)
 VERBOSE=false
 OUTPUT_DIR="./wifi-test-results"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 ESP32_SAMPLE_MODE=false                       # Use sample ESP32 data for testing
 
 # Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# RED='\033[0;31m' # Unused variable
+# GREEN='\033[0;32m' # Unused variable
+# YELLOW='\033[1;33m' # Unused variable
+# BLUE='\033[0;34m' # Unused variable
+# NC='\033[0m' # Unused variable
 
 # Logging functions
 log_info() { echo -e "$(date +%H:%M:%S.%3N) ℹ️  $1" >&2; }
@@ -84,7 +84,7 @@ parse_args() {
             r) ROUTER_IP="$OPTARG" ;;
             u) REMOTE_USER="$OPTARG" ;;
             o) OUTPUT_DIR="$OPTARG" ;;
-            t) TEST_TIMEOUT="$OPTARG" ;;
+            t) : ;; # TEST_TIMEOUT option removed (unused)
             s) ESP32_SAMPLE_MODE=true ;;
             v) VERBOSE=true ;;
             h) show_usage; exit 0 ;;
@@ -271,7 +271,8 @@ convert_esp32_to_json() {
 EOF
     
     # Extract total APs
-    local total_aps=$(echo "$esp32_output" | grep "Found.*total APs" | grep -o '[0-9]\+' | head -1)
+    local total_aps
+    total_aps=$(echo "$esp32_output" | grep "Found.*total APs" | grep -o '[0-9]\+' | head -1)
     [ -z "$total_aps" ] && total_aps=0
     echo "    \"total_aps\": $total_aps,"
     
@@ -293,12 +294,16 @@ EOF
         
         [ "$first" = true ] && first=false || echo ","
         
-        local channel=$(echo "$penalty_line" | grep -o "Channel [0-9]\+" | grep -o "[0-9]\+")
-        local penalty=$(echo "$penalty_line" | grep -o "Penalty: [0-9]\+" | grep -o "[0-9]\+")
-        local ap_primaries=$(echo "$penalty_line" | grep -o "AP Primaries: [0-9]\+" | grep -o "[0-9]\+")
+        local channel
+        channel=$(echo "$penalty_line" | grep -o "Channel [0-9]\+" | grep -o "[0-9]\+")
+        local penalty
+        penalty=$(echo "$penalty_line" | grep -o "Penalty: [0-9]\+" | grep -o "[0-9]\+")
+        local ap_primaries
+        ap_primaries=$(echo "$penalty_line" | grep -o "AP Primaries: [0-9]\+" | grep -o "[0-9]\+")
         
         # Get ranking for this channel
-        local rank=$(grep "CHANNEL.*$channel" "$temp_rankings" | grep -o "RANK.*[0-9]\+" | grep -o "[0-9]\+" | head -1)
+        local rank
+        rank=$(grep "CHANNEL.*$channel" "$temp_rankings" | grep -o "RANK.*[0-9]\+" | grep -o "[0-9]\+" | head -1)
         [ -z "$rank" ] && rank=0
         
         # Calculate score (12 - rank + 1, so rank 1 = score 12, rank 12 = score 1)
