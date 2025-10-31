@@ -1,161 +1,170 @@
-# NEW CHAT SESSION: CROSS-PLATFORM VALIDATION & ENHANCEMENT
+# NEW CHAT SESSION: CLAUDE CODE 2.0 MIGRATION
 
-## 🎯 **MISSION**: Cross-Platform Code Audit and System Enhancement  
+## 🎯 **MISSION**: Claude Code 2.0 Migration Implementation
 
-### **✅ CONTEXT**: Major Migration Successfully Completed (2025-10-31)
-**ARCHITECTURAL MILESTONE ACHIEVED**: Complete validated-scripts module elimination successful
-- ✅ **All 4 migration phases complete**: 72+ scripts migrated to standard nixpkgs patterns
-- ✅ **Module infrastructure eliminated**: 3,551 lines removed, clean architecture achieved  
-- ✅ **System integrity maintained**: All flake checks passing, full functionality preserved
-- ✅ **Pure nixpkgs patterns**: Complete transition from custom framework to standard practices
+### **✅ CONTEXT**: System Ready for Migration (2025-10-31)
+**ARCHITECTURAL FOUNDATION COMPLETE**: All previous work successfully completed
+- ✅ **Validated-scripts elimination**: 72+ scripts migrated to standard nixpkgs patterns
+- ✅ **Module-based organization**: Clean separation in home/common/*.nix files  
+- ✅ **Test infrastructure modernized**: Major overhaul with 76% code reduction
+- ✅ **Build system validated**: All flake checks passing, home-manager deployments successful
 
-**CURRENT SYSTEM STATE**: Robust, well-tested, production-ready configuration
+**CURRENT SYSTEM STATE**: Stable, well-tested, production-ready configuration
 
-### **🎯 PRIMARY OBJECTIVE**: Cross-Platform Validation and Enhancement
-**GOAL**: Identify and resolve platform-specific assumptions across the codebase
-**WHY**: Ensure portability and robustness across different operating systems and environments
+### **🎯 PRIMARY OBJECTIVE**: Claude Code v1.x → v2.0 Migration
+**GOAL**: Implement Claude Code 2.0 configuration schema with improved configuration/state separation
+**WHY**: Leverage v2.0's enhanced permissions system, better MCP management, and improved runtime state handling
 
 ### **📊 CURRENT STATE**:
 **Repository Status**:
 - **Branch**: `dev`  
-- **Last commits**: 03fdd50 (documentation), 7c3661a (validated-scripts elimination)
 - **Build State**: ✅ All flake checks passing, home-manager deployments successful
 - **Architecture**: ✅ Clean nixpkgs.writeShellApplication patterns throughout
+- **Quality**: ✅ Shellcheck compliance, comprehensive testing
 
-**System Architecture**:
-- **Unified Files Module**: ✅ Fully operational with comprehensive script coverage
-- **Standard Patterns**: ✅ Pure nixpkgs.writers implementation achieved
-- **Quality Assurance**: ✅ Shellcheck compliance, comprehensive testing
-- **Module Organization**: ✅ Scripts properly categorized in home/common/*.nix files
+**Migration Documentation**:
+- **Primary Source**: `CLAUDE-CODE-2-MIGRATION.md` (comprehensive technical specification)
+- **Task Structure**: Organized in CLAUDE.md with 4 phases, 24 specific tasks
+- **Implementation Details**: Code snippets and architectural guidance included
 
-### **🔧 AUDIT APPROACH** (Systematic & Comprehensive):
+### **🔧 MIGRATION APPROACH** (4-Phase Strategy):
 
-**Phase 1 - Platform-Specific Code Identification**:
-1. **Search for hardcoded paths**: Look for `/home/`, `/mnt/c/`, WSL-specific assumptions
-2. **OS detection patterns**: Find `uname`, `$OSTYPE`, platform-specific logic
-3. **Environment assumptions**: Identify hardcoded environment variables, tool paths
-4. **Tool availability assumptions**: Check for commands that may not exist on all platforms
+**Phase 1 - Nix Module Updates (v2.0 Schema)**:
+1. **Update permission options schema**: Implement v2.0 allow/deny/ask structure (foundation)
+2. **Update settings template**: Convert to v2.0 permissions structure (core change)  
+3. **Add MCP template generation**: Create separate `.mcp.json` generation (new functionality)
+4. **Remove mcpServers**: Extract from settings.json to dedicated file (cleanup)
 
-**Phase 2 - Documentation and Planning**:
-1. **Categorize findings**: Group issues by severity and module
-2. **Impact assessment**: Determine which issues affect functionality vs. convenience
-3. **Migration strategy**: Plan fixes with backward compatibility
-4. **Testing approach**: Design cross-platform validation methods
+**Phase 2 - Wrapper Updates**:
+1. **Update wrapper flags**: Change `--config-dir` to `--settings` in claudemax/claudepro
+2. **Add coalescence function**: Implement startup config merging for runtime state preservation
+3. **Preserve single-instance logic**: Maintain existing PID management
+4. **Test wrapper functionality**: Verify new flag usage and coalescence behavior
 
-**Phase 3 - Implementation and Validation**:
-1. **Fix high-priority issues**: Address functionality-breaking assumptions
-2. **Enhance robustness**: Add platform detection and graceful fallbacks
-3. **Update documentation**: Reflect cross-platform considerations
-4. **Validate changes**: Ensure fixes don't break existing functionality
+**Phase 3 - Activation Script Updates**:
+1. **Update deployment logic**: Deploy both settings.json and .mcp.json (always overwrite)
+2. **Preserve runtime state**: Leave .claude.json for Claude Code + coalescence to manage
+3. **Test activation**: Verify template deployment and file separation
+4. **Validate integration**: Ensure coalescence preserves both Nix config and runtime state
 
-### **📁 KEY AREAS FOR INVESTIGATION**:
+**Phase 4 - Testing & Validation**:
+1. **Build system validation**: `nix flake check` and `home-manager switch --dry-run`
+2. **Configuration format validation**: Verify v2.0 schema compliance
+3. **Runtime testing**: Test wrapper execution and coalescence behavior
+4. **End-to-end validation**: Confirm Claude Code v2.0 functionality
 
-**High-Priority Modules**:
-- **WSL-specific code**: `home/common/onedrive.nix`, `home/modules/terminal-verification.nix`
-- **Path assumptions**: Scripts in `home/files/bin/`, library paths in `home/files/lib/`
-- **Tool dependencies**: ESP-IDF tools, development utilities, terminal setup
-- **Environment detection**: Platform-specific configuration in various modules
+### **🗂️ KEY FILES FOR MIGRATION**:
 
-**Search Patterns to Investigate**:
-```bash
-# Hardcoded paths
-rg "/home/" --type nix
-rg "/mnt/c/" --type nix  
-rg "/tmp/" --type nix
+**Primary Module**: `home/modules/claude-code.nix`
+- Settings template generation (v2.0 schema conversion)
+- MCP template generation (new .mcp.json file)
+- Permission options schema (allow/deny/ask structure)
+- Activation script updates
 
-# OS-specific code
-rg "WSL" --type nix
-rg "linux" --type nix
-rg "darwin" --type nix
+**Wrapper Scripts**: Located in `home/common/development.nix`
+- `claudemax` - MAX account wrapper 
+- `claudepro` - PRO account wrapper
+- Both need flag updates and coalescence function
 
-# Tool assumptions
-rg "which " --type nix
-rg "command -v" --type nix
-```
+**Runtime Directories**: `claude-runtime/.claude-{max,pro}/`
+- `settings.json` - Nix-managed v2.0 configuration
+- `.mcp.json` - Nix-managed MCP server definitions  
+- `.claude.json` - Runtime state + coalesced config (Claude Code managed)
 
 ### **🚀 STEP-BY-STEP EXECUTION**:
 
-**Step 1**: Platform-specific code audit
+**Step 1**: Start with Phase 1 (Nix Module Updates)
 ```bash
-# Search for platform assumptions across the codebase
-rg "/home/|/mnt/c/|WSL_|uname|OSTYPE" /home/tim/src/nixcfg/ --type nix
+# Work in correct location
+cd /home/tim/src/nixcfg
 
-# Check scripts for hardcoded paths
-rg "/home/|/mnt/c/" /home/tim/src/nixcfg/home/files/bin/ --type sh
+# Read current module structure
+cat home/modules/claude-code.nix
 
-# Look for tool availability assumptions
-rg "which |command -v" /home/tim/src/nixcfg/ --type nix
+# Follow CLAUDE-CODE-2-MIGRATION.md Phase 1 specifications
+# Update permission options schema first (foundation)
 ```
 
-**Step 2**: Document findings and prioritize
+**Step 2**: Implement v2.0 schema systematically  
 ```bash
-# Create systematic documentation of issues found
-# Categorize by: Critical, Important, Enhancement
-# Plan migration strategy for each category
+# Update each component following priority order in CLAUDE.md:
+# 1. Permission options schema update
+# 2. Settings template v2.0 structure  
+# 3. MCP template generation
+# 4. Remove mcpServers from settings
+
+# Validate each change with nix flake check
 ```
 
-**Step 3**: Implement fixes with validation
+**Step 3**: Phase 2 wrapper updates (requires Phase 1 completion)
 ```bash
-# Apply fixes with careful testing
-nix flake check  # Verify build integrity
-nix run home-manager -- switch --flake '.#tim@thinky-nixos' --dry-run  # Test deployment
+# Update wrapper scripts with new flags and coalescence
+# Test flag changes and runtime behavior
+# Preserve all existing functionality
+```
 
-# Verify functionality preservation
-# Test cross-platform compatibility where possible
+**Step 4**: Complete remaining phases with full validation
+```bash
+# Phase 3: Activation script updates
+# Phase 4: Comprehensive testing and validation
+
+# Final validation commands:
+nix flake check
+nix run home-manager -- switch --flake '.#tim@thinky-nixos' --dry-run
+claudemax --print "test"  # Test v2.0 wrapper functionality
 ```
 
 ### **⚠️ CRITICAL SUCCESS CRITERIA**:
-1. **No functionality regression**: All existing features must continue working
-2. **Improved portability**: Reduced platform-specific assumptions  
-3. **Graceful degradation**: Non-critical features fail gracefully on unsupported platforms
-4. **Clear documentation**: Platform requirements and limitations documented
+1. **No functionality regression**: All existing Claude Code features must continue working
+2. **V2.0 schema compliance**: Settings.json must use v2.0 permissions structure  
+3. **Proper file separation**: MCP servers in .mcp.json, not settings.json
+4. **Runtime state preservation**: Coalescence must preserve auth tokens, projects, etc.
 5. **Build integrity**: All flake checks and deployments must continue passing
 
 ### **🔍 VALIDATION COMMANDS**:
 ```bash
-# Verify no critical hardcoded paths remain
-rg "/home/tim" /home/tim/src/nixcfg/ --type nix | grep -v "# Path:" || echo "✅ No hardcoded user paths"
+# Verify v2.0 schema compliance
+jq '.permissions.allow' claude-runtime/.claude-max/settings.json
+jq '.mcpServers' claude-runtime/.claude-max/.mcp.json
 
-# Confirm platform detection is robust
-rg "if.*linux|if.*darwin" /home/tim/src/nixcfg/ --type nix
+# Test wrapper functionality  
+claudemax --print "echo test"  # Should use --settings flag internally
 
-# Test complete system build
-nix flake check && echo "✅ Flake check passes"
+# Verify coalescence behavior
+# Start session, check that runtime .claude.json has Nix config applied
 
-# Test deployment
+# Complete system validation
+nix flake check && echo "✅ Build check passes"
 nix run home-manager -- switch --flake '.#tim@thinky-nixos' --dry-run && echo "✅ Deployment succeeds"
 ```
 
 ### **📚 CONTEXT FROM PREVIOUS WORK**:
-**Migration Pattern Established**: All scripts now use standard nixpkgs.writeShellApplication
-**Quality Standards**: Shellcheck compliance enforced at build time
+**Proven Implementation Patterns**: All scripts use standard nixpkgs.writeShellApplication
+**Quality Standards**: Shellcheck compliance enforced at build time  
 **Testing Infrastructure**: Comprehensive test suites with nixpkgs-standard patterns
-**Module Organization**: Clean separation by functionality in home/common/*.nix
+**Module Organization**: Clean separation by functionality proven effective
 
-**Proven Integration Points**:
-- **Git tools**: `home/common/git.nix`
-- **Terminal utilities**: `home/common/terminal.nix`  
-- **Shell utilities**: `home/common/shell-utils.nix`
-- **ESP-IDF tools**: `home/common/esp-idf.nix`
-- **OneDrive tools**: `home/common/onedrive.nix` (WSL-specific)
-- **Development tools**: `home/common/development.nix`
-- **Tmux tools**: `home/common/tmux.nix`
+**Known Working Architecture**:
+- **Settings management**: Template-based configuration deployment
+- **Wrapper patterns**: Single-instance enforcement with PID management
+- **Runtime integration**: Activation scripts for configuration management
+- **Quality assurance**: Build-time validation with flake check
 
 ### **🎯 SESSION GOALS**:
-1. **Complete cross-platform audit**: Identify all platform-specific assumptions
-2. **Prioritize findings**: Categorize issues by impact and feasibility  
-3. **Implement high-priority fixes**: Address critical portability issues
-4. **Enhance robustness**: Add platform detection and graceful fallbacks
-5. **Validate improvements**: Ensure no functionality regression
-6. **Document platform considerations**: Update architecture documentation
+1. **Complete Phase 1**: Nix module updates with v2.0 schema implementation
+2. **Begin Phase 2**: Wrapper updates with new flags and coalescence
+3. **Validate progress**: Ensure no functionality regression at each step
+4. **Document findings**: Update CLAUDE.md with progress and any discoveries
+5. **Prepare for Phase 3/4**: Set up remaining phases for subsequent sessions
 
 ### **🔧 REPOSITORY STATE**:
 - **Branch**: `dev`
-- **Status**: Clean, validated-scripts elimination complete
-- **Build state**: ✅ Stable (all checks passing, deployments successful)
-- **Next milestone**: Cross-platform robustness and enhanced portability
+- **Status**: Clean, all major migrations complete
+- **Build state**: ✅ Stable (all checks passing, deployments successful)  
+- **Current milestone**: Claude Code 2.0 migration (immediate priority)
+- **Next milestone**: Cross-platform validation and enhancement
 
 ### **💡 SUCCESS INDICATOR**:
-When complete, the system should have minimal platform-specific assumptions, graceful fallbacks for unsupported features, and clear documentation of platform requirements. All existing functionality should be preserved while improving overall portability.
+When complete, Claude Code should run with v2.0 configuration schema, proper file separation (settings.json + .mcp.json), and seamless coalescence preserving runtime state. All existing functionality preserved while gaining v2.0 benefits.
 
-**TASK**: Begin with a comprehensive audit of platform-specific code patterns across the codebase, document findings systematically, then prioritize and implement fixes to enhance cross-platform robustness.
+**TASK**: Begin with Phase 1 Nix module updates, following the priority order specified in CLAUDE.md. Start with permission options schema update as the foundation, then proceed systematically through the remaining Phase 1 tasks.
