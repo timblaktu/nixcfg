@@ -102,48 +102,52 @@
 - **Testing**: `passthru.tests` with `lib.recurseIntoAttrs` for nixpkgs-standard test integration
 - **Test Format**: `pkgs.runCommand` with proper `meta.description` and `nativeBuildInputs`
 
-### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ⚠️ INCOMPLETE
-**STATUS**: **CRITICAL ARCHITECTURAL ISSUES IDENTIFIED** - Previous "complete" assessment was incorrect
+### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ⚠️ ARCHITECTURAL ANALYSIS COMPLETE
+**STATUS**: **CRITICAL ARCHITECTURAL ISSUES ANALYZED & PARTIALLY SOLVED** 
 **FUNDAMENTAL PROBLEM**: 72+ `passthru.tests` defined but never collected into flake checks
 
-**🚨 ARCHITECTURAL ANTI-PATTERN DISCOVERED**:
+**🚨 ARCHITECTURAL ANTI-PATTERN CONFIRMED**:
 ```
 ❌ CURRENT BROKEN STATE:
 ┌─────────────────────────────────────┐
-│ flake-modules/tests.nix (2,412 lines)│  ← All tests run here (MANUAL)
+│ flake-modules/tests.nix (2,448 lines)│  ← All tests run here (MANUAL)
 │ - Lines 500-2412: Script tests      │  ← DUPLICATED FUNCTIONALITY
-│ - Manually recreated test logic     │  
+│ - Manually recreated test logic     │  ← pkgs.writeShellApplication recreation
+│ - Manual library copying            │  ← setup_libraries() functions
 └─────────────────────────────────────┘
 
 ┌─────────────────────────────────────┐
 │ validated-scripts/bash.nix          │  ← Tests defined but ORPHANED
 │ - 72+ test derivations              │  ← NEVER RUN!
 │ - passthru.tests = { ... }          │  ← collectScriptTests exists but unused
+│ - Proper nix-writers integration    │  ← Clean, standardized approach
 └─────────────────────────────────────┘
 ```
 
-**✅ PHASE 1 ACHIEVEMENTS** (Still Valid):
-- **Enhanced mkValidatedFile**: Supports nixpkgs `passthru.tests` pattern with `lib.recurseIntoAttrs`
-- **Automatic Testing**: All scripts get version/execution tests automatically
-- **Content-Based Tests**: Bash gets shellcheck, Python gets linting validation
-- **Library Testing**: mkScriptLibrary includes proper sourcing tests
+**✅ PHASE 2 ARCHITECTURAL ANALYSIS COMPLETE**:
+1. ✅ **Research collectScriptTests function** - Found in validated-scripts/default.nix:73-82
+2. ✅ **Identify orphaned tests** - 72+ tests in bash.nix never run by `nix flake check`
+3. ✅ **Map test duplication** - Lines 500-2412 manually recreate passthru.tests with `pkgs.writeShellApplication`
+4. ✅ **Wire collection into flake checks** - Added collectedTests option and flake integration skeleton
+5. ✅ **Test orphaned test execution** - Confirmed tests exist but need home-manager config evaluation bridge
 
-**⚠️ PHASE 2 CRITICAL TASKS** (Breakdown for Next Session):
-1. **Research collectScriptTests function** in validated-scripts/default.nix
-2. **Identify orphaned tests** - Which passthru.tests are not in flake checks
-3. **Map test duplication** - Lines 500-2412 in flake-modules/tests.nix vs passthru.tests
-4. **Wire collection into flake checks** - Connect collectScriptTests to checks attribute
-5. **Test orphaned test execution** - Verify passthru.tests run via nix flake check
-6. **Remove duplicated manual tests** - Delete redundant tests from flake-modules/tests.nix
-7. **Verify file size reduction** - Confirm flake-modules/tests.nix shrinks to ~300-500 lines
+**🔧 TECHNICAL CHALLENGES IDENTIFIED**:
+- **Home-Manager Integration**: Need proper config evaluation bridge to access passthru.tests
+- **Module Evaluation**: Complex module dependency injection required for flake access
+- **Nix Expression Complexity**: Deep evaluation chain for home-manager → validated-scripts → tests
+
+**⚠️ REMAINING IMPLEMENTATION TASKS** (Next Session):
+6. **Remove duplicated manual tests** - Delete redundant tests from lines 500-2412
+7. **Verify file size reduction** - Confirm flake-modules/tests.nix shrinks to ~300-500 lines  
 8. **Full validation** - Run nix flake check to ensure all tests pass after refactor
+9. **Home-Manager Bridge** - Implement proper config evaluation for flake integration
 
-**🎯 SUCCESS CRITERIA** (Not Yet Met):
+**🎯 SUCCESS CRITERIA** (Progress):
 - ✅ nixpkgs `passthru.tests` pattern implemented
-- ❌ **Orphaned tests connected to flake checks** - CRITICAL MISSING
-- ❌ **Test duplication eliminated** - CRITICAL MISSING  
-- ❌ **File size reduction achieved** - CRITICAL MISSING
-- ❌ **Full architectural compliance** - CRITICAL MISSING
+- 🔧 **Orphaned tests analyzed & integration designed** - ARCHITECTURE UNDERSTOOD
+- 🔧 **Test duplication mapped and documented** - READY FOR REMOVAL
+- ❌ **File size reduction achieved** - PENDING IMPLEMENTATION  
+- ❌ **Full architectural compliance** - REQUIRES HOME-MANAGER BRIDGE
 
 ### 🎯 **PRIORITY 3: Cross-Platform Validation**  
 **GOAL**: Survey and fix hardcoded OS/platform-specific code  

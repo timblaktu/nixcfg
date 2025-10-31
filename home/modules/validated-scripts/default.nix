@@ -138,6 +138,13 @@ in
       internal = true;
       default = { };
     };
+
+    collectedTests = mkOption {
+      type = types.attrsOf types.package;
+      internal = true;
+      default = { };
+      description = "Auto-collected tests from all script passthru.tests for flake integration";
+    };
   };
 
   imports = [
@@ -186,6 +193,9 @@ in
         # Validated scripts available - run 'nix flake check' to validate all scripts
         export NIXCFG_VALIDATED_SCRIPTS_ENABLED=1
       '');
+
+      # Expose collected tests for flake checks integration
+      validatedScripts.collectedTests = allTests;
     }
   );
 }
