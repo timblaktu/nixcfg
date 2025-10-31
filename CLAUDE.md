@@ -126,7 +126,27 @@
 })
 ```
 
-**🚀 READY FOR PHASE 2**: Claude/development tools migration (5 scripts identified)
+**🚀 PHASE 2 READY**: Claude/development tools migration (5 scripts identified)
+
+### 🎯 **VALIDATED-SCRIPTS ELIMINATION PHASE 2** ✅ FUNCTIONALLY COMPLETE  
+**STATUS**: **CLAUDE/DEVELOPMENT TOOLS REPLACED** - Commit 50f877d (2025-10-31)
+
+**✅ PHASE 2 ACHIEVEMENTS**:
+- **claude**: Default account wrapper with PID management **replaced** in development.nix
+- **claude-code-wrapper**: User-local npm installation wrapper **replaced**
+- **claude-code-update**: Claude Code updater utility **replaced**  
+- **claudemax**: Already present from previous work (validation confirmed)
+- **claudepro**: Already present from previous work (validation confirmed)
+- **Home Manager Validation**: ✅ Dry-run and flake check SUCCESS (208 lines added to development.nix)
+- **Pattern Consistency**: All scripts follow established nixpkgs.writeShellApplication + passthru.tests pattern
+
+**📋 PHASE 2 STATUS**: **FUNCTIONALLY COMPLETE, CLEANUP NEEDED**
+- ✅ **New scripts active**: development.nix versions are deployed and functional
+- ✅ **No conflicts**: validated-scripts module is disabled in base.nix (line 29 commented)
+- ❌ **Cleanup pending**: Old script definitions still exist in validated-scripts/bash.nix but unused
+- **Next action**: Remove unused definitions from validated-scripts OR proceed to Phase 3
+
+**🚀 READY FOR PHASE 3**: ESP-IDF, OneDrive, and remaining utility scripts migration
 
 ### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ✅ **COMPLETED**
 **STATUS**: **ARCHITECTURAL SUCCESS - MAJOR OVERHAUL COMPLETED** 
@@ -169,6 +189,49 @@
 - ✅ **Test duplication eliminated** - 1,870 lines removed
 - ✅ **File size reduction achieved** - 76% reduction (2,460 → 590 lines)
 - ✅ **Full validation passed** - All existing tests continue working
+
+### 🎯 **VALIDATED-SCRIPTS ELIMINATION PHASE 3** ⚠️ **PARTIALLY COMPLETE**
+**STATUS**: **ESP-IDF MIGRATION COMPLETE, ONEDRIVE DEPLOYMENT INCOMPLETE** - Commit f3837d8 (2025-10-31)
+
+**✅ PHASE 3 TECHNICAL ACHIEVEMENTS**:
+- **ESP-IDF Scripts**: 4 scripts successfully migrated to `home/common/esp-idf.nix` (esp-idf-install, esp-idf-shell, esp-idf-export, idf.py)
+- **OneDrive Scripts**: 2 scripts technically migrated to new `home/common/onedrive.nix` (onedrive-status, onedrive-force-sync)
+- **Module Integration**: Both modules properly integrated with base.nix options framework
+- **Standard Patterns**: All scripts use `writeShellApplication` + `passthru.tests` pattern
+- **WSL Compatibility**: OneDrive scripts include proper WSL environment detection
+
+**❌ CRITICAL DEPLOYMENT ISSUES IDENTIFIED**:
+- **OneDrive Not Enabled**: `enableOneDriveUtils = false` in tim@thinky-nixos configuration (flake-modules/home-configurations.nix:93)
+- **OneDrive Scripts Non-Functional**: Scripts not deployed to user environment, completely inaccessible
+- **Source Duplication**: Original scripts remain in validated-scripts/bash.nix (lines 360-542, 1235-1320)
+- **Incomplete Validation**: End-to-end OneDrive functionality not demonstrated
+
+**📈 MIGRATION PROGRESS** (Corrected):
+```
+✅ PHASE 1: Tmux Scripts (2 scripts) - COMPLETE
+✅ PHASE 2: Claude/Development Tools (5 scripts) - FUNCTIONALLY COMPLETE  
+⚠️ PHASE 3: ESP-IDF (4 scripts) ✅ + OneDrive (2 scripts) ❌ - PARTIALLY COMPLETE
+🚨 BLOCKING ISSUE: OneDrive deployment failure prevents Phase 4
+```
+
+**🔧 TECHNICAL IMPLEMENTATION STATUS**:
+- **ESP-IDF Module**: ✅ **FULLY FUNCTIONAL** - Updated existing module, scripts deployed and working
+- **OneDrive Module**: ❌ **NON-FUNCTIONAL** - Implementation exists but not enabled in configuration
+- **Environment Integration**: ✅ Proper FHS environment variable handling for ESP-IDF scripts
+- **Quality Assurance**: ✅ Comprehensive test migration from validated-scripts test definitions
+- **Deployment Validation**: ⚠️ **PARTIAL** - ESP-IDF successful, OneDrive failed
+
+**🎯 PHASE 3 STATUS: 60% COMPLETE - CRITICAL ISSUES PREVENT COMPLETION**
+- ✅ **ESP-IDF scripts migrated and deployed**: 4 scripts fully functional
+- ❌ **OneDrive scripts implementation incomplete**: Not enabled in configuration
+- ❌ **Source cleanup pending**: Original scripts remain in validated-scripts
+- ❌ **End-to-end validation incomplete**: OneDrive functionality not demonstrated
+
+**🚨 IMMEDIATE ACTIONS REQUIRED**:
+1. **Enable OneDrive**: Add `enableOneDriveUtils = true;` to tim@thinky-nixos configuration
+2. **Validate Deployment**: Test OneDrive scripts work after enablement
+3. **Clean Sources**: Remove migrated scripts from validated-scripts/bash.nix
+4. **Document Requirements**: Specify configuration prerequisites for future phases
 
 ### 🎯 **PRIORITY 3: Cross-Platform Validation**  
 **GOAL**: Survey and fix hardcoded OS/platform-specific code  
