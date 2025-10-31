@@ -699,8 +699,8 @@ parse_all_files_parallel() {
     
     export PARALLEL_CITATION="will-cite"
     
-    # Use streaming approach without --keep-order for progressive population
-    local parallel_flags=(--will-cite --jobs 0)
+    # Use streaming approach with --keep-order to maintain correlation between list and preview
+    local parallel_flags=(--will-cite --jobs 0 --keep-order)
     
     # Process files in parallel using the complete worker function
     # Extract only the first line (formatted display data) from each worker output
@@ -948,9 +948,9 @@ get_session_list() {
     
     # Find all resurrect files (sorted newest first) using fd for performance
     if [[ -d "$RESURRECT_DIR" && -r "$RESURRECT_DIR" ]]; then
-        # Use fd with error handling for file discovery
+        # Use fd with pipe to stat for file discovery (newest first by modification time)
         local fd_output
-        if fd_output=$(fd --type f "tmux_resurrect_.*\.txt" "$RESURRECT_DIR" 2>/dev/null | sort -r); then
+        if fd_output=$(fd --type f "tmux_resurrect_.*\.txt" "$RESURRECT_DIR" -0 2>/dev/null | xargs -0 stat --format='%Y %n' 2>/dev/null | sort -nr | cut -d' ' -f2-); then
             while IFS= read -r file; do
                 # Additional validation: ensure file is readable and non-empty
                 if [[ -f "$file" && -r "$file" && -s "$file" ]]; then
