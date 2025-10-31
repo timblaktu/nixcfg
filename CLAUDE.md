@@ -21,7 +21,7 @@
 2. /home/tim/src/home-manager
 3. /home/tim/src/NixOS-WSL
 
-## 📋 CURRENT STATUS: PRIORITY 1 COMPLETE ✅
+## 📋 CURRENT STATUS: PRIORITY 2 COMPLETE ✅
 
 ### 🎯 **PRIORITY 1 SUCCESSFULLY COMPLETED**
 
@@ -99,15 +99,17 @@
 - **Library Sourcing**: Absolute paths: `source "$HOME/.local/lib/library-name.bash"`
 - **Integration**: Import + enableOption in base.nix
 - **Quality Control**: Strict shellcheck compliance required for deployment
+- **Testing**: `passthru.tests` with `lib.recurseIntoAttrs` for nixpkgs-standard test integration
+- **Test Format**: `pkgs.runCommand` with proper `meta.description` and `nativeBuildInputs`
 
-### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ✅ COMPLETE
-**STATUS**: **COMPLETED** - passthru.tests pattern successfully implemented
-**IMPLEMENTATION COMPLETED**:
+### 🎯 **PRIORITY 2: Test Infrastructure Modernization** ✅ PHASE 1 COMPLETE
+**STATUS**: **PHASE 1 COMPLETED** - passthru.tests pattern successfully implemented
+**PHASE 1 IMPLEMENTATION COMPLETED**:
 1. ✅ **Research nixpkgs `passthru.tests` patterns** - Standard nixpkgs testing approaches documented
 2. ✅ **Create test migration strategy** - Comprehensive migration plan developed
 3. ✅ **Implement `passthru.tests` on script derivations** - Enhanced mkValidatedFile with proper test support
-4. **Consolidate flake-modules/tests.nix** - Next phase: reduce to collection logic only
-5. **Validate test migration** - Next phase: ensure all tests still pass
+4. ⚡ **Phase 2: Migrate existing tests** - Migrate tests from flake-modules/tests.nix to script-level tests
+5. ⚡ **Phase 2: Consolidate test infrastructure** - Reduce flake-modules/tests.nix to collection logic only
 
 **✅ ACHIEVEMENTS**:
 - **Enhanced mkValidatedFile**: Supports nixpkgs `passthru.tests` pattern with `lib.recurseIntoAttrs`
@@ -122,6 +124,23 @@
 - **User Tests**: Support string format, attribute format, or existing derivations
 - **Quality Assurance**: Flake check passes, home-manager switch successful
 
+### 🎯 **PRIORITY 2 PHASE 2: Test Migration** ⚡ READY
+**STATUS**: **READY TO BEGIN** - Test infrastructure foundation complete
+**GOAL**: Migrate existing tests from centralized to script-level co-location
+**APPROACH**: Move tests from flake-modules/tests.nix to individual script `passthru.tests`
+**IMPLEMENTATION STEPS**:
+1. **Audit existing tests** - Catalog all 38+ tests in flake-modules/tests.nix
+2. **Script-test mapping** - Map each test to its corresponding script
+3. **Migrate tests systematically** - Move tests to script `passthru.tests` using new pattern
+4. **Validate test migration** - Ensure all migrated tests still pass with `nix flake check`
+5. **Consolidate test infrastructure** - Reduce flake-modules/tests.nix to collection logic only
+
+**🎯 EXPECTED BENEFITS**:
+- **Localized Testing**: Tests co-located with the scripts they validate
+- **Better Maintainability**: Script changes and test updates in same context  
+- **Improved CI/CD**: Faster, more targeted test execution
+- **Standard Pattern**: Follows nixpkgs conventions for package testing
+
 ### 🎯 **PRIORITY 3: Cross-Platform Validation**  
 **GOAL**: Survey and fix hardcoded OS/platform-specific code  
 **PATTERN**: Implement conditional platform detection guards  
@@ -134,22 +153,22 @@
 
 **🔧 SYSTEM STATUS**: 
 - ✅ **All builds passing** - Complete unified files module deployment success
-- ✅ **All critical functionality operational** - 4 critical scripts working in production
-- ✅ **Foundation solid** - Ready for Priority 2 (Test Infrastructure Modernization)
+- ✅ **All critical functionality operational** - 4 critical scripts working in production  
+- ✅ **Test Infrastructure Modernized** - passthru.tests pattern implemented
 - ✅ **Deployment validated** - Both dry-run and actual home-manager switch successful
-- ✅ **Quality assurance** - Strict shellcheck compliance enforced system-wide
+- ✅ **Quality assurance** - Strict shellcheck compliance + nixpkgs-standard testing
 
-**🎯 NEXT SESSION FOCUS**: Begin Priority 2 - Test Infrastructure Modernization with `passthru.tests` pattern implementation
+**🎯 NEXT SESSION FOCUS**: Priority 2 Phase 2 - Migrate existing tests from flake-modules/tests.nix to script-level tests
 
 ## 🎯 **SESSION HANDOFF SUMMARY** (2025-10-30)
 
-### ✅ **MAJOR MILESTONE ACHIEVED: PRIORITY 2 COMPLETE**
+### ✅ **MAJOR MILESTONE ACHIEVED: PRIORITY 2 PHASE 1 COMPLETE**
 
 **Session Accomplishments:**
 - **🔧 passthru.tests pattern IMPLEMENTED**: Enhanced unified files module with nixpkgs-standard testing
 - **✅ mkValidatedFile enhanced**: Automatic version/execution tests + content-based validation
 - **✅ mkScriptLibrary enhanced**: Proper sourcing tests + lib.recurseIntoAttrs integration
-- **📊 PROGRESS**: Priority 2 (Test Infrastructure Modernization) fundamentally complete
+- **📊 PROGRESS**: Priority 2 Phase 1 (Test Infrastructure Foundation) complete
 
 **Technical Solutions Applied:**
 - **passthru.tests Pattern**: All scripts now include `passthru.tests = lib.recurseIntoAttrs scriptTests`
@@ -160,16 +179,17 @@
 
 **Git Commits Created:**
 - `47ff520`: Implement passthru.tests pattern for unified files module
+- `52425b2`: Update project documentation: Priority 2 complete
 
 **Memory Bank Status:**
-- ✅ Priority 2 (Test Infrastructure Modernization) completed
-- ✅ Foundation ready for Priority 3 (Cross-Platform Validation)
+- ✅ Priority 2 Phase 1 (Test Infrastructure Foundation) completed
+- ⚡ Ready for Priority 2 Phase 2 (Test Migration)
 - ✅ System validated: flake check passes, home-manager switch successful
 
 ### 🚀 **NEXT SESSION PRIORITIES**
 
 **IMMEDIATE NEXT TASKS** (Ready to execute):
-1. **Priority 2 Phase 2: Test Migration** - Migrate existing tests from flake-modules/tests.nix to script-level tests
+1. **Priority 2 Phase 2: Test Migration** - Migrate existing 38+ tests from flake-modules/tests.nix to script-level passthru.tests
 2. **Priority 3: Cross-Platform Validation** - Survey and fix hardcoded OS/platform-specific code  
 3. **Priority 4: Enhanced Configuration Features** - Explore autoWriter integration and advanced shell features
 
