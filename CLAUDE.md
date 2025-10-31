@@ -11,9 +11,9 @@
 - **DEPENDENCY ANALYSIS BOUNDARY**: When hitting build system complexity (Nix dependency injection, flake outputs), document the issue and recommend next steps rather than deep-diving into the build system
 - **NIX FLAKE CHECK DEBUGGING**: When `nix flake check` fails, debug in-place using: (1) `nix log /nix/store/...` for detailed failure logs, (2) `nix flake check --verbose --debug --print-build-logs`, (3) `nix build .#checks.SYSTEM.TEST_NAME` for individual test execution, (4) `nix repl` + `:lf .` for interactive flake exploration. NEVER waste time on manual test reproduction - use Nix's built-in debugging tools.
 
-## CURRENT FOCUS: **CLAUDE CODE 2.0 MIGRATION**
+## ✅ CURRENT FOCUS: **CLAUDE CODE 2.0 MIGRATION** - **COMPLETED** (2025-10-31)
 
-**IMMEDIATE PRIORITY**: Migrate from Claude Code v1.x to v2.0 configuration schema with improved configuration/state separation architecture.
+**MIGRATION STATUS**: **SUCCESSFUL** - Full v2.0 configuration schema implemented with MCP file separation and updated wrapper scripts.
 
 ### IMPORTANT PATHS
 
