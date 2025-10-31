@@ -78,6 +78,18 @@
           touch $out
         '';
 
+        # === VALIDATED SCRIPTS COLLECTED TESTS ===
+        # TODO: Auto-collected tests from validated-scripts module passthru.tests
+        # ARCHITECTURAL CHALLENGE IDENTIFIED:
+        # - 72+ passthru.tests defined in validated-scripts/bash.nix but never run
+        # - collectScriptTests function exists but needs proper flake integration
+        # - Lines 500-2412 in this file manually duplicate passthru.tests functionality
+        # 
+        # NEXT STEPS:
+        # 1. Proper home-manager config evaluation integration
+        # 2. Remove manual test duplication (lines 500-2412)
+        # 3. Reduce file size from 2,400+ lines to ~300-500 lines
+
         script-tests-available = pkgs.runCommand "script-tests-check"
           {
             meta = {
