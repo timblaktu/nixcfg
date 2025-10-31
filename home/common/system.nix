@@ -30,6 +30,19 @@ in
         text = builtins.readFile ../files/bin/build-wsl-tarball;
         runtimeInputs = with pkgs; [ nix coreutils util-linux ];
       })
+
+      # USB device restart utilities  
+      (pkgs.writeShellApplication {
+        name = "restart-usb";
+        text = builtins.readFile ../files/bin/restart-usb;
+        runtimeInputs = with pkgs; [ coreutils util-linux usbutils ];
+      })
+
+      (pkgs.writeShellApplication {
+        name = "restart-usb-improved";
+        text = builtins.readFile ../files/bin/restart-usb-improved;
+        runtimeInputs = with pkgs; [ coreutils util-linux usbutils ];
+      })
     ];
   };
 }
