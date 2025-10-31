@@ -33,7 +33,7 @@ get_token() {
     echo "  6. Find the 'oauth_token' parameter in the request URL"
     echo "  7. Copy the token value (format: 2-123456-123456789-123456789)"
     echo
-    read -p "Paste your OAuth token here: " token
+    read -r -p "Paste your OAuth token here: " token
     
     if [[ -z "$token" ]]; then
         print_error "No token provided"

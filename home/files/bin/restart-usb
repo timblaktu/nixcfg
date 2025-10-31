@@ -150,7 +150,7 @@ else
     echo -e "${YELLOW}[*] Not in Windows Terminal - option 1 (smart) will use best available method${NC}"
 fi
 
-read -p "Select option [1-6] (Enter for smart selection): " choice
+read -r -p "Select option [1-6] (Enter for smart selection): " choice
 
 # Default to smart selection if no input
 choice=${choice:-1}
@@ -187,7 +187,7 @@ case $choice in
         echo "2. Navigate to the script location:"
         echo "   cd $(wslpath -w "$(dirname "$PS1_SCRIPT")")"
         echo "3. Run the script:"
-        echo "   .\\restart-usb-v4.ps1"
+        printf "   .\\\\restart-usb-v4.ps1\\n"
         echo ""
         echo "Or in one command:"
         echo "   powershell -ExecutionPolicy Bypass -File \"$(wslpath -w "$PS1_SCRIPT")\""
