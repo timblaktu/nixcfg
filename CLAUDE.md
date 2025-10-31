@@ -198,19 +198,27 @@
 **TESTS.md REVEALS CRITICAL ARCHITECTURAL MISMATCH** - See TESTS.md lines 125-236 for full analysis
 
 **🚨 URGENT NEXT SESSION PRIORITY**: 
-**CRITICAL ARCHITECTURE DECISION REQUIRED** - Based on TESTS.md analysis (lines 125-236)
+**COMPLETE validated-scripts ELIMINATION** - Migration to standard nixpkgs.writers patterns
 
-**🎯 IMMEDIATE DECISION POINTS**:
-1. **Re-enable validated-scripts** (connect 72+ orphaned tests to flake checks)
-2. **Complete unified files migration** (move all scripts from validated-scripts)
+**✅ ARCHITECTURE DECISION MADE**: **ELIMINATE validated-scripts module completely**
+- **Strategy**: Complete migration to standard nixpkgs.writers best practices
+- **Target**: Move all scripts from validated-scripts to appropriate locations throughout nixcfg
+- **Approach**: Use standard nixpkgs patterns instead of custom validated-scripts framework
 
-**📋 CURRENT TRANSITIONAL STATE** (per TESTS.md):
-- ❌ validated-scripts: 3,700+ lines, 72+ tests defined but NEVER RUN 
-- ❌ Migration incomplete: Scripts exist in validated-scripts but base.nix import disabled
-- ❌ Tests orphaned: flake-modules/tests.nix manually duplicates what passthru.tests should provide
-- ❌ Architecture mismatch: Two test systems exist but neither is properly connected
+**📋 MIGRATION STATUS** (per TESTS.md analysis):
+- ✅ **Decision confirmed**: validated-scripts elimination (user decision)
+- ❌ **Migration incomplete**: 72+ scripts still in validated-scripts/bash.nix  
+- ❌ **Tests orphaned**: Need to migrate tests to standard nixpkgs passthru.tests pattern
+- ❌ **Manual duplication**: flake-modules/tests.nix manually implements what should be automatic
 
-**🎯 FOLLOW-UP PRIORITIES** (after architecture decision):
+**🎯 VALIDATED-SCRIPTS ELIMINATION TASKS**:
+1. **Script migration**: Move 72+ scripts from validated-scripts/bash.nix to appropriate home/common/*.nix files
+2. **Test migration**: Convert custom tests to standard nixpkgs passthru.tests pattern  
+3. **Test collection**: Implement automatic test collection from migrated scripts
+4. **Module removal**: Delete validated-scripts module after migration complete
+5. **Cleanup**: Remove manual test duplications from flake-modules/tests.nix
+
+**🎯 FOLLOW-UP PRIORITIES** (after migration complete):
 - **Priority 3**: Cross-Platform Validation 
 - **Priority 4**: Enhanced Configuration Features
 - **Cleanup**: Git history cleanup
@@ -246,13 +254,13 @@ validated-scripts/bash.nix          ← 72+ passthru.tests NEVER RUN
 - 72+ comprehensive tests exist but are **completely disconnected**
 - Manual script tests in flake-modules/tests.nix **duplicate** what passthru.tests should provide
 
-**DECISION NEEDED**: 
-1. **Re-enable validated-scripts** and connect the orphaned tests to flake checks
-2. **Complete unified files migration** and properly move all scripts/tests
+**✅ DECISION MADE**: **ELIMINATE validated-scripts module completely**
+- User decision: Complete migration to standard nixpkgs.writers best practices
+- Target: Move all 72+ scripts to appropriate locations using standard patterns
 
 **Current Branch**: `dev`  
-**System State**: ❌ **BROKEN** - Tests exist but are orphaned  
-**PRIORITY**: **URGENT** - Architecture decision before any other work
+**System State**: ❌ **MIGRATION INCOMPLETE** - 72+ scripts still in validated-scripts  
+**PRIORITY**: **URGENT** - Complete validated-scripts elimination migration
 
 ### 📝 **REFERENCE FOR NEXT SESSION**: 
 **CRITICAL**: Read TESTS.md lines 125-236 for complete architectural analysis before proceeding
