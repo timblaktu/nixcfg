@@ -9,7 +9,7 @@ let
   # OneDrive status checker for WSL environments
   onedrive-status = pkgs.writeShellApplication {
     name = "onedrive-status";
-    runtimeInputs = with pkgs; [ coreutils ];
+    runtimeInputs = with pkgs; [ coreutils findutils ];
     text = ''
       set -euo pipefail
       
@@ -33,7 +33,7 @@ let
       if [[ "$current_dir" =~ /mnt/c/Users/.*OneDrive ]]; then
         echo "📁 Current directory is in OneDrive: $current_dir"
         echo "📋 Recent files in current directory:"
-        ls -lat | head -5
+        find . -maxdepth 1 -type f -printf '%T@ %p\n' | sort -nr | head -5 | cut -d' ' -f2-
       else
         echo "📁 Current directory is not in OneDrive: $current_dir"
       fi

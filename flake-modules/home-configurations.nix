@@ -91,6 +91,7 @@
                 homeDirectory = "/home/tim";
                 enableDevelopment = true;
                 enableEspIdf = true;
+                enableOneDriveUtils = true;
                 environmentVariables = {
                   WSL_DISTRO = "nixos";
                   EDITOR = "nvim";
