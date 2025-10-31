@@ -23,10 +23,17 @@ let
       writer = writers.${writerName};
 
       # Handle dependencies - convert to libraries format if needed
-      # For bash scripts, writeBashBin just takes name and text
+      # For bash scripts, use writeShellApplication if deps are provided for better integration
       # For python, writePython3Bin takes name, libraries (as an attrset), and text
       script =
-        if lang == "bash" then
+        if lang == "bash" && deps != [ ] then
+          pkgs.writeShellApplication
+            {
+              name = name;
+              runtimeInputs = deps;
+              text = text;
+            }
+        else if lang == "bash" then
           writer name text
         else if lang == "python3" then
           writer name { libraries = deps; } text
@@ -71,14 +78,15 @@ let
 
   # Helper to collect all tests from a set of scripts
   collectScriptTests = scripts:
-    lib.mapAttrs'
-      (scriptName: script:
-        lib.mapAttrs'
+    lib.foldlAttrs
+      (acc: scriptName: script:
+        acc // lib.mapAttrs'
           (testName: testDrv:
             lib.nameValuePair "script-${scriptName}-${testName}" testDrv
           )
           (script.passthru.tests or { })
       )
+      { }
       scripts;
 
 in
