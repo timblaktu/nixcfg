@@ -49,6 +49,30 @@ cp ${../home/files/lib/path-utils.bash} $HOME/.local/lib/path-utils.bash
 
 **📊 PROGRESS**: ✅ 3/12 tmux tests fixed and passing • ⏳ 9/12 tests need same fix applied
 
+### 🚨 CRITICAL RUNTIME BUG DISCOVERED (2025-10-30 Session 2 Continued)
+
+**VALIDATION FAILURE**: User reported tmux-session-picker completely broken after home-manager switch - fzf dialog shows errors in both main list and preview windows.
+
+**🔍 ROOT CAUSE ANALYSIS**:
+- **Shell Quoting Bug**: `parallel "$parallel_flags"` where `parallel_flags="--will-cite --jobs 0"` 
+- **Actual Command**: `parallel "--will-cite --jobs 0"` (single quoted argument)
+- **Expected Command**: `parallel --will-cite --jobs 0` (separate arguments)
+- **Error**: "Unknown option: will-cite --jobs 0" from GNU parallel
+- **Impact**: Complete failure of session file parsing, causing all tmux picker functionality to break
+
+**💥 WHY FLAKE CHECKS MISSED THIS**:
+1. **Test Coverage Gap**: Tests only validated `--help` functionality, never actual session parsing
+2. **No Runtime Integration**: Tests don't exercise parallel processing code paths  
+3. **Build vs Runtime Gap**: Shell argument expansion errors only manifest at runtime
+4. **Missing Functional Tests**: No tests with actual tmux resurrect files to process
+
+**✅ BUG IDENTIFIED & FIXED**:
+- **Fix**: Changed `local parallel_flags="--will-cite --jobs 0"` → `local parallel_flags=(--will-cite --jobs 0)`
+- **Fix**: Changed `parallel "$parallel_flags"` → `parallel "${parallel_flags[@]}"`
+- **Status**: Fix applied to source file, needs home-manager rebuild to deploy
+
+**📋 ARCHITECTURAL LESSON**: Our "comprehensive test suite" had a massive blind spot - no functional/integration tests that actually exercise the core functionality with real data.
+
 ## 📋 PREVIOUS STATUS: MODULE-BASED SCRIPT ORGANIZATION BREAKTHROUGH (2025-10-30)
 
 ### 🎯 COMPLETED: Architectural Issue Resolution via Module-Based Organization

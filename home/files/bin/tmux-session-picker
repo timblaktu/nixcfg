@@ -700,21 +700,21 @@ parse_all_files_parallel() {
     export PARALLEL_CITATION="will-cite"
     
     # Use streaming approach without --keep-order for progressive population
-    local parallel_flags="--will-cite --jobs 0"
+    local parallel_flags=(--will-cite --jobs 0)
     
     # Process files in parallel using the complete worker function
     # Extract only the first line (formatted display data) from each worker output
     # Capture stderr to individual files for debugging (only when debugging is needed)
     if [[ "${TMUX_PICKER_DEBUG:-false}" == "true" ]]; then
         printf '%s\n' "${session_files[@]}" | \
-            parallel "$parallel_flags" \
+            parallel "${parallel_flags[@]}" \
                 'process_session_file_complete {} '"$terminal_width"' 2>'"$debug_dir"'/worker-{#}.stderr | head -n 1'
         echo "Debug files preserved in: $debug_dir" >&2
         echo "Worker stderr files: $debug_dir/worker-*.stderr" >&2
     else
         # Normal mode: send stderr to /dev/null for clean operation
         printf '%s\n' "${session_files[@]}" | \
-            parallel "$parallel_flags" \
+            parallel "${parallel_flags[@]}" \
                 'process_session_file_complete {} '"$terminal_width"' 2>/dev/null | head -n 1'
         # Clean up debug directory in normal mode
         rm -rf "$debug_dir"
