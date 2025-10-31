@@ -28,7 +28,9 @@ in
     # Enhanced nix-writers based script management (now migrated to unified files)
     # ./validated-scripts  # REMOVED: All scripts migrated to unified files
     # Import ESP-IDF development module
-    # ../common/esp-idf.nix
+    ../common/esp-idf.nix
+    # Import OneDrive utilities module (WSL-specific)
+    ../common/onedrive.nix
   ];
 
   options.homeBase = {
@@ -161,6 +163,12 @@ in
       type = types.bool;
       default = false;
       description = "Enable ESP-IDF development environment with FHS compatibility";
+    };
+
+    enableOneDriveUtils = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable OneDrive utilities for WSL environments";
     };
 
     # enableValidatedScripts option removed - all scripts migrated to unified files
