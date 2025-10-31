@@ -692,7 +692,8 @@ parse_all_files_parallel() {
     export -f process_session_file_complete
     export -f _format_session_row
     export -f get_display_width
-    export -f truncate_to_display_width  
+    export -f truncate_to_display_width
+    export -f parse_single_file
     # Libraries sourced: terminal-utils, color-utils, path-utils
     
     
