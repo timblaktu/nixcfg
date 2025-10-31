@@ -444,7 +444,7 @@ with lib;
 
         # ACCOUNT CONFIGURATION: Deploy settings for each enabled account
         ${concatStringsSep "\n" (mapAttrsToList (name: account: ''
-          if [[ "${toString account.enable}" == "true" ]]; then
+          if [[ "${toString account.enable}" == "1" ]]; then
             accountDir="${runtimePath}/.claude-${name}"
             echo "⚙️ Configuring account: ${name}"
           
@@ -476,7 +476,7 @@ with lib;
             
               # Use jq with --argjson for safe JSON handling (v2.0: no MCP servers in .claude.json)
               # Build jq arguments dynamically
-              local jq_args=(--argjson permissions '${builtins.toJSON {
+              jq_args=(--argjson permissions '${builtins.toJSON {
                 allow = cfg.permissions.allow;
                 deny = cfg.permissions.deny;
                 ask = cfg.permissions.ask;

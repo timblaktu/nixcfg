@@ -80,18 +80,35 @@ in
             mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
               account="${account}"
               config_dir="${configDir}"
+              settings_file="$config_dir/settings.json"
               pidfile="/tmp/claude-''${account}.pid"
+            
+              # V2.0 Coalescence: Merge Nix-managed config with runtime state
+              coalesce_config() {
+                if [[ -f "$config_dir/.claude.json" && -f "$settings_file" ]]; then
+                  # Preserve runtime fields while applying Nix settings
+                  ${pkgs.jq}/bin/jq -s '.[0] as $runtime | .[1] as $settings | 
+                    $runtime + {
+                      permissions: $settings.permissions,
+                      env: $settings.env,
+                      hooks: $settings.hooks,
+                      statusLine: $settings.statusLine
+                    }' "$config_dir/.claude.json" "$settings_file" > "$config_dir/.claude.json.tmp" && \
+                    mv "$config_dir/.claude.json.tmp" "$config_dir/.claude.json"
+                fi
+              }
             
               # Check for headless mode - bypass PID check for stateless operations
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                export CLAUDE_CONFIG_DIR="$config_dir"
+                coalesce_config
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
               fi
 
-              # Production Claude detection logic  
-              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+              # Production Claude detection logic (v2.0: check for --settings flag)
+              if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
+                coalesce_config
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
               fi
 
               # PID-based single instance management
@@ -100,7 +117,8 @@ in
                 if kill -0 "$pid" 2>/dev/null; then
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
-                  exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+                  coalesce_config
+                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -109,15 +127,17 @@ in
 
               # Launch new instance with environment setup
               echo "🚀 Launching Claude (${displayName})..."
-              export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
             
               # Create config directory if it doesn't exist
               mkdir -p "$config_dir"
+              
+              # Apply coalescence before launch
+              coalesce_config
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
             '';
           in
           mkClaudeWrapperScript {
@@ -143,46 +163,49 @@ in
                   text =
                     let
                       mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-                        account="${account}"
-                        config_dir="${configDir}"
-                        pidfile="/tmp/claude-''${account}.pid"
+                              account="${account}"
+                              config_dir="${configDir}"
+                              pidfile="/tmp/claude-''${account}.pid"
                   
-                        # Check for headless mode - bypass PID check for stateless operations
-                        if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                          export CLAUDE_CONFIG_DIR="$config_dir"
-                          ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                          exec "${pkgs.claude-code}/bin/claude" "$@"
-                        fi
+                              # Check for headless mode - bypass PID check for stateless operations
+                              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
+                                export CLAUDE_CONFIG_DIR="$config_dir"
+                                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+                                exec "${pkgs.claude-code}/bin/claude" "$@"
+                              fi
 
-                        # Production Claude detection logic  
-                        if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                          exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
-                        fi
+                              # Production Claude detection logic  
+                              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
+                                coalesce_config
+                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                              fi
 
-                        # PID-based single instance management
-                        if [[ -f "$pidfile" ]]; then
-                          pid=$(cat "$pidfile")
-                          if kill -0 "$pid" 2>/dev/null; then
-                            echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                            echo "   Using existing instance..."
-                            exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
-                          else
-                            echo "🧹 Cleaning up stale PID file..."
-                            rm -f "$pidfile"
-                          fi
-                        fi
+                              # PID-based single instance management
+                              if [[ -f "$pidfile" ]]; then
+                                pid=$(cat "$pidfile")
+                                if kill -0 "$pid" 2>/dev/null; then
+                                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+                                  echo "   Using existing instance..."
+                                  coalesce_config
+                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                                else
+                                  echo "🧹 Cleaning up stale PID file..."
+                                  rm -f "$pidfile"
+                                fi
+                              fi
 
-                        # Launch new instance with environment setup
-                        echo "🚀 Launching Claude (${displayName})..."
-                        export CLAUDE_CONFIG_DIR="$config_dir"
-                        ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+                              # Launch new instance with environment setup
+                              echo "🚀 Launching Claude (${displayName})..."
+                              export CLAUDE_CONFIG_DIR="$config_dir"
+                              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
                   
-                        # Create config directory if it doesn't exist
-                        mkdir -p "$config_dir"
+                              # Create config directory if it doesn't exist
+                              mkdir -p "$config_dir"
                   
-                        # Store PID and execute
-                        echo $$ > "$pidfile"
-                        exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+                              # Store PID and execute
+                              echo $$ > "$pidfile"
+                              coalesce_config
+                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
                       '';
                     in
                     mkClaudeWrapperScript {
@@ -218,18 +241,35 @@ in
             mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
               account="${account}"
               config_dir="${configDir}"
+              settings_file="$config_dir/settings.json"
               pidfile="/tmp/claude-''${account}.pid"
+            
+              # V2.0 Coalescence: Merge Nix-managed config with runtime state
+              coalesce_config() {
+                if [[ -f "$config_dir/.claude.json" && -f "$settings_file" ]]; then
+                  # Preserve runtime fields while applying Nix settings
+                  ${pkgs.jq}/bin/jq -s '.[0] as $runtime | .[1] as $settings | 
+                    $runtime + {
+                      permissions: $settings.permissions,
+                      env: $settings.env,
+                      hooks: $settings.hooks,
+                      statusLine: $settings.statusLine
+                    }' "$config_dir/.claude.json" "$settings_file" > "$config_dir/.claude.json.tmp" && \
+                    mv "$config_dir/.claude.json.tmp" "$config_dir/.claude.json"
+                fi
+              }
             
               # Check for headless mode - bypass PID check for stateless operations
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                export CLAUDE_CONFIG_DIR="$config_dir"
+                coalesce_config
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
               fi
 
-              # Production Claude detection logic  
-              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+              # Production Claude detection logic (v2.0: check for --settings flag)
+              if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
+                coalesce_config
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
               fi
 
               # PID-based single instance management
@@ -238,7 +278,8 @@ in
                 if kill -0 "$pid" 2>/dev/null; then
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
-                  exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+                  coalesce_config
+                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -247,15 +288,17 @@ in
 
               # Launch new instance with environment setup
               echo "🚀 Launching Claude (${displayName})..."
-              export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
             
               # Create config directory if it doesn't exist
               mkdir -p "$config_dir"
+              
+              # Apply coalescence before launch
+              coalesce_config
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
             '';
           in
           mkClaudeWrapperScript {
@@ -278,18 +321,35 @@ in
             mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
               account="${account}"
               config_dir="${configDir}"
+              settings_file="$config_dir/settings.json"
               pidfile="/tmp/claude-''${account}.pid"
+            
+              # V2.0 Coalescence: Merge Nix-managed config with runtime state
+              coalesce_config() {
+                if [[ -f "$config_dir/.claude.json" && -f "$settings_file" ]]; then
+                  # Preserve runtime fields while applying Nix settings
+                  ${pkgs.jq}/bin/jq -s '.[0] as $runtime | .[1] as $settings | 
+                    $runtime + {
+                      permissions: $settings.permissions,
+                      env: $settings.env,
+                      hooks: $settings.hooks,
+                      statusLine: $settings.statusLine
+                    }' "$config_dir/.claude.json" "$settings_file" > "$config_dir/.claude.json.tmp" && \
+                    mv "$config_dir/.claude.json.tmp" "$config_dir/.claude.json"
+                fi
+              }
             
               # Check for headless mode - bypass PID check for stateless operations
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                export CLAUDE_CONFIG_DIR="$config_dir"
+                coalesce_config
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
               fi
 
-              # Production Claude detection logic  
-              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+              # Production Claude detection logic (v2.0: check for --settings flag)
+              if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
+                coalesce_config
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
               fi
 
               # PID-based single instance management
@@ -298,7 +358,8 @@ in
                 if kill -0 "$pid" 2>/dev/null; then
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
-                  exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+                  coalesce_config
+                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -307,15 +368,17 @@ in
 
               # Launch new instance with environment setup
               echo "🚀 Launching Claude (${displayName})..."
-              export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
             
               # Create config directory if it doesn't exist
               mkdir -p "$config_dir"
+              
+              # Apply coalescence before launch
+              coalesce_config
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
             '';
           in
           mkClaudeWrapperScript {
