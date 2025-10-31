@@ -50,18 +50,18 @@ in
         runtimeInputs = with pkgs; [ stress-ng coreutils ];
       })
 
-      # WiFi analysis utilities (temporarily disabled due to possible dependency issues)
-      # (pkgs.writeShellApplication {
-      #   name = "wifi-test-comparison";
-      #   text = builtins.readFile ../files/bin/wifi-test-comparison;
-      #   runtimeInputs = with pkgs; [ coreutils openssh ];
-      # })
+      # WiFi analysis utilities
+      (pkgs.writeShellApplication {
+        name = "wifi-test-comparison";
+        text = builtins.readFile ../files/bin/wifi-test-comparison;
+        runtimeInputs = with pkgs; [ coreutils openssh bash ];
+      })
 
-      # (pkgs.writeShellApplication {
-      #   name = "remote-wifi-analyzer";
-      #   text = builtins.readFile ../files/bin/remote-wifi-analyzer;
-      #   runtimeInputs = with pkgs; [ coreutils openssh ];
-      # })
+      (pkgs.writeShellApplication {
+        name = "remote-wifi-analyzer";
+        text = builtins.readFile ../files/bin/remote-wifi-analyzer;
+        runtimeInputs = with pkgs; [ coreutils openssh bash ];
+      })
     ];
 
     # Shell libraries - place as files for sourcing
