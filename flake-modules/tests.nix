@@ -1091,9 +1091,18 @@
             } ''
                       echo "Testing tmux-session-picker session file validation..."
           
+                      # Set up library dependencies function for multiple HOME directories
+                      setup_libraries() {
+                        mkdir -p "$1/.local/lib"
+                        cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+                        cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+                        cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+                      }
+          
                       # Set up test environment
                       mkdir -p "$TMPDIR/.local/share/tmux/resurrect"
                       export HOME="$TMPDIR"
+                      setup_libraries "$HOME"
           
                       # Test 6.1: Create valid session files with proper format using tmux-test-data-generator
                       echo "Creating valid tmux-resurrect session files with tmux-test-data-generator..."
@@ -1276,9 +1285,18 @@
             } ''
                                   echo "Testing tmux-session-picker preview generation..."
           
+                                  # Set up library dependencies function for multiple HOME directories
+                                  setup_libraries() {
+                                    mkdir -p "$1/.local/lib"
+                                    cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+                                    cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+                                    cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+                                  }
+          
                                   # Set up test environment
                                   mkdir -p "$TMPDIR/.local/share/tmux/resurrect"
                                   export HOME="$TMPDIR"
+                                  setup_libraries "$HOME"
           
                                   # Test 7.1: Create session file with known window/pane structure for preview testing
                                   echo "Creating session file with complex structure for preview testing using tmux-test-data-generator..."
@@ -1467,11 +1485,20 @@
             } ''
                       echo "Testing tmux-session-picker error handling..."
           
+                      # Set up library dependencies function for multiple HOME directories
+                      setup_libraries() {
+                        mkdir -p "$1/.local/lib"
+                        cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+                        cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+                        cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+                      }
+          
                       # Test 8.1: Invalid command line usage
                       echo "Testing invalid command line usage handling..."
           
                       export HOME="/tmp/test-home-invalid-usage"
                       mkdir -p "$HOME/.local/share/tmux/resurrect"
+                      setup_libraries "$HOME"
           
                       # Create a test session
                       cat > "$HOME/.local/share/tmux/resurrect/tmux_resurrect_test.txt" << 'EOF'
@@ -1543,6 +1570,7 @@
                       export HOME="/tmp/test-home-permissions"
                       mkdir -p "$HOME/.local/share/tmux"
                       mkdir -p "$HOME/.local/share/tmux/resurrect"
+                      setup_libraries "$HOME"
           
                       # Create a test session file
                       cat > "$HOME/.local/share/tmux/resurrect/tmux_resurrect_test.txt" << 'EOF'
@@ -1582,6 +1610,7 @@
           
                       export HOME="/tmp/test-home-empty"
                       mkdir -p "$HOME/.local/share/tmux/resurrect"
+                      setup_libraries "$HOME"
           
                       # No session files in directory
                       output4=$(${tmux-session-picker-script}/bin/tmux-session-picker --list 2>&1 || true)
@@ -1611,6 +1640,7 @@
           
                       export HOME="/tmp/test-home-recovery"
                       mkdir -p "$HOME/.local/share/tmux/resurrect"
+                      setup_libraries "$HOME"
           
                       # Create a mix of valid and problematic files
                       cat > "$HOME/.local/share/tmux/resurrect/tmux_resurrect_20250125_120000.txt" << 'EOF'
@@ -1682,9 +1712,18 @@
             } ''
                       echo "Testing tmux-session-picker tmux environment detection..."
           
+                      # Set up library dependencies function for multiple HOME directories
+                      setup_libraries() {
+                        mkdir -p "$1/.local/lib"
+                        cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+                        cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+                        cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+                      }
+          
                       # Set up test environment
                       export HOME="/tmp/test-home-tmux-env"
                       mkdir -p "$HOME/.local/share/tmux/resurrect"
+                      setup_libraries "$HOME"
           
                       # Create test session files (correct tab-delimited tmux-resurrect format)
                       cat > "$HOME/.local/share/tmux/resurrect/tmux_resurrect_test_session.txt" << 'EOF'
@@ -1955,9 +1994,18 @@
             } ''
                           echo "CRITICAL: Testing complete session picker workflow with IFS read robustness..."
               
+                          # Set up library dependencies function for multiple HOME directories
+                          setup_libraries() {
+                            mkdir -p "$1/.local/lib"
+                            cp ${../home/files/lib/terminal-utils.bash} "$1/.local/lib/terminal-utils.bash"
+                            cp ${../home/files/lib/color-utils.bash} "$1/.local/lib/color-utils.bash"
+                            cp ${../home/files/lib/path-utils.bash} "$1/.local/lib/path-utils.bash"
+                          }
+              
                           # Set up test environment
                           export HOME="$TMPDIR"
                           mkdir -p "$HOME/.local/share/tmux/resurrect"
+                          setup_libraries "$HOME"
               
                           # Test 1: Create realistic tmux-resurrect files with UTF-8 and complex content
                           echo "Creating realistic session files with UTF-8 and complex paths..."
