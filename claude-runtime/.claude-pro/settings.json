@@ -20,7 +20,6 @@
       "Write(/etc/passwd)"
     ]
   },
-  "model": "haiku",
   "statusLine": {
     "type": "command",
     "command": "claude-statusline-powerline",
