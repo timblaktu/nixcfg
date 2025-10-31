@@ -9,7 +9,7 @@ title=1
 while [[ $1 == -* ]]; do
   case $1 in
     --no-title) title=0; shift ;;
-    -t*)        title=0; [[ $1 == -t* ]] && [[ $1 != -t ]] && set -- "-${1#-t}" "${@:2}" || shift ;;
+    -t*)        title=0; if [[ $1 == -t* ]] && [[ $1 != -t ]]; then set -- "-${1#-t}" "${@:2}"; else shift; fi ;;
     -n*)        val="${1#-n}"; [[ -z $val ]] && val=$2 && shift; interval=$val; shift ;;
     --)         shift; break ;;
     *) echo "vwatch: unrecognized option '$1'" >&2; exit 1 ;;

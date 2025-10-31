@@ -9,6 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 if [[ -f "$LIB_DIR/profiling-utils.bash" ]]; then
+    # shellcheck source=/dev/null
     source "$LIB_DIR/profiling-utils.bash"
 else
     echo "Warning: profiling-utils.bash not found, profiling disabled"
@@ -40,13 +41,13 @@ if [[ -t 1 ]]; then
     RESET='\033[0m'
     BOLD='\033[1m'
     DIM='\033[2m'
-    RED='\033[31m'
+    # RED='\033[31m' # Unused variable removed
     GREEN='\033[32m'
     YELLOW='\033[33m'
     BLUE='\033[34m'
     CYAN='\033[36m'
 else
-    RESET='' BOLD='' DIM='' RED='' GREEN='' YELLOW='' BLUE='' CYAN=''
+    RESET='' BOLD='' DIM='' GREEN='' YELLOW='' BLUE='' CYAN=''
 fi
 
 # Default values
@@ -98,7 +99,8 @@ truncate_to_display_width() {
     local max_width="$2"
     local ellipsis="${3:-…}"
     
-    prof_time "get_current_width" local current_width=$(get_display_width "$text")
+    local current_width
+    current_width=$(prof_time "get_current_width" get_display_width "$text")
     
     # If it fits, return as-is
     if [[ $current_width -le $max_width ]]; then
@@ -117,7 +119,8 @@ truncate_to_display_width() {
         prof_counter "binary_search_iterations"
         local mid=$(( (left + right) / 2 ))
         local substring="${text:0:$mid}"
-        prof_time "substring_width_calc" local sub_width=$(get_display_width "$substring")
+        local sub_width
+        sub_width=$(prof_time "substring_width_calc" get_display_width "$substring")
         
         if [[ $sub_width -le $((max_width - $(get_display_width "$ellipsis"))) ]]; then
             best_len=$mid
@@ -180,7 +183,7 @@ parse_arguments() {
                 ;;
             --preview)
                 prof_checkpoint "PREVIEW_MODE" "Preview mode requested"
-                shift
+                # shift # Unreachable code removed
                 if [[ -z "${1:-}" ]]; then
                     echo "Error: --preview requires a file argument"
                     exit 1
@@ -194,7 +197,7 @@ parse_arguments() {
                 exit 1
                 ;;
         esac
-        shift
+        # shift # Unreachable after exit statements
     done
     
     prof_section_end "PARSE_ARGS"
@@ -251,9 +254,10 @@ format_session() {
     
     prof_checkpoint "DATE_FORMATTING" "Formatting date from filename"
     # Extract and format date efficiently
-    local basename=$(basename "$file" .txt)
-    local timestamp=$(echo "$basename" | sed 's/tmux_resurrect_//')
-    local year=${timestamp:0:4}
+    local basename
+    basename=$(basename "$file" .txt)
+    local timestamp
+    timestamp="${basename#tmux_resurrect_}"
     local month=${timestamp:4:2}
     local day=${timestamp:6:2}
     local hour=${timestamp:9:2}
@@ -263,12 +267,14 @@ format_session() {
     
     prof_checkpoint "CURRENT_SESSION_CHECK" "Checking if session is current"
     # Check if this is the current session
-    local current_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
+    local current_file
+    current_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
     prof_counter "current_session_check"
     
     prof_checkpoint "SESSION_METADATA" "Extracting session metadata"
     # Get session name and determine if current
-    local session=$(grep "^window" "$file" | head -1 | cut -f2)
+    local session
+    session=$(grep "^window" "$file" | head -1 | cut -f2)
     prof_counter "session_name_extraction"
     local metadata="  "  # Default: two spaces for metadata field
     if [[ "$file" == "$current_file" ]]; then
@@ -276,8 +282,10 @@ format_session() {
     fi
     
     prof_checkpoint "WINDOW_PANE_COUNTS" "Counting windows and panes"
-    prof_time "window_count" local window_count=$(grep "^window" "$file" | wc -l)
-    prof_time "pane_count" local pane_count=$(grep "^pane" "$file" | wc -l)
+    local window_count
+    window_count=$(prof_time "window_count" grep "^window" "$file" | wc -l)
+    local pane_count
+    pane_count=$(prof_time "pane_count" grep "^pane" "$file" | wc -l)
     
     prof_checkpoint "TERMINAL_WIDTH" "Calculating terminal width and columns"
     # Calculate field widths based on terminal width - optimized for maximum SUMMARY space
@@ -299,22 +307,23 @@ format_session() {
     prof_checkpoint "WINDOW_DETAILS" "Processing window details"
     # Get enhanced window summary with paths and commands
     local window_details=()
-    while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+    while IFS=$'\t' read -r type session_name window_idx window_name _ _ layout; do
         prof_counter "window_detail_processing"
         window_name="${window_name#:}"
         
         # Get primary path and command for this window
-        prof_time "window_path_extraction" local window_path=$(grep "^pane" "$file" | \
-            awk -F'\t' -v s="$session_name" -v w="$window_idx" '$2==s && $3==w {print $8}' | \
-            head -1)
-        prof_time "primary_cmd_call" local primary_cmd=$(get_primary_command "$file" "$session_name" "$window_idx")
+        local window_path
+        window_path=$(prof_time "window_path_extraction" sh -c "grep '^pane' '$file' | awk -F'\t' -v s='$session_name' -v w='$window_idx' '\$2==s && \$3==w {print \$8}' | head -1")
+        local primary_cmd
+        primary_cmd=$(prof_time "primary_cmd_call" get_primary_command "$file" "$session_name" "$window_idx")
         
         # Create window detail with path/command
         local detail="$window_name"
         if [[ -n "$primary_cmd" && "$primary_cmd" != "zsh" && "$primary_cmd" != "bash" ]]; then
             detail="$window_name:$primary_cmd"
         elif [[ -n "$window_path" ]]; then
-            prof_time "path_abbreviation" local short_path=$(abbreviate_path "$window_path")
+            local short_path
+            short_path=$(prof_time "path_abbreviation" abbreviate_path "$window_path")
             detail="$window_name:$short_path"
         fi
         
@@ -335,11 +344,12 @@ format_session() {
     
     prof_checkpoint "SUMMARY_TRUNCATION" "Truncating window summary"
     # Truncate window summary if too long, using Unicode ellipsis with proper display width calculation
-    prof_time "summary_truncation" window_summary=$(truncate_to_display_width "$window_summary" "$remaining_width")
+    window_summary=$(prof_time "summary_truncation" truncate_to_display_width "$window_summary" "$remaining_width")
     
     prof_checkpoint "FORMAT_OUTPUT" "Generating formatted output"
     # Format the table row with fixed widths and colors (tab-delimited for fzf field selection)
-    local timestamp=$(basename "$file" | sed 's/tmux_resurrect_\(.*\)\.txt/\1/')
+    local timestamp
+    timestamp=$(basename "$file" | sed 's/tmux_resurrect_\(.*\)\.txt/\1/')
     printf "${YELLOW}%-*s${RESET}${CYAN}${BOLD}%-*s${RESET} ${BLUE}%-*s${RESET} ${GREEN}%*s${RESET} ${DIM}%-*s${RESET}\t%s\n" \
         "$metadata_width" "$metadata" \
         "$session_width" "$session" \
@@ -370,12 +380,16 @@ generate_preview() {
     
     prof_checkpoint "PREVIEW_METADATA" "Extracting preview metadata"
     # Format the same as the list but without metadata
-    local basename=$(basename "$file" .txt)
-    local timestamp=$(echo "$basename" | sed 's/tmux_resurrect_//')
-    local current_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
+    local basename
+    basename=$(basename "$file" .txt)
+    local timestamp
+    timestamp="${basename#tmux_resurrect_}"
+    local current_file
+    current_file=$(readlink -f "$RESURRECT_DIR/last" 2>/dev/null || echo "")
     
     # Get session info
-    local session=$(grep "^window" "$file" | head -1 | cut -f2)
+    local session
+    session=$(grep "^window" "$file" | head -1 | cut -f2)
     
     if [[ "$file" == "$current_file" ]]; then
         echo -e "${YELLOW}${BOLD}* CURRENTLY ACTIVE SESSION${RESET}"
@@ -389,16 +403,15 @@ generate_preview() {
         echo ""
         
         # Group by window and show details
-        local current_window=""
-        while IFS=$'\t' read -r type session_name window_idx window_name active flags layout; do
+        while IFS=$'\t' read -r type session_name window_idx window_name _ _ layout; do
             prof_counter "preview_window_processing"
             if [[ "$type" == "window" ]]; then
-                current_window="$window_idx"
+                # current_window="$window_idx" # Unused variable removed
                 local window_display="${window_name#:}"
                 echo -e "${GREEN}${BOLD}Window $window_idx: $window_display${RESET}"
                 
                 # Show panes for this window
-                while IFS=$'\t' read -r ptype psession pwindow pane_idx pane_path pane_index pactive title path full_command command; do
+                while IFS=$'\t' read -r ptype psession pwindow pane_idx _ _ pactive _ path _ command; do
                     prof_counter "preview_pane_processing"
                     if [[ "$ptype" == "pane" && "$psession" == "$session_name" && "$pwindow" == "$window_idx" ]]; then
                         local cmd_display="$command"
