@@ -9,11 +9,9 @@ REMOTE_USER="${REMOTE_USER:-root}"
 VERBOSE=false
 
 # Color codes
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
 NC='\033[0m'
 
 # Logging functions with timestamp and emoji
@@ -235,7 +233,7 @@ cmd_setup() {
         
         log_info "Waiting ${wait_time}s for router to come back..."
         local elapsed=0
-        while [ $elapsed -lt $wait_time ]; do
+        while [ "$elapsed" -lt "$wait_time" ]; do
             if check_connectivity && ssh_exec "echo ready" >/dev/null 2>&1; then
                 log_success "Router is back online"
                 sleep 10
@@ -250,7 +248,8 @@ cmd_setup() {
     
     # Detect hardware and configure
     log_info "Detecting hardware capabilities..."
-    local channels=$(detect_and_configure "$mode")
+    local channels
+    channels=$(detect_and_configure "$mode")
     
     if [ "$config_only" = false ]; then
         deploy_analyzer
@@ -264,7 +263,9 @@ detect_and_configure() {
     local mode=$1
     
     # Get PHY information
-    local phy_info=$(ssh_exec '
+    local phy_info
+    # shellcheck disable=SC2016  # Variables should expand on remote host, not locally
+    phy_info=$(ssh_exec '
         for phy in $(ls /sys/class/ieee80211/ 2>/dev/null | sort); do
             echo "PHY:$phy"
             radio=$(uci show wireless 2>/dev/null | grep ".phy='\''$phy'\''" | cut -d. -f2 | head -1)
@@ -287,7 +288,7 @@ detect_and_configure() {
     
     while IFS= read -r line; do
         case $line in
-            PHY:*) current_phy=${line#PHY:} ;;
+            PHY:*) ;;
             *RADIO:*) current_radio=${line#*RADIO:} ;;
             *5G:*) 
                 [ -z "$radio_5g" ] && radio_5g=$current_radio
@@ -314,23 +315,20 @@ detect_and_configure() {
     fi
     
     # Configure based on mode
-    local primary_radio channels
+    local channels
     case $mode in
         5g)
             [ -z "$channels_5g" ] && { log_error "No 5GHz channels available"; exit 1; }
-            primary_radio=$radio_5g
             channels=$channels_5g
             configure_radio "$radio_5g" 36 "VHT80" "$radio_2g"
             ;;
         2g)
             [ -z "$channels_2g" ] && { log_error "No 2.4GHz channels available"; exit 1; }
-            primary_radio=$radio_2g
             channels=$channels_2g
             configure_radio "$radio_2g" 6 "HT40" "$radio_5g"
             ;;
         dual)
             [ -z "$channels_5g" ] || [ -z "$channels_2g" ] && { log_error "Dual mode requires both bands"; exit 1; }
-            primary_radio=$radio_5g
             channels="$channels_5g $channels_2g"
             configure_radio "$radio_5g" 36 "VHT80" ""
             configure_radio "$radio_2g" 6 "HT40" "" "secondary"
@@ -596,7 +594,7 @@ mode_hop() {
     tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
     TCPDUMP_PID=$!
     
-    trap "kill $TCPDUMP_PID 2>/dev/null; wait $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    trap 'kill $TCPDUMP_PID 2>/dev/null; wait $TCPDUMP_PID 2>/dev/null' EXIT INT TERM
     
     # Hop channels while tcpdump runs
     for channel in $CHANNELS; do
@@ -690,7 +688,7 @@ mode_scan() {
     tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
     TCPDUMP_PID=$!
     
-    trap "kill $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    trap 'kill $TCPDUMP_PID 2>/dev/null' EXIT INT TERM
     
     for channel in $CHANNELS; do
         echo "📡 Scanning $INTERFACE ($phy) on channel $channel" >&2
@@ -915,8 +913,9 @@ cmd_run() {
     else
         # For capture modes, monitor progress
         # Create a temp file for stderr
-        local stderr_file=$(mktemp /tmp/wifi-analyzer-stderr.XXXXXX)
-        trap "rm -f $stderr_file" EXIT INT TERM
+        local stderr_file
+        stderr_file=$(mktemp /tmp/wifi-analyzer-stderr.XXXXXX)
+        trap 'rm -f $stderr_file' EXIT INT TERM
         
         # Start SSH with stderr redirected to temp file
         ssh_exec "wifi-analyzer$remote_args" > "$output_file" 2>"$stderr_file" &
@@ -931,7 +930,8 @@ cmd_run() {
         while kill -0 $ssh_pid 2>/dev/null; do
             # Check for new stderr output and timestamp it
             if [ -f "$stderr_file" ]; then
-                local current_stderr_size=$(stat -c %s "$stderr_file" 2>/dev/null || stat -f %z "$stderr_file" 2>/dev/null || echo 0)
+                local current_stderr_size
+                current_stderr_size=$(stat -c %s "$stderr_file" 2>/dev/null || stat -f %z "$stderr_file" 2>/dev/null || echo 0)
                 if [ "$current_stderr_size" -gt "$last_stderr_pos" ]; then
                     tail -c +$((last_stderr_pos + 1)) "$stderr_file" | while IFS= read -r line; do
                         if [ -n "$line" ]; then
@@ -945,12 +945,13 @@ cmd_run() {
             
             # Check capture file growth
             if [ -f "$output_file" ]; then
-                local current_size=$(stat -c %s "$output_file" 2>/dev/null || stat -f %z "$output_file" 2>/dev/null || echo 0)
+                local current_size
+                current_size=$(stat -c %s "$output_file" 2>/dev/null || stat -f %z "$output_file" 2>/dev/null || echo 0)
                 if [ "$current_size" -gt "$last_size" ]; then
                     # Only show size updates every 3 seconds to reduce noise
                     update_count=$((update_count + 1))
                     if [ $((update_count % 3)) -eq 0 ]; then
-                        log_info "Captured: $(numfmt --to=iec-i --suffix=B $current_size 2>/dev/null || echo "${current_size} bytes")"
+                        log_info "Captured: $(numfmt --to=iec-i --suffix=B "$current_size" 2>/dev/null || echo "${current_size} bytes")"
                     fi
                     no_growth_count=0
                 else
@@ -984,9 +985,10 @@ cmd_run() {
     
     if [ $exit_code -eq 0 ] || [ $exit_code -eq 130 ]; then
         if [ -f "$output_file" ]; then
-            local final_size=$(stat -c %s "$output_file" 2>/dev/null || stat -f %z "$output_file" 2>/dev/null || echo 0)
-            if [ $final_size -gt 0 ]; then
-                log_success "Capture saved: $(numfmt --to=iec-i --suffix=B $final_size 2>/dev/null || echo "${final_size} bytes") in $output_file"
+            local final_size
+            final_size=$(stat -c %s "$output_file" 2>/dev/null || stat -f %z "$output_file" 2>/dev/null || echo 0)
+            if [ "$final_size" -gt 0 ]; then
+                log_success "Capture saved: $(numfmt --to=iec-i --suffix=B "$final_size" 2>/dev/null || echo "${final_size} bytes") in $output_file"
             else
                 log_warn "Output file is empty: $output_file"
             fi
@@ -1586,7 +1588,7 @@ mode_hop() {
     tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
     TCPDUMP_PID=$!
     
-    trap "kill $TCPDUMP_PID 2>/dev/null; wait $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    trap 'kill $TCPDUMP_PID 2>/dev/null; wait $TCPDUMP_PID 2>/dev/null' EXIT INT TERM
     
     # Hop channels while tcpdump runs
     for channel in $CHANNELS; do
@@ -1680,7 +1682,7 @@ mode_scan() {
     tcpdump -U $SNAPLEN $RADIOTAP -i $INTERFACE -w - "$CAPTURE_FILTER" 2>/dev/null &
     TCPDUMP_PID=$!
     
-    trap "kill $TCPDUMP_PID 2>/dev/null" EXIT INT TERM
+    trap 'kill $TCPDUMP_PID 2>/dev/null' EXIT INT TERM
     
     for channel in $CHANNELS; do
         echo "📡 Scanning $INTERFACE ($phy) on channel $channel" >&2
@@ -1857,13 +1859,13 @@ show_examples() {
     
     if [ -n "$ch_5g" ]; then
         echo "# Non-DFS 5GHz capture:"
-        echo -e "${YELLOW}remote-wifi-analyzer run -c '$(echo $ch_5g | xargs)' -p 50 -f capture.pcap${NC}"
+        echo -e "${YELLOW}remote-wifi-analyzer run -c '$(echo "$ch_5g" | xargs)' -p 50 -f capture.pcap${NC}"
         echo ""
     fi
     
     if [ -n "$ch_dfs" ]; then
         echo "# DFS channels:"
-        echo -e "${YELLOW}remote-wifi-analyzer run -c '$(echo $ch_dfs | xargs)' -p 50 -f capture-dfs.pcap${NC}"
+        echo -e "${YELLOW}remote-wifi-analyzer run -c '$(echo "$ch_dfs" | xargs)' -p 50 -f capture-dfs.pcap${NC}"
         echo ""
     fi
     
