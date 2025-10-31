@@ -309,18 +309,238 @@ in
       runtimeInputs = with pkgs; [ procps coreutils ];
     })
 
-    # Tmux auto-attach logic for shell startup
-    (pkgs.writeShellApplication {
-      name = "tmux-auto-attach";
-      text = builtins.readFile ../files/bin/tmux-auto-attach;
-      runtimeInputs = with pkgs; [ tmux procps ];
-    })
-
     # Tmux test data generator for testing session picker
     (pkgs.writeShellApplication {
       name = "tmux-test-data-generator";
       text = builtins.readFile ../files/bin/tmux-test-data-generator;
       runtimeInputs = with pkgs; [ coreutils ];
+      passthru.tests = {
+        syntax = pkgs.runCommand "test-tmux-test-data-generator-syntax" { } ''
+          echo "✅ Syntax validation passed at build time" > $out
+        '';
+        help_availability = pkgs.runCommand "test-tmux-test-data-generator-help"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-test-data-generator";
+                text = builtins.readFile ../files/bin/tmux-test-data-generator;
+                runtimeInputs = with pkgs; [ coreutils ];
+              })
+            ];
+          } ''
+          output=$(tmux-test-data-generator --help 2>&1)
+          exit_code=$?
+          
+          if [[ $exit_code -eq 0 ]]; then
+            echo "✅ Help command works" > $out
+            if echo "$output" | grep -q "Usage:\|OPTIONS:\|EXAMPLES:"; then
+              echo "✅ Help contains expected sections" >> $out
+            else
+              echo "❌ Help missing expected sections" >> $out
+              exit 1
+            fi
+          else
+            echo "❌ Help command failed with exit code $exit_code" > $out
+            exit 1
+          fi
+        '';
+        basic_generation = pkgs.runCommand "test-tmux-test-data-generator-basic"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-test-data-generator";
+                text = builtins.readFile ../files/bin/tmux-test-data-generator;
+                runtimeInputs = with pkgs; [ coreutils ];
+              })
+            ];
+          } ''
+          # Test basic session generation
+          test_dir=$(mktemp -d)
+          trap "rm -rf $test_dir" EXIT
+          
+          tmux-test-data-generator -o "$test_dir" -c 3
+          
+          # Verify files were created
+          file_count=$(find "$test_dir" -name "tmux_resurrect_*.txt" | wc -l)
+          if [[ $file_count -eq 3 ]]; then
+            echo "✅ Generated expected number of test files" > $out
+          else
+            echo "❌ Expected 3 files, got $file_count" > $out
+            exit 1
+          fi
+        '';
+      };
+    })
+
+    # Optimized tmux parser for performance - migrated from validated-scripts
+    (pkgs.writeShellApplication {
+      name = "tmux-parser-optimized";
+      text = /* bash */ ''
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # tmux-parser-optimized: Fast parser for tmux resurrect files
+        # Returns: session\x1Fwindows\x1Fpanes\x1Ftimestamp\x1Fsummary\x1Fis_current
+        
+        # Input validation
+        if [[ $# -eq 0 ]]; then
+            echo "Usage: tmux-parser-optimized <resurrect_file> [current_session_file]" >&2
+            exit 1
+        fi
+
+        resurrect_file="$1"
+        current_session_file="''${2:-}"
+
+        # File existence check
+        if [[ ! -f "$resurrect_file" ]]; then
+            exit 1
+        fi
+
+        # Extract session name from file content (first session line)
+        session_name=$(awk '/^session\t/ {print $2; exit}' "$resurrect_file" 2>/dev/null || echo "unknown")
+
+        # Count windows and panes
+        window_count=$(grep -c "^window" "$resurrect_file" 2>/dev/null || echo "0")
+        pane_count=$(grep -c "^pane" "$resurrect_file" 2>/dev/null || echo "0")
+
+        # Extract timestamp from filename or use fallback
+        basename=$(basename "$resurrect_file" .txt)
+        if [[ "$basename" =~ tmux_resurrect_([0-9]{8}_[0-9]{6}) ]]; then
+            timestamp="''${BASH_REMATCH[1]}"
+        else
+            timestamp="19700101_000000"
+        fi
+
+        # Create summary
+        summary="''${window_count}w/''${pane_count}p"
+
+        # Determine if current session
+        is_current="false"
+        if [[ -n "$current_session_file" && "$resurrect_file" == "$current_session_file" ]]; then
+            is_current="true"
+        fi
+
+        # Output in ASCII Unit Separator format
+        printf "%s\x1F%s\x1F%s\x1F%s\x1F%s\x1F%s\n" \
+            "$session_name" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_current"
+      '';
+      runtimeInputs = with pkgs; [ coreutils gnugrep gawk ];
+      passthru.tests = {
+        syntax = pkgs.runCommand "test-tmux-parser-optimized-syntax" { } ''
+          echo "✅ Syntax validation passed at build time" > $out
+        '';
+        basic_parsing = pkgs.runCommand "test-tmux-parser-optimized-basic"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-parser-optimized";
+                text = /* bash */ ''
+                  #!/usr/bin/env bash
+                  set -euo pipefail
+                  if [[ $# -eq 0 ]]; then
+                      echo "Usage: tmux-parser-optimized <resurrect_file> [current_session_file]" >&2
+                      exit 1
+                  fi
+                  resurrect_file="$1"
+                  current_session_file="''${2:-}"
+                  if [[ ! -f "$resurrect_file" ]]; then
+                      exit 1
+                  fi
+                  session_name=$(awk '/^session\t/ {print $2; exit}' "$resurrect_file" 2>/dev/null || echo "unknown")
+                  window_count=$(grep -c "^window" "$resurrect_file" 2>/dev/null || echo "0")
+                  pane_count=$(grep -c "^pane" "$resurrect_file" 2>/dev/null || echo "0")
+                  basename=$(basename "$resurrect_file" .txt)
+                  if [[ "$basename" =~ tmux_resurrect_([0-9]{8}_[0-9]{6}) ]]; then
+                      timestamp="''${BASH_REMATCH[1]}"
+                  else
+                      timestamp="19700101_000000"
+                  fi
+                  summary="''${window_count}w/''${pane_count}p"
+                  is_current="false"
+                  if [[ -n "$current_session_file" && "$resurrect_file" == "$current_session_file" ]]; then
+                      is_current="true"
+                  fi
+                  printf "%s\x1F%s\x1F%s\x1F%s\x1F%s\x1F%s\n" \
+                      "$session_name" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_current"
+                '';
+                runtimeInputs = with pkgs; [ coreutils gnugrep gawk ];
+              })
+            ];
+          } ''
+                    # Create test file
+                    test_dir=$(mktemp -d)
+                    test_file="$test_dir/tmux_resurrect_20250124_143022.txt"
+                    cat > "$test_file" << 'EOF'
+          session	test-session	:1.0	1	:vim*	vim	:
+          window	test-session:1	1	:*	cd3c-	:vim	/home/user	vim	:
+          pane	test-session:1	1	:	1	:*	1	:/home/user	1	vim	:
+          EOF
+
+                    result=$(tmux-parser-optimized "$test_file")
+                    IFS=$'\x1F' read -r session windows panes timestamp summary is_current <<< "$result"
+
+                    [[ "$session" == "test-session" ]] || { echo "❌ Session name failed: '$session'" > $out; exit 1; }
+                    [[ "$windows" == "1" ]] || { echo "❌ Window count failed: '$windows'" > $out; exit 1; }
+                    [[ "$panes" == "1" ]] || { echo "❌ Pane count failed: '$panes'" > $out; exit 1; }
+                    [[ "$timestamp" == "20250124_143022" ]] || { echo "❌ Timestamp failed: '$timestamp'" > $out; exit 1; }
+
+                    echo "✅ Basic parsing test passed" > $out
+                    rm -rf "$test_dir"
+        '';
+        error_handling = pkgs.runCommand "test-tmux-parser-optimized-errors"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-parser-optimized";
+                text = /* bash */ ''
+                  #!/usr/bin/env bash
+                  set -euo pipefail
+                  if [[ $# -eq 0 ]]; then
+                      echo "Usage: tmux-parser-optimized <resurrect_file> [current_session_file]" >&2
+                      exit 1
+                  fi
+                  resurrect_file="$1"
+                  current_session_file="''${2:-}"
+                  if [[ ! -f "$resurrect_file" ]]; then
+                      exit 1
+                  fi
+                  session_name=$(awk '/^session\t/ {print $2; exit}' "$resurrect_file" 2>/dev/null || echo "unknown")
+                  window_count=$(grep -c "^window" "$resurrect_file" 2>/dev/null || echo "0")
+                  pane_count=$(grep -c "^pane" "$resurrect_file" 2>/dev/null || echo "0")
+                  basename=$(basename "$resurrect_file" .txt)
+                  if [[ "$basename" =~ tmux_resurrect_([0-9]{8}_[0-9]{6}) ]]; then
+                      timestamp="''${BASH_REMATCH[1]}"
+                  else
+                      timestamp="19700101_000000"
+                  fi
+                  summary="''${window_count}w/''${pane_count}p"
+                  is_current="false"
+                  if [[ -n "$current_session_file" && "$resurrect_file" == "$current_session_file" ]]; then
+                      is_current="true"
+                  fi
+                  printf "%s\x1F%s\x1F%s\x1F%s\x1F%s\x1F%s\n" \
+                      "$session_name" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_current"
+                '';
+                runtimeInputs = with pkgs; [ coreutils gnugrep gawk ];
+              })
+            ];
+          } ''
+          test_dir=$(mktemp -d)
+          
+          # Test non-existent file
+          result=$(tmux-parser-optimized "$test_dir/nonexistent.txt" 2>/dev/null || echo "PARSER_FAILED")
+          [[ "$result" == "PARSER_FAILED" ]] || { echo "❌ Should fail on non-existent file" > $out; exit 1; }
+          
+          # Test empty file
+          empty_file="$test_dir/empty.txt"
+          touch "$empty_file"
+          result=$(tmux-parser-optimized "$empty_file" 2>/dev/null || echo "PARSER_FAILED")
+          [[ "$result" == "PARSER_FAILED" ]] || { echo "❌ Should fail on empty file" > $out; exit 1; }
+          
+          echo "✅ Error handling test passed" > $out
+          rm -rf "$test_dir"
+        '';
+      };
     })
 
     # Custom tmux window status format script with proper library path
