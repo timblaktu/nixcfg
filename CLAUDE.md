@@ -33,13 +33,25 @@
 3. **File Separation**: MCP servers moved from settings.json to `.mcp.json`
 4. **Runtime State**: Add coalescence hook for proper state management
 
-### 🎯 **PHASE 1: Nix Module Updates (v2.0 Schema)** 
+### 🎯 **PHASE 1: Nix Module Updates (v2.0 Schema)** - ⚠️ **CRITICAL BUG FOUND**
 
-**📋 Phase 1 Tasks**:
-- [ ] **Update settings template**: Convert to v2.0 permissions structure in `home/modules/claude-code.nix`
-- [ ] **Add MCP template**: Create separate `.mcp.json` generation
-- [ ] **Update permission options**: Implement v2.0 permission schema with allow/deny/ask structure
-- [ ] **Remove mcpServers**: Extract from settings.json to dedicated file
+**📋 Phase 1 Status**: 
+- ✅ **Nix module code**: All v2.0 schema changes implemented correctly  
+- ✅ **Template generation**: Both settings.json and .mcp.json templates being generated
+- ✅ **Build validation**: `nix flake check` passes, `home-manager switch --dry-run` succeeds
+- ❌ **Deployment logic**: Activation script preserves existing files instead of updating to v2.0
+
+**🚨 CRITICAL ISSUE DISCOVERED**:
+- **Problem**: Activation script only creates templates if files don't exist (lines 453-461 in claude-code.nix)
+- **Impact**: Existing installations keep v1.x settings.json with mcpServers, missing v2.0 permissions structure  
+- **Evidence**: Live settings.json still has `mcpServers`, missing `ask`/`defaultMode`/etc., no `.mcp.json` file
+- **Root Cause**: Conditional deployment logic `if [[ -f "$accountDir/settings.json" ]]; then echo "preserved"`
+
+**📋 IMMEDIATE FIX NEEDED**:
+- [ ] **Always deploy templates**: Force deployment of v2.0 settings.json and .mcp.json files
+- [ ] **Migration strategy**: Handle existing v1.x → v2.0 upgrade path
+- [ ] **Template validation**: Verify deployed files match v2.0 schema  
+- [ ] **Runtime testing**: Test actual Claude Code v2.0 functionality
 
 **🎯 PHASE 1 PRIORITY ORDER**:
 1. Start with permission options schema update (foundation)
