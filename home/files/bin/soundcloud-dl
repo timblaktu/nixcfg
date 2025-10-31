@@ -1,0 +1,209 @@
+#!/bin/bash
+# Semi-automated SoundCloud downloader with token persistence
+# Usage: soundcloud-dl <soundcloud-url> [additional-yt-dlp-options]
+
+set -euo pipefail
+
+TOKEN_FILE="$HOME/.config/soundcloud-token"
+TOKEN_MAX_AGE=3000  # 50 minutes in seconds (tokens expire after ~1 hour)
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Function to extract token from browser
+get_token() {
+    print_info "OAuth token required for SoundCloud private content"
+    echo
+    print_info "To get your OAuth token:"
+    echo "  1. Open SoundCloud in your browser and log in"
+    echo "  2. Press F12 to open Developer Tools"
+    echo "  3. Go to the Network tab"
+    echo "  4. Reload the page or play any track"
+    echo "  5. Look for requests to 'api-v2.soundcloud.com'"
+    echo "  6. Find the 'oauth_token' parameter in the request URL"
+    echo "  7. Copy the token value (format: 2-123456-123456789-123456789)"
+    echo
+    read -p "Paste your OAuth token here: " token
+    
+    if [[ -z "$token" ]]; then
+        print_error "No token provided"
+        exit 1
+    fi
+    
+    # Create config directory if it doesn't exist
+    mkdir -p "$(dirname "$TOKEN_FILE")"
+    echo "$token" > "$TOKEN_FILE"
+    print_success "Token saved to $TOKEN_FILE"
+}
+
+# Function to check if token is valid and not expired
+is_token_valid() {
+    if [[ ! -f "$TOKEN_FILE" ]]; then
+        return 1
+    fi
+    
+    local token_age=$(($(date +%s) - $(stat -c %Y "$TOKEN_FILE" 2>/dev/null || echo 0)))
+    if [[ $token_age -gt $TOKEN_MAX_AGE ]]; then
+        print_warning "Token is older than 50 minutes and likely expired"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to try alternative authentication methods
+try_alternatives() {
+    local url="$1"
+    shift
+    local extra_args=("$@")
+    
+    print_warning "OAuth token failed, trying alternative methods..."
+    
+    # Try browser cookies (Firefox first, then Edge, then Chrome)
+    for browser in firefox edge chrome; do
+        print_info "Trying cookies from $browser..."
+        if yt-dlp --cookies-from-browser "$browser" --no-warnings --quiet --simulate "$url" >/dev/null 2>&1; then
+            print_success "Using cookies from $browser"
+            exec yt-dlp --cookies-from-browser "$browser" "${extra_args[@]}" "$url"
+        fi
+    done
+    
+    print_error "All authentication methods failed"
+    print_info "Consider using: yt-dlp --cookies-from-browser firefox '$url'"
+    exit 1
+}
+
+# Show detailed help information
+show_help() {
+    cat << 'EOF'
+SOUNDCLOUD-DL - Semi-automated SoundCloud downloader with authentication
+
+USAGE:
+    soundcloud-dl <soundcloud-url> [yt-dlp-options]
+    soundcloud-dl --help
+
+AUTHENTICATION METHODS:
+    This script uses multiple authentication methods in order of preference:
+    1. OAuth token (cached for 50 minutes)
+    2. Browser cookies (Firefox → Edge → Chrome)
+
+BROWSER SETUP FOR COOKIE AUTHENTICATION:
+
+    Firefox (Most Reliable):
+    - Simply ensure you're logged into SoundCloud in Firefox
+    - The script will automatically extract cookies when needed
+    - No additional setup required
+
+    Microsoft Edge:
+    - Method 1 (Recommended): Close Edge completely before running script
+    - Method 2: Add browser flag to Edge shortcut:
+      1. Right-click Edge shortcut → Properties
+      2. Add to Target: --disable-features=LockProfileCookieDatabase
+      3. Restart Edge completely
+    - Method 3: Use specific profile if you have multiple:
+      yt-dlp --cookies-from-browser edge:"Profile 1" <url>
+
+    Chrome:
+    - Close Chrome completely before running script
+    - Same browser flag workaround as Edge if needed
+
+OAUTH TOKEN EXTRACTION:
+    If browser cookies fail, the script will guide you through OAuth extraction:
+    1. Open SoundCloud in browser, ensure you're logged in
+    2. Press F12 → Network tab
+    3. Reload page or play any track
+    4. Look for requests to 'api-v2.soundcloud.com'
+    5. Find 'oauth_token=' in request URL parameters
+    6. Copy token value (format: 2-123456-123456789-123456789)
+    
+    Token is cached in ~/.config/soundcloud-token for 50 minutes
+
+EXAMPLES:
+    # Download playlist
+    soundcloud-dl https://soundcloud.com/user/sets/playlist
+    
+    # Extract audio as MP3
+    soundcloud-dl https://soundcloud.com/user/track -x --audio-format mp3
+    
+    # Custom output filename
+    soundcloud-dl https://soundcloud.com/user/track --output "%(title)s.%(ext)s"
+    
+    # Download with metadata and thumbnail
+    soundcloud-dl https://soundcloud.com/user/track --add-metadata --embed-thumbnail
+    
+    # Force browser cookies (bypass OAuth)
+    yt-dlp --cookies-from-browser firefox <url>
+
+TROUBLESHOOTING:
+    - 404 errors: Usually authentication issue, try browser cookies
+    - Edge cookie errors: Close Edge completely or use browser flag
+    - Token expired: Delete ~/.config/soundcloud-token to get new one
+    - All methods fail: Try manual cookie export with browser extension
+
+FILES:
+    ~/.config/soundcloud-token - Cached OAuth token (auto-expires)
+
+EOF
+}
+
+# Main script
+main() {
+    # Handle help flag
+    if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+        show_help
+        exit 0
+    fi
+    
+    if [[ $# -lt 1 ]]; then
+        echo "Usage: $0 <soundcloud-url> [additional-yt-dlp-options]"
+        echo "       $0 --help    (for detailed help)"
+        echo
+        echo "Quick Examples:"
+        echo "  $0 https://soundcloud.com/user/track"
+        echo "  $0 https://soundcloud.com/user/sets/playlist -x --audio-format mp3"
+        echo "  $0 https://soundcloud.com/user/track --output '%(title)s.%(ext)s'"
+        exit 1
+    fi
+    
+    local url="$1"
+    shift
+    local extra_args=("$@")
+    
+    # Validate URL
+    if [[ ! "$url" =~ ^https?://soundcloud\.com/ ]]; then
+        print_error "Please provide a valid SoundCloud URL"
+        exit 1
+    fi
+    
+    # Check if token exists and is valid
+    if ! is_token_valid; then
+        print_warning "Token missing, expired, or invalid"
+        get_token
+    fi
+    
+    local token
+    token=$(cat "$TOKEN_FILE")
+    
+    print_info "Using stored OAuth token ($(( ($(date +%s) - $(stat -c %Y "$TOKEN_FILE")) / 60 )) minutes old)"
+    
+    # Try with OAuth token first
+    if ! yt-dlp --username oauth --password "$token" "${extra_args[@]}" "$url"; then
+        print_warning "OAuth authentication failed"
+        try_alternatives "$url" "${extra_args[@]}"
+    else
+        print_success "Download completed successfully"
+    fi
+}
+
+# Run main function with all arguments
+main "$@"
