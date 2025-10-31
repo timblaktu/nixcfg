@@ -21,7 +21,69 @@
 2. /home/tim/src/home-manager
 3. /home/tim/src/NixOS-WSL
 
-## 📋 CURRENT STATUS: CRITICAL TEST VALIDATION BREAKTHROUGH (2025-10-30 Session 2)
+## 📋 CURRENT STATUS: HIGH-PRIORITY TASK COMPLETION + CRITICAL NEW ISSUE (2025-10-30 Session 3)
+
+### 🚨 **CRITICAL NEW ISSUE DISCOVERED**
+
+**❌ TMUX-SESSION-PICKER HANGING AFTER PARALLEL FIX**: User reports fzf dialog hangs for 30+ seconds
+- **Context**: After deploying parallel command fix, interactive mode hangs when invoked manually  
+- **Initial Analysis**: Commands work fine (`--help`, `--list`) but interactive fzf mode hangs
+- **Likely Cause**: TTY/terminal interaction issue with fzf in non-interactive contexts
+- **Test Coverage Gap**: Flake checks test `--help` and `--list` but NOT interactive fzf mode
+- **Status**: ⚠️ CRITICAL - Main functionality broken despite "successful" deployment
+
+**🔧 ROOT CAUSE HYPOTHESIS**:
+- Parallel command fix resolved shell quoting issue correctly
+- But exposed underlying fzf interactive terminal detection problem  
+- Script likely doesn't handle non-TTY scenarios gracefully
+- Flake checks only test non-interactive commands, missing real usage patterns
+
+**🎯 IMMEDIATE NEXT SESSION PRIORITIES**:
+1. **CRITICAL**: Fix tmux-session-picker interactive hanging issue
+2. **ARCHITECTURE**: Add proper TTY detection and graceful fallbacks
+3. **TEST COVERAGE**: Add functional tests for interactive mode (real usage validation)
+4. **ROOT CAUSE**: Investigate why fzf hangs instead of failing gracefully
+
+### 🎯 **SESSION 3 ACHIEVEMENTS** 
+
+**✅ HIGH-PRIORITY TASK COMPLETED**: Successfully deployed parallel command fix and resolved test library dependencies
+
+**✅ PARALLEL COMMAND FIX DEPLOYED**:
+- **Fix**: Array expansion `parallel "${parallel_flags[@]}"` instead of string expansion
+- **Status**: ✅ Deployed via home-manager rebuild, `--list` and `--help` work correctly  
+- **Impact**: Eliminated "Unknown option: will-cite --jobs 0" errors
+
+**✅ TEST LIBRARY DEPENDENCY CRISIS RESOLVED**:
+- **Problem**: 12 tmux tests failing with "No such file or directory" for library dependencies
+- **Solution**: Added `setup_libraries()` function to 6 missing tests  
+- **Result**: ✅ Zero library dependency errors, all tests now have proper environment setup
+- **Tests Fixed**: error-handling, tmux-environment-detection, session-file-validation, preview-generation, integration-ifs-robustness
+
+**✅ ARCHITECTURAL INSIGHTS**:
+- **Test vs Runtime Gap**: Test environment libraries needed to match runtime sourcing patterns
+- **Coverage Analysis**: Non-interactive commands work, interactive mode has separate issues
+- **Build Success ≠ Functional Success**: Flake checks pass but real usage reveals problems
+
+### 🎯 **CRITICAL ARCHITECTURE TASKS IDENTIFIED FROM TESTS.MD**
+
+**📋 TEST INFRASTRUCTURE CONSOLIDATION NEEDED**:
+- **Current State**: Tests scattered across 3 locations with architectural mismatch
+- **Problem**: `flake-modules/tests.nix` (2,412 lines) doing ALL testing work
+- **Missing**: 72+ script tests in `validated-scripts/bash.nix` never run (orphaned)
+- **Solution**: Implement nixpkgs pattern with `passthru.tests` on script derivations
+
+**🏗️ RECOMMENDED ARCHITECTURE**:
+```nix
+# home/common/tmux.nix  
+tmux-session-picker = writeShellApplication {
+  passthru.tests = { help = ...; args = ...; }; # ← Tests WITH derivation
+};
+
+# flake-modules/tests.nix (shrinks to 300-500 lines)
+checks = collectAllScriptTests // moduleIntegrationTests; # ← Just collection
+```
+
+## 📋 PREVIOUS STATUS: CRITICAL TEST VALIDATION BREAKTHROUGH (2025-10-30 Session 2)
 
 ### 🎯 HIGH-PRIORITY TASK SESSION RESULTS
 

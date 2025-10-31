@@ -121,3 +121,115 @@
   2. Debugging: Use specific test builds with --show-trace
   3. CI/CD: Use nix flake check in GitHub Actions
   4. Before commits: Run nix run .#regression-test for quick validation
+
+# CRITICAL ANALYSIS: Current Test Organization
+
+Based on my comprehensive exploration of your repository, here's the breakdown of test locations and why `flake-modules/tests.nix` is so large. Your tests are spread across **3 main locations**:
+
+1. **`flake-modules/tests.nix` (2,412 lines)** - PRIMARY ACTIVE TESTS
+   - All 30+ tests that run via `nix flake check`
+   - Contains configuration evaluation, module integration, and **black-box functional tests**
+   - This is where the tmux-session-picker runtime tests are located
+
+2. **`home/modules/validated-scripts/` (3,700+ lines across multiple files)** - ORPHANED TESTS
+   - `bash.nix` contains 72+ test definitions as `passthru.tests` on script derivations
+   - Tests are **defined but not collected** into flake checks
+   - Test collection function exists in `default.nix` but is **never called**
+
+3. **`tests/` directory (6 files)** - LEGACY/UNUSED
+   - SOPS, SSH, integration tests
+   - **Not imported** into flake at all
+
+### **Why flake-modules/tests.nix is So Big**
+
+The file is large because it's doing **ALL the testing work** for your entire repository:
+
+- **Configuration evaluation tests** (checking nixos/home-manager configs build)
+- **Module integration tests** (checking modules work together)
+- **Service configuration tests** (SSH, users, etc.)
+- **Cross-module integration** (WSL + base, SOPS + base, etc.)
+- **Script functionality tests** (tmux-session-picker black-box tests with 9+ sub-tests each)
+
+### **The Core Problem: Architectural Mismatch**
+
+You have tests in two places that **should be connected but aren't**:
+
+```
+❌ CURRENT STATE:
+┌─────────────────────────────────────┐
+│ flake-modules/tests.nix (2,412 lines)│  ← All tests run here
+│ - Config tests                       │
+│ - Module tests                       │
+│ - Script functional tests (manual)   │  ← These are DUPLICATED!
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ validated-scripts/bash.nix          │  ← Tests defined here
+│ - Scripts with passthru.tests       │
+│ - 72+ test derivations               │  ← But NEVER RUN!
+└─────────────────────────────────────┘
+```
+
+### **The nixpkgs Pattern (What You Should Have)**
+
+```
+✅ CORRECT PATTERN:
+┌─────────────────────────────────────┐
+│ home/common/tmux.nix                │
+│ tmux-session-picker = writeShellApp {│
+│   passthru.tests = {                │  ← Tests WITH derivation
+│     help = ...;                     │
+│     args = ...;                     │
+│   };                                │
+│ }                                   │
+└─────────────────────────────────────┘
+           ↓ (auto-collected)
+┌─────────────────────────────────────┐
+│ flake-modules/tests.nix (300 lines) │  ← Much smaller!
+│ checks = collectAllScriptTests      │
+│   // moduleIntegrationTests;        │  ← Just collection
+└─────────────────────────────────────┘
+```
+
+### **Specific Findings About Your Tests**
+
+**In `flake-modules/tests.nix`:**
+- Lines 1-500: Configuration and module tests (appropriate location)
+- Lines 500-2412: **Script functional tests that should be `passthru.tests`** on the script derivations in `home/common/*.nix`
+
+**In `validated-scripts/bash.nix`:**
+- 72+ test derivations defined as `passthru.tests`
+- Collection function exists: `collectScriptTests`
+- **Problem**: Never exported to flake checks, so tests never run
+
+### **Action Items to Fix This**
+
+1. **Move script tests to their derivations** in `home/common/*.nix`:
+   ```nix
+   # home/common/tmux.nix
+   tmux-session-picker = pkgs.writeShellApplication {
+     name = "tmux-session-picker";
+     text = builtins.readFile ../files/bin/tmux-session-picker;
+     runtimeInputs = [ ... ];
+     passthru.tests = {
+       help-availability = pkgs.runCommand ... { } ''...'';
+       argument-validation = pkgs.runCommand ... { } ''...'';
+     };
+   };
+   ```
+
+2. **Create test collection in flake-modules/tests.nix**:
+   ```nix
+   checks =
+     # Configuration/module tests
+     { ... }
+     //
+     # Auto-collected script tests
+     (lib.concatMapAttrs collectScriptTests [
+       config.home.common.tmux
+       config.home.common.git
+       # ... other modules
+     ]);
+   ```
+
+3. **Result**: `flake-modules/tests.nix` shrinks from 2,412 lines to ~300-500 lines
