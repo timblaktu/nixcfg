@@ -33,7 +33,7 @@
 3. **File Separation**: MCP servers moved from settings.json to `.mcp.json`
 4. **Runtime State**: Add coalescence hook for proper state management
 
-### 🎯 **PHASE 1: Nix Module Updates (v2.0 Schema)** - ✅ **COMPLETED**
+### 🎯 **PHASE 1: Nix Module Updates (v2.0 Schema)** - ⚠️ **80% COMPLETE**
 
 **📋 Phase 1 Status**: 
 - ✅ **Nix module code**: All v2.0 schema changes implemented correctly  
@@ -41,15 +41,19 @@
 - ✅ **Build validation**: `nix flake check` passes, `home-manager switch --dry-run` succeeds
 - ✅ **Deployment logic**: Fixed activation script to always deploy v2.0 templates
 - ✅ **Enterprise settings**: Updated to v2.0 schema with all 6 permissions fields
+- ❌ **MCP file separation**: User-level .mcp.json not deployed, old mcp.json remains
 
 **🔧 CRITICAL ISSUES RESOLVED** (2025-10-31):
 - **Issue**: Activation script preserved existing v1.x files instead of upgrading to v2.0
 - **Root Cause**: Conditional deployment logic in `home/modules/claude-code.nix` lines 455-460
 - **Resolution**: 
-  1. **User templates**: Fixed conditional logic to always deploy v2.0 settings.json and .mcp.json
-  2. **Enterprise settings**: Updated `modules/base.nix` to include v2.0 permissions structure
-  3. **System deployment**: Rebuilt NixOS system to deploy v2.0 enterprise settings
+  1. **Enterprise settings**: Updated `modules/base.nix` to include v2.0 permissions structure ✅
+  2. **System deployment**: Rebuilt NixOS system to deploy v2.0 enterprise settings ✅
+  3. **User templates**: Fixed conditional logic to always deploy v2.0 templates ✅
 - **Validation**: Enterprise settings now contain all v2.0 fields: `allow`, `deny`, `ask`, `defaultMode`, `disableBypassPermissionsMode`, `additionalDirectories`
+
+**🚨 REMAINING ISSUE**:
+- **MCP File Separation Incomplete**: Account-level template deployment not executing, need to investigate account configuration logic or enterprise settings precedence behavior
 
 **🎯 PHASE 1 PRIORITY ORDER**:
 1. Start with permission options schema update (foundation)
@@ -157,13 +161,19 @@ claudemax -p "git status"       # Non-interactive mode
 
 **Next Major Priority**: Cross-platform validation and enhancement (after Claude Code 2.0 migration)
 
-## 🎯 **SESSION HANDOFF NOTES**
+## 🎯 **SESSION HANDOFF NOTES** (2025-10-31 16:15 UTC)
 
-**Previous Priority**: Validated-scripts module elimination successfully completed (all 4 phases)
-**Current Priority**: Claude Code 2.0 migration (immediate priority per CLAUDE-CODE-2-MIGRATION.md)  
-**Next Priority**: Cross-platform validation and enhancement (per NEW_CHAT_PROMPT.md)
+**Current Status**: Claude Code 2.0 Migration Phase 1 - 80% Complete
+**Critical Achievement**: Enterprise settings successfully migrated to v2.0 schema (6 permissions fields)  
+**Remaining Work**: Complete MCP file separation (.mcp.json deployment) and Phase 2 wrapper updates
 
+**Phase 1 Results**:
+- ✅ Enterprise settings: Full v2.0 compliance deployed to `/etc/claude-code/managed-settings.json`
+- ✅ Activation script: Fixed conditional deployment logic in `home/modules/claude-code.nix`
+- ⚠️ MCP separation: User-level `.mcp.json` not deploying (requires investigation)
+
+**Next Priority**: Complete Phase 1 MCP file separation, then proceed to Phase 2 wrapper updates
 **Key Architecture Files**:
-- `home/modules/claude-code.nix` - Main Claude Code module orchestrator
-- `claude-runtime/.claude-max/` - Account-specific configuration directories
-- Wrapper scripts: claudemax, claudepro in development.nix
+- `home/modules/claude-code.nix` - Main Claude Code module orchestrator  
+- `modules/base.nix` - Enterprise settings (successfully updated to v2.0)
+- `claude-runtime/.claude-{max,pro}/` - Account-specific configuration directories
