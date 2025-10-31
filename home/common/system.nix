@@ -44,5 +44,14 @@ in
         runtimeInputs = with pkgs; [ coreutils util-linux usbutils ];
       })
     ];
+
+    # Windows-specific PowerShell scripts (documentation only)
+    # These are provided as reference files for Windows/WSL environments
+    home.file = {
+      ".local/share/docs/windows-scripts/fix-terminal-fonts.ps1".source = ../files/bin/fix-terminal-fonts.ps1;
+      ".local/share/docs/windows-scripts/font-detection-functions.ps1".source = ../files/bin/font-detection-functions.ps1;
+      ".local/share/docs/windows-scripts/install-terminal-fonts.ps1".source = ../files/bin/install-terminal-fonts.ps1;
+      ".local/share/docs/windows-scripts/restart-usb-v4.ps1".source = ../files/bin/restart-usb-v4.ps1;
+    };
   };
 }
