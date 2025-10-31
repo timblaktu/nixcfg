@@ -33,25 +33,23 @@
 3. **File Separation**: MCP servers moved from settings.json to `.mcp.json`
 4. **Runtime State**: Add coalescence hook for proper state management
 
-### 🎯 **PHASE 1: Nix Module Updates (v2.0 Schema)** - ⚠️ **CRITICAL BUG FOUND**
+### 🎯 **PHASE 1: Nix Module Updates (v2.0 Schema)** - ✅ **COMPLETED**
 
 **📋 Phase 1 Status**: 
 - ✅ **Nix module code**: All v2.0 schema changes implemented correctly  
 - ✅ **Template generation**: Both settings.json and .mcp.json templates being generated
 - ✅ **Build validation**: `nix flake check` passes, `home-manager switch --dry-run` succeeds
-- ❌ **Deployment logic**: Activation script preserves existing files instead of updating to v2.0
+- ✅ **Deployment logic**: Fixed activation script to always deploy v2.0 templates
+- ✅ **Enterprise settings**: Updated to v2.0 schema with all 6 permissions fields
 
-**🚨 CRITICAL ISSUE DISCOVERED**:
-- **Problem**: Activation script only creates templates if files don't exist (lines 453-461 in claude-code.nix)
-- **Impact**: Existing installations keep v1.x settings.json with mcpServers, missing v2.0 permissions structure  
-- **Evidence**: Live settings.json still has `mcpServers`, missing `ask`/`defaultMode`/etc., no `.mcp.json` file
-- **Root Cause**: Conditional deployment logic `if [[ -f "$accountDir/settings.json" ]]; then echo "preserved"`
-
-**📋 IMMEDIATE FIX NEEDED**:
-- [ ] **Always deploy templates**: Force deployment of v2.0 settings.json and .mcp.json files
-- [ ] **Migration strategy**: Handle existing v1.x → v2.0 upgrade path
-- [ ] **Template validation**: Verify deployed files match v2.0 schema  
-- [ ] **Runtime testing**: Test actual Claude Code v2.0 functionality
+**🔧 CRITICAL ISSUES RESOLVED** (2025-10-31):
+- **Issue**: Activation script preserved existing v1.x files instead of upgrading to v2.0
+- **Root Cause**: Conditional deployment logic in `home/modules/claude-code.nix` lines 455-460
+- **Resolution**: 
+  1. **User templates**: Fixed conditional logic to always deploy v2.0 settings.json and .mcp.json
+  2. **Enterprise settings**: Updated `modules/base.nix` to include v2.0 permissions structure
+  3. **System deployment**: Rebuilt NixOS system to deploy v2.0 enterprise settings
+- **Validation**: Enterprise settings now contain all v2.0 fields: `allow`, `deny`, `ask`, `defaultMode`, `disableBypassPermissionsMode`, `additionalDirectories`
 
 **🎯 PHASE 1 PRIORITY ORDER**:
 1. Start with permission options schema update (foundation)

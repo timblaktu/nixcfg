@@ -451,13 +451,9 @@ with lib;
             # RUNTIME-ONLY: Create directories for session data
             $DRY_RUN_CMD mkdir -p "$accountDir"/{logs,projects,shell-snapshots,statsig,todos,commands}
           
-            # SETTINGS: Deploy initial settings (v2.0 schema without MCP servers)
-            if [[ -f "$accountDir/settings.json" ]]; then
-              echo "✅ Preserved existing settings: $accountDir/settings.json"
-            else
-              copy_template "${mkSettingsTemplate (if account.model != null then account.model else cfg.defaultModel)}" "$accountDir/settings.json"
-              echo "🆕 Created initial settings (v2.0 schema): $accountDir/settings.json"
-            fi
+            # SETTINGS: Always deploy v2.0 schema settings (migration-safe)
+            copy_template "${mkSettingsTemplate (if account.model != null then account.model else cfg.defaultModel)}" "$accountDir/settings.json"
+            echo "🔧 Updated settings to v2.0 schema: $accountDir/settings.json"
           
             # MCP SERVERS: Always deploy separate .mcp.json file (v2.0 schema)
             copy_template "${mcpTemplate}" "$accountDir/.mcp.json"

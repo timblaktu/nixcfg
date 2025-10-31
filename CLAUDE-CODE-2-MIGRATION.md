@@ -359,3 +359,9 @@ claudemax -p "git status"
 - Ensure `jq` available (should be in Nix packages)
 - Check settings file path correct
 - Verify no syntax errors in JSON templates
+
+## References
+
+- https://docs.claude.com/en/docs/claude-code/cli-reference
+- https://docs.claude.com/en/docs/claude-code/settings
+- https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview
