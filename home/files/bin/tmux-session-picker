@@ -1017,7 +1017,7 @@ build_fzf_command() {
         --bind="ctrl-t:change-preview-window(up:${preview_size}:wrap|right:${preview_size}:wrap)"
         --bind="left:change-preview-window(up:${preview_size}:wrap|right:${preview_size}:wrap)"
         --bind="right:change-preview-window(up:${preview_size}:wrap|right:${preview_size}:wrap)"
-        --preview="${SCRIPT_PATH} --preview {}"
+        --preview="${SCRIPT_PATH} --preview {+}"
         --preview-window="${preview_window}"
         --prompt="Search ($layout)> "
         --highlight-line
