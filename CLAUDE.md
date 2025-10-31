@@ -170,7 +170,19 @@ SCRIPT-NAME = pkgs.writeShellApplication {
 - **Status**: ✅ WORKING PATTERN established for remaining 9 tests
 - **Architecture Gap**: Test vs runtime environment discrepancy - tests need library files present for script execution
 
-**📋 NEXT PRIORITY TASKS**:
+**🎯 IMMEDIATE NEXT SESSION TASKS**:
+
+**🚨 CRITICAL PRIORITY 1: Deploy tmux-session-picker fix**
+1. **Rebuild home-manager** to deploy the parallel command fix: `nix run home-manager -- switch --flake '.#tim@thinky-nixos'`
+2. **Validate functionality** - test tmux Prefix-t session picker works without errors
+3. **Confirm fix** - verify fzf dialog shows sessions without parallel command errors
+
+**🔧 HIGH PRIORITY 2: Prevent future runtime failures**  
+1. **Add functional runtime tests** - tests that exercise actual session parsing with real tmux resurrect data
+2. **Complete remaining tmux test library fixes** - apply library dependency pattern to remaining 8 of 12 tests
+3. **Implement integration testing** - bridge the build vs runtime validation gap
+
+**📋 MEDIUM PRIORITY 3: Architecture improvements**
 
 **🎯 PRIORITY 1: Test Quality & Integration Improvements**
 1. **Add runtime integration tests** - Test scripts in actual home-manager environment, not just build environment
