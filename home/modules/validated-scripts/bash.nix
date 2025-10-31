@@ -106,48 +106,6 @@ let
     };
   }) // {
 
-    # Git smart merge tool - migrated from home/common/git.nix
-    smart-nvimdiff = mkBashScript {
-      name = "smart-nvimdiff";
-      deps = with pkgs; [ git neovim coreutils ];
-      text = /* bash */ ''
-        #!/usr/bin/env bash
-        # Smart mergetool wrapper for neovim
-        # Automatically switches to 2-way diff when BASE is empty
-        
-        BASE="$1"
-        LOCAL="$2"  
-        REMOTE="$3"
-        MERGED="$4"
-        
-        # Check if BASE file exists and is not empty
-        if [ -f "$BASE" ] && [ -s "$BASE" ]; then
-            # Normal 4-way diff with non-empty BASE
-            # Use timer to ensure focus happens after all initialization
-            exec nvim -d "$MERGED" "$LOCAL" "$BASE" "$REMOTE" \
-              -c "wincmd J" \
-              -c "call timer_start(250, {-> execute('wincmd b')})"
-        else
-            # Empty or missing BASE, so MERGED is just a useless single conflict diff.
-            # Overwrite MERGED with LOCAL and do 2-way diff against REMOTE.
-            # This gives us a clean starting point without conflict markers
-            # which allows us to properly merge the desired changes.
-            cp "$LOCAL" "$MERGED"
-            exec nvim -d "$MERGED" "$REMOTE"
-        fi
-      '';
-      tests = {
-        syntax = writers.testBash "test-smart-nvimdiff-syntax" ''
-          # Test that script has valid bash syntax
-          echo "✅ Syntax validation passed at build time"
-        '';
-        argument_validation = writers.testBash "test-smart-nvimdiff-args" ''
-          # Test that script properly validates arguments
-          # This is a placeholder - full testing would require mock git environment
-          echo "✅ Argument validation test passed (placeholder)"
-        '';
-      };
-    };
 
     # Terminal verification scripts - migrated from home/modules/terminal-verification.nix
     # NOTE: check-terminal-setup moved to static script in home/files/bin/ due to evaluation issues
