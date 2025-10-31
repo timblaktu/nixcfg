@@ -295,12 +295,12 @@ in
         script
     ))
 
-    # Tmux session picker profiled version (performance testing) - TEMPORARILY DISABLED due to shellcheck warnings
-    # (pkgs.writeShellApplication {
-    #   name = "tmux-session-picker-profiled";
-    #   text = builtins.readFile ../files/bin/tmux-session-picker-profiled;
-    #   runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep time ];
-    # })
+    # Tmux session picker profiled version (performance testing)
+    (pkgs.writeShellApplication {
+      name = "tmux-session-picker-profiled";
+      text = builtins.readFile ../files/bin/tmux-session-picker-profiled;
+      runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep time ];
+    })
 
     # Tmux CPU/memory status display with colored braille indicators
     (pkgs.writeShellApplication {
@@ -323,10 +323,10 @@ in
       runtimeInputs = with pkgs; [ coreutils ];
     })
 
-    # Custom tmux window status format script with proper Nix path substitution
+    # Custom tmux window status format script with proper library path
     (pkgs.writers.writeBashBin "tmux-window-status-format" (builtins.replaceStrings
-      [ ''source "''${HOME}/bin/functions.sh"'' ]
-      [ "source \"${config.home.homeDirectory}/.nix-profile/lib/bash-utils/general-utils.bash\"" ]
+      [ ''source "''${HOME}/lib/general-utils.bash"'' ]
+      [ "source \"${config.home.homeDirectory}/.local/lib/general-utils.bash\"" ]
       (builtins.readFile ../files/bin/tmux-window-status-format)
     ))
 
