@@ -92,6 +92,7 @@
                 enableDevelopment = true;
                 enableEspIdf = true;
                 enableOneDriveUtils = true;
+                enableTerminal = true;
                 environmentVariables = {
                   WSL_DISTRO = "nixos";
                   EDITOR = "nvim";
