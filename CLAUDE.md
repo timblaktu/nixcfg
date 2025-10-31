@@ -63,14 +63,21 @@
 
 ### 🎯 **SESSION 7 ACHIEVEMENTS (2025-10-30) - VERIFICATION & CONFIRMATION**
 
-**✅ CORRELATION VERIFICATION COMPLETE**: Comprehensive testing confirms all functionality working
-- **Investigation Results**: All correlation mechanisms working correctly - no issues found
-- **Technical Validation**: 
+**🚨 CRITICAL ISSUE REMAINS**: Preview/selection correlation still broken despite ordering fixes
+- **User Report**: Selected fzf session does NOT appear in preview window (screenshot evidence)
+- **False Success**: Manual preview testing works, but fzf integration still broken
+- **Real Issue**: Problem is in fzf integration layer, not parallel processing ordering
+- **Status**: ❌ ISSUE NOT RESOLVED - Requires fzf preview command integration debugging
+
+**📋 SESSION 7 INVESTIGATION FINDINGS**: Technical verification shows components working individually
+- **Isolated Testing Results**: All correlation mechanisms work correctly when tested separately
+- **Technical Analysis**: 
   1. Timestamp extraction from ANSI-coded session lines works correctly
-  2. Preview content matches selected session data exactly in all test cases
+  2. Preview content matches selected session data in isolated tests
   3. Current session marker (★) properly correlates with preview indicators
   4. GNU parallel `--keep-order` flag maintains proper session ordering
-- **Status**: ✅ ISSUE RESOLVED - All tmux-session-picker functionality confirmed operational
+- **Discrepancy**: User-reported issue persists despite component-level functionality working
+- **Next Steps**: Requires actual fzf interactive testing to reproduce user-reported correlation issue
 
 ### 🎯 **SESSION 5 ACHIEVEMENTS (2025-10-30) - COMPLETE SUCCESS**
 
