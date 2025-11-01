@@ -219,38 +219,22 @@ flake-nixpkgs.nix      # nixpkgs fork only
 - Configuration duplication
 - Risk of configurations drifting apart
 
-### **🎯 RECOMMENDED HYBRID APPROACH**
+### **🎯 CORRECTED APPROACH: GIT WORKTREE SUPERPROJECT**
 
-**Primary Strategy**: Branch-Based Convention + Dynamic Resolution
-**Secondary Strategy**: Command-Line Overrides for adhoc testing
+**USER PREFERENCE**: Git worktree-based solution (NOT branch-based dynamic resolution)
 
-**Implementation Plan**:
-1. **Branch Convention**: Establish naming pattern that maps to input selections
-2. **Dynamic flake.nix**: Auto-detect branch and select appropriate inputs
-3. **Environment Overrides**: Allow `NIX_CONTEXT=upstream|dev|custom` override
-4. **Wrapper Scripts**: Simple commands for common operations
-5. **Clear Indicators**: Always show active context in shell prompt/status
+**RESEARCH REQUIRED**: 
+- **Location**: ~/src/git-worktree-superproject contains previous work on this approach
+- **Task**: Analyze existing implementation patterns and adapt for nixcfg multi-fork development
+- **Method**: Proper git mechanisms rather than flake.nix dynamic logic
 
-**Benefits**:
-- Low friction context switching (`git checkout main` vs `git checkout dev`)
-- Version controlled conventions
-- Override capabilities for testing
-- Clear visual feedback on active context
-- Maintains single flake.nix (with smart logic)
+**NEXT SESSION PRIORITY**:
+1. **Research existing worktree superproject implementation**
+2. **Understand previous patterns and lessons learned**  
+3. **Design git worktree approach for nixcfg fork/upstream switching**
+4. **Implement proper git-based solution**
 
-### **🔧 IMPLEMENTATION PRIORITIES**
-1. **Design branch naming convention** (main=upstream, dev=all-forks, etc.)
-2. **Create dynamic input resolution logic** in flake.nix
-3. **Implement context indicator system** (shell prompt, status command)
-4. **Create wrapper scripts** for common operations
-5. **Document context switching workflow** for team usage
-
-**Critical Success Factors**:
-- Zero friction for switching between contexts
-- Impossible to accidentally mix contexts
-- Clear visual indication of active context
-- Version controlled and shareable conventions
-- Graceful fallbacks when forks unavailable
+**Note**: Branch-based dynamic resolution approach rejected in favor of proper git worktree mechanism.
 
 ## 📋 **CURRENT TASKS** (2025-10-31)
 
@@ -259,13 +243,13 @@ flake-nixpkgs.nix      # nixpkgs fork only
 - [x] ✅ Restore working state with local nixpkgs fork and full feature set - COMPLETED 
 - [x] ✅ Document proper upgrade approach that maintains functionality - COMPLETED
 
-**Priority 1: Multi-Context Development System** (NEW TOP PRIORITY)
-- [ ] **CRITICAL**: Design and implement fork/upstream context switching system
-- [ ] Create branch naming convention (main=upstream, dev=all-forks, etc.)
-- [ ] Implement dynamic input resolution in flake.nix
-- [ ] Add context indicator system (shell prompt, status command)
-- [ ] Create wrapper scripts for common operations (hm-switch-dev, etc.)
-- [ ] Document context switching workflow
+**Priority 1: Git Worktree-Based Multi-Context System** (NEW TOP PRIORITY)
+- [ ] **CRITICAL**: Research existing git worktree approach at ~/src/git-worktree-superproject
+- [ ] Analyze previous worktree superproject implementation and patterns
+- [ ] Design git worktree-based fork/upstream context switching for nixcfg
+- [ ] Implement proper git worktree solution (NOT branch-based dynamic resolution)
+- [ ] Create worktree management scripts and documentation
+- [ ] Test worktree approach with nixcfg multi-fork development
 
 **Priority 2: Local Fork Development Resolution** (ENABLED by Priority 1)
 - [ ] Complete ongoing fork development in parallel with other work
