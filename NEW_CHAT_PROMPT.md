@@ -1,76 +1,102 @@
-# URGENT CORRECTION: Revert Destructive "Upgrade" and Restore Functionality
+# New Chat Session: Enhance git-worktree-superproject for Nix Flake Support
 
-## 🚨 **CRITICAL ISSUE IDENTIFIED**
+## 🎯 **MISSION STATEMENT**
 
-**Problem**: Previous session performed a destructive "upgrade" that disabled core system functionality to make tests pass artificially.
+Extend the existing git-worktree-superproject tool to support **Nix flakes as first-class superprojects**, enabling sophisticated per-workspace flake input management for multi-fork development scenarios.
 
-**What Was Broken**:
-- Claude Code configuration entirely disabled
-- MCP servers configuration commented out  
-- WSL integration disabled
-- Custom modules renamed to `.temp-disabled`
-- Switched to upstream nixpkgs (lacks our custom claude-code module)
+## 📋 **IMMEDIATE PRIORITY TASKS**
 
-**Current State**: System builds but has lost critical functionality.
+1. **Implement Nix flake detection in wt-super**
+   - Add flake.nix detection to workspace script
+   - Parse flake inputs and extract repository specifications
+   - Integrate with existing git config-based repository management
 
-## 🎯 **SINGLE FOCUSED TASK**
+2. **Add flake input configuration commands**
+   - Extend `workspace config` subcommands for flake inputs
+   - Support commands like `workspace config set-flake-input <workspace> <input> <url> [ref]`
+   - Store flake input overrides in git config (`workspace.flake.input.*`)
 
-**Objective**: Revert to the last working state before the destructive changes and restore full functionality.
+3. **Create per-workspace flake input override system**
+   - Generate workspace-specific flake.nix files with appropriate inputs
+   - Support mixing upstream and fork inputs per workspace
+   - Maintain backwards compatibility with existing wt-super functionality
 
-## 📊 **RECOVERY PLAN**
+4. **Test with nixcfg multi-fork development**
+   - Apply enhanced wt-super to nixcfg project
+   - Create workspaces for different input combinations (upstream, all-forks, nixpkgs-only)
+   - Validate parallel development workflow
 
-**Step 1**: Examine git history to find last working commit before destructive changes
-**Step 2**: Either revert the commit or manually restore disabled functionality  
-**Step 3**: Validate that restored system maintains all original features
-**Step 4**: Document what actually needs to be upgraded properly (without breaking functionality)
+## 🏗️ **TECHNICAL ARCHITECTURE**
 
-## 🔍 **WHAT TO EXAMINE**
+### **Current nixcfg Challenge**
+- Fork development (nixpkgs, home-manager, NixOS-WSL) blocks other work
+- Manual flake.nix input switching is error-prone and friction-heavy
+- Need parallel development: fork work AND mainstream development
 
-1. **Git History**:
-   ```bash
-   git log --oneline -10
-   git show HEAD~1  # Check state before destructive commit
-   ```
+### **Enhanced wt-super Solution**
+```
+nixcfg/                         # Enhanced with wt-super
+├── workspace                   # Enhanced script with flake support
+├── .git/config                 # Flake input preferences stored here
+├── flake.nix                   # Template flake (source of truth)
+└── worktrees/                  # Isolated workspace environments
+    ├── upstream/               # Uses upstream inputs
+    │   ├── flake.nix          # Generated with upstream inputs
+    │   └── ...                # Full nixcfg working tree
+    ├── dev/                   # Uses all forks
+    │   ├── flake.nix          # Generated with fork inputs
+    │   └── ...
+    └── nixpkgs-dev/           # Mixed: nixpkgs fork + upstream others
+        ├── flake.nix          # Generated with mixed inputs
+        └── ...
+```
 
-2. **Key Files That Were Broken**:
-   - `home/modules/claude-code.nix.temp-disabled` → Should be `claude-code.nix`
-   - `home/modules/mcp-servers.nix` → All functionality commented out
-   - `home/modules/base.nix` → Claude Code config commented out
-   - `flake.nix` → Switched to upstream instead of local forks
+### **Git Config Schema**
+```bash
+# Default flake inputs (inherited by all workspaces)
+git config workspace.flake.input.nixpkgs "github:NixOS/nixpkgs/nixos-unstable"
+git config workspace.flake.input.home-manager "github:nix-community/home-manager"
 
-3. **Functionality That Must Be Restored**:
-   - Claude Code with accounts (max, pro)
-   - MCP servers (context7, nixos, sequential-thinking)
-   - WSL integration and configurations
-   - Custom statusline and hooks
+# Workspace-specific overrides (stored in worktree config)
+cd worktrees/dev
+git config --worktree workspace.flake.input.nixpkgs "git+file:///home/tim/src/nixpkgs?ref=writers-auto-detection"
+git config --worktree workspace.flake.input.home-manager "git+file:///home/tim/src/home-manager?ref=feature-test-with-fcitx5-fix"
+```
 
-## ✅ **SUCCESS CRITERIA**
+## 🔍 **RESEARCH FOUNDATION**
 
-- [ ] All originally working functionality restored
-- [ ] Claude Code accounts working (max, pro)
-- [ ] MCP servers configured and accessible
-- [ ] WSL integration functional
-- [ ] System builds AND maintains full feature set
-- [ ] Ready for proper (non-destructive) upgrade approach
+**Location**: `~/src/git-worktree-superproject` (owned by user)
+**Status**: Researched and analyzed (completed in previous session)
 
-## 🚀 **RECOVERY APPROACH**
+**Key Patterns Identified**:
+- Git config-based repository specification system
+- Per-workspace override mechanisms via worktree config
+- Template and inheritance patterns for configuration
+- Proven multi-workspace isolation architecture
 
-1. **Assessment**: Check `git log` to understand what was working before
-2. **Decision**: Choose between `git revert` or manual restoration  
-3. **Restoration**: Bring back all disabled functionality
-4. **Validation**: Ensure everything works as it did before
-5. **Documentation**: Note what really needs upgrading vs. what was working fine
+## 🚀 **STRATEGIC IMPACT**
 
-## 🎯 **FOCUS DISCIPLINE**
+**Immediate Benefits**:
+- Eliminate fork development blocking other nixcfg work
+- Enable parallel upstream and fork development
+- Version-controlled workspace configurations
+- Reusable pattern for any Nix flake multi-repo development
 
-**This iteration**: ONLY restore working functionality
-**NOT this iteration**: Any new upgrades, pytest work, or feature additions
+**Innovation Opportunity**: Create industry-first integration of git worktrees with Nix flake input management
 
-The goal is to get back to a working baseline before attempting any actual improvements.
+## 📚 **CONTEXT FILES TO REVIEW**
 
-## 📝 **LESSON LEARNED**
+1. `~/src/git-worktree-superproject/workspace` - Base script to enhance
+2. `~/src/git-worktree-superproject/README.md` - Architecture documentation  
+3. `/home/tim/src/nixcfg/flake.nix` - Current flake structure to work with
+4. `/home/tim/src/nixcfg/CLAUDE.md` - Updated project memory with design
 
-Never disable core functionality to make tests pass. If there are compatibility issues, fix them properly or defer the upgrade until there's time to do it right.
+## 🎯 **SUCCESS CRITERIA**
 
-**Previous approach was wrong**: Disable features → Tests pass → "Success"
-**Correct approach should be**: Fix compatibility → Tests pass → Functionality maintained
+- [ ] Enhanced workspace script supports flake input detection and management
+- [ ] Per-workspace flake input overrides work via git config
+- [ ] nixcfg can be developed with parallel upstream/fork contexts
+- [ ] All existing wt-super functionality remains intact
+- [ ] Clean, documented, and reusable implementation
+
+**Start with**: Begin implementing Nix flake detection in the workspace script at `~/src/git-worktree-superproject/workspace`.

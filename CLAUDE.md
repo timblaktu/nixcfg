@@ -219,22 +219,35 @@ flake-nixpkgs.nix      # nixpkgs fork only
 - Configuration duplication
 - Risk of configurations drifting apart
 
-### **🎯 CORRECTED APPROACH: GIT WORKTREE SUPERPROJECT**
+### **🎯 CORRECTED APPROACH: ENHANCE GIT-WORKTREE-SUPERPROJECT FOR NIX FLAKES**
 
-**USER PREFERENCE**: Git worktree-based solution (NOT branch-based dynamic resolution)
+**USER INTENT**: Extend git-worktree-superproject to support Nix flakes as first-class superprojects
 
-**RESEARCH REQUIRED**: 
-- **Location**: ~/src/git-worktree-superproject contains previous work on this approach
-- **Task**: Analyze existing implementation patterns and adapt for nixcfg multi-fork development
-- **Method**: Proper git mechanisms rather than flake.nix dynamic logic
+**STRATEGIC VISION**: 
+- Add native Nix flake support to wt-super for input management
+- Store flake input specifications in git config metadata (like repository specs)
+- Enable per-workspace flake input overrides for fork/upstream switching
+- Make this a reusable pattern for any Nix flake multi-repository development
+
+**RESEARCH COMPLETED**: 
+- ✅ Analyzed wt-super architecture and configuration patterns
+- ✅ Identified git config-based repository specification system
+- ✅ Understood per-workspace override mechanisms
+
+**DESIGN REQUIREMENTS**:
+1. **Flake Input Detection**: Auto-detect flake.nix and extract input specifications
+2. **Input Configuration Storage**: Store input preferences in git config (workspace.flake.input.*)
+3. **Per-Workspace Input Overrides**: Allow workspace-specific input URL/ref overrides
+4. **Template System**: Generate flake.nix with appropriate inputs per workspace
+5. **Backwards Compatibility**: Maintain existing wt-super functionality
 
 **NEXT SESSION PRIORITY**:
-1. **Research existing worktree superproject implementation**
-2. **Understand previous patterns and lessons learned**  
-3. **Design git worktree approach for nixcfg fork/upstream switching**
-4. **Implement proper git-based solution**
+1. **Implement Nix flake detection in wt-super**
+2. **Add flake input configuration commands**
+3. **Create per-workspace flake input override system**
+4. **Test with nixcfg multi-fork development scenario**
 
-**Note**: Branch-based dynamic resolution approach rejected in favor of proper git worktree mechanism.
+**INNOVATION OPPORTUNITY**: Create industry-first git worktree + Nix flake integration
 
 ## 📋 **CURRENT TASKS** (2025-10-31)
 
@@ -243,13 +256,14 @@ flake-nixpkgs.nix      # nixpkgs fork only
 - [x] ✅ Restore working state with local nixpkgs fork and full feature set - COMPLETED 
 - [x] ✅ Document proper upgrade approach that maintains functionality - COMPLETED
 
-**Priority 1: Git Worktree-Based Multi-Context System** (NEW TOP PRIORITY)
-- [ ] **CRITICAL**: Research existing git worktree approach at ~/src/git-worktree-superproject
-- [ ] Analyze previous worktree superproject implementation and patterns
-- [ ] Design git worktree-based fork/upstream context switching for nixcfg
-- [ ] Implement proper git worktree solution (NOT branch-based dynamic resolution)
-- [ ] Create worktree management scripts and documentation
-- [ ] Test worktree approach with nixcfg multi-fork development
+**Priority 1: Enhance git-worktree-superproject for Nix Flakes** (NEW TOP PRIORITY)
+- [x] ✅ Research existing git worktree approach at ~/src/git-worktree-superproject
+- [x] ✅ Analyze previous worktree superproject implementation and patterns
+- [x] ✅ Design enhancement strategy for Nix flake support
+- [ ] **CRITICAL**: Implement Nix flake detection in wt-super
+- [ ] Add flake input configuration commands to workspace script
+- [ ] Create per-workspace flake input override system
+- [ ] Test enhanced wt-super with nixcfg multi-fork development
 
 **Priority 2: Local Fork Development Resolution** (ENABLED by Priority 1)
 - [ ] Complete ongoing fork development in parallel with other work
