@@ -1,150 +1,126 @@
-# New Chat Session: Integrate AST-Based URL Replacement into Workspace Script
+# NEXT Session Focus: Implement Expanded rnix-test Coverage
 
-## 🎯 **MISSION STATEMENT**
+## ✅ **COMPLETED IN PREVIOUS SESSION**
 
-Replace the current text-processing approach in the git-worktree-superproject workspace script with the production-ready AST-based selective reconstruction system we just completed, finalizing the Nix flake multi-context development solution.
+**Critical Analysis Task Completed Successfully**:
+1. ✅ **Current test coverage analysis**: 26 passing tests across 8 files with comprehensive basic coverage
+2. ✅ **flake-parts research**: Advanced patterns including module input access, perSystem distinctions, custom module arguments  
+3. ✅ **Nested flake research**: Direct flake references, transitive input chains, complex follows patterns
+4. ✅ **Coverage gap identification**: 4 specific pattern categories needing test implementation
 
-## ✅ **MAJOR BREAKTHROUGH ACHIEVED (2025-11-01)**
+## 🎯 **IMMEDIATE PRIORITY FOR THIS SESSION**
 
-### **Complete AST-Based Selective Reconstruction System - WORKING**
-- **✅ Production-ready API**: `find_url_string_path()` and `reconstruct_with_replacement()` functions
-- **✅ Perfect structure preservation**: Comments, whitespace, formatting completely maintained
-- **✅ Real-world validated**: Works with actual nixcfg flake.nix (2285 bytes)
-- **✅ Performance optimized**: Sub-100ms reconstruction for 50+ input structures  
-- **✅ Comprehensive testing**: 17 passing tests covering all edge cases
-- **✅ Error handling**: Graceful failure for malformed input and non-existent URLs
+### **Priority 1: Implement Test Coverage for Discovered Patterns** 🔥 **START HERE**
 
-### **Key Technical Achievement**
-**Industry-first selective Nix AST reconstruction with green node copying optimization**
-- Replaces only target URLs while preserving all other content byte-perfectly
-- Uses `children_with_tokens()` approach to maintain exact formatting
-- Leverages rowan's GreenNodeBuilder for efficient tree reconstruction
+**Mission**: Implement comprehensive test coverage for the 4 discovered pattern categories that are missing from current test suite.
 
-### **Current Implementation Location**
-- **Working system**: `/home/tim/src/nixcfg/rnix-test/` (comprehensive test validation)
-- **Ready for integration**: Production APIs available for workspace script integration
+**Implementation Strategy**: Create focused test files for each pattern category with production-realistic test cases.
 
-## 🎯 **IMMEDIATE TASK: Replace Text Processing with AST-Based System**
+### **Required Test Implementation** (Choose ONE to start):
 
-### **Current State**
-The enhanced git-worktree-superproject has basic flake input support using text processing, but needs AST-based precision for production use.
+#### **Option A: flake-parts Advanced Patterns** 
+**File**: `src/flake_parts_advanced_tests.rs`
+**Test Cases**:
+1. **Module Input Access Pattern**: Test `_module.args.origInputs = inputs` pattern for passing inputs to separate modules
+2. **perSystem Input Distinction**: Test `inputs'` vs `inputs` access patterns within perSystem modules  
+3. **Custom Module Arguments**: Test custom pkgs definitions with overlays via module arguments
 
-### **Integration Strategy**
+#### **Option B: Nested Flake Input Patterns**
+**File**: `src/nested_flake_tests.rs` 
+**Test Cases**:
+1. **Direct Flake Reference**: Test flakes referencing other repositories that are themselves flakes
+2. **Transitive Input Chains**: Test flake A → flake B → flake C dependency patterns
+3. **Complex Follows Chains**: Test `mynixpkgs.follows = "dotfiles/nixpkgs"` transitivity patterns
 
-**Phase 1: Copy AST Implementation (THIS SESSION)**
-1. **Copy working modules**: Move `selective_reconstruction.rs` and dependencies from `rnix-test/` to workspace script
-2. **Add Rust dependencies**: Ensure `rnix` and `rowan` are available in workspace script environment
-3. **Create flake URL replacement function**: Wrap the AST reconstruction in a user-friendly interface
+#### **Option C: Git Submodule Patterns** 
+**File**: `src/submodule_input_tests.rs`
+**Test Cases**:
+1. **Submodule URL Parameters**: Test `git+https://...?submodules=1` pattern
+2. **Manual Submodule Inputs**: Test `{ url = "./sub"; flake = false; }` patterns
+3. **Local Submodule References**: Test `git+file://...?submodules=1` patterns
 
-**Phase 2: Replace Text-Processing Logic (THIS SESSION)**
-1. **Identify current text-processing**: Locate where flake inputs are currently modified
-2. **Replace with AST calls**: Use `find_url_string_path()` and `reconstruct_with_replacement()`  
-3. **Preserve existing interface**: Maintain the same command-line interface users expect
-4. **Add validation**: Ensure modified flakes pass `nix flake check`
+#### **Option D: Self-Reference Patterns**
+**File**: `src/self_reference_tests.rs` 
+**Test Cases**:
+1. **Output Composition**: Test `${self.packages.x86_64-linux.base}` references
+2. **Self Input Access**: Test `self` special input handling in AST modification
+3. **Recursive Reference Chains**: Test when outputs reference other outputs from same flake
 
-**Phase 3: Testing & Documentation (THIS SESSION)**
-1. **Test with real nixcfg**: Validate the integration works with actual fork development scenario
-2. **Create usage examples**: Document the new AST-based approach
-3. **Performance validation**: Ensure sub-second response times for typical use cases
+## 📋 **SPECIFIC TASKS FOR THIS SESSION**
 
-## 🔧 **TECHNICAL IMPLEMENTATION PRIORITIES**
+### **Task 1: Choose Implementation Focus** (START HERE)
+1. Select ONE of the 4 pattern categories above (recommend starting with Option A - flake-parts advanced)
+2. Navigate to `/home/tim/src/nixcfg/rnix-test/src/`
+3. Create the new test file for chosen pattern category
+4. Implement first test case with AST-based URL replacement validation
 
-### **Priority 1: Environment Setup (THIS SESSION)**
-1. **Determine integration approach**: How to make Rust AST code available to workspace script
-   - Option A: Compile to standalone binary and call from script
-   - Option B: Embedded Rust in shell script (if supported)
-   - Option C: Python wrapper calling Rust library
-   - **Recommended**: Option A (standalone binary) for simplicity and reliability
+### **Task 2: Test Implementation Standards**
+**Critical Requirements**:
+- Use existing `find_url_string_path` and `reconstruct_with_replacement` functions from selective_reconstruction.rs
+- Test both structure preservation AND successful URL replacement
+- Validate syntax with `Root::parse()` after modification
+- Include realistic flake patterns based on research findings
+- Test edge cases and error conditions
 
-2. **Create `flake-input-modifier` binary**: Standalone tool for AST-based URL replacement
-   ```bash
-   flake-input-modifier flake.nix input-name old-url new-url
-   # Returns: modified flake.nix content to stdout
-   ```
+**Test Template Pattern**:
+```rust
+#[test]
+fn test_pattern_name() {
+    let input = r#"{ /* realistic flake pattern */ }"#;
+    let parse_result = Root::parse(input);
+    let tree = parse_result.tree();
+    
+    if let Some(expr) = tree.expr() {
+        let node = expr.syntax();
+        
+        if let Some(path) = find_url_string_path(node, "target-url") {
+            let mut builder = GreenNodeBuilder::new();
+            assert!(reconstruct_with_replacement(&mut builder, node, &path, 0, "new-url").is_ok());
+            
+            let result = builder.finish();
+            let new_tree = rnix::SyntaxNode::new_root(result);
+            let result_text = new_tree.text().to_string();
+            
+            // Verify replacement + structure preservation + syntax validation
+        }
+    }
+}
+```
 
-### **Priority 2: Replace Text Processing (THIS SESSION)**
-1. **Locate current implementation**: Find text-processing logic in workspace script
-2. **Replace with AST calls**: Integrate the new binary into existing workflow
-3. **Validate output**: Ensure modified flakes maintain syntax correctness
-4. **Error handling**: Graceful fallback if AST modification fails
+### **Task 3: Integration Readiness Validation**
+After implementing test coverage:
+1. Run `cargo test` to ensure all tests pass
+2. Validate that AST system handles the new patterns correctly
+3. Update CLAUDE.md with implementation progress
+4. Assess readiness for workspace script integration
 
-### **Priority 3: Multi-Input Support (THIS SESSION)**
-1. **Batch processing**: Handle multiple input URL changes in single operation
-2. **Workspace configuration**: Update input specifications to work with new system
-3. **Validation pipeline**: Ensure all changes result in valid, working flakes
+## 🔧 **CONTEXT: Integration Work Status**
 
-## 📁 **CURRENT WORKING ENVIRONMENT**
+**What's Already Done**: Complete AST-based flake input modification integration (commit 895f70c on dev branch)
+- ✅ **flake-input-modifier binary**: Production-ready standalone tool
+- ✅ **workspace script integration**: Enhanced wt-super with Nix flake support  
+- ✅ **AST capabilities**: Perfect structure preservation for existing test patterns
 
-### **Working AST Implementation**
-- **Location**: `/home/tim/src/nixcfg/rnix-test/src/selective_reconstruction.rs`
-- **Status**: Production-ready with comprehensive testing
-- **Dependencies**: `rnix = "0.12.0"`, `rowan = "0.15.17"`
-- **Test coverage**: 17 passing tests including real-world validation
+**What's Missing**: Validation that AST system handles ALL real-world flake patterns, not just the basic ones currently tested.
 
-### **Target Integration Location**
-- **Workspace script**: `~/src/git-worktree-superproject/workspace` (enhanced with Nix flake support)
-- **Integration point**: Where flake input URLs are currently modified via text processing
-- **Expected outcome**: AST-based precision replacement for text-processing approach
+**Why This Matters**: The workspace integration is functional but premature without comprehensive test validation. Must ensure robustness before considering it production-ready.
 
-### **Test Environment**
-- **Target flake**: `/home/tim/src/nixcfg/flake.nix` (2285 bytes)
-- **Test scenario**: Replace `home-manager` URL from fork to upstream
-- **Validation**: `nix flake check` must pass after modification
+## 🎯 **SUCCESS CRITERIA**
 
-## 🎯 **SUCCESS CRITERIA FOR THIS SESSION**
+### **Session Goals**:
+1. **✅ Implement expanded test coverage**: At least ONE complete pattern category with multiple test cases
+2. **✅ Validate AST robustness**: Ensure AST system handles advanced patterns correctly  
+3. **📋 Clear implementation roadmap**: Updated task queue for remaining pattern categories
+4. **📊 Integration readiness assessment**: Determine if workspace integration is truly production-ready
 
-### **Core Integration Achievements**
-1. **✅ Working binary**: `flake-input-modifier` tool created and functional
-2. **✅ Workspace integration**: Text processing replaced with AST-based calls
-3. **✅ Real-world validation**: Successfully modifies nixcfg flake.nix inputs
-4. **✅ Validation pipeline**: Modified flakes pass `nix flake check`
-5. **✅ Performance confirmed**: Sub-second response times for typical operations
-
-### **Enhanced Multi-Context Development**
-1. **✅ Fork ↔ upstream switching**: Seamless context switching for development
-2. **✅ Multiple input support**: Can modify multiple inputs in single operation
-3. **✅ Structure preservation**: Comments, formatting, and non-target content unchanged
-4. **✅ Error resilience**: Graceful handling of edge cases and invalid input
-
-## 🚀 **STRATEGIC IMPACT UPON COMPLETION**
-
-### **Development Workflow Revolution**
-- **Parallel development**: Fork work AND other nixcfg development can proceed simultaneously
-- **Context switching**: Instant switching between development contexts
-- **Zero friction**: No manual flake.nix editing or git branch management required
-- **Precision**: AST-based modifications ensure perfect structure preservation
-
-### **Technical Innovation**
-- **Industry-first**: Multi-repository Nix flake development environment
-- **Reusable pattern**: Template for any complex multi-fork development scenario
-- **AST-based tooling**: Production example of rnix/rowan AST manipulation
-
-## 📋 **SPECIFIC IMPLEMENTATION TASKS**
-
-### **Task 1: Create Standalone Binary (START HERE)**
-1. **Copy AST implementation**: Move working code from `rnix-test/` to new project
-2. **Create CLI interface**: Accept flake path, input name, and new URL as arguments
-3. **Validate functionality**: Test with actual nixcfg flake.nix
-4. **Build system**: Ensure binary can be compiled and used by workspace script
-
-### **Task 2: Integrate with Workspace Script**
-1. **Locate text processing**: Find where flake input modifications currently happen
-2. **Replace with binary calls**: Use new `flake-input-modifier` tool
-3. **Preserve interface**: Maintain existing workspace script commands and behavior
-4. **Add validation**: Verify modified flakes with `nix flake check`
-
-### **Task 3: Test End-to-End Workflow**
-1. **Fork development scenario**: Test switching nixcfg from fork to upstream contexts
-2. **Multiple input changes**: Verify batch processing of multiple URL changes
-3. **Error handling**: Test with invalid inputs and verify graceful failures
-4. **Performance validation**: Confirm sub-second response times
+### **Quality Standards**:
+- Tests must use realistic, production-based flake patterns
+- All tests must validate both replacement success AND structure preservation
+- Test implementation must follow existing patterns and coding standards
+- Error conditions and edge cases must be covered
 
 ## 🎯 **START HERE**
 
-**Begin with**: Creating the standalone `flake-input-modifier` binary by copying the working AST implementation from `rnix-test/` and wrapping it in a CLI interface.
+Begin with **Option A: flake-parts Advanced Patterns** - create `src/flake_parts_advanced_tests.rs` and implement the Module Input Access Pattern test case using the research findings from the previous session.
 
-**Target outcome**: Production-ready tool that can replace text processing with AST-based precision, enabling the completion of the enhanced git-worktree-superproject for Nix flakes.
-
-**⚠️ CRITICAL SUCCESS FACTOR**: The integration must maintain the same user experience while providing AST-based precision. Users should see no difference except improved reliability and structure preservation.
-
-**Milestone target**: Complete integration replacing text processing with AST-based modification, achieving the first production multi-context Nix flake development environment.
+**Remember**: The goal is validation and robustness testing, not new feature development. The AST system is already complete - we're proving it works correctly with advanced real-world patterns.
