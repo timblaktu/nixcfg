@@ -265,9 +265,12 @@ flake-nixpkgs.nix      # nixpkgs fork only
 
 **Priority 0: rnix-test Test Coverage Validation and Expansion** 🔥 **IMMEDIATE**
 - [x] ✅ **Analyze current test coverage**: Document existing cargo tests in rnix-test/ and their coverage - **COMPLETED (2025-11-01)**
-  - **26 passing tests** across 8 test files with comprehensive coverage for basic and advanced patterns
+  - **41 passing tests** across 11 test files with comprehensive coverage for basic and advanced patterns - **UPDATED (2025-11-01)**
   - ✅ **comprehensive_tests.rs** (9 tests): Core AST replacement, structure preservation, error handling, performance
   - ✅ **advanced_flake_patterns_tests.rs** (9 tests): Git+SSH URLs, FlakeHub, subdirectories, tarball URLs, basic flake-parts, follows chains, non-flake inputs, conditional inputs
+  - ✅ **flake_parts_advanced_tests.rs** (4 tests): Advanced flake-parts patterns - **COMPLETED (2025-11-01)**
+  - ✅ **nested_flake_tests.rs** (6 tests): Nested flake patterns - **NEWLY ADDED (2025-11-01)**
+  - ✅ **submodule_input_tests.rs** (5 tests): Git submodule patterns - **NEWLY ADDED (2025-11-01)**
   - ✅ **selective_reconstruction.rs** (3 tests): Green node copying, AST reconstruction mechanics
   - ✅ **real_flake_test.rs** (1 test): Production nixcfg flake.nix validation
   - ✅ **Basic flake-parts**: Simple modular pattern with imports tested
@@ -276,10 +279,10 @@ flake-nixpkgs.nix      # nixpkgs fork only
   - ✅ **Nested flake patterns**: Direct flake references, transitive input chains, complex follows patterns
   - ✅ **Git submodule patterns**: URL parameters (?submodules=1), manual submodule inputs
   - ✅ **Self-reference patterns**: Output composition with self references
-- [ ] **Expand test coverage**: Implement tests for all discovered edge cases
-  - [ ] **flake-parts advanced support**: Module input access patterns, perSystem input distinctions, custom module arguments
-  - [ ] **nested flakes**: Direct flake references, transitive input chains, complex follows patterns  
-  - [ ] **git submodule patterns**: ?submodules=1 URLs, manual submodule as input patterns
+- [x] ✅ **Expand test coverage**: Implement tests for all discovered edge cases - **MAJOR PROGRESS (2025-11-01)**
+  - [x] ✅ **flake-parts advanced support**: Module input access patterns, perSystem input distinctions, custom module arguments - **COMPLETED (2025-11-01)**
+  - [x] ✅ **nested flakes**: Direct flake references, transitive input chains, complex follows patterns - **COMPLETED (2025-11-01)**
+  - [x] ✅ **git submodule patterns**: ?submodules=1 URLs, manual submodule as input patterns - **COMPLETED (2025-11-01)**
   - [ ] **self-reference patterns**: Output composition with self references
 
 **Priority 1: Integration Work (ALREADY DONE - NEEDS VALIDATION)** ⚠️ **PREMATURE**
