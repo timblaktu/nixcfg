@@ -102,13 +102,13 @@ in
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 coalesce_config
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
               # Production Claude detection logic (v2.0: check for --settings flag)
               if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
                 coalesce_config
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
               # PID-based single instance management
@@ -118,7 +118,7 @@ in
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
                   coalesce_config
-                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -137,7 +137,7 @@ in
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
             '';
           in
           mkClaudeWrapperScript {
@@ -177,7 +177,7 @@ in
                               # Production Claude detection logic  
                               if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
                                 coalesce_config
-                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                               fi
 
                               # PID-based single instance management
@@ -187,7 +187,7 @@ in
                                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                                   echo "   Using existing instance..."
                                   coalesce_config
-                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                                 else
                                   echo "🧹 Cleaning up stale PID file..."
                                   rm -f "$pidfile"
@@ -205,7 +205,7 @@ in
                               # Store PID and execute
                               echo $$ > "$pidfile"
                               coalesce_config
-                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                       '';
                     in
                     mkClaudeWrapperScript {
@@ -263,13 +263,13 @@ in
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 coalesce_config
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
               # Production Claude detection logic (v2.0: check for --settings flag)
               if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
                 coalesce_config
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
               # PID-based single instance management
@@ -279,7 +279,7 @@ in
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
                   coalesce_config
-                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -298,7 +298,7 @@ in
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
             '';
           in
           mkClaudeWrapperScript {
@@ -343,13 +343,13 @@ in
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 coalesce_config
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
               # Production Claude detection logic (v2.0: check for --settings flag)
               if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
                 coalesce_config
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
               # PID-based single instance management
@@ -359,7 +359,7 @@ in
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
                   coalesce_config
-                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
                   rm -f "$pidfile"
@@ -378,7 +378,7 @@ in
             
               # Store PID and execute
               echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" "$@"
+              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
             '';
           in
           mkClaudeWrapperScript {
