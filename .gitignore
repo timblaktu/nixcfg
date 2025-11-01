@@ -54,3 +54,8 @@ claude-runtime/
 
 # Personal migration instructions (contains sensitive information)
 SECRETS-USER-INSTRUCTIONS.md
+
+# Rust build artifacts
+*/target/
+**/target/
+*.pdb

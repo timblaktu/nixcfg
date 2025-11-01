@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["NixLanguage","NodeOrToken","SyntaxKind","TokenAtOffset","WalkEvent"],"macro":["T","match_ast"],"mod":["ast","parser","tokenizer"],"struct":["Parse","TextRange","TextSize"],"type":["SyntaxElement","SyntaxElementChildren","SyntaxNode","SyntaxNodeChildren","SyntaxToken"]};

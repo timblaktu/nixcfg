@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["demonstrate_rnix_immutability","explore_modification_apis","test_node_mutability","test_tree_reconstruction_approach"]};

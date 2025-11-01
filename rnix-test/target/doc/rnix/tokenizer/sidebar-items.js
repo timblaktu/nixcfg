@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["tokenize"],"struct":["Tokenizer"],"type":["Token"]};
