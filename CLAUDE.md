@@ -20,48 +20,122 @@
 
 ## 🔧 **IMPORTANT PATHS**
 
-1. `/home/tim/src/nixpkgs` - Local nixpkgs fork
-2. `/home/tim/src/home-manager` - Local home-manager fork  
-3. `/home/tim/src/NixOS-WSL` - WSL-specific configurations
+1. `/home/tim/src/nixpkgs` - Local nixpkgs fork (active development: writers-auto-detection)
+2. `/home/tim/src/home-manager` - Local home-manager fork (active development: autoValidate + fcitx5 fixes)  
+3. `/home/tim/src/NixOS-WSL` - WSL-specific configurations (active development: plugin shim integration)
+
+## 🚧 **ACTIVE FORK DEVELOPMENT STATUS** (2025-10-31)
+
+### **nixpkgs Fork Development**
+**Branch**: `writers-auto-detection` (ahead 1 commit)
+**Status**: Feature development in progress
+**Feature**: Automatic file type detection for nixpkgs writers
+- ✅ lib.fileTypes module for automatic detection
+- ✅ autoWriter function implementation  
+- ✅ autoWriterBin for executable binary creation
+- 🔧 Working debug harness (debug-autowriter.nix)
+- 📋 **Upstream Goal**: Submit as RFC/PR for nixpkgs inclusion
+
+### **home-manager Fork Development**  
+**Branches**: 
+- `auto-validate-feature` (current) - autoValidate feature
+- `feature-test-with-fcitx5-fix` - fcitx5 compatibility fix
+**Status**: Multiple features in development
+**Features**:
+1. **autoValidate Integration**: Automatic validation for home.file
+   - ✅ Source attribute conflict resolution (mkMerge)
+   - 🔧 Integration with file-type detection
+2. **fcitx5 Package Path Fix**: Compatibility with recent nixpkgs
+   - ✅ Updated package path (libsForQt5.fcitx5-with-addons → fcitx5-with-addons)
+- 📋 **Upstream Goal**: Submit both features for home-manager inclusion
+
+### **NixOS-WSL Fork Development**
+**Branches**:
+- `plugin-shim-integration` (current) - Plugin architecture development
+- `feature/bare-mount-support` - Enhanced mount automation
+**Status**: Advanced plugin architecture development  
+**Features**:
+1. **Plugin Shim Integration**: WSL plugin communication via VSOCK
+   - ✅ VSOCK-based communication
+   - ✅ Windows container builds integration
+   - ✅ Comprehensive documentation (331+ lines)
+   - ✅ Test infrastructure updates
+2. **Bare Mount Support**: Enhanced WSL mount automation
+   - ✅ Comprehensive automation support
+   - ✅ Idempotent Windows script generation
+- 📋 **Upstream Goal**: Major feature contribution to NixOS-WSL project
+
+### **⚠️ CRITICAL DEVELOPMENT DEPENDENCIES**
+1. **Cross-Fork Integration**: nixpkgs autoWriter used by home-manager autoValidate
+2. **Active Development**: All forks have significant uncommitted/unpushed work
+3. **Upstream Timing**: Features need coordination for proper upstream submission
+4. **Breaking Changes Risk**: Major upgrades could conflict with ongoing development
+
+### **🎯 FORK RESOLUTION STRATEGY**
+**Phase 1: Feature Completion**
+- Complete nixpkgs writers-auto-detection testing
+- Finalize home-manager autoValidate integration
+- Complete NixOS-WSL plugin shim documentation
+
+**Phase 2: Upstream Coordination**  
+- Prepare nixpkgs RFC for autoWriter feature
+- Submit home-manager PRs for autoValidate + fcitx5 fixes
+- Coordinate NixOS-WSL plugin architecture contribution
+
+**Phase 3: Synchronized Upgrades**
+- Only after upstream acceptance or feature stability
+- Maintain local forks until upstream integration complete
 
 ## 📋 **CURRENT TASKS** (2025-10-31)
 
-**Priority 0: CRITICAL CORRECTION NEEDED**
-- [ ] **URGENT**: Revert destructive "upgrade" that disabled core functionality
-- [ ] Restore working state with local nixpkgs fork and full feature set
-- [ ] Document proper upgrade approach that maintains functionality
+**Priority 0: CRITICAL CORRECTION** ✅ **COMPLETED**
+- [x] ✅ **URGENT**: Revert destructive "upgrade" that disabled core functionality - COMPLETED
+- [x] ✅ Restore working state with local nixpkgs fork and full feature set - COMPLETED 
+- [x] ✅ Document proper upgrade approach that maintains functionality - COMPLETED
 
-**Priority 1: Proper Infrastructure Updates** (DEFERRED until correction)
+**Priority 1: Local Fork Development Resolution** (NEW TOP PRIORITY)
+- [ ] **CRITICAL**: Complete ongoing fork development before major upgrades
+- [ ] Coordinate nixpkgs writers-auto-detection feature for upstream submission
+- [ ] Resolve home-manager autoValidate feature development  
+- [ ] Complete NixOS-WSL plugin shim integration work
+- [ ] Plan fork synchronization strategy with upstream
+
+**Priority 2: Infrastructure Updates** (DEFERRED - awaiting fork resolution)
 - [x] ✅ Review pytest + NixOS test framework integration documentation (NIXOS-PYTEST.md) - COMPLETED
-- [ ] Plan proper upgrade strategy that maintains all functionality
+- [ ] Plan upgrade strategy that maintains fork development work (LOW PRIORITY)
 
-**Note**: Session ready for development work. NIXOS-PYTEST.md contains complete implementation plan for surgical pytest integration at testScript interface layer.
+**Note**: Major package upgrades deferred until active fork development is resolved to prevent conflicts.
 
-**Priority 2: Test Infrastructure Development** 
+**Priority 3: Test Infrastructure Development** (DEFERRED - post fork resolution)
 - [ ] Design test infrastructure architecture for unified Nix configuration
 - [ ] Create tests/lib.nix helper for NixOS test framework integration
 - [ ] Add checks output to flake.nix for test integration
 - [ ] Create base VM configuration template for test environments
 
-**Priority 3: Core Validation Tests**
+**Priority 4: Core Validation Tests** (DEFERRED - post fork resolution)
 - [ ] Implement Home Manager configuration validation tests
 - [ ] Test Claude Code configuration deployment across platforms
 - [ ] Validate shell environment configurations (zsh, bash) in test VMs
 - [ ] Create development tools validation tests (git, editors, etc.)
 
-**Priority 4: Multi-Platform Testing**
+**Priority 5: Multi-Platform Testing** (DEFERRED - post fork resolution)
 - [ ] Create multi-architecture testing (x86_64, aarch64) validation
 - [ ] Develop WSL-specific functionality tests with nested virtualization
 - [ ] Implement cross-platform package compatibility tests
 
-**Priority 5: CI/CD & Documentation**
+**Priority 6: CI/CD & Documentation** (DEFERRED - post fork resolution)  
 - [ ] Set up CI/CD integration for automated test execution
 - [ ] Document testing workflow and debugging procedures
 
+**Priority 7: pytest Integration** (DEFERRED - post fork resolution)
+- [ ] Implement pytest fixture interface for NixOS test framework (surgical integration)
+- [ ] Complete NIXOS-PYTEST.md implementation plan
+
 ## 🎯 **SESSION CONTEXT**
 
-**Current Focus**: NixOS Test Framework with surgical pytest fixture integration for multi-platform validation
-**Innovation Goal**: "Dog food" pytest fixture interface before upstream contribution (RFC candidate)
+**Current Focus**: Local fork development resolution and coordination before major system upgrades
+**Critical Priority**: Complete ongoing feature development in nixpkgs, home-manager, and NixOS-WSL forks
+**Strategic Goal**: Successful upstream contribution of developed features before major package updates
 
 **Pytest Integration Approach** (from NIXOS-PYTEST.md):
 - **Surgical scope**: Only touches testScript interface layer, not VM infrastructure
