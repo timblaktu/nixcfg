@@ -55,17 +55,17 @@
                   explorer = "explorer.exe .";
                 };
               };
-              targets.wsl = {
-                enable = true;
-                windowsUsername = "timbl";
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
-                };
-                bindMountRoot.enable = true;
-              };
+              # targets.wsl = {  # Disabled - using upstream nixpkgs
+              #   enable = true;
+              #   windowsUsername = "timbl";
+              #   windowsTools = {
+              #     enablePowerShell = true;
+              #     enableCmd = false;
+              #     enableWslPath = true;
+              #     wslPathPath = "/bin/wslpath";
+              #   };
+              #   bindMountRoot.enable = true;
+              # };
             }
             ../hosts/thinky-ubuntu
             # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration
@@ -108,18 +108,18 @@
               home.packages = with pkgs; [
                 wslu
               ];
-              targets.wsl = {
-                enable = true;
-                windowsUsername = "timbl";
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
-                };
-                # Disable bind mount - handled by NixOS-WSL module
-                bindMountRoot.enable = false;
-              };
+              # targets.wsl = {  # Disabled - using upstream nixpkgs
+              #   enable = true;
+              #   windowsUsername = "timbl";
+              #   windowsTools = {
+              #     enablePowerShell = true;
+              #     enableCmd = false;
+              #     enableWslPath = true;
+              #     wslPathPath = "/bin/wslpath";
+              #   };
+              #   # Disable bind mount - handled by NixOS-WSL module
+              #   bindMountRoot.enable = false;
+              # };
             }
             # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration
             ../home/modules/mcp-servers.nix
