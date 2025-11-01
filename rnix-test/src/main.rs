@@ -7,6 +7,9 @@ mod simple_reconstruction;
 mod selective_reconstruction;
 mod real_flake_test;
 mod comprehensive_tests;
+mod advanced_flake_patterns_tests;
+mod flake_parts_advanced_tests;
+mod nested_flake_tests;
 
 fn main() {
     println!("=== rnix-parser flake.nix evaluation ===");
