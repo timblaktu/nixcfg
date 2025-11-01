@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["text_size",[["impl&lt;S&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.89.0/core/ops/arith/trait.SubAssign.html\" title=\"trait core::ops::arith::SubAssign\">SubAssign</a>&lt;S&gt; for <a class=\"struct\" href=\"text_size/struct.TextRange.html\" title=\"struct text_size::TextRange\">TextRange</a><div class=\"where\">where\n    <a class=\"struct\" href=\"text_size/struct.TextRange.html\" title=\"struct text_size::TextRange\">TextRange</a>: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.89.0/core/ops/arith/trait.Sub.html\" title=\"trait core::ops::arith::Sub\">Sub</a>&lt;S, Output = <a class=\"struct\" href=\"text_size/struct.TextRange.html\" title=\"struct text_size::TextRange\">TextRange</a>&gt;,</div>"],["impl&lt;S&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.89.0/core/ops/arith/trait.SubAssign.html\" title=\"trait core::ops::arith::SubAssign\">SubAssign</a>&lt;S&gt; for <a class=\"struct\" href=\"text_size/struct.TextSize.html\" title=\"struct text_size::TextSize\">TextSize</a><div class=\"where\">where\n    <a class=\"struct\" href=\"text_size/struct.TextSize.html\" title=\"struct text_size::TextSize\">TextSize</a>: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.89.0/core/ops/arith/trait.Sub.html\" title=\"trait core::ops::arith::Sub\">Sub</a>&lt;S, Output = <a class=\"struct\" href=\"text_size/struct.TextSize.html\" title=\"struct text_size::TextSize\">TextSize</a>&gt;,</div>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1446]}

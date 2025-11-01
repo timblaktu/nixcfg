@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extract_url_value","extract_url_value_for_input","find_input_by_name","find_inputs_section","main","test_multiple_inputs","test_url_replacement"],"mod":["greennode_research","mutation_research","simple_reconstruction"]};

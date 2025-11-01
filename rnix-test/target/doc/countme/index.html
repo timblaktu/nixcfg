@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A library to quickly get the live/total/max counts of allocated instances."><title>countme - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-84e720fa.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="countme" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0 (29483883e 2025-08-04) (built from a source tarball)" data-channel="1.89.0" data-search-js="search-92309212.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-fd3af306.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../countme/index.html">countme</a><span class="version">3.0.1</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#example" title="Example">Example</a></li><li><a href="#configuration" title="Configuration">Configuration</a></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>countme</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/countme/lib.rs.html#1-193">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A library to quickly get the live/total/max counts of allocated instances.</p>
+<h2 id="example"><a class="doc-anchor" href="#example">§</a>Example</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>
+<span class="attr">#[derive(Default)]
+</span><span class="kw">struct </span>Widget {
+  _c: countme::Count&lt;<span class="self">Self</span>&gt;,
+}
+
+countme::enable(<span class="bool-val">true</span>);
+
+<span class="kw">let </span>w1 = Widget::default();
+<span class="kw">let </span>w2 = Widget::default();
+<span class="kw">let </span>w3 = Widget::default();
+drop(w1);
+
+<span class="kw">let </span>counts = countme::get::&lt;Widget&gt;();
+<span class="macro">assert_eq!</span>(counts.live, <span class="number">2</span>);
+<span class="macro">assert_eq!</span>(counts.max_live, <span class="number">3</span>);
+<span class="macro">assert_eq!</span>(counts.total, <span class="number">3</span>);
+
+<span class="macro">eprintln!</span>(<span class="string">"{}"</span>, countme::get_all());</code></pre></div>
+<h2 id="configuration"><a class="doc-anchor" href="#configuration">§</a>Configuration</h2>
+<p>By default, the implementation compiles to no-ops. Therefore it is possible
+to include <code>Count</code> fields into library types.</p>
+<p>The <code>enable</code> cargo feature ungates the counting code. The feature can be
+enabled anywhere in the crate graph.</p>
+<p>At run-time, the counters are controlled with <a href="fn.enable.html" title="fn countme::enable"><code>enable</code></a> function. Counting
+is enabled by default if <code>print_at_exit</code> feature is enabled. Otherwise
+counting is disabled by default. Call <code>enable(true)</code> early in <code>main</code> to enable:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">fn </span>main() {
+    countme::enable(std::env::var(<span class="string">"COUNTME"</span>).is_ok());
+}</code></pre></div>
+<p>The code is optimized for the case where counting is not enabled at runtime
+(counting is a relaxed load and a branch to a function call).</p>
+<p>The <code>print_at_exit</code> Cargo feature uses <code>atexit</code> call to print final counts
+before the program exits (it also enables counting at runtime). Use it only
+when you can’t modify the main to print counts – <code>atexit</code> is not guaranteed
+to work with rust’s runtime.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.AllCounts.html" title="struct countme::AllCounts">AllCounts</a></dt><dd>A collection of counts for all types.</dd><dt><a class="struct" href="struct.Count.html" title="struct countme::Count">Count</a></dt><dd>Store this inside your struct as <code>_c: countme::Count&lt;Self&gt;</code>.</dd><dt><a class="struct" href="struct.Counts.html" title="struct countme::Counts">Counts</a></dt></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.enable.html" title="fn countme::enable">enable</a></dt><dd>Enable or disable counting at runtime.</dd><dt><a class="fn" href="fn.get.html" title="fn countme::get">get</a></dt><dd>Returns the counts for the <code>T</code> type.</dd><dt><a class="fn" href="fn.get_all.html" title="fn countme::get_all">get_all</a></dt><dd>Returns a collection of counts for all types.</dd></dl></section></div></main></body></html>

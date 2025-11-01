@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["support"],"struct":["AstChildren","AstPtr","SyntaxNodePtr"],"trait":["AstNode"]};

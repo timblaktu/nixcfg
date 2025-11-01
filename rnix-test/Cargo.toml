@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 rnix = "0.12.0"
+rowan = "0.15.17"
