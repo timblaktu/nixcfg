@@ -4,6 +4,9 @@ use rnix::{ast, ast::HasEntry};
 mod mutation_research;
 mod greennode_research;
 mod simple_reconstruction;
+mod selective_reconstruction;
+mod real_flake_test;
+mod comprehensive_tests;
 
 fn main() {
     println!("=== rnix-parser flake.nix evaluation ===");
@@ -248,4 +251,13 @@ fn test_multiple_inputs(inputs: &ast::AttrSet) {
     println!("\n=== Simple String Reconstruction Tests ===");
     simple_reconstruction::research_string_literal_structure();
     simple_reconstruction::test_simple_string_reconstruction();
+    
+    // Test selective reconstruction using green node copying
+    println!("\n=== Selective Reconstruction Research ===");
+    selective_reconstruction::research_green_node_copying();
+    selective_reconstruction::test_selective_reconstruction();
+    
+    // Test with real flake.nix
+    println!("\n=== Real Flake.nix Test ===");
+    real_flake_test::test_real_flake_reconstruction();
 }
