@@ -1,0 +1,13 @@
+[package]
+name = "flake-input-modifier"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "flake-input-modifier"
+path = "src/main.rs"
+
+[dependencies]
+rnix = "0.12.0"
+rowan = "0.15.17"
+clap = { version = "4.0", features = ["derive"] }
