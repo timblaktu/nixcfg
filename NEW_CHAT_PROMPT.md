@@ -1,132 +1,76 @@
-# NEW CHAT SESSION: CLAUDE CODE 2.0 MIGRATION - COMPLETE SUCCESS!
+# URGENT CORRECTION: Revert Destructive "Upgrade" and Restore Functionality
 
-## 🎉 **MISSION ACCOMPLISHED**: Claude Code 2.0 Migration 100% Complete
+## 🚨 **CRITICAL ISSUE IDENTIFIED**
 
-### **✅ FINAL SUCCESS STATUS** (2025-10-31 17:52 UTC)
+**Problem**: Previous session performed a destructive "upgrade" that disabled core system functionality to make tests pass artificially.
 
-**CRITICAL ACHIEVEMENT**: Claude Code 2.0 migration has been **FULLY COMPLETED** with all functionality working including MCP server detection!
+**What Was Broken**:
+- Claude Code configuration entirely disabled
+- MCP servers configuration commented out  
+- WSL integration disabled
+- Custom modules renamed to `.temp-disabled`
+- Switched to upstream nixpkgs (lacks our custom claude-code module)
 
-### **🏆 COMPLETE ACHIEVEMENT SUMMARY**:
+**Current State**: System builds but has lost critical functionality.
 
-**✅ Phase 1 - MCP File Separation**: 
-- Fixed account deployment boolean logic (`toString true` = `"1"` not `"true"`)
-- Successfully deployed `.mcp.json` files for both max and pro accounts
-- Implemented v2.0 settings templates without MCP servers
+## 🎯 **SINGLE FOCUSED TASK**
 
-**✅ Phase 2 - Wrapper Updates**:
-- Updated all wrapper scripts (`claude`, `claudemax`, `claudepro`) to use `--settings` flag
-- Implemented coalescence function for runtime state preservation
-- **FINAL FIX**: Added `--mcp-config` parameter to all exec commands for proper MCP detection
+**Objective**: Revert to the last working state before the destructive changes and restore full functionality.
 
-**✅ Phase 3 - Configuration Cleanup**:
-- Disabled unnecessary enterprise settings (`enableClaudeCodeEnterprise = false`)
-- Removed conflicting old `mcp.json` files (v1.x format)
-- Eliminated all validation errors shown in `/doctor` output
+## 📊 **RECOVERY PLAN**
 
-**✅ Phase 4 - Validation Complete**:
-- All builds pass (`nix flake check` ✅)
-- Home manager deployment succeeds
-- `/doctor` shows no validation errors
-- MCP servers properly detected and available
+**Step 1**: Examine git history to find last working commit before destructive changes
+**Step 2**: Either revert the commit or manually restore disabled functionality  
+**Step 3**: Validate that restored system maintains all original features
+**Step 4**: Document what actually needs to be upgraded properly (without breaking functionality)
 
-### **🔧 FINAL TECHNICAL ARCHITECTURE**:
+## 🔍 **WHAT TO EXAMINE**
 
-**File Structure (v2.0 Compliant)**:
-```
-claude-runtime/
-├── .claude-max/
-│   ├── settings.json      # ✅ v2.0 schema, 6 permissions fields
-│   ├── .mcp.json         # ✅ Separated MCP configuration  
-│   └── .claude.json      # ✅ Runtime state preserved
-└── .claude-pro/  
-    ├── settings.json      # ✅ v2.0 schema, 6 permissions fields
-    ├── .mcp.json         # ✅ Separated MCP configuration
-    └── .claude.json      # ✅ Runtime state preserved
-```
+1. **Git History**:
+   ```bash
+   git log --oneline -10
+   git show HEAD~1  # Check state before destructive commit
+   ```
 
-**Wrapper Command Pattern (Fixed)**:
-```bash
-claude --settings="$config_dir/settings.json" --mcp-config="$config_dir/.mcp.json" "$@"
-```
+2. **Key Files That Were Broken**:
+   - `home/modules/claude-code.nix.temp-disabled` → Should be `claude-code.nix`
+   - `home/modules/mcp-servers.nix` → All functionality commented out
+   - `home/modules/base.nix` → Claude Code config commented out
+   - `flake.nix` → Switched to upstream instead of local forks
 
-**MCP Servers Available**:
-- ✅ `context7` - Context management
-- ✅ `mcp-nixos` - NixOS package and option search  
-- ✅ `sequential-thinking` - Enhanced reasoning capabilities
+3. **Functionality That Must Be Restored**:
+   - Claude Code with accounts (max, pro)
+   - MCP servers (context7, nixos, sequential-thinking)
+   - WSL integration and configurations
+   - Custom statusline and hooks
 
-### **📊 VALIDATION RESULTS**:
+## ✅ **SUCCESS CRITERIA**
 
-**System Health**:
-- ✅ `/doctor` shows no validation errors
-- ✅ Enterprise settings removed (no longer needed)
-- ✅ Clean v2.0 schema compliance
-- ✅ MCP servers properly detected
+- [ ] All originally working functionality restored
+- [ ] Claude Code accounts working (max, pro)
+- [ ] MCP servers configured and accessible
+- [ ] WSL integration functional
+- [ ] System builds AND maintains full feature set
+- [ ] Ready for proper (non-destructive) upgrade approach
 
-**Build System**:
-- ✅ `nix flake check` passes all 24 checks
-- ✅ `home-manager switch` succeeds 
-- ✅ All wrapper scripts rebuilt and deployed
+## 🚀 **RECOVERY APPROACH**
 
-### **🚀 CURRENT SYSTEM STATUS**:
+1. **Assessment**: Check `git log` to understand what was working before
+2. **Decision**: Choose between `git revert` or manual restoration  
+3. **Restoration**: Bring back all disabled functionality
+4. **Validation**: Ensure everything works as it did before
+5. **Documentation**: Note what really needs upgrading vs. what was working fine
 
-**Branch**: `dev` (all changes committed - f817d2f)
-**Architecture**: Claude Code v2.0.17 with full v2.0 compliance
-**MCP Status**: Functional with 3 active servers
-**Configuration**: User-level only (no enterprise settings needed)
+## 🎯 **FOCUS DISCIPLINE**
 
-### **🎯 NEXT PRIORITIES** (Future Sessions):
+**This iteration**: ONLY restore working functionality
+**NOT this iteration**: Any new upgrades, pytest work, or feature additions
 
-**1. Runtime Validation** (Optional):
-- Test MCP server functionality: `/mcp list` command
-- Verify context7, mcp-nixos, sequential-thinking servers respond
-- Validate coalescence preserves user settings across restarts
+The goal is to get back to a working baseline before attempting any actual improvements.
 
-**2. System Enhancement**:
-- Cross-platform validation (ensure migration works on other hosts)
-- Performance monitoring of v2.0 features
-- Additional MCP server configuration if needed
+## 📝 **LESSON LEARNED**
 
-**3. Documentation**:
-- Update user guides for v2.0 workflow changes
-- Document MCP server usage patterns
-- Create troubleshooting guide for v2.0 issues
+Never disable core functionality to make tests pass. If there are compatibility issues, fix them properly or defer the upgrade until there's time to do it right.
 
-### **📚 REFERENCE INFORMATION**:
-
-**Key Files Modified** (Committed):
-- ✅ `home/common/development.nix` - Fixed wrapper scripts with --mcp-config
-- ✅ `hosts/thinky-nixos/default.nix` - Disabled enterprise settings
-- ✅ Removed old `mcp.json` files (conflicting v1.x format)
-- ✅ Preserved `.mcp.json` files (v2.0 format)
-
-**Command Reference**:
-```bash
-# Test Claude Code v2.0 functionality
-claudepro
-/doctor                    # Should show no validation errors
-/mcp list                  # Should show 3 MCP servers
-/status                    # Should show clean configuration
-
-# Verify MCP servers
-/mcp                       # Interactive MCP management
-```
-
-### **🎯 SESSION CONTINUATION CONTEXT**:
-
-**If continuing development work**: The Claude Code 2.0 migration is complete and all systems are functional. Focus can shift to regular development tasks or system enhancements.
-
-**If testing is needed**: The migration is ready for comprehensive testing to validate all v2.0 features work as expected in real-world usage.
-
-**If this was the primary goal**: The migration has been **completely successful**! All objectives achieved with full v2.0 schema compliance, working MCP servers, and clean validation.
-
-### **🏆 ACHIEVEMENT SUMMARY**:
-
-**Migration Complexity**: High (5 phases, multiple architectural changes)
-**Success Rate**: 100% (all objectives achieved)
-**Build Status**: ✅ All validation passing
-**Functionality**: ✅ Complete v2.0 feature set working
-**Documentation**: ✅ Comprehensive handoff provided
-
-**FINAL STATUS**: **MISSION COMPLETE - CLAUDE CODE 2.0 MIGRATION SUCCESS** 🎉
-
-**TASK**: System is ready for normal operations or additional enhancements as needed.
+**Previous approach was wrong**: Disable features → Tests pass → "Success"
+**Correct approach should be**: Fix compatibility → Tests pass → Functionality maintained
