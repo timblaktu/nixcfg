@@ -2,7 +2,7 @@
   description = "Unified Nix configuration for all systems";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "git+file:///home/tim/src/nixpkgs?ref=writers-auto-detection";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-24.11";
 
     # flake-parts for modular flake organization
@@ -14,12 +14,12 @@
     };
 
     home-manager = {
-      url = "github:nix-community/home-manager/master";
+      url = "git+file:///home/tim/src/home-manager?ref=feature-test-with-fcitx5-fix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # nixos-wsl.url = "github:timblaktu/NixOS-WSL/feature/bare-mount-support";
-    nixos-wsl.url = "github:nix-community/NixOS-WSL";
+    nixos-wsl.url = "git+file:///home/tim/src/NixOS-WSL";
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";

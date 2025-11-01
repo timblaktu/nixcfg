@@ -22,7 +22,7 @@ in
     ../common/system.nix
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
-    # ./claude-code.nix # Claude Code MCP servers configuration - disabled for upstream nixpkgs compatibility
+    ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
     ./podman-tools.nix # Container tools configuration
     # Enhanced nix-writers based script management (migrated to unified files)
@@ -88,7 +88,7 @@ in
         sops
         nerd-fonts.caskaydia-mono
         cascadia-code
-        noto-fonts-color-emoji
+        noto-fonts-emoji
         twemoji-color-font
       ];
       description = "Base packages for all home environments";
@@ -275,15 +275,13 @@ in
 
       # Configure shell aliases
       programs.bash.shellAliases = lib.mkDefault (cfg.shellAliases //
-        lib.optionalAttrs false {
-          # (config.targets.wsl.enable or false) disabled - using upstream nixpkgs
+        lib.optionalAttrs (config.targets.wsl.enable or false) {
           "od-sync" = "onedrive-force-sync";
           "od-status" = "onedrive-status";
           "force-onedrive" = "onedrive-force-sync";
         });
       programs.zsh.shellAliases = lib.mkDefault (cfg.shellAliases //
-        lib.optionalAttrs false {
-          # (config.targets.wsl.enable or false) disabled - using upstream nixpkgs
+        lib.optionalAttrs (config.targets.wsl.enable or false) {
           "od-sync" = "onedrive-force-sync";
           "od-status" = "onedrive-status";
           "force-onedrive" = "onedrive-force-sync";
@@ -315,34 +313,34 @@ in
 
       # Validated scripts configuration removed - migrated to unified files
 
-      # programs.claude-code = {  # Disabled for upstream nixpkgs compatibility
-      #   enable = cfg.enableClaudeCode;
-      #   defaultModel = "opus";
-      #   accounts = {
-      #     max = {
-      #       enable = true;
-      #       displayName = "Claude Max Account";
-      #     };
-      #     pro = {
-      #       enable = true;
-      #       displayName = "Claude Pro Account";
-      #       model = "sonnet";
-      #     };
-      #   };
-      #   statusline = {
-      #     enable = true;
-      #     style = "powerline"; # Enable colored statusline with powerline symbols
-      #     enableAllStyles = true; # Install all styles for testing
-      #     testMode = true; # Enable test mode for validation
-      #   };
-      #   mcpServers = {
-      #     context7.enable = true;
-      #     sequentialThinking.enable = true; # Now using TypeScript version via npx
-      #     nixos.enable = true; # Using uvx to run mcp-nixos Python package
-      #     # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
-      #     # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
-      #   };
-      # };
+      programs.claude-code = {
+        enable = cfg.enableClaudeCode;
+        defaultModel = "opus";
+        accounts = {
+          max = {
+            enable = true;
+            displayName = "Claude Max Account";
+          };
+          pro = {
+            enable = true;
+            displayName = "Claude Pro Account";
+            model = "sonnet";
+          };
+        };
+        statusline = {
+          enable = true;
+          style = "powerline"; # Enable colored statusline with powerline symbols
+          enableAllStyles = true; # Install all styles for testing
+          testMode = true; # Enable test mode for validation
+        };
+        mcpServers = {
+          context7.enable = true;
+          sequentialThinking.enable = true; # Now using TypeScript version via npx
+          nixos.enable = true; # Using uvx to run mcp-nixos Python package
+          # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
+          # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
+        };
+      };
 
       # Yazi file manager configuration
       programs.yazi = {

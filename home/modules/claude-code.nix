@@ -4,8 +4,8 @@ with lib;
 
 {
   imports = [
-    # ./claude-code/mcp-servers.nix  # Disabled - conflicts with upstream nixpkgs mcpServers format
-    # ./claude-code/hooks.nix  # Disabled - conflicts with upstream nixpkgs hooks format
+    ./claude-code/mcp-servers.nix
+    ./claude-code/hooks.nix
     ./claude-code/sub-agents.nix
     ./claude-code/slash-commands.nix
     ./claude-code/memory-commands.nix
@@ -228,10 +228,10 @@ with lib;
       '';
 
       # WSL environment detection for Claude Desktop
-      isWSLEnabled = false; # config.targets.wsl.enable or false; # Disabled - using upstream nixpkgs
+      isWSLEnabled = config.targets.wsl.enable or false;
       wslDistroName =
         if isWSLEnabled then
-          "NixOS" # config.targets.wsl.wslDistroName or "NixOS"
+          config.targets.wsl.wslDistroName or "NixOS"
         else
           "NixOS";
 
@@ -264,10 +264,10 @@ with lib;
         // (lib.optionalAttrs (serverCfg ? retries) { inherit (serverCfg) retries; });
 
       # Generate Claude Desktop configuration with WSL wrapper
-      claudeDesktopMcpServers = {}; # lib.mapAttrs mkClaudeDesktopServer cfg._internal.mcpServers;
+      claudeDesktopMcpServers = lib.mapAttrs mkClaudeDesktopServer cfg._internal.mcpServers;
 
       # Filter MCP servers for Claude Code (exclude Claude Desktop only servers)
-      claudeCodeMcpServers = {}; # removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
+      claudeCodeMcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
 
       # Base settings configuration
       mkSettingsTemplate = model: pkgs.writeText "claude-settings.json" (builtins.toJSON (
@@ -364,23 +364,23 @@ with lib;
         memoryUpdateScript # Add the memory update script
         # Account-specific command scripts now provided by validated-scripts module
       ] ++ [
-      ] ++ optionals false [ # (cfg.mcpServers.sequentialThinkingPython.enable or false) disabled
+      ] ++ optionals (cfg.mcpServers.sequentialThinkingPython.enable or false) [
         # Python/UV version wrapper - only included when explicitly enabled
         (pkgs.writers.writeBashBin "sequential-thinking-mcp" ''
           exec ${nixmcp.packages.${pkgs.system}.sequential-thinking-mcp}/bin/sequential-thinking-mcp "$@"
         '')
-      ] ++ optionals false [ # cfg.hooks.formatting.enable disabled
+      ] ++ optionals cfg.hooks.formatting.enable [
         nixpkgs-fmt
         black
         nodePackages.prettier
         rustfmt
         go
         shfmt
-      ] ++ optionals false [ # cfg.hooks.linting.enable disabled
+      ] ++ optionals cfg.hooks.linting.enable [
         python3Packages.pylint
         nodePackages.eslint
         shellcheck
-      ] ++ optionals false [ # cfg.hooks.notifications.enable disabled
+      ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
         libnotify
       ];
 
@@ -399,9 +399,9 @@ with lib;
         })
 
         # Claude Desktop configuration (always generated if MCP servers exist)
-        # (mkIf (cfg._internal.mcpServers != { }) {
-        #   "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
-        # })
+        (mkIf (cfg._internal.mcpServers != { }) {
+          "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
+        })
       ];
 
       # Activation script to populate runtime directories with templates
@@ -691,12 +691,11 @@ with lib;
 
       # Assertions
       assertions = [
-        # Disabled due to upstream hooks incompatibility
-        #{
-        #  assertion = cfg.hooks.notifications.enable ->
-        #    (pkgs.stdenv.isDarwin || config.home.packages or [ ] != [ ]);
-        #  message = "Notifications require either macOS or a Linux notification daemon";
-        #}
+        {
+          assertion = cfg.hooks.notifications.enable ->
+            (pkgs.stdenv.isDarwin || config.home.packages or [ ] != [ ]);
+          message = "Notifications require either macOS or a Linux notification daemon";
+        }
         {
           assertion = cfg.defaultAccount != null -> cfg.accounts ? ${cfg.defaultAccount};
           message = "Default account '${cfg.defaultAccount}' must be defined in accounts";

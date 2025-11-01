@@ -5,45 +5,44 @@ with lib;
 
 let
   cfg = config.homeBase;
-in
-{
+in {
   config = {
     # Consolidated session variables (replaces most shell initExtra content)
     home.sessionVariables = {
       # Go configuration
       GOPATH = "$HOME/go";
-
+      
       # Android SDK configuration  
       ANDROID_SDK_ROOT = "$HOME/android-sdk";
       ADB_PORT = "5037";
-
+       
       # Pyenv setup
       PYENV_ROOT = "$HOME/.pyenv";
-
+      
       # Neovim runtime
       VIMRUNTIME = "/usr/share/nvim/runtime";
-
+      
       # Yocto build configuration
       BUILD_DIR = "/mnt/internal-4tb-nvme/build";
       TRIP = "10.0.1.19";
-
+      
       # Dynamic variables that need shell execution
       # These will be set in a sourced script
     } // cfg.environmentVariables;
-
+    
     # Consolidated session path (replaces sessionPath additions in initExtra)
     home.sessionPath = [
-      "$HOME/bin" # Our drop-in scripts
-      "$HOME/.local/bin" # User local binaries
-      "/usr/local/bin" # System local binaries
-      "$HOME/go/bin" # Go binaries
-      "/usr/local/go/bin" # System Go installation
-      "$HOME/.cargo/bin" # Rust/Cargo binaries  
-      "$HOME/.pyenv/bin" # Pyenv binaries
-      "$HOME/android-sdk/cmdline-tools/latest/bin" # Android tools
-      "$HOME/android-sdk/platform-tools" # Android platform tools
+      "$HOME/bin"                    # Our drop-in scripts
+      "$HOME/.local/bin"             # User local binaries
+      "/usr/local/bin"               # System local binaries
+      "$HOME/go/bin"                 # Go binaries
+      "/usr/local/go/bin"            # System Go installation
+      "$HOME/.cargo/bin"             # Rust/Cargo binaries  
+      "$HOME/.pyenv/bin"             # Pyenv binaries
+      "$HOME/android-sdk/cmdline-tools/latest/bin"  # Android tools
+      "$HOME/android-sdk/platform-tools"            # Android platform tools
     ];
-
+    
     # Create a shared environment setup script that both shells can source
     home.file.".nix-shared-env" = mkIf config.programs.bash.enable {
       text = ''
@@ -81,7 +80,7 @@ in
         fi
       '';
     };
-
+    
     # Create idempotent environment variable sourcing script
     home.file.".nix-idempotent-env" = {
       text = ''
@@ -205,44 +204,44 @@ in
         }
       '';
     };
-
+    
     # For zsh users, create .zshenv which is always sourced (even for non-interactive shells)
     # This ensures tmux sessions have proper environment
-    # home.file.".zshenv" = mkIf config.programs.zsh.enable {  # Disabled for upstream nixpkgs compatibility
-    #   text = ''
-    #     # ZSH environment setup - sourced for ALL zsh instances
-    #     # This ensures consistent environment in tmux sessions
-    #     
-    #     # Source static Nix environment first
-    #     [[ -f "$HOME/.nix-profile/etc/profile.d/nix.sh" ]] && source "$HOME/.nix-profile/etc/profile.d/nix.sh"
-    #     
-    #     # Dynamic environment variables that need shell execution
-    #     export GPG_TTY=$(tty)
-    #     export HOST_IP=$(ip route show | grep -i default | awk '{ print $3}')
-    #     export ADB_SERVER_SOCKET="tcp:$HOST_IP:$ADB_PORT"
-    #     
-    #     # Create Go directories if they don't exist
-    #     mkdir -p $GOPATH/{src,pkg,bin} 2>/dev/null || true
-    #     
-    #     # Source color functions if available
-    #     if [ -f "$HOME/bin/colorfuncs.sh" ]; then
-    #       . "$HOME/bin/colorfuncs.sh"
-    #     fi
-    #     
-    #     # TMUX hostname abbreviation
-    #     if [ -n "$TMUX" ]; then
-    #       export TMUX_HOSTNAME_ABBREV=$(
-    #         python -c 'import re, socket; h=socket.gethostname(); tokens=re.split(r"([^a-zA-Z0-9]+)", h); print("".join(t[:4] if t.isalnum() else t for t in tokens)[:15])' 2>/dev/null || echo "$HOSTNAME"
-    #       )
-    #     fi
-    #     
-    #     # Cargo environment
-    #     if [ -f "$HOME/.cargo/env" ]; then
-    #       . "$HOME/.cargo/env"
-    #     fi
-    #   '';
-    # };
-
+    home.file.".zshenv" = mkIf config.programs.zsh.enable {
+      text = ''
+        # ZSH environment setup - sourced for ALL zsh instances
+        # This ensures consistent environment in tmux sessions
+        
+        # Source static Nix environment first
+        [[ -f "$HOME/.nix-profile/etc/profile.d/nix.sh" ]] && source "$HOME/.nix-profile/etc/profile.d/nix.sh"
+        
+        # Dynamic environment variables that need shell execution
+        export GPG_TTY=$(tty)
+        export HOST_IP=$(ip route show | grep -i default | awk '{ print $3}')
+        export ADB_SERVER_SOCKET="tcp:$HOST_IP:$ADB_PORT"
+        
+        # Create Go directories if they don't exist
+        mkdir -p $GOPATH/{src,pkg,bin} 2>/dev/null || true
+        
+        # Source color functions if available
+        if [ -f "$HOME/bin/colorfuncs.sh" ]; then
+          . "$HOME/bin/colorfuncs.sh"
+        fi
+        
+        # TMUX hostname abbreviation
+        if [ -n "$TMUX" ]; then
+          export TMUX_HOSTNAME_ABBREV=$(
+            python -c 'import re, socket; h=socket.gethostname(); tokens=re.split(r"([^a-zA-Z0-9]+)", h); print("".join(t[:4] if t.isalnum() else t for t in tokens)[:15])' 2>/dev/null || echo "$HOSTNAME"
+          )
+        fi
+        
+        # Cargo environment
+        if [ -f "$HOME/.cargo/env" ]; then
+          . "$HOME/.cargo/env"
+        fi
+      '';
+    };
+    
     # Simplified bash configuration - now uses idempotent sourcing
     programs.bash.initExtra = lib.mkAfter ''
       # Source shared environment setup
@@ -266,7 +265,7 @@ in
         eval "$(pyenv init - bash)"
       fi
     '';
-
+    
     # Simplified zsh configuration - now uses idempotent sourcing
     programs.zsh.initContent = lib.mkAfter ''
       # Source shared environment setup
