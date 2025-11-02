@@ -59,3 +59,4 @@ SECRETS-USER-INSTRUCTIONS.md
 */target/
 **/target/
 *.pdb
+worktrees-test/

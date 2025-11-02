@@ -1,0 +1,1417 @@
+#!/usr/bin/env bash
+# workspace - Manage multi-repo workspaces without submodules
+
+set -euo pipefail
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The workspace root is where the script is located
+WORKSPACE_ROOT="$SCRIPT_DIR"
+CONFIG_FILE="$WORKSPACE_ROOT/workspace.conf"
+REPOS_DIR="$WORKSPACE_ROOT/repos"
+WORKTREES_DIR="$WORKSPACE_ROOT/worktrees"
+
+# Initialize superproject if needed
+init_superproject() {
+    if [[ ! -d "$WORKSPACE_ROOT/.git" ]]; then
+        echo "Initializing workspace superproject..."
+        cd "$WORKSPACE_ROOT"
+        git init
+        git config extensions.worktreeConfig true
+        echo "/repos/" >> .gitignore
+        echo "/worktrees/" >> .gitignore
+        git add .
+        git commit -m "Initialize workspace superproject"
+        cd - > /dev/null
+    elif [[ "$(cd "$WORKSPACE_ROOT" && git config extensions.worktreeConfig)" != "true" ]]; then
+        echo "Enabling worktree config..."
+        (cd "$WORKSPACE_ROOT" && git config extensions.worktreeConfig true)
+    fi
+}
+
+# Load repository URLs from config file (legacy)
+load_repos_from_file() {
+    local repos=()
+    [[ ! -f "$CONFIG_FILE" ]] && return
+    
+    # Use a different approach that handles files without final newlines
+    # Read the entire file, then process line by line
+    local content
+    content=$(<"$CONFIG_FILE")
+    
+    # Handle empty file or whitespace-only content
+    [[ -z "$content" ]] && return
+    [[ -z "${content//[[:space:]]/}" ]] && return
+    
+    # Process each line, including the last one even without newline
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        repos+=("$line")
+    done <<< "$content"
+    
+    [[ ${#repos[@]} -gt 0 ]] && printf '%s\n' "${repos[@]}"
+}
+
+# Load repository URLs from multi-source configuration
+load_repos() {
+    local workspace="${1:-main}"
+    
+    # Priority 1: Worktree-specific git config
+    if [[ -e "$WORKTREES_DIR/$workspace/.git" ]]; then
+        local config
+        config=$(cd "$WORKTREES_DIR/$workspace" 2>/dev/null && \
+                 git config --worktree --get-all workspace.repo 2>/dev/null || true)
+        if [[ -n "$config" ]]; then
+            echo "$config"
+            return
+        fi
+    fi
+    
+    # Priority 2: Superproject default config
+    local default_config
+    default_config=$(cd "$WORKSPACE_ROOT" && git config --get-all workspace.repo 2>/dev/null || true)
+    if [[ -n "$default_config" ]]; then
+        echo "$default_config"
+        return
+    fi
+    
+    # Priority 3: Legacy workspace.conf (for migration)
+    if [[ -f "$CONFIG_FILE" ]]; then
+        load_repos_from_file
+    fi
+}
+
+# Extract repo name from URL
+get_repo_name() {
+    local url="$1"
+    basename "${url%.git}"
+}
+
+# Detect if current directory contains a Nix flake
+has_flake() {
+    [[ -f "flake.nix" ]]
+}
+
+# Parse flake.nix inputs and extract input specifications
+parse_flake_inputs() {
+    local flake_file="${1:-flake.nix}"
+    
+    [[ ! -f "$flake_file" ]] && return 1
+    
+    # Use nix to evaluate the flake inputs safely
+    # This approach handles complex flake.nix files with imports and expressions
+    if command -v nix >/dev/null 2>&1; then
+        # Use nix flake metadata to get clean input information
+        nix flake metadata --json 2>/dev/null | jq -r '
+            .locks.nodes.root.inputs // {} | 
+            to_entries[] | 
+            select(.value != "follows") |
+            .key as $name |
+            .value as $input_name |
+            .key + " " + (.locks.nodes[$input_name].locked.type // "unknown") + " " + 
+            (if .locks.nodes[$input_name].locked.type == "github" then
+                "github:" + .locks.nodes[$input_name].locked.owner + "/" + .locks.nodes[$input_name].locked.repo + 
+                (if .locks.nodes[$input_name].locked.ref then "/" + .locks.nodes[$input_name].locked.ref else "" end)
+            elif .locks.nodes[$input_name].locked.type == "git" then
+                .locks.nodes[$input_name].locked.url + 
+                (if .locks.nodes[$input_name].locked.ref then "?ref=" + .locks.nodes[$input_name].locked.ref else "" end)
+            else
+                .locks.nodes[$input_name].original.url // "unknown"
+            end)
+        ' 2>/dev/null
+    else
+        # Fallback: simple regex parsing for basic cases
+        # This is less robust but works when nix isn't available
+        grep -A 1000 "inputs\s*=" "$flake_file" | 
+        grep -B 1000 -m 1 "};" | 
+        grep -E '^\s*[a-zA-Z0-9_-]+\s*\.' | 
+        sed -E 's/^\s*([a-zA-Z0-9_-]+)\.url\s*=\s*"([^"]+)".*/\1 \2/' |
+        grep -v "follows"
+    fi
+}
+
+# Get flake input URL by name
+get_flake_input_url() {
+    local input_name="$1"
+    local workspace="${2:-main}"
+    
+    # Priority 1: Workspace-specific flake input override
+    if [[ -e "$WORKTREES_DIR/$workspace/.git" ]]; then
+        local override_url
+        override_url=$(cd "$WORKTREES_DIR/$workspace" 2>/dev/null && \
+                      git config --worktree --get "workspace.flake.input.$input_name.url" 2>/dev/null || true)
+        if [[ -n "$override_url" ]]; then
+            echo "$override_url"
+            return 0
+        fi
+    fi
+    
+    # Priority 2: Superproject default flake input override
+    local default_override
+    default_override=$(cd "$WORKSPACE_ROOT" && git config --get "workspace.flake.input.$input_name.url" 2>/dev/null || true)
+    if [[ -n "$default_override" ]]; then
+        echo "$default_override"
+        return 0
+    fi
+    
+    # Priority 3: Original flake.nix input (if we're in a flake directory)
+    # Note: Only return URLs for actual overrides, not original flake parsing
+    # The generate_workspace_flake function handles original URLs by copying the source
+    return 1
+}
+
+# Generate workspace-specific flake.nix with appropriate inputs
+generate_workspace_flake() {
+    local workspace="$1"
+    local source_flake="${2:-flake.nix}"
+    local target_flake="${3:-flake.nix}"
+    
+    [[ ! -f "$source_flake" ]] && { echo "Source flake not found: $source_flake" >&2; return 1; }
+    
+    # Copy source flake to target location
+    cp "$source_flake" "$target_flake"
+    
+    # Check if there are any workspace-specific overrides
+    local has_overrides=false
+    while IFS= read -r input_line; do
+        [[ -z "$input_line" ]] && continue
+        
+        local input_name url_part
+        read -r input_name url_part <<< "$input_line"
+        
+        # Check if there's a workspace-specific override for this input
+        local override_url
+        override_url=$(get_flake_input_url "$input_name" "$workspace")
+        
+        if [[ -n "$override_url" ]]; then
+            has_overrides=true
+            break
+        fi
+    done < <(parse_flake_inputs "$source_flake")
+    
+    # Only process inputs if there are actual overrides
+    if [[ "$has_overrides" == "true" ]]; then
+        # Extract the inputs section and process each input
+        while IFS= read -r input_line; do
+            [[ -z "$input_line" ]] && continue
+            
+            local input_name url_part
+            read -r input_name url_part <<< "$input_line"
+            
+            # Check if there's a workspace-specific override for this input
+            local override_url
+            override_url=$(get_flake_input_url "$input_name" "$workspace")
+            
+            if [[ -n "$override_url" ]]; then
+                # Extract current URL from flake for AST tool
+                local current_url
+                current_url=$(grep -E "^\s*$input_name\.url\s*=" "$target_flake" | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+                
+                # Use AST-based replacement with graceful fallback to sed
+                local ast_binary="$WORKSPACE_ROOT/bin/flake-input-modifier"
+                if [[ -x "$ast_binary" && -n "$current_url" ]] && "$ast_binary" "$target_flake" "$input_name" "$current_url" "$override_url" --in-place 2>/dev/null; then
+                    # AST modification succeeded
+                    true
+                else
+                    # Fallback to sed-based replacement
+                    if [[ -z "$current_url" ]]; then
+                        echo "  Info: Using sed fallback for $input_name (complex flake structure)" >&2
+                    else
+                        echo "  Warning: AST modification failed for $input_name, using sed fallback" >&2
+                    fi
+                    # Read the current flake content
+                    local flake_content
+                    flake_content=$(<"$target_flake")
+                    # Handle both simple format: input.url = "url"
+                    # and complex format with follows
+                    local modified_content
+                    modified_content=$(echo "$flake_content" | sed -E "s|(^\s*$input_name\.url\s*=\s*\")[^\"]+(\";.*$)|\1$override_url\2|")
+                    echo "$modified_content" > "$target_flake"
+                fi
+            fi
+        done < <(parse_flake_inputs "$source_flake")
+    fi
+}
+
+# Ensure central repository exists
+ensure_central_repo() {
+    local url="$1"
+    local name="$2"
+    local central_repo="$REPOS_DIR/$name"
+    
+    if [[ ! -d "$central_repo" ]]; then
+        echo "  Initializing central repository: $name"
+        mkdir -p "$REPOS_DIR"
+        if ! git clone "$url" "$central_repo" --quiet; then
+            echo "  Error: Failed to clone $url" >&2
+            return 1
+        fi
+        
+        # Check out a placeholder branch so main branches can be used by worktrees
+        (cd "$central_repo" && git checkout --orphan __workspace_placeholder 2>/dev/null && git reset --hard 2>/dev/null || true)
+    fi
+}
+
+# Create worktree from central repository
+create_worktree() {
+    local name="$1"
+    local branch="$2"
+    local worktree_path="$3"
+    local central_repo="$REPOS_DIR/$name"
+    
+    # Check if worktree path exists but is corrupted
+    if [[ -e "$worktree_path/.git" ]]; then
+        # Check if the .git file is corrupted
+        local corrupted=false
+        if [[ -f "$worktree_path/.git" ]]; then
+            # Check if it's a valid worktree reference
+            if ! grep -q "^gitdir:" "$worktree_path/.git" 2>/dev/null; then
+                corrupted=true
+            fi
+        fi
+        
+        if [[ "$corrupted" == true ]]; then
+            echo "  Detected corrupted worktree at $worktree_path, removing..."
+            # Force remove corrupted worktree
+            rm -rf "$worktree_path"
+            # Also try to prune worktrees from central repo
+            (cd "$central_repo" && git worktree prune 2>/dev/null || true)
+        fi
+    fi
+    
+    # Ensure the central repo is up to date (skip for local repos)
+    if (cd "$central_repo" && git remote get-url origin 2>/dev/null | grep -qE "^(https?://|git@|ssh://)"); then
+        (cd "$central_repo" && git fetch --all --quiet 2>/dev/null || true)
+    fi
+    
+    # Check if the branch exists (locally or remotely)
+    local branch_exists=false
+    if (cd "$central_repo" && git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null); then
+        # Local branch exists
+        branch_exists=true
+    elif (cd "$central_repo" && git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null); then
+        # Remote branch exists, create local tracking branch and worktree
+        if (cd "$central_repo" && git worktree add "$worktree_path" -b "$branch" "origin/$branch" --quiet 2>/dev/null); then
+            return 0
+        fi
+    fi
+    
+    if [[ "$branch_exists" == true ]]; then
+        # Try to create worktree with existing local branch
+        if (cd "$central_repo" && git worktree add "$worktree_path" "$branch" --quiet 2>/dev/null); then
+            return 0
+        fi
+    else
+        # Branch doesn't exist, create new branch from the default branch
+        local default_branch
+        default_branch=$(cd "$central_repo" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+        
+        if (cd "$central_repo" && git worktree add "$worktree_path" -b "$branch" "$default_branch" --quiet 2>/dev/null); then
+            return 0
+        fi
+    fi
+    
+    # All attempts failed
+    echo "  Error: Failed to create worktree for branch $branch" >&2
+    return 1
+}
+
+# Remove worktree
+remove_worktree() {
+    local name="$1"
+    local worktree_path="$2"
+    local central_repo="$REPOS_DIR/$name"
+    
+    if [[ -d "$central_repo" && -e "$worktree_path" ]]; then
+        # Try normal worktree remove first
+        if ! (cd "$central_repo" && git worktree remove "$worktree_path" --force 2>/dev/null); then
+            # If that fails, force remove the directory and prune
+            rm -rf "$worktree_path"
+            (cd "$central_repo" && git worktree prune 2>/dev/null || true)
+        fi
+    elif [[ -e "$worktree_path" ]]; then
+        # No central repo, just remove the directory
+        rm -rf "$worktree_path"
+    fi
+}
+
+# Switch to workspace (create if doesn't exist)
+switch_workspace() {
+    local branch="${1:-main}"
+    local workspace_dir="$WORKTREES_DIR/$branch"
+    local failed=0
+    
+    # Initialize superproject if needed
+    init_superproject
+    
+    echo "Switching to workspace: $branch"
+    
+    # Create superproject worktree (not just directory)
+    if [[ ! -e "$workspace_dir/.git" ]]; then
+        echo "Creating workspace as superproject worktree..."
+        mkdir -p "$WORKTREES_DIR"
+        
+        # Check if workspace branch exists
+        if (cd "$WORKSPACE_ROOT" && git show-ref --verify --quiet "refs/heads/workspace/$branch" 2>/dev/null); then
+            # Branch exists, just add worktree
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" "workspace/$branch" 2>/dev/null)
+        else
+            # Create new branch for this workspace
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" -b "workspace/$branch" 2>/dev/null)
+        fi
+    fi
+    
+    while read -r repo_line; do
+        read -ra parts <<< "$repo_line"
+        local url="${parts[0]}"
+        local repo_branch="${parts[1]:-$branch}"
+        local ref="${parts[2]:-}"
+        local name=$(get_repo_name "$url")
+        local repo_path="$workspace_dir/$name"
+        
+        [[ -d "$repo_path" ]] && { echo "  $name exists, skipping"; continue; }
+        
+        echo "  Setting up $name... (url=$url, branch=$repo_branch, path=$repo_path)"
+        if ! ensure_central_repo "$url" "$name"; then
+            echo "  Failed to set up central repository for $name" >&2
+            failed=1
+            continue
+        fi
+        echo "  Central repo for $name ready, creating worktree..."
+        if ! create_worktree "$name" "$repo_branch" "$repo_path"; then
+            echo "  Failed to create worktree for $name" >&2
+            failed=1
+            continue
+        fi
+        echo "  Worktree for $name created successfully"
+        
+        [[ -n "$ref" ]] && (cd "$repo_path" && git checkout "$ref" --quiet)
+    done < <(load_repos "$branch")
+    
+    # Generate workspace-specific flake.nix if superproject has one
+    if [[ -f "$WORKSPACE_ROOT/flake.nix" ]]; then
+        echo "  Generating workspace-specific flake.nix..."
+        (cd "$WORKSPACE_ROOT" && generate_workspace_flake "$branch" "flake.nix" "$workspace_dir/flake.nix")
+        echo "  Workspace flake.nix generated with input overrides"
+    fi
+    
+    if [[ $failed -eq 1 ]]; then
+        echo "Workspace setup completed with failures" >&2
+        exit 1
+    fi
+    
+    echo "Workspace ready: $workspace_dir"
+}
+
+# Sync workspace
+sync_workspace() {
+    local branch="${1:-}"
+    
+    # If no branch specified, try to detect current workspace
+    if [[ -z "$branch" ]]; then
+        # Check if we're in a worktree by looking for .git file that points to a worktree
+        if [[ -f "$PWD/.git" ]] && grep -q "^gitdir: .*/\.git/worktrees/" "$PWD/.git" 2>/dev/null; then
+            # Extract workspace name from the gitdir path
+            # gitdir format: /path/to/workspace/.git/worktrees/workspace-name
+            local gitdir=$(grep "^gitdir:" "$PWD/.git" | cut -d: -f2- | xargs)
+            branch=$(basename "$gitdir")
+        else
+            # Try to find workspace by checking parent directories
+            local check_dir="$PWD"
+            while [[ "$check_dir" != "/" ]]; do
+                if [[ -d "$WORKTREES_DIR" ]] && [[ "$check_dir" == "$WORKTREES_DIR"/* ]]; then
+                    branch=$(echo "$check_dir" | sed "s|^$WORKTREES_DIR/||" | cut -d/ -f1)
+                    break
+                fi
+                check_dir=$(dirname "$check_dir")
+            done
+        fi
+        
+        [[ -z "$branch" ]] && { echo "Not in a workspace. Please specify workspace name or cd to a workspace."; exit 1; }
+    fi
+    
+    local workspace_dir="$WORKTREES_DIR/$branch"
+    
+    [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $branch"; exit 1; }
+    
+    echo "Syncing workspace: $branch"
+    
+    while read -r repo_line; do
+        read -ra parts <<< "$repo_line"
+        local url="${parts[0]}"
+        local ref="${parts[2]:-}"
+        local name=$(get_repo_name "$url")
+        local repo_path="$workspace_dir/$name"
+        
+        [[ ! -d "$repo_path" ]] && continue
+        
+        if [[ -n "$ref" ]]; then
+            echo "  $name is pinned, skipping"
+        else
+            echo "  Updating $name..."
+            # Update central repository first
+            local central_repo="$REPOS_DIR/$name"
+            [[ -d "$central_repo" ]] && (cd "$central_repo" && git fetch --all --quiet)
+            
+            # Check if upstream is set, and set it if not
+            (
+                cd "$repo_path"
+                local current_branch=$(git branch --show-current)
+                if [[ -n "$current_branch" ]]; then
+                    # Check if upstream is set
+                    if ! git rev-parse --abbrev-ref "$current_branch@{upstream}" &>/dev/null; then
+                        # Try to set upstream to origin/branch
+                        if git rev-parse --verify "origin/$current_branch" &>/dev/null; then
+                            echo "    Setting upstream to origin/$current_branch"
+                            git branch --set-upstream-to="origin/$current_branch" "$current_branch"
+                        else
+                            # If remote branch doesn't exist, check if we have local commits
+                            local unpushed_commits=$(git rev-list --count HEAD --not --remotes=origin 2>/dev/null || echo "0")
+                            if [[ "$unpushed_commits" -gt 0 ]]; then
+                                echo "    Warning: $unpushed_commits local commit(s) not pushed to remote"
+                                # Don't try to pull if we have local commits and no remote branch
+                                exit 0
+                            fi
+                        fi
+                    fi
+                    
+                    # Now try to pull
+                    if git rev-parse --abbrev-ref "$current_branch@{upstream}" &>/dev/null; then
+                        git pull --ff-only
+                    fi
+                fi
+            )
+        fi
+    done < <(load_repos "$branch")
+}
+
+# Show status
+show_status() {
+    echo "Workspace Status"
+    echo "================"
+    
+    [[ ! -d "$WORKTREES_DIR" ]] && { echo "No workspaces found"; return; }
+    
+    for workspace_dir in "$WORKTREES_DIR"/*; do
+        [[ ! -d "$workspace_dir" ]] && continue
+        
+        local workspace=$(basename "$workspace_dir")
+        echo -e "\n$workspace"
+        echo "----------------------------------------"
+        
+        while read -r repo_line; do
+            read -ra parts <<< "$repo_line"
+            local url="${parts[0]}"
+            local name=$(get_repo_name "$url")
+            local repo_path="$workspace_dir/$name"
+            
+            [[ ! -d "$repo_path" ]] && { printf "  %-20s [missing]\n" "$name:"; continue; }
+            [[ ! -d "$repo_path/.git" && ! -f "$repo_path/.git" ]] && { printf "  %-20s [invalid git]\n" "$name:"; continue; }
+            
+            (
+                cd "$repo_path" 2>/dev/null || { printf "  %-20s %-20s %s\n" "$name:" "[cannot access]" "[error]"; exit 1; }
+                
+                # Check for broken repository states
+                if ! git rev-parse HEAD >/dev/null 2>&1; then
+                    # Repository has no valid HEAD
+                    if git remote -v >/dev/null 2>&1; then
+                        printf "  %-20s %-20s %s\n" "$name:" "[uninitialized]" "[no commits]"
+                    else
+                        printf "  %-20s %-20s %s\n" "$name:" "[broken]" "[invalid HEAD]"
+                    fi
+                else
+                    local branch=$(git branch --show-current 2>/dev/null || git describe --always 2>/dev/null || echo "[detached]")
+                    local status=$(git status --porcelain 2>/dev/null || echo "error")
+                    if [[ "$status" == "error" ]]; then
+                        printf "  %-20s %-20s %s\n" "$name:" "$branch" "[error]"
+                    else
+                        printf "  %-20s %-20s %s\n" "$name:" "$branch" "[$([ -n "$status" ] && echo "modified" || echo "clean")]"
+                    fi
+                fi
+            )
+        done < <(load_repos "$workspace")
+    done
+}
+
+# Repair broken repository
+repair_repository() {
+    local workspace="${1:-}"
+    local repo_name="${2:-}"
+    
+    if [[ -z "$workspace" || -z "$repo_name" ]]; then
+        echo "Usage: $0 repair <workspace> <repository-name>"
+        echo "  Attempts to repair a broken repository in the specified workspace"
+        return 1
+    fi
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace"
+    if [[ ! -d "$workspace_dir" ]]; then
+        echo "Error: Workspace not found: $workspace"
+        return 1
+    fi
+    
+    # Load repository configuration to get URL
+    local repo_url=""
+    local repo_branch=""
+    while read -r repo_line; do
+        read -ra parts <<< "$repo_line"
+        local url="${parts[0]}"
+        local name=$(get_repo_name "$url")
+        if [[ "$name" == "$repo_name" ]]; then
+            repo_url="$url"
+            repo_branch="${parts[1]:-$workspace}"
+            break
+        fi
+    done < <(load_repos "$workspace")
+    
+    if [[ -z "$repo_url" ]]; then
+        echo "Error: Repository $repo_name not found in workspace configuration"
+        return 1
+    fi
+    
+    local repo_path="$workspace_dir/$repo_name"
+    local central_repo="$REPOS_DIR/$repo_name"
+    
+    echo "Attempting to repair $repo_name in workspace $workspace..."
+    
+    # Check the state of the repository
+    if [[ ! -e "$repo_path" ]]; then
+        echo "  Repository doesn't exist, creating fresh worktree..."
+        if ensure_central_repo "$repo_url" "$repo_name"; then
+            create_worktree "$repo_name" "$repo_branch" "$repo_path"
+        fi
+    elif [[ -d "$repo_path" ]] && ! git -C "$repo_path" rev-parse HEAD >/dev/null 2>&1; then
+        echo "  Repository exists but has no valid HEAD"
+        
+        # Check if this is a standalone repo that should be a worktree
+        if [[ ! -f "$repo_path/.git" ]] && [[ -d "$repo_path/.git" ]]; then
+            echo "  Found standalone repository instead of worktree"
+            echo "  This needs to be converted to use the worktree architecture"
+            
+            # Check if central repo exists
+            if [[ ! -d "$central_repo" ]]; then
+                echo "  No central repository found, creating one..."
+                # Move the existing repo to be the central repo
+                mv "$repo_path" "$central_repo"
+                
+                # Checkout placeholder branch in central repo
+                (cd "$central_repo" && git checkout --orphan __workspace_placeholder 2>/dev/null && git reset --hard 2>/dev/null || true)
+                
+                # Now create the worktree
+                if create_worktree "$repo_name" "$repo_branch" "$repo_path"; then
+                    echo "  Successfully converted to worktree architecture"
+                else
+                    echo "  Error: Failed to create worktree"
+                    return 1
+                fi
+            else
+                # Central repo exists, this standalone repo is redundant
+                echo "  Central repository exists, removing redundant standalone repo..."
+                rm -rf "$repo_path"
+                
+                # Create worktree from central repo
+                if create_worktree "$repo_name" "$repo_branch" "$repo_path"; then
+                    echo "  Successfully replaced with worktree"
+                else
+                    echo "  Error: Failed to create worktree"
+                    return 1
+                fi
+            fi
+        # Check if it's just uninitialized (cloned but no commits)
+        elif git -C "$repo_path" remote -v >/dev/null 2>&1; then
+            echo "  Repository appears to be cloned but has no commits"
+            echo "  Attempting to fetch and checkout branch..."
+            
+            if (cd "$repo_path" && timeout 30 git fetch origin 2>/dev/null); then
+                if (cd "$repo_path" && git checkout -b "$repo_branch" "origin/$repo_branch" 2>/dev/null); then
+                    echo "  Successfully initialized repository with branch $repo_branch"
+                elif (cd "$repo_path" && git checkout "$repo_branch" 2>/dev/null); then
+                    echo "  Successfully checked out existing branch $repo_branch"
+                else
+                    # Try to checkout the default branch
+                    local default_branch=$(cd "$repo_path" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+                    if (cd "$repo_path" && git checkout -b "$repo_branch" "origin/$default_branch" 2>/dev/null); then
+                        echo "  Created $repo_branch from default branch $default_branch"
+                    else
+                        echo "  Error: Could not checkout any valid branch"
+                        echo "  Consider removing and recreating: rm -rf $repo_path"
+                        return 1
+                    fi
+                fi
+            else
+                echo "  Error: Could not fetch from remote"
+                echo "  Removing broken repository and recreating..."
+                rm -rf "$repo_path"
+                
+                # Prune worktrees from central repo
+                if [[ -d "$central_repo" ]]; then
+                    (cd "$central_repo" && git worktree prune 2>/dev/null || true)
+                fi
+                
+                # Recreate
+                if ensure_central_repo "$repo_url" "$repo_name"; then
+                    create_worktree "$repo_name" "$repo_branch" "$repo_path"
+                    echo "  Repository recreated successfully"
+                else
+                    echo "  Error: Failed to recreate repository"
+                    return 1
+                fi
+            fi
+        else
+            echo "  Repository is corrupted, removing and recreating..."
+            rm -rf "$repo_path"
+            
+            # Prune worktrees from central repo
+            if [[ -d "$central_repo" ]]; then
+                (cd "$central_repo" && git worktree prune 2>/dev/null || true)
+            fi
+            
+            # Recreate
+            if ensure_central_repo "$repo_url" "$repo_name"; then
+                create_worktree "$repo_name" "$repo_branch" "$repo_path"
+                echo "  Repository recreated successfully"
+            else
+                echo "  Error: Failed to recreate repository"
+                return 1
+            fi
+        fi
+    else
+        echo "  Repository appears to be functional"
+        (cd "$repo_path" && git status --short)
+    fi
+}
+
+# Execute command in all repos (like git submodule foreach)
+foreach_repos() {
+    shift  # Remove 'foreach' from arguments
+    
+    local quiet=false
+    if [[ "$1" == "--quiet" || "$1" == "-q" ]]; then
+        quiet=true
+        shift
+    fi
+    
+    # Check if a workspace is explicitly specified
+    local workspace_branch=""
+    local workspace_specified=false
+    
+    # Check if first argument could be a workspace name (doesn't start with -)
+    # But only if we have at least 2 arguments (workspace name + command)
+    if [[ $# -gt 1 ]] && [[ "$1" != -* ]] && [[ -d "$WORKTREES_DIR/$1" ]]; then
+        workspace_branch="$1"
+        workspace_specified=true
+        shift
+    fi
+    
+    # If no workspace specified, try to detect current workspace
+    if [[ -z "$workspace_branch" ]]; then
+        # First, check if there's exactly one workspace regardless of PWD
+        # This handles the case where the script is run from outside the workspace
+        if [[ -d "$WORKTREES_DIR" ]]; then
+            local workspace_count=0
+            local last_workspace=""
+            for ws_dir in "$WORKTREES_DIR"/*; do
+                if [[ -d "$ws_dir" ]]; then
+                    workspace_count=$((workspace_count + 1))
+                    last_workspace=$(basename "$ws_dir")
+                fi
+            done
+            
+            if [[ $workspace_count -eq 1 ]]; then
+                # Only one workspace exists, use it
+                workspace_branch="$last_workspace"
+            elif [[ $workspace_count -gt 1 ]]; then
+                # Multiple workspaces exist, need more context
+                # Check if we're at the workspace root
+                if [[ "$PWD" == "$WORKSPACE_ROOT" ]]; then
+                    echo "Multiple workspaces found. Please specify which one:"
+                    for ws_dir in "$WORKTREES_DIR"/*; do
+                        [[ -d "$ws_dir" ]] && echo "  $(basename "$ws_dir")"
+                    done
+                    echo "Usage: $0 foreach <workspace> <command>"
+                    exit 1
+                fi
+                # If not at workspace root, continue to try other detection methods
+            fi
+        fi
+        
+        # If still no workspace detected and there are multiple, try other detection methods
+        if [[ -z "$workspace_branch" ]]; then
+            # Check if we're in a worktree by looking for .git file that points to a worktree
+            if [[ -f "$PWD/.git" ]] && grep -q "^gitdir: .*/\.git/worktrees/" "$PWD/.git" 2>/dev/null; then
+                # Extract workspace name from the gitdir path
+                # gitdir format: /path/to/workspace/.git/worktrees/workspace-name
+                local gitdir=$(grep "^gitdir:" "$PWD/.git" | cut -d: -f2- | xargs)
+                workspace_branch=$(basename "$gitdir")
+            else
+                # Try to find workspace by checking parent directories
+                local check_dir="$PWD"
+                while [[ "$check_dir" != "/" ]]; do
+                    if [[ -d "$WORKTREES_DIR" ]] && [[ "$check_dir" == "$WORKTREES_DIR"/* ]]; then
+                        workspace_branch=$(echo "$check_dir" | sed "s|^$WORKTREES_DIR/||" | cut -d/ -f1)
+                        break
+                    fi
+                    check_dir=$(dirname "$check_dir")
+                done
+            fi
+        fi
+    fi
+    
+    [[ -z "$workspace_branch" ]] && { echo "Not in a workspace. Please cd to a workspace directory or specify workspace name."; exit 1; }
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace_branch"
+    [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $workspace_branch"; exit 1; }
+    
+    # Deduplicate repositories by URL to avoid processing duplicates
+    declare -A seen_urls
+    while read -r repo_line; do
+        read -ra parts <<< "$repo_line"
+        local url="${parts[0]}"
+        
+        # Skip if we've already processed this URL
+        if [[ -n "${seen_urls[$url]:-}" ]]; then
+            continue
+        fi
+        seen_urls[$url]=1
+        
+        local name=$(get_repo_name "$url")
+        local repo_path="$workspace_dir/$name"
+        local displaypath="${repo_path#$workspace_dir/}"
+        
+        if [[ -d "$repo_path/.git" || -f "$repo_path/.git" ]]; then
+            # Export variables like git submodule foreach
+            export name="$name"
+            export path="$displaypath"
+            export displaypath="$displaypath"
+            export toplevel="$workspace_dir"
+            
+            if [[ "$quiet" == false ]]; then
+                echo "=== $name ==="
+            fi
+            (cd "$repo_path" && eval "$@")
+            if [[ "$quiet" == false ]]; then
+                echo
+            fi
+        fi
+    done < <(load_repos "$workspace_branch")
+}
+
+# List workspaces
+list_workspaces() {
+    echo "Available Workspaces"
+    echo "==================="
+    
+    [[ ! -d "$WORKTREES_DIR" ]] && { echo "No workspaces found"; return; }
+    
+    for workspace_dir in "$WORKTREES_DIR"/*; do
+        [[ -d "$workspace_dir" ]] && echo "  $(basename "$workspace_dir")"
+    done
+}
+
+# Clean workspace
+clean_workspace() {
+    local branch="${1}"
+    [[ -z "$branch" ]] && { echo "Workspace name required"; exit 1; }
+    
+    local workspace_dir="$WORKTREES_DIR/$branch"
+    [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $branch"; exit 1; }
+    
+    echo "Delete workspace: $branch? (y/N) "
+    read -r -n 1
+    echo
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Removing worktrees..."
+        while read -r repo_line; do
+            read -ra parts <<< "$repo_line"
+            local url="${parts[0]}"
+            local name=$(get_repo_name "$url")
+            local repo_path="$workspace_dir/$name"
+            
+            [[ -d "$repo_path" ]] && remove_worktree "$name" "$repo_path"
+        done < <(load_repos "$branch")
+        
+        # Remove superproject worktree
+        if [[ -e "$workspace_dir/.git" ]]; then
+            (cd "$WORKSPACE_ROOT" && git worktree remove "$workspace_dir" --force 2>/dev/null || true)
+        else
+            # Legacy: Remove the workspace directory after all worktrees are removed
+            rmdir "$workspace_dir" 2>/dev/null || rm -rf "$workspace_dir"
+        fi
+        echo "Workspace removed"
+    else
+        echo "Cancelled"
+    fi
+}
+
+# Config management: Set repository configuration for a workspace
+config_set() {
+    local workspace="${1:-}"
+    local repo_spec="${2:-}"
+    
+    [[ -z "$workspace" || -z "$repo_spec" ]] && { 
+        echo "Usage: workspace config set <workspace> <url> [branch] [ref]" 
+        echo "       workspace config set <workspace> <repo-name> <url> [branch] [ref]"
+        exit 1 
+    }
+    
+    shift 2
+    local remaining_args=("$@")
+    
+    # Parse arguments - could be either:
+    # 1. <url> [branch] [ref]
+    # 2. <repo-name> <url> [branch] [ref]
+    local url branch ref repo_name
+    
+    if [[ "$repo_spec" =~ ^https?:// || "$repo_spec" =~ ^git@ || "$repo_spec" =~ ^ssh:// || "$repo_spec" =~ \.git$ || "$repo_spec" =~ ^file:// || "$repo_spec" =~ ^/ ]]; then
+        # First arg is URL or absolute path
+        url="$repo_spec"
+        branch="${remaining_args[0]:-main}"
+        ref="${remaining_args[1]:-}"
+        repo_name=$(get_repo_name "$url")
+    else
+        # First arg is repo name
+        repo_name="$repo_spec"
+        url="${remaining_args[0]:-}"
+        branch="${remaining_args[1]:-main}"
+        ref="${remaining_args[2]:-}"
+        
+        [[ -z "$url" ]] && { echo "URL required when specifying repo name"; exit 1; }
+    fi
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace"
+    
+    # Ensure workspace exists as git worktree
+    if [[ ! -e "$workspace_dir/.git" ]]; then
+        echo "Creating workspace as superproject worktree..."
+        init_superproject
+        mkdir -p "$WORKTREES_DIR"
+        
+        if (cd "$WORKSPACE_ROOT" && git show-ref --verify --quiet "refs/heads/workspace/$workspace" 2>/dev/null); then
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" "workspace/$workspace" 2>/dev/null)
+        else
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" -b "workspace/$workspace" 2>/dev/null)
+        fi
+    fi
+    
+    # Store in git config
+    local config_value="$url $branch${ref:+ $ref}"
+    (cd "$workspace_dir" && git config --worktree "workspace.repo" "$config_value")
+    
+    echo "Set repository config for workspace '$workspace':"
+    echo "  $repo_name: $config_value"
+}
+
+# Config management: Show workspace configuration
+config_show() {
+    local workspace="${1:-main}"
+    
+    echo "Configuration for workspace: $workspace"
+    echo "======================================="
+    
+    # Check worktree-specific config
+    if [[ -e "$WORKTREES_DIR/$workspace/.git" ]]; then
+        local worktree_config
+        worktree_config=$(cd "$WORKTREES_DIR/$workspace" 2>/dev/null && \
+                         git config --worktree --get-all workspace.repo 2>/dev/null || true)
+        if [[ -n "$worktree_config" ]]; then
+            echo "Workspace-specific repositories:"
+            echo "$worktree_config" | while IFS= read -r line; do
+                echo "  $line"
+            done
+            return
+        fi
+    fi
+    
+    # Check default config
+    local default_config
+    default_config=$(cd "$WORKSPACE_ROOT" && git config --get-all workspace.repo 2>/dev/null || true)
+    if [[ -n "$default_config" ]]; then
+        echo "Default repositories (inherited):"
+        echo "$default_config" | while IFS= read -r line; do
+            echo "  $line"
+        done
+        return
+    fi
+    
+    # Check legacy file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        echo "Legacy configuration (from workspace.conf):"
+        load_repos_from_file | while IFS= read -r line; do
+            echo "  $line"
+        done
+        return
+    fi
+    
+    echo "No configuration found"
+}
+
+# Config management: Import from workspace.conf
+config_import() {
+    local workspace="${1:-}"
+    local source_file="${2:-$CONFIG_FILE}"
+    
+    [[ -z "$workspace" ]] && { echo "Workspace name required"; exit 1; }
+    [[ ! -f "$source_file" ]] && { echo "Config file not found: $source_file"; exit 1; }
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace"
+    
+    # Ensure workspace exists as git worktree
+    if [[ ! -e "$workspace_dir/.git" ]]; then
+        echo "Creating workspace as superproject worktree..."
+        init_superproject
+        mkdir -p "$WORKTREES_DIR"
+        
+        if (cd "$WORKSPACE_ROOT" && git show-ref --verify --quiet "refs/heads/workspace/$workspace" 2>/dev/null); then
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" "workspace/$workspace" 2>/dev/null)
+        else
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" -b "workspace/$workspace" 2>/dev/null)
+        fi
+    fi
+    
+    echo "Importing configuration to workspace: $workspace"
+    
+    # Clear existing workspace-specific config
+    (cd "$workspace_dir" && git config --worktree --unset-all workspace.repo 2>/dev/null || true)
+    
+    # Import from file
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        
+        (cd "$workspace_dir" && git config --worktree --add "workspace.repo" "$line")
+        echo "  Imported: $line"
+    done < "$source_file"
+    
+    echo "Import complete"
+}
+
+# Config management: Set default configuration
+config_set_default() {
+    local repo_spec="${1:-}"
+    
+    [[ -z "$repo_spec" ]] && { 
+        echo "Usage: workspace config set-default <url> [branch] [ref]" 
+        exit 1 
+    }
+    
+    shift
+    local remaining_args=("$@")
+    
+    # Parse arguments
+    local url="$repo_spec"
+    local branch="${remaining_args[0]:-main}"
+    local ref="${remaining_args[1]:-}"
+    
+    # Initialize if needed
+    init_superproject
+    
+    # Store in superproject git config
+    local config_value="$url $branch${ref:+ $ref}"
+    (cd "$WORKSPACE_ROOT" && git config --add "workspace.repo" "$config_value")
+    
+    echo "Set default repository config:"
+    echo "  $config_value"
+}
+
+# Config management: Set flake input for a workspace
+config_set_flake_input() {
+    local workspace="${1:-}"
+    local input_name="${2:-}"
+    local input_url="${3:-}"
+    local input_ref="${4:-}"
+    
+    [[ -z "$workspace" || -z "$input_name" || -z "$input_url" ]] && { 
+        echo "Usage: workspace config set-flake-input <workspace> <input-name> <url> [ref]" 
+        echo "       workspace config set-flake-input main nixpkgs github:NixOS/nixpkgs/nixos-unstable"
+        echo "       workspace config set-flake-input dev nixpkgs git+file:///path/to/nixpkgs?ref=my-branch"
+        exit 1 
+    }
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace"
+    
+    # Ensure workspace exists as git worktree
+    if [[ ! -e "$workspace_dir/.git" ]]; then
+        echo "Creating workspace as superproject worktree..."
+        init_superproject
+        mkdir -p "$WORKTREES_DIR"
+        
+        if (cd "$WORKSPACE_ROOT" && git show-ref --verify --quiet "refs/heads/workspace/$workspace" 2>/dev/null); then
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" "workspace/$workspace" 2>/dev/null)
+        else
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" -b "workspace/$workspace" 2>/dev/null)
+        fi
+    fi
+    
+    # Build the final URL (with ref if provided)
+    local final_url="$input_url"
+    if [[ -n "$input_ref" ]]; then
+        # Handle different URL formats
+        if [[ "$input_url" =~ ^github: ]]; then
+            final_url="$input_url/$input_ref"
+        elif [[ "$input_url" =~ \? ]]; then
+            final_url="$input_url&ref=$input_ref"
+        else
+            final_url="$input_url?ref=$input_ref"
+        fi
+    fi
+    
+    # Store in git config
+    (cd "$workspace_dir" && git config --worktree "workspace.flake.input.$input_name.url" "$final_url")
+    
+    echo "Set flake input for workspace '$workspace':"
+    echo "  $input_name: $final_url"
+}
+
+# Config management: Show flake inputs for a workspace
+config_show_flake_inputs() {
+    local workspace="${1:-main}"
+    
+    echo "Flake inputs for workspace: $workspace"
+    echo "========================================="
+    
+    # Check if we're in a flake directory to show original inputs
+    if [[ -f "flake.nix" ]]; then
+        echo
+        echo "Original flake inputs:"
+        parse_flake_inputs | while IFS= read -r line; do
+            [[ -n "$line" ]] && echo "  $line"
+        done
+    fi
+    
+    # Check workspace-specific overrides
+    if [[ -e "$WORKTREES_DIR/$workspace/.git" ]]; then
+        local overrides
+        overrides=$(cd "$WORKTREES_DIR/$workspace" 2>/dev/null && \
+                   git config --worktree --get-regexp "workspace\.flake\.input\." 2>/dev/null | \
+                   sed 's/workspace\.flake\.input\.\([^.]*\)\.url /\1: /' || true)
+        if [[ -n "$overrides" ]]; then
+            echo
+            echo "Workspace-specific input overrides:"
+            echo "$overrides" | while IFS= read -r line; do
+                echo "  $line"
+            done
+        fi
+    fi
+    
+    # Check default overrides
+    local default_overrides
+    default_overrides=$(cd "$WORKSPACE_ROOT" && \
+                       git config --get-regexp "workspace\.flake\.input\." 2>/dev/null | \
+                       sed 's/workspace\.flake\.input\.\([^.]*\)\.url /\1: /' || true)
+    if [[ -n "$default_overrides" ]]; then
+        echo
+        echo "Default input overrides (inherited):"
+        echo "$default_overrides" | while IFS= read -r line; do
+            echo "  $line"
+        done
+    fi
+    
+    if [[ ! -f "flake.nix" ]] && [[ -z "$overrides" ]] && [[ -z "$default_overrides" ]]; then
+        echo "No flake inputs found (not in a Nix flake directory)"
+    fi
+}
+
+# Config management: Set default flake input for all workspaces
+config_set_flake_input_default() {
+    local input_name="${1:-}"
+    local input_url="${2:-}"
+    local input_ref="${3:-}"
+    
+    [[ -z "$input_name" || -z "$input_url" ]] && { 
+        echo "Usage: workspace config set-flake-input-default <input-name> <url> [ref]" 
+        exit 1 
+    }
+    
+    # Initialize if needed
+    init_superproject
+    
+    # Build the final URL (with ref if provided)
+    local final_url="$input_url"
+    if [[ -n "$input_ref" ]]; then
+        # Handle different URL formats
+        if [[ "$input_url" =~ ^github: ]]; then
+            final_url="$input_url/$input_ref"
+        elif [[ "$input_url" =~ \? ]]; then
+            final_url="$input_url&ref=$input_ref"
+        else
+            final_url="$input_url?ref=$input_ref"
+        fi
+    fi
+    
+    # Store in superproject git config
+    (cd "$WORKSPACE_ROOT" && git config "workspace.flake.input.$input_name.url" "$final_url")
+    
+    echo "Set default flake input:"
+    echo "  $input_name: $final_url"
+}
+
+# Regenerate workspace-specific flake.nix
+regenerate_workspace_flake() {
+    local workspace="${1:-}"
+    
+    # If no workspace specified, try to detect current workspace
+    if [[ -z "$workspace" ]]; then
+        # Check if we're in a worktree by looking for .git file that points to a worktree
+        if [[ -f "$PWD/.git" ]] && grep -q "^gitdir: .*/\.git/worktrees/" "$PWD/.git" 2>/dev/null; then
+            # Extract workspace name from the gitdir path
+            local gitdir=$(grep "^gitdir:" "$PWD/.git" | cut -d: -f2- | xargs)
+            workspace=$(basename "$gitdir")
+        else
+            # Try to find workspace by checking parent directories
+            local check_dir="$PWD"
+            while [[ "$check_dir" != "/" ]]; do
+                if [[ -d "$WORKTREES_DIR" ]] && [[ "$check_dir" == "$WORKTREES_DIR"/* ]]; then
+                    workspace=$(echo "$check_dir" | sed "s|^$WORKTREES_DIR/||" | cut -d/ -f1)
+                    break
+                fi
+                check_dir=$(dirname "$check_dir")
+            done
+        fi
+        
+        [[ -z "$workspace" ]] && { echo "Not in a workspace. Please specify workspace name or cd to a workspace."; exit 1; }
+    fi
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace"
+    
+    [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $workspace"; exit 1; }
+    [[ ! -f "$WORKSPACE_ROOT/flake.nix" ]] && { echo "No flake.nix found in superproject: $WORKSPACE_ROOT"; exit 1; }
+    
+    echo "Regenerating flake.nix for workspace: $workspace"
+    
+    (cd "$WORKSPACE_ROOT" && generate_workspace_flake "$workspace" "flake.nix" "$workspace_dir/flake.nix")
+    
+    echo "Workspace flake.nix regenerated with current input overrides"
+    echo "Location: $workspace_dir/flake.nix"
+}
+
+# Install shell completion
+install_completion() {
+    local shell="${1:-}"
+    local script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+    local interactive="${2:-yes}"  # Default to interactive mode
+    
+    if [[ -z "$shell" ]]; then
+        # Try to detect shell
+        if [[ -n "${BASH_VERSION:-}" ]]; then
+            shell="bash"
+        elif [[ -n "${ZSH_VERSION:-}" ]]; then
+            shell="zsh"
+        else
+            echo "Could not detect shell. Please specify: workspace install-completion [bash|zsh]"
+            exit 1
+        fi
+    fi
+    
+    case "$shell" in
+        bash)
+            local completion_file="$script_dir/workspace-completion.bash"
+            local xdg_dir="$HOME/.local/share/bash-completion/completions"
+            
+            if [[ ! -f "$completion_file" ]]; then
+                echo "Error: Bash completion file not found: $completion_file"
+                exit 1
+            fi
+            
+            echo "Installing bash completion for workspace..."
+            echo ""
+            
+            if [[ "$interactive" == "yes" ]]; then
+                echo "This will install the completion to:"
+                echo "  $xdg_dir/workspace"
+                echo ""
+                read -p "Continue? (Y/n) " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    echo "Installation cancelled."
+                    echo ""
+                    echo "To install manually, run:"
+                    echo "  mkdir -p $xdg_dir"
+                    echo "  cp '$completion_file' $xdg_dir/workspace"
+                    exit 0
+                fi
+            fi
+            
+            mkdir -p "$xdg_dir"
+            cp "$completion_file" "$xdg_dir/workspace"
+            echo "✓ Installed to $xdg_dir/workspace"
+            echo ""
+            echo "Completion should work automatically in new bash shells."
+            echo "To use in current shell, run: source '$completion_file'"
+            ;;
+            
+        zsh)
+            local completion_file="$script_dir/workspace-completion.zsh"
+            local xdg_dir="$HOME/.local/share/zsh/site-functions"
+            
+            if [[ ! -f "$completion_file" ]]; then
+                echo "Error: Zsh completion file not found: $completion_file"
+                exit 1
+            fi
+            
+            echo "Installing zsh completion for workspace..."
+            echo ""
+            
+            if [[ "$interactive" == "yes" ]]; then
+                echo "This will install the completion to:"
+                echo "  $xdg_dir/_workspace"
+                echo ""
+                read -p "Continue? (Y/n) " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    echo "Installation cancelled."
+                    echo ""
+                    echo "To install manually, run:"
+                    echo "  mkdir -p $xdg_dir"
+                    echo "  cp '$completion_file' $xdg_dir/_workspace"
+                    exit 0
+                fi
+            fi
+            
+            mkdir -p "$xdg_dir"
+            cp "$completion_file" "$xdg_dir/_workspace"
+            echo "✓ Installed to $xdg_dir/_workspace"
+            echo ""
+            
+            # Check if this directory is in fpath (only if we're in zsh)
+            if [[ -n "${ZSH_VERSION:-}" ]] && ! echo $fpath | grep -q "$xdg_dir"; then
+                echo "Note: $xdg_dir is not in your fpath."
+                echo "You may need to add it to your shell configuration:"
+                echo ""
+                echo "  # For .zshrc or Home Manager:"
+                echo "  fpath=(\$HOME/.local/share/zsh/site-functions \$fpath)"
+                echo "  autoload -Uz compinit && compinit"
+            elif [[ -n "${ZSH_VERSION:-}" ]]; then
+                echo "Completion should work automatically in new zsh shells."
+                echo "To reload completions in current shell, run: compinit"
+            else
+                echo "Completion will be available in new zsh shells."
+                echo ""
+                echo "If completions don't work, add this to your shell configuration:"
+                echo "  fpath=(\$HOME/.local/share/zsh/site-functions \$fpath)"
+                echo "  autoload -Uz compinit && compinit"
+            fi
+            ;;
+            
+        *)
+            echo "Error: Unknown shell '$shell'. Supported: bash, zsh"
+            exit 1
+            ;;
+    esac
+}
+
+# Main
+case "${1:-help}" in
+    switch) switch_workspace "${2:-main}" ;;
+    sync)   sync_workspace "${2:-}" ;;
+    status) show_status ;;
+    foreach) foreach_repos "$@" ;;
+    list)   list_workspaces ;;
+    clean)  clean_workspace "${2:-}" ;;
+    repair) repair_repository "${2:-}" "${3:-}" ;;
+    regenerate-flake) regenerate_workspace_flake "${2:-}" ;;
+    install-completion) install_completion "${2:-}" ;;
+    config)
+        case "${2:-}" in
+            "")
+                echo "Error: config command requires a subcommand" >&2
+                echo "Run 'workspace config help' for usage information" >&2
+                exit 1
+                ;;
+            set) 
+                shift 2
+                config_set "$@" 
+                ;;
+            show)
+                config_show "${3:-main}"
+                ;;
+            import)
+                config_import "${3:-}" "${4:-}"
+                ;;
+            set-default)
+                shift 2
+                config_set_default "$@"
+                ;;
+            set-flake-input)
+                shift 2
+                config_set_flake_input "$@"
+                ;;
+            show-flake-inputs)
+                config_show_flake_inputs "${3:-main}"
+                ;;
+            set-flake-input-default)
+                shift 2
+                config_set_flake_input_default "$@"
+                ;;
+            help)
+                cat << EOF
+Configuration Management
+
+Usage: workspace config <subcommand> [arguments]
+
+Repository Configuration:
+  set <workspace> <url> [branch] [ref]
+                    Set repository config for a workspace
+  show [workspace]  Show configuration (default: main)
+  import <workspace> [file]
+                    Import from workspace.conf file
+  set-default <url> [branch] [ref]
+                    Set default repository for all workspaces
+
+Flake Input Configuration:
+  set-flake-input <workspace> <input-name> <url> [ref]
+                    Set flake input override for a workspace
+  show-flake-inputs [workspace]
+                    Show flake inputs (default: main)
+  set-flake-input-default <input-name> <url> [ref]
+                    Set default flake input for all workspaces
+
+Examples:
+  workspace config set-flake-input dev nixpkgs git+file:///path/to/nixpkgs?ref=my-branch
+  workspace config set-flake-input main home-manager github:nix-community/home-manager
+  workspace config show-flake-inputs dev
+
+Configuration Priority:
+  1. Workspace-specific (git worktree config)
+  2. Default (superproject git config)
+  3. Legacy workspace.conf file (migration only)
+EOF
+                ;;
+            *)
+                echo "Error: Unknown config subcommand: ${2}" >&2
+                echo "Run 'workspace config help' for usage information" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    help|*)
+        cat << EOF
+Workspace Manager - Submodule-free multi-repo development
+
+Usage: workspace <command> [arguments]
+
+Commands:
+  switch [branch]   Switch to workspace, create if needed (default: main)
+  sync [branch]     Sync repositories
+  status            Show all workspace status
+  foreach <cmd>     Execute command in all repos
+  list              List workspaces
+  clean <branch>    Remove workspace
+  repair <workspace> <repo>  Repair broken repository
+  regenerate-flake [workspace]  Regenerate workspace flake.nix with current input overrides
+  config            Manage per-workspace configurations
+  install-completion <shell>  Install shell completion (bash/zsh)
+
+Configuration:
+  Per-workspace: Use 'workspace config' commands
+  Legacy: Edit workspace.conf (for backward compatibility)
+
+Examples:
+  workspace switch feature-x
+  workspace config set feature-x https://github.com/org/repo.git feature-branch
+  workspace config show feature-x
+  workspace config import main workspace.conf
+EOF
+        ;;
+esac

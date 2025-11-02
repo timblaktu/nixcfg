@@ -2,98 +2,104 @@
 
 ## 🎯 **IMMEDIATE CONTEXT**
 
-**CURRENT STATUS**: Architecture Analysis Phase - Evaluating unified Rust implementation approach
+**CURRENT STATUS**: Rust Migration Planning Complete - Implementation Ready
 
-The git-worktree-superproject system has evolved from a bash proof-of-concept into a sophisticated multi-language architecture:
-- **Bash**: Main implementation (1000+ lines) - workspace management, git operations, configuration
-- **Rust**: AST-based Nix flake parsing and modification - high precision, performance critical
-- **Python/pytest**: Comprehensive test suite for bash functionality
+**DECISION FINALIZED**: **Migrate to unified Rust implementation** 
+- **Architecture Analysis**: Completed comprehensive evaluation
+- **User Approval**: Secured for unified Rust migration approach
+- **Planning Phase**: All three implementation phases defined
+- **Implementation Strategy**: Single-user, clean slate, preserve existing Rust AST assets
 
-**CRITICAL QUESTION**: Should the entire system be migrated to a unified Rust implementation for better maintainability, performance, and type safety?
+**KEY IMPLEMENTATION DECISION**: Proceed with Phase 1 → Core infrastructure migration
 
 ## 🔧 **CURRENT SYSTEM STATE**
 
-### **Production-Ready Components**
-- **Rust AST System**: Surgical Nix flake modification with perfect structure preservation
-- **Bash Workspace Manager**: 1000+ line script handling git worktrees, repository management, configuration
-- **Python Test Suite**: 728+ tests covering bash functionality comprehensively
-- **Documentation**: Professional, comprehensive user guides and technical documentation
+### **Migration Planning Completed**
+- **Phase 1 Scope**: Core infrastructure (git operations, configuration, CLI, filesystem)
+- **Phase 2 Scope**: Advanced features (Nix integration, repository management, state tracking)  
+- **Phase 3 Scope**: Testing and polish (test migration, performance optimization, hardening)
+- **Implementation Strategy**: No backwards compatibility overhead, integrate existing Rust AST system
 
-### **Architecture Analysis Required**
-- **Maintainability**: Multi-language complexity vs unified Rust benefits
-- **Performance**: Bash script efficiency vs Rust performance gains
-- **Type Safety**: Shell scripting limitations vs Rust compile-time guarantees
-- **Testing**: pytest integration vs native Rust testing ecosystem
+### **Architecture Decision Rationale**
+- **Current System**: 1,416-line bash script + 296-line Rust AST + 5,095-line Python tests
+- **Maintainability Issues**: Bash exceeded sustainable script boundaries
+- **Performance Potential**: 10-100x improvements with libgit2 native operations
+- **Type Safety**: Compile-time guarantees vs runtime shell errors
+- **Unified Testing**: Native Rust testing vs multi-language coordination
 
 ## 🔥 **TOP PRIORITIES FOR THIS SESSION**
 
-### **Priority 1: Architecture Analysis** 🔍 **IMMEDIATE**
-**Goal**: Evaluate bash vs unified Rust implementation trade-offs
+### **Priority 1: Phase 1 Implementation** 🔍 **IMMEDIATE**
+**Goal**: Begin core infrastructure migration implementation
+
+**Phase 1 Components**:
+1. **Git Operations Layer**: libgit2-rs integration for repository management, worktree operations, branch management
+2. **Configuration System**: TOML-based configuration with serde, environment detection, path resolution
+3. **CLI Interface**: clap-based argument parsing, command structure, help system
+4. **File System Operations**: Directory management, file operations, permission handling
 
 **Specific Actions**:
-1. **Bash complexity analysis**: Review 1000+ line workspace script for maintainability issues
-2. **Multi-language overhead assessment**: Cost of bash/rust/python coordination
-3. **Rust migration feasibility**: What functionality would need reimplementation
-4. **Performance comparison**: Shell operations vs Rust equivalents
-5. **Type safety benefits**: Compile-time guarantees vs runtime shell errors
+1. **Project Setup**: Create new Rust project structure
+2. **Dependency Configuration**: Add libgit2, clap, serde, tokio to Cargo.toml
+3. **Core Module Architecture**: Define main modules and interfaces
+4. **Git Operations Foundation**: Implement basic repository and worktree operations
+5. **CLI Structure**: Create command parsing and help system
 
-### **Priority 2: Migration Impact Assessment** ⚡ **IMPORTANT**
-**Goal**: Understand effort and benefits of unified Rust approach
+### **Priority 2: Asset Integration** ⚡ **CONCURRENT**
+**Goal**: Integrate existing Rust AST system into unified project
 
 **Specific Actions**:
-1. **Git operations in Rust**: libgit2 vs shell git commands
-2. **File system operations**: Rust std vs bash file operations
-3. **Configuration management**: TOML/JSON vs git config approach
-4. **Test migration**: pytest to Rust testing ecosystem
-5. **User experience impact**: Binary distribution vs shell script portability
+1. **AST Module Migration**: Move existing Rust AST code into new project
+2. **Dependency Consolidation**: Merge AST dependencies with core project
+3. **Interface Alignment**: Ensure AST operations integrate with git workflows
+4. **Test Infrastructure**: Begin migrating Python tests to Rust native tests
 
-## 🤔 **ARCHITECTURAL QUESTIONS**
+## 🤔 **IMPLEMENTATION QUESTIONS**
 
-### **Design Complexity Analysis**
-- Is a 1000+ line bash script maintainable long-term?
-- What are the pain points of multi-language coordination?
-- Would a unified Rust implementation be simpler and more robust?
-- How much effort would a migration require vs benefits gained?
+### **Project Structure Decisions**
+- How should we organize the main Rust project modules?
+- Should we use a workspace approach or single crate?
+- What's the optimal CLI command structure design?
+- How do we handle configuration file location and format?
 
-### **Technical Trade-offs**
-- **Shell scripting**: Quick prototyping vs maintainability concerns
-- **Type safety**: Runtime shell errors vs compile-time Rust guarantees  
-- **Performance**: Shell process spawning vs native Rust operations
-- **Distribution**: Script portability vs binary compilation requirements
-- **Testing**: pytest ecosystem vs Rust testing framework
+### **Technical Implementation**
+- **Git Operations**: Direct libgit2 usage vs git2-rs wrapper patterns
+- **Error Handling**: Custom error types vs anyhow for development speed
+- **Async vs Sync**: tokio async operations vs synchronous git operations
+- **Configuration**: TOML vs YAML vs JSON for user configuration
 
 ## 🎯 **SESSION OBJECTIVES**
 
-### **Primary Goal**: **Architecture Design Analysis**
-Evaluate whether the multi-language bash/rust/python architecture should be unified into a pure Rust implementation.
+### **Primary Goal**: **Phase 1 Implementation Kickoff**
+Begin implementing the core infrastructure for unified Rust workspace manager.
 
-### **Secondary Goal**: **Migration Feasibility Assessment**
-Understand the effort, risks, and benefits of migrating from bash to unified Rust approach.
+### **Secondary Goal**: **Asset Integration Planning**
+Plan integration of existing Rust AST system into new unified project.
 
 ### **Success Metrics for This Session**:
-- [ ] Bash script complexity and maintainability assessment completed
-- [ ] Multi-language coordination overhead analysis completed  
-- [ ] Rust migration feasibility and effort estimation completed
-- [ ] Performance comparison: shell operations vs Rust equivalents
-- [ ] Type safety and error handling benefits quantified
-- [ ] Recommendation: Continue multi-language vs migrate to unified Rust
+- [ ] New Rust project created with proper structure
+- [ ] Core dependencies added (libgit2, clap, serde)
+- [ ] Basic module architecture defined
+- [ ] Git operations foundation implemented
+- [ ] CLI structure and parsing established
+- [ ] Integration plan for existing AST system
 
 ## 🚨 **CRITICAL RULES FOR THIS SESSION**
-- **ARCHITECTURAL FOCUS**: Evaluate design trade-offs, not implementation details
-- **COMPREHENSIVE ANALYSIS**: Consider maintainability, performance, type safety, testing
-- **PRACTICAL ASSESSMENT**: Balance theoretical benefits against migration effort
-- **DOCUMENT RECOMMENDATIONS**: Provide clear guidance on architecture decisions
-- **NO IMPLEMENTATION**: Analysis only - no code changes during this session
+- **IMPLEMENTATION FOCUS**: Write actual working code, not just planning
+- **ITERATIVE DEVELOPMENT**: Start simple, build incrementally
+- **TEST-DRIVEN APPROACH**: Write tests alongside implementation
+- **PRESERVE EXISTING ASSETS**: Integrate current Rust AST code effectively
+- **SINGLE-USER OPTIMIZATION**: No backwards compatibility overhead
 
 ## 🔧 **IMPORTANT PATHS**
-- **Main workspace script**: `/home/tim/src/git-worktree-superproject/workspace` (1000+ lines)
-- **Rust AST tool**: `/home/tim/src/git-worktree-superproject/flake-input-modifier/` 
-- **Python test suite**: `/home/tim/src/git-worktree-superproject/test/` (728+ tests)
-- **Documentation**: README.md, FLAKE_USER_GUIDE.md, PERFORMANCE_BENCHMARKS.md
+- **Current Bash Script**: `/home/tim/src/git-worktree-superproject/workspace` (1,416 lines to replace)
+- **Existing Rust AST**: `/home/tim/src/git-worktree-superproject/flake-input-modifier/` (to integrate)
+- **Python Test Suite**: `/home/tim/src/git-worktree-superproject/test/` (728+ tests to migrate)
+- **Target Location**: TBD - new Rust project location
 
 ## 🎯 **SESSION FOCUS**
-**ARCHITECTURE ANALYSIS** - Evaluate the multi-language design and assess whether a unified Rust implementation would be superior.
+**RUST IMPLEMENTATION** - Begin Phase 1 implementation of unified workspace manager.
 
-**START WITH**: "I'll analyze the overall architecture of git-worktree-superproject, examining the 1000+ line bash script, and evaluate whether the entire system would be simpler and more maintainable as a unified Rust implementation."
+**START WITH**: "Migration planning complete. Ready to begin Phase 1 implementation of the unified Rust workspace manager. Let me start by creating the project structure and implementing core git operations. Which directory should I create the new Rust project in?"
 
-**OBJECTIVE**: Determine the optimal architecture approach: continue with multi-language design or migrate to unified Rust implementation.
+**OBJECTIVE**: Create working foundation for unified Rust implementation with core git operations and CLI structure.
