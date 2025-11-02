@@ -102,8 +102,8 @@ Test the system with actual development workflows to identify any remaining poli
 
 ## 🔧 **IMPORTANT PATHS**
 - **git-worktree-superproject**: `/home/tim/src/git-worktree-superproject/` (production-ready with AST integration)
-- **AST binary**: `/home/tim/src/git-worktree-superproject/bin/flake-input-modifier` (deployed and validated)
-- **nixcfg project**: `/home/tim/src/nixcfg/` (source of AST innovation)
+- **AST source and binary**: `/home/tim/src/git-worktree-superproject/flake-input-modifier/` (self-contained Rust project)
+- **nixcfg project**: `/home/tim/src/nixcfg/` (Nix configuration, cleaned of unrelated Rust projects)
 
 ## 🎯 **SESSION FOCUS**
 **DOCUMENTATION AND POLISH** - This session focuses on documenting the completed AST integration, creating user guides, and validating real-world workflows.

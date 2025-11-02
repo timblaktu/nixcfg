@@ -305,13 +305,14 @@ flake-nixpkgs.nix      # nixpkgs fork only
 ## 📋 **UPDATED CURRENT TASKS** (2025-11-01)
 
 **Priority 1: AST Integration Implementation** ✅ **COMPLETED SUCCESSFULLY** (2025-11-01)
-- [x] ✅ **AST binary deployment**: Release-optimized binary copied to git-worktree-superproject/bin/
+- [x] ✅ **AST project migration**: Moved flake-input-modifier from nixcfg to git-worktree-superproject for architectural alignment
 - [x] ✅ **Enhanced generate_workspace_flake()**: AST-based replacement with graceful sed fallback  
 - [x] ✅ **Comprehensive error handling**: User feedback, fallback mechanisms, edge case coverage
 - [x] ✅ **Full integration testing**: Multi-input scenarios, override vs no-override validation
 - [x] ✅ **Backward compatibility**: All existing commands work perfectly
 - [x] ✅ **Critical validation**: 6-point validation confirms production readiness
 - [x] ✅ **Bug resolution**: Fixed "unknown" URL replacement issue in original logic
+- [x] ✅ **Self-contained architecture**: Source, build, and usage now unified in git-worktree-superproject
 
 **VALIDATION EVIDENCE**:
 - ✅ **Perfect preservation**: No-override scenarios produce identical files (diff confirmed)
@@ -396,12 +397,19 @@ flake-nixpkgs.nix      # nixpkgs fork only
 - ✅ **Edge cases**: Conditional/commented inputs, nested flakes, multi-file structures
 - ✅ **Real-world validation**: Complex production flake patterns with multiple advanced features combined
 
-**Priority 2: Documentation and User Experience Polish** 🎯 **NEXT SESSION PRIORITY**
+**Priority 2: Documentation and User Experience Polish** 🎯 **CURRENT SESSION FOCUS**
 - [ ] **Document AST integration** in git-worktree-superproject README with examples
 - [ ] **Create user guide** for flake input override workflows and best practices
 - [ ] **Add performance benchmarks** demonstrating structure preservation benefits
 - [ ] **Evaluate git-worktree-superproject** for commit and potential upstream contribution
 - [ ] **Test real-world workflows** with actual multi-context development scenarios
+
+**ARCHITECTURAL UPDATES COMPLETED** (2025-11-01):
+- ✅ **Rust project relocation**: flake-input-modifier moved from nixcfg to git-worktree-superproject
+- ✅ **Eliminated deployment friction**: No more cross-repository binary copying required
+- ✅ **Self-contained development**: Source, build, test, and usage unified in single repository
+- ✅ **Rust toolchain integration**: Added cargo, rustc, rust-analyzer to git-worktree-superproject flake.nix
+- ✅ **Clean separation**: Removed unrelated Rust projects from nixcfg for cleaner architecture
 
 **Priority 3: Local Fork Development Resolution** (ENABLED by System Completion)
 - [ ] Complete ongoing fork development in parallel with other work
