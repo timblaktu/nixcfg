@@ -216,12 +216,26 @@ generate_workspace_flake() {
         override_url=$(get_flake_input_url "$input_name" "$workspace")
         
         if [[ -n "$override_url" ]]; then
-            # Replace the URL in the flake content using Python for more reliable parsing
-            # This handles both simple and complex formats properly
+            # Replace the URL using AST-based modification for perfect structure preservation
             local temp_file=$(mktemp)
             echo "$modified_content" > "$temp_file"
             
-            python3 -c "
+            # Use flake-input-modifier for AST-based replacement
+            local flake_modifier_binary="$WORKSPACE_ROOT/flake-input-modifier/target/debug/flake-input-modifier"
+            
+            if [[ -x "$flake_modifier_binary" ]]; then
+                # Use the AST-based binary for precise modification
+                local current_url
+                current_url=$(parse_flake_inputs "$temp_file" | grep "^$input_name " | cut -d' ' -f2-)
+                
+                if [[ -n "$current_url" ]]; then
+                    modified_content=$("$flake_modifier_binary" "$temp_file" "$input_name" "$current_url" "$override_url")
+                fi
+            else
+                # Fallback to Python-based approach (legacy)
+                echo "Warning: flake-input-modifier binary not found, using fallback method" >&2
+                
+                python3 -c "
 import re
 import sys
 
@@ -272,9 +286,12 @@ for line in lines:
 with open('${temp_file}.new', 'w') as f:
     f.write('\\n'.join(result_lines))
 "
+                
+                modified_content=$(<"${temp_file}.new")
+                rm -f "${temp_file}.new"
+            fi
             
-            modified_content=$(<"${temp_file}.new")
-            rm -f "$temp_file" "${temp_file}.new"
+            rm -f "$temp_file"
         fi
     done < <(parse_flake_inputs "$source_flake")
     
