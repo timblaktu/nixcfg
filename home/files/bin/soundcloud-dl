@@ -31,7 +31,7 @@ get_token() {
     echo "  4. Reload the page or play any track"
     echo "  5. Look for requests to 'api-v2.soundcloud.com'"
     echo "  6. Find the 'oauth_token' parameter in the request URL"
-    echo "  7. Copy the token value (format: 2-123456-123456789-123456789)"
+    echo "  7. Copy the OAuth value (format: 2-123456-123456789-123456789)"
     echo
     read -r -p "Paste your OAuth token here: " oauth_value
 
@@ -123,8 +123,8 @@ OAUTH TOKEN EXTRACTION:
     2. Press F12 → Network tab
     3. Reload page or play any track
     4. Look for requests to 'api-v2.soundcloud.com'
-    5. Find 'oauth_token=' in request URL parameters
-    6. Copy token value (format: 2-123456-123456789-123456789)
+    5. Find the 'oauth_token' parameter in request URL
+    6. Copy OAuth value (format: 2-123456-123456789-123456789)
     
     Token is cached in ~/.config/soundcloud-token for 50 minutes
 
