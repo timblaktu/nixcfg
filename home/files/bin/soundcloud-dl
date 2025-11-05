@@ -33,16 +33,16 @@ get_token() {
     echo "  6. Find the 'oauth_token' parameter in the request URL"
     echo "  7. Copy the token value (format: 2-123456-123456789-123456789)"
     echo
-    read -r -p "Paste your OAuth token here: " token
-    
-    if [[ -z "$token" ]]; then
+    read -r -p "Paste your OAuth token here: " oauth_value
+
+    if [[ -z "$oauth_value" ]]; then
         print_error "No token provided"
         exit 1
     fi
-    
+
     # Create config directory if it doesn't exist
     mkdir -p "$(dirname "$TOKEN_FILE")"
-    echo "$token" > "$TOKEN_FILE"
+    echo "$oauth_value" > "$TOKEN_FILE"
     print_success "Token saved to $TOKEN_FILE"
 }
 
@@ -52,8 +52,8 @@ is_token_valid() {
         return 1
     fi
     
-    local token_age=$(($(date +%s) - $(stat -c %Y "$TOKEN_FILE" 2>/dev/null || echo 0)))
-    if [[ $token_age -gt $TOKEN_MAX_AGE ]]; then
+    local auth_age=$(($(date +%s) - $(stat -c %Y "$TOKEN_FILE" 2>/dev/null || echo 0)))
+    if [[ $auth_age -gt $TOKEN_MAX_AGE ]]; then
         print_warning "Token is older than 50 minutes and likely expired"
         return 1
     fi
@@ -191,13 +191,13 @@ main() {
         get_token
     fi
     
-    local token
-    token=$(cat "$TOKEN_FILE")
-    
+    local oauth_value
+    oauth_value=$(cat "$TOKEN_FILE")
+
     print_info "Using stored OAuth token ($(( ($(date +%s) - $(stat -c %Y "$TOKEN_FILE")) / 60 )) minutes old)"
-    
+
     # Try with OAuth token first
-    if ! yt-dlp --username oauth --password "$token" "${extra_args[@]}" "$url"; then
+    if ! yt-dlp --username oauth --password "$oauth_value" "${extra_args[@]}" "$url"; then
         print_warning "OAuth authentication failed"
         try_alternatives "$url" "${extra_args[@]}"
     else

@@ -99,23 +99,23 @@ parse_single_file() {
         commands_str="${commands_str%:}"  # Remove trailing colon
     fi
     
-    # Format summary with last tokens only
-    local tokens=()
+    # Format summary with last items only
+    local summary_items=()
     if [[ -n "$paths_str" ]]; then
         IFS=':' read -ra path_arr <<< "$paths_str"
         for p in "${path_arr[@]}"; do
-            tokens+=("${p##*/}")
+            summary_items+=("${p##*/}")
         done
     fi
     if [[ -n "$commands_str" ]]; then
         IFS=':' read -ra cmd_arr <<< "$commands_str"
         for c in "${cmd_arr[@]}"; do
-            tokens+=("$c")
+            summary_items+=("$c")
         done
     fi
     local window_summary
-    if [[ ${#tokens[@]} -gt 0 ]]; then
-        window_summary="${tokens[*]}"
+    if [[ ${#summary_items[@]} -gt 0 ]]; then
+        window_summary="${summary_items[*]}"
     else
         window_summary="${window_count}w ${pane_count}p"
     fi
@@ -457,67 +457,67 @@ _format_session_row() {
     # Process and abbreviate summary paths/commands
     local display_summary="$window_summary"
     
-    # If summary contains tokens, apply smart abbreviation based on available width and token count
+    # If summary contains items, apply smart abbreviation based on available width and item count
     if [[ -n "$window_summary" && ! "$window_summary" =~ ^[0-9]+w\ [0-9]+p$ ]]; then
-        # Split summary into tokens
-        local -a tokens
-        read -ra tokens <<< "$window_summary"
-        local token_count=${#tokens[@]}
-        
-        # Calculate smart abbreviation width per token based on available space
-        if [[ $token_count -gt 0 ]]; then
-            # Prioritized token display strategy for readability
-            local abbreviated_tokens=()
+        # Split summary into items
+        local -a summary_items
+        read -ra summary_items <<< "$window_summary"
+        local item_count=${#summary_items[@]}
+
+        # Calculate smart abbreviation width per item based on available space
+        if [[ $item_count -gt 0 ]]; then
+            # Prioritized item display strategy for readability
+            local abbreviated_items=()
             local space_used=0
             # shellcheck disable=SC2034  # Reserved for future session width optimization
             local min_readable_width=12
-            local max_token_width=18
-            local tokens_shown=0
-            
-            # Show tokens until we run out of readable space
-            for token in "${tokens[@]}"; do
-                # Calculate space needed for this token (including separator if not first)
-                local token_width=${#token}
-                local needed_space=$token_width
-                [[ $tokens_shown -gt 0 ]] && needed_space=$((needed_space + 1))  # space separator
-                
-                # If token needs truncation, use readable width
-                if [[ $token_width -gt $max_token_width ]]; then
-                    needed_space=$max_token_width
-                    [[ $tokens_shown -gt 0 ]] && needed_space=$((needed_space + 1))
+            local max_item_width=18
+            local items_shown=0
+
+            # Show items until we run out of readable space
+            for item in "${summary_items[@]}"; do
+                # Calculate space needed for this item (including separator if not first)
+                local item_width=${#item}
+                local needed_space=$item_width
+                [[ $items_shown -gt 0 ]] && needed_space=$((needed_space + 1))  # space separator
+
+                # If item needs truncation, use readable width
+                if [[ $item_width -gt $max_item_width ]]; then
+                    needed_space=$max_item_width
+                    [[ $items_shown -gt 0 ]] && needed_space=$((needed_space + 1))
                 fi
-                
-                # Check if we have enough space for readable token
+
+                # Check if we have enough space for readable item
                 if [[ $((space_used + needed_space)) -le $remaining_width ]]; then
-                    # Add token (truncate if needed but keep readable)
-                    if [[ $token_width -gt $max_token_width ]]; then
-                        abbreviated_tokens+=("$(truncate_to_display_width "$token" "$max_token_width")")
-                        space_used=$((space_used + max_token_width))
+                    # Add item (truncate if needed but keep readable)
+                    if [[ $item_width -gt $max_item_width ]]; then
+                        abbreviated_items+=("$(truncate_to_display_width "$item" "$max_item_width")")
+                        space_used=$((space_used + max_item_width))
                     else
-                        abbreviated_tokens+=("$token")
-                        space_used=$((space_used + token_width))
+                        abbreviated_items+=("$item")
+                        space_used=$((space_used + item_width))
                     fi
-                    [[ $tokens_shown -gt 0 ]] && space_used=$((space_used + 1))  # separator space
-                    tokens_shown=$((tokens_shown + 1))
+                    [[ $items_shown -gt 0 ]] && space_used=$((space_used + 1))  # separator space
+                    items_shown=$((items_shown + 1))
                 else
-                    # Not enough space for readable token, stop here
+                    # Not enough space for readable item, stop here
                     break
                 fi
             done
-            
-            # Add indicator if we truncated tokens
-            local remaining_tokens=$((token_count - tokens_shown))
-            if [[ $remaining_tokens -gt 0 ]]; then
-                local indicator="+$remaining_tokens"
+
+            # Add indicator if we truncated items
+            local remaining_items=$((item_count - items_shown))
+            if [[ $remaining_items -gt 0 ]]; then
+                local indicator="+$remaining_items"
                 # Check if we have space for indicator
                 local indicator_space=$((${#indicator} + 1))  # space + indicator
                 if [[ $((space_used + indicator_space)) -le $remaining_width ]]; then
-                    abbreviated_tokens+=("$indicator")
+                    abbreviated_items+=("$indicator")
                 fi
             fi
-            
-            # Reconstruct summary with abbreviated tokens
-            display_summary="${abbreviated_tokens[*]}"
+
+            # Reconstruct summary with abbreviated items
+            display_summary="${abbreviated_items[*]}"
         fi
     fi
     
