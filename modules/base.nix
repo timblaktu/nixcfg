@@ -315,8 +315,7 @@ in
               "Write(/etc/passwd)"
             ];
             ask = [ ];
-            defaultMode = "ask";
-            disableBypassPermissionsMode = false;
+            defaultMode = "default";
             additionalDirectories = [ ];
           };
 

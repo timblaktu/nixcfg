@@ -251,7 +251,10 @@ in
         } // cfg.environmentVariables;
 
         # Files and scripts
-        file = { };
+        file = {
+          # Glow markdown renderer configuration
+          ".config/glow/glow.yml".source = ../files/glow.yml;
+        };
 
         # THis isn't working. For now just run exec $SHELL manually
         # auto-exec $SHELL after a home-manager switch
@@ -349,7 +352,13 @@ in
         plugins = {
           toggle-pane = pkgs.yaziPlugins.toggle-pane;
           mediainfo = pkgs.yaziPlugins.mediainfo;
-          glow = pkgs.yaziPlugins.glow;
+          # Override glow plugin to use dynamic width instead of hardcoded 55
+          glow = pkgs.yaziPlugins.glow.overrideAttrs (old: {
+            postPatch = ''
+              # Replace main.lua with our patched version
+              cp ${../files/yazi-glow-main.lua} main.lua
+            '';
+          });
           miller = pkgs.yaziPlugins.miller;
           ouch = pkgs.yaziPlugins.ouch;
           # Additional useful plugins

@@ -101,6 +101,7 @@ in
               # Check for headless mode - bypass PID check for stateless operations
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 coalesce_config
+                export CLAUDE_CONFIG_DIR="$config_dir"
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
                 exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
@@ -108,6 +109,7 @@ in
               # Production Claude detection logic (v2.0: check for --settings flag)
               if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
                 coalesce_config
+                export CLAUDE_CONFIG_DIR="$config_dir"
                 exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
@@ -118,6 +120,7 @@ in
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
                   coalesce_config
+                  export CLAUDE_CONFIG_DIR="$config_dir"
                   exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
@@ -127,14 +130,15 @@ in
 
               # Launch new instance with environment setup
               echo "🚀 Launching Claude (${displayName})..."
+              export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-            
+
               # Create config directory if it doesn't exist
               mkdir -p "$config_dir"
-              
+
               # Apply coalescence before launch
               coalesce_config
-            
+
               # Store PID and execute
               echo $$ > "$pidfile"
               exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
@@ -262,6 +266,7 @@ in
               # Check for headless mode - bypass PID check for stateless operations
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 coalesce_config
+                export CLAUDE_CONFIG_DIR="$config_dir"
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
                 exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
@@ -269,6 +274,7 @@ in
               # Production Claude detection logic (v2.0: check for --settings flag)
               if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
                 coalesce_config
+                export CLAUDE_CONFIG_DIR="$config_dir"
                 exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
@@ -279,6 +285,7 @@ in
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
                   coalesce_config
+                  export CLAUDE_CONFIG_DIR="$config_dir"
                   exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
@@ -288,14 +295,15 @@ in
 
               # Launch new instance with environment setup
               echo "🚀 Launching Claude (${displayName})..."
+              export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-            
+
               # Create config directory if it doesn't exist
               mkdir -p "$config_dir"
-              
+
               # Apply coalescence before launch
               coalesce_config
-            
+
               # Store PID and execute
               echo $$ > "$pidfile"
               exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
@@ -342,6 +350,7 @@ in
               # Check for headless mode - bypass PID check for stateless operations
               if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
                 coalesce_config
+                export CLAUDE_CONFIG_DIR="$config_dir"
                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
                 exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
@@ -349,6 +358,7 @@ in
               # Production Claude detection logic (v2.0: check for --settings flag)
               if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
                 coalesce_config
+                export CLAUDE_CONFIG_DIR="$config_dir"
                 exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
               fi
 
@@ -359,6 +369,7 @@ in
                   echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
                   echo "   Using existing instance..."
                   coalesce_config
+                  export CLAUDE_CONFIG_DIR="$config_dir"
                   exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
                 else
                   echo "🧹 Cleaning up stale PID file..."
@@ -368,14 +379,15 @@ in
 
               # Launch new instance with environment setup
               echo "🚀 Launching Claude (${displayName})..."
+              export CLAUDE_CONFIG_DIR="$config_dir"
               ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-            
+
               # Create config directory if it doesn't exist
               mkdir -p "$config_dir"
-              
+
               # Apply coalescence before launch
               coalesce_config
-            
+
               # Store PID and execute
               echo $$ > "$pidfile"
               exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"

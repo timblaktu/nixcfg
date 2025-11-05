@@ -91,15 +91,9 @@ with lib;
       };
 
       defaultMode = mkOption {
-        type = types.enum [ "allow" "deny" "ask" ];
-        default = "ask";
+        type = types.enum [ "acceptEdits" "bypassPermissions" "default" "plan" ];
+        default = "default";
         description = "Default permission mode for tools not explicitly listed";
-      };
-
-      disableBypassPermissionsMode = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Disable bypass permissions mode";
       };
 
       additionalDirectories = mkOption {
@@ -283,7 +277,6 @@ with lib;
             deny = cfg.permissions.deny;
             ask = cfg.permissions.ask;
             defaultMode = cfg.permissions.defaultMode;
-            disableBypassPermissionsMode = cfg.permissions.disableBypassPermissionsMode;
             additionalDirectories = cfg.permissions.additionalDirectories;
           };
         in
@@ -328,7 +321,6 @@ with lib;
             deny = cfg.permissions.deny;
             ask = cfg.permissions.ask;
             defaultMode = cfg.permissions.defaultMode;
-            disableBypassPermissionsMode = cfg.permissions.disableBypassPermissionsMode;
             additionalDirectories = cfg.permissions.additionalDirectories;
           };
         in
@@ -481,7 +473,6 @@ with lib;
                 deny = cfg.permissions.deny;
                 ask = cfg.permissions.ask;
                 defaultMode = cfg.permissions.defaultMode;
-                disableBypassPermissionsMode = cfg.permissions.disableBypassPermissionsMode;
                 additionalDirectories = cfg.permissions.additionalDirectories;
               }}')
               ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}

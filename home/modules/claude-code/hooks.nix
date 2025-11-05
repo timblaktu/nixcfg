@@ -151,7 +151,7 @@ in
 
     custom = mkOption {
       type = types.attrs;
-      default = { PreToolUse = [ ]; PostToolUse = [ ]; Start = [ ]; Stop = [ ]; };
+      default = { PreToolUse = [ ]; PostToolUse = [ ]; SessionStart = [ ]; Stop = [ ]; };
       description = "Custom hook definitions";
     };
   };
@@ -161,7 +161,7 @@ in
     {
       PreToolUse = [ ];
       PostToolUse = [ ];
-      Start = [ ];
+      SessionStart = [ ];
       Stop = [ ];
     }
 

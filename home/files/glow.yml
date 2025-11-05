@@ -1,0 +1,11 @@
+# Glow configuration
+# Auto-detect terminal width for optimal markdown rendering (0 = auto-detect)
+style: "auto"
+# mouse support (TUI-mode only)
+mouse: false
+# use pager to display markdown
+pager: false
+# word-wrap at width (0 = auto-detect terminal width)
+width: 0
+# show all files, including hidden and ignored
+all: false

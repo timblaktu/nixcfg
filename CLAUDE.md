@@ -1,6 +1,4 @@
-# Unified Nix Configuration - Working Document
-
-## ⚠️ CRITICAL PROJECT-SPECIFIC RULES ⚠️ 
+# ⚠️ CRITICAL PROJECT-SPECIFIC RULES ⚠️ 
 - **SESSION CONTINUITY**: Update this CLAUDE.md file with task progress and provide end-of-response summary of changes made
 - **COMPLETION STANDARD**: Tasks complete ONLY when: (1) `git add` all files, (2) `nix flake check` passes, (3) `nix run home-manager -- switch --flake '.#TARGET' --dry-run` succeeds, (4) end-to-end functionality demonstrated. **Writing code ≠ Working system**
 - **NEVER WORK ON MAIN OR MASTER BRANCH**: ALWAYS ask user what branch to work on, and switch to or create it from main or master before starting work
@@ -11,22 +9,63 @@
 - **DEPENDENCY ANALYSIS BOUNDARY**: When hitting build system complexity (Nix dependency injection, flake outputs), document the issue and recommend next steps rather than deep-diving into the build system
 - **NIX FLAKE CHECK DEBUGGING**: When `nix flake check` fails, debug in-place using: (1) `nix log /nix/store/...` for detailed failure logs, (2) `nix flake check --verbose --debug --print-build-logs`, (3) `nix build .#checks.SYSTEM.TEST_NAME` for individual test execution, (4) `nix repl` + `:lf .` for interactive flake exploration. NEVER waste time on manual test reproduction - use Nix's built-in debugging tools.
 
-## 📊 **CURRENT SYSTEM STATUS**
+# 🔧 **DEVELOPMENT ENVIRONMENT**
+- Claude code may be running in the terminal or the web. Both use the same .claude/ and CLAUDE.md files in the repo.
+- We define a session startup hook to ensure nix is installed in the environment.
+  - **Web** environments are ephemeral, so nix will always need to be installed every session startup
+  - **Local** environments already have nix, so hook should be a no-op (fast)
+- **Environment config**: `flake-modules/dev-shells.nix` defines tooling
 
-**Current Branch**: `dev`
-**Build State**: ✅ All flake checks passing, home-manager deployments successful
-**Architecture**: Multi-language system requiring architectural evaluation:
-- **Bash**: 1000+ line workspace management script (proof-of-concept evolved)
-- **Rust**: Production-ready AST-based Nix flake modification  
-- **Python**: Comprehensive pytest test suite (728+ tests)
+# CLAUDE-CODE CONFIGURATION AND STATE MANAGEMENT
 
-**Critical Question**: Should this be unified into a pure Rust implementation?
+**Local sessions:**
+- Use `CLAUDE_CONFIG_DIR` → `claude-runtime/.claude-{account}/`
+- Never touch `.claude/`
+- Hook script at `home/files/bin/ensure-nix.sh` is fine (not web-specific)
 
-## 🔧 **IMPORTANT PATHS**
+**Web sessions:**
+- Use `.claude/settings.json` for hooks
+- Create runtime state in `.claude/` (all ignored except settings.json)
+- Hook runs `bin/ensure-nix.sh` (same script, works in both contexts)
+
+## Filesystem View of Claude Configuration and Runtime State
+
+```
+nixcfg/
+├── home/files/bin/
+│   └── ensure-nix.sh          # Shared hook script
+├── claude-runtime/
+│   ├── .claude-default/
+│   │   ├── settings.json      # ✅ Checked in (Nix-managed)
+│   │   ├── .claude.json       # ❌ Ignored (runtime)
+│   │   └── .mcp.json          # ❌ Ignored (runtime)
+│   ├── .claude-max/
+│   │   └── ... (same)
+│   └── .claude-pro/
+│       └── ... (same)
+└── .claude/                   # Web sessions ONLY
+    ├── settings.json          # ✅ Checked in (web hooks)
+    ├── .claude.json           # ❌ Ignored (runtime)
+    ├── .mcp.json              # ❌ Ignored (runtime)
+    └── logs/                  # ❌ Ignored (runtime)
+```
+
+# Common Nix Development Workflow Commands
+```bash
+nixpkgs-fmt <file>              # Format Nix files
+nix flake check                 # Validate entire flake (MANDATORY before commits)
+nix flake update                # Update flake inputs
+nix build .#homeConfigurations."tim@thinky-nixos".activationPackage
+home-manager switch --flake .#tim@thinky-nixos  # Test config switch
+```
+
+# 🔧 **IMPORTANT PATHS for local sessions**
 
 1. `/home/tim/src/nixpkgs` - Local nixpkgs fork (active development: writers-auto-detection)
 2. `/home/tim/src/home-manager` - Local home-manager fork (active development: autoValidate + fcitx5 fixes)  
 3. `/home/tim/src/NixOS-WSL` - WSL-specific configurations (active development: plugin shim integration)
+4. `/home/tim/src/git-worktree-superproject` - working tree for MY PROJECT implementing fast worktree switching for multi-repo and nix flake projects. We will eventually USE this here in nixcfg to facilitate multiple concurrent nix- development efforts
+
 
 ## 🚧 **ACTIVE FORK DEVELOPMENT STATUS** (2025-10-31)
 
@@ -99,188 +138,12 @@
 - Manual input switching is error-prone and friction-heavy
 - Need clear indication of development context
 
-### **🏗️ PROPOSED CONTEXT SWITCHING STRATEGIES**
+### **🏗️ PROPOSED CONTEXT SWITCHING STRATEGY: git-worktree-superproject**
 
-#### **Strategy 1: Branch-Based Input Convention (Git Super-Repo Pattern)**
-**Concept**: nixcfg branch name determines flake input selection
-**Implementation**: 
-- `main` branch → all upstream inputs (github:NixOS/nixpkgs, etc.)
-- `dev` branch → all development fork inputs (git+file:///home/tim/src/*)
-- `nixpkgs-dev` branch → nixpkgs fork only, others upstream
-- `home-manager-dev` branch → home-manager fork only, others upstream
+See /home/tim/src/git-worktree-superproject for details.
 
-**Pros**: 
-- Convention-based, version controlled
-- Clear visual indication via branch name
-- Can have specialized branches for specific feature combinations
+## 📋 **CURRENT TASKS**
 
-**Cons**: 
-- Requires branch switching to change context
-- Need dynamic flake.nix or conditional logic
-
-#### **Strategy 2: Git Worktree Multi-Context Architecture**
-**Concept**: Separate working directories for different development contexts
-**Implementation**:
-```
-~/src/nixcfg-main/        # main branch, upstream inputs
-~/src/nixcfg-dev/         # dev branch, all fork inputs  
-~/src/nixcfg-nixpkgs/     # nixpkgs-dev branch, nixpkgs fork only
-~/src/nixcfg-feature-X/   # feature branch, custom input mix
-```
-
-**Pros**:
-- Complete context isolation
-- No git branch switching needed
-- Each worktree can have different flake.nix
-- Can work on multiple contexts simultaneously
-
-**Cons**:
-- Multiple working directories to maintain
-- Higher disk usage
-- Potential for divergent configurations
-
-#### **Strategy 3: Dynamic Input Resolution System**
-**Concept**: Smart flake.nix that auto-detects appropriate inputs
-**Implementation**:
-- Check current git branch name (`git rev-parse --abbrev-ref HEAD`)
-- Check for existence of local fork directories
-- Environment variable overrides (`NIX_USE_FORKS=nixpkgs,home-manager`)
-- Fallback hierarchy: ENV → branch name → local detection → upstream
-
-**Pros**:
-- Automatic context detection
-- Flexible override system
-- Single flake.nix handles all cases
-
-**Cons**:
-- Complex flake.nix logic
-- Potential for unexpected behavior
-- Harder to debug input resolution
-
-#### **Strategy 4: Explicit Profile Selection System**
-**Concept**: Explicit profile files define input sets
-**Implementation**:
-```
-profiles/
-├── upstream.nix          # All upstream inputs
-├── all-forks.nix         # All development forks
-├── nixpkgs-only.nix      # nixpkgs fork, others upstream
-└── testing.nix          # Specific input mix for testing
-```
-
-**Pros**:
-- Explicit, version controlled
-- Easy to understand and modify
-- Can create custom profiles for specific needs
-
-**Cons**:
-- Manual profile selection required
-- Need mechanism to choose active profile
-
-#### **Strategy 5: Command-Line Input Override System**
-**Concept**: Default to upstream, override inputs at build time
-**Implementation**:
-```bash
-# Use upstream (default)
-nix run home-manager -- switch --flake .
-
-# Override specific inputs
-nix run home-manager -- switch --flake . \
-  --override-input nixpkgs git+file:///home/tim/src/nixpkgs?ref=writers-auto-detection
-
-# Wrapper scripts for common combinations
-hm-switch-dev     # Uses all forks
-hm-switch-nixpkgs # Uses nixpkgs fork only
-```
-
-**Pros**:
-- Uses nix built-in override system
-- No flake.nix modifications needed
-- Scriptable with wrapper functions
-
-**Cons**:
-- Command-line complexity
-- Easy to forget which overrides are active
-- Not version controlled
-
-#### **Strategy 6: Multiple Flake Configuration Pattern**
-**Concept**: Separate flake files for different contexts
-**Implementation**:
-```
-flake.nix              # Symlink to active configuration
-flake-upstream.nix     # Upstream inputs
-flake-dev.nix          # Development fork inputs
-flake-nixpkgs.nix      # nixpkgs fork only
-```
-
-**Pros**:
-- Simple, explicit configuration files
-- Easy to understand and maintain
-- Can version control all variants
-
-**Cons**:
-- Manual symlink management
-- Configuration duplication
-- Risk of configurations drifting apart
-
-## 🏗️ **ARCHITECTURE EVALUATION REQUIRED**
-
-The git-worktree-superproject has evolved from a simple bash proof-of-concept into a sophisticated multi-language system:
-
-### **Current Architecture**
-- **Bash Script**: 1000+ lines of workspace management, git operations, configuration handling
-- **Rust Binary**: Production-ready AST-based Nix flake modification with comprehensive testing  
-- **Python Tests**: 728+ pytest tests providing comprehensive coverage of bash functionality
-
-### **Key Question**
-**Should this multi-language system be unified into a pure Rust implementation?**
-
-**Considerations**:
-- **Maintainability**: Is 1000+ lines of bash sustainable long-term?
-- **Type Safety**: Runtime shell errors vs compile-time Rust guarantees
-- **Performance**: Shell process spawning vs native operations
-- **Testing**: Multi-language test coordination vs unified Rust testing
-- **Distribution**: Shell script portability vs binary compilation requirements
-
-## 📋 **CURRENT TASKS** (2025-11-02)
-
-**Goal**: Rust migration planning complete - Implementation ready to begin
-
-**Completed Planning**:
-- [x] **Architecture analysis**: Multi-language system evaluation complete ✅
-- [x] **Migration decision**: Approved unified Rust implementation ✅
-- [x] **Phase 1 Planning**: Core infrastructure migration (git, config, CLI, filesystem) ✅
-- [x] **Phase 2 Planning**: Advanced features (Nix integration, repo management, state) ✅  
-- [x] **Phase 3 Planning**: Testing and polish (test migration, performance, hardening) ✅
-
-**Current Status**: Planning complete - Ready for implementation
-
-**Next Session Priority**: Begin Phase 1 implementation → Core infrastructure migration
-
-**Implementation Strategy**:
-- **No backwards compatibility needed**: Single-user implementation
-- **Preserve existing assets**: Integrate current Rust AST system
-- **Clean slate approach**: New Rust project structure from scratch
-- **Test-driven development**: Migrate Python tests to native Rust testing
-
-**Priority 2: Future Development** (DEFERRED pending Rust migration completion)
+**Future Development** (DEFERRED until git-worktree-superproject is validated)
 - [ ] Complete ongoing fork development work  
 - [ ] Coordinate upstream contributions post-migration
-
-## 🎯 **SESSION CONTEXT**
-
-**Current Focus**: Rust migration implementation planning complete
-**Critical Priority**: Begin Phase 1 implementation of unified Rust workspace manager
-**Strategic Goal**: Replace 1,416-line bash script with structured Rust implementation
-**Innovation Opportunity**: Unified codebase with 10-100x performance improvements
-
-**Implementation Phases Defined**:
-- **Phase 1**: Core infrastructure (git operations, configuration, CLI, filesystem)
-- **Phase 2**: Advanced features (Nix integration, repository management, state tracking)
-- **Phase 3**: Testing and polish (test migration, performance optimization, hardening)
-
-**Architecture Decision Finalized**:
-- **Approved**: Unified Rust implementation (libgit2, clap, serde, comprehensive testing)
-- **Rejected**: Multi-language bash/rust/python coordination approach
-- **Implementation**: Clean slate with existing Rust AST system integration
-

@@ -46,11 +46,17 @@ secrets.yaml
 !*.template         # Allow template files
 *.pcap
 *.wsl
-.claude/
 .serena/
 build-profiles/
 .archive/
-claude-runtime/
+
+# === Claude Code Configuration ===
+# Ignore all runtime state
+claude-runtime/*/*
+.claude/*         
+# ..but include settings/configuration
+!claude-runtime/*/settings.json
+!.claude/settings.json 
 
 # Personal migration instructions (contains sensitive information)
 SECRETS-USER-INSTRUCTIONS.md

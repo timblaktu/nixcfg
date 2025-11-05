@@ -2,10 +2,100 @@
 { config, lib, pkgs, ... }:
 
 let
+  # ---- COLOR SCHEME SELECTOR ----
+  # Change this to experiment with different status bar color schemes
+  # Options: "default" | "classic" | "subtle" | "high-contrast" | "solarized" | "minimal" | "balanced"
+  colorScheme = "classic";
+
   # Width thresholds
   narrowWidth = "60";
   mediumWidth = "100";
   wideWidth = "140";
+
+  # ---- COLOR SCHEME DEFINITIONS ----
+  # Conditional color scheme selection
+  colorSchemes = {
+    # Original monochrome scheme
+    default = {
+      style_normal = "fg=colour7,bg=colour0";
+      style_nested = "fg=colour7,bg=colour8";
+      style_current_window = "fg=colour7,bold,bg=colour10";
+      lock_closed = "fg=colour7,bg=colour0";
+      lock_open = "fg=colour7,bg=colour0";
+      status_left_style = "fg=colour7,bg=colour0";
+      status_right_style = "fg=colour7,bg=colour0";
+    };
+
+    # Classic - nearly identical to original with minimal differentiation
+    # Same black background, same aesthetic, just tiny text color variations for field separation
+    classic = {
+      style_normal = "fg=colour7,bg=colour0";
+      style_nested = "fg=colour7,bg=colour8";
+      style_current_window = "fg=colour7,bold,bg=colour10";
+      lock_closed = "fg=colour7,bg=colour0";
+      lock_open = "fg=colour7,bg=colour0";
+      status_left_style = "fg=colour15,bg=colour0"; # Bright white for hostname/time
+      status_right_style = "fg=colour244,bg=colour0"; # Medium gray for load averages
+    };
+
+    # Scheme 1: Subtle Professional - muted colors with gentle differentiation
+    subtle = {
+      style_normal = "fg=colour252,bg=colour235";
+      style_nested = "fg=colour252,bg=colour237";
+      style_current_window = "fg=colour16,bold,bg=colour75";
+      lock_closed = "fg=colour208,bg=colour235";
+      lock_open = "fg=colour117,bg=colour235";
+      status_left_style = "fg=colour117,bg=colour235";
+      status_right_style = "fg=colour228,bg=colour235";
+    };
+
+    # Scheme 2: High Contrast - maximum clarity with strong visual separation
+    high-contrast = {
+      style_normal = "fg=colour255,bg=colour233";
+      style_nested = "fg=colour255,bg=colour236";
+      style_current_window = "fg=colour16,bold,bg=colour51";
+      lock_closed = "fg=colour196,bg=colour233";
+      lock_open = "fg=colour46,bg=colour233";
+      status_left_style = "fg=colour46,bold,bg=colour233";
+      status_right_style = "fg=colour226,bold,bg=colour233";
+    };
+
+    # Scheme 3: Solarized-Inspired - warm, comfortable colors
+    solarized = {
+      style_normal = "fg=colour244,bg=colour235";
+      style_nested = "fg=colour244,bg=colour237";
+      style_current_window = "fg=colour235,bold,bg=colour166";
+      lock_closed = "fg=colour160,bg=colour235";
+      lock_open = "fg=colour33,bg=colour235";
+      status_left_style = "fg=colour33,bg=colour235";
+      status_right_style = "fg=colour64,bg=colour235";
+    };
+
+    # Scheme 4: Minimal Modern - clean design with strategic highlights
+    minimal = {
+      style_normal = "fg=colour248,bg=colour234";
+      style_nested = "fg=colour248,bg=colour236";
+      style_current_window = "fg=colour255,bold,bg=colour127";
+      lock_closed = "fg=colour203,bg=colour234";
+      lock_open = "fg=colour248,bg=colour234";
+      status_left_style = "fg=colour248,bg=colour234";
+      status_right_style = "fg=colour51,bg=colour234";
+    };
+
+    # Scheme 5: Balanced Contrast - optimal balance (recommended)
+    balanced = {
+      style_normal = "fg=colour250,bg=colour235";
+      style_nested = "fg=colour250,bg=colour237";
+      style_current_window = "fg=colour16,bold,bg=colour214";
+      lock_closed = "fg=colour203,bg=colour235";
+      lock_open = "fg=colour117,bg=colour235";
+      status_left_style = "fg=colour117,bg=colour235";
+      status_right_style = "fg=colour156,bg=colour235";
+    };
+  };
+
+  # Select active color scheme
+  activeScheme = colorSchemes.${colorScheme};
 
   # Fixed conditional logic using >= comparisons instead of < to avoid nesting issues
   cpuRamSection = ''
@@ -42,6 +132,16 @@ in
     shell = if config.programs.zsh.enable then "${config.programs.zsh.package}/bin/zsh" else "${pkgs.bash}/bin/bash";
 
     extraConfig = ''
+      # ╔═══════════════════════════════════════════════════════════════════════════════╗
+      # ║  COLOR SCHEME EXPERIMENTATION                                                 ║
+      # ║  To change the status bar color scheme:                                       ║
+      # ║  1. Edit the 'colorScheme' variable at the top of this file (line 8)         ║
+      # ║  2. Options: "default" | "classic" | "subtle" | "high-contrast" |             ║
+      # ║              "solarized" | "minimal" | "balanced"                             ║
+      # ║  3. Rebuild home-manager: home-manager switch --flake '.#TARGET'             ║
+      # ║  4. Reload tmux config: Ctrl-a r                                              ║
+      # ╚═══════════════════════════════════════════════════════════════════════════════╝
+
       # ---- ENVIRONMENT HANDLING ----
       # Update these variables when attaching to ensure they reflect current terminal
       set -g update-environment "DISPLAY SSH_ASKPASS SSH_AUTH_SOCK SSH_AGENT_PID SSH_CONNECTION WINDOWID XAUTHORITY GPG_TTY HOST_IP ADB_SERVER_SOCKET"
@@ -65,7 +165,19 @@ in
       set -ga terminal-overrides ",*:smul=\\E[4m"
       set -ga terminal-overrides ",*:sitm=\\E[3m"
       set-hook -g client-resized 'refresh-client -S'
-      
+
+      # ---- PANE VISUAL INDICATORS ----
+      # Dim inactive panes for clear visual distinction (disabled - kept for experimentation)
+      # set -g window-style 'fg=colour247,bg=colour235'
+      # set -g window-active-style 'fg=colour250,bg=black'
+
+      # ---- PANE BORDER ----
+      set -g pane-border-lines single
+      set -g pane-border-style 'fg=colour238'
+      set -g pane-active-border-style 'fg=colour51,bold'
+      set -g pane-border-status top
+      set -g pane-border-format "#{?pane_active,#[fg=colour51 bold],#[fg=colour238]}"
+
       # ---- WINDOW MANAGEMENT ----
       set -g renumber-windows on
       set -g bell-action any
@@ -130,12 +242,12 @@ in
       bind-key -T copy-mode-vi 'C-\' select-pane -l
       
       # ---- NESTED SESSION SUPPORT ----
-      # Color and style definitions
-      style_normal="fg=colour7,bg=colour0"
-      style_nested="fg=colour7,bg=colour8"
-      style_current_window="fg=colour7,bold,bg=colour10"
-      lock_closed="fg=colour7,bg=colour0"
-      lock_open="fg=colour7,bg=colour0"
+      # Color and style definitions - sourced from active color scheme
+      style_normal="${activeScheme.style_normal}"
+      style_nested="${activeScheme.style_nested}"
+      style_current_window="${activeScheme.style_current_window}"
+      lock_closed="${activeScheme.lock_closed}"
+      lock_open="${activeScheme.lock_open}"
       
       # ---- STATUS BAR CONFIGURATION ----
       set -g status on
@@ -146,11 +258,11 @@ in
       set -g @medium_width ${mediumWidth}
       set -g @wide_width ${wideWidth}
       # LEFT STATUS BAR
-      set -g status-left-style "''$style_normal"
+      set -g status-left-style "${activeScheme.status_left_style}"
       set -g status-left-length 48
       set -g status-left "${statusLeft}"
       # RIGHT STATUS BAR
-      set -g status-right-style "''$style_normal"
+      set -g status-right-style "${activeScheme.status_right_style}"
       set -g status-right-length 80
       set -g status-right "${statusRight}"
       
