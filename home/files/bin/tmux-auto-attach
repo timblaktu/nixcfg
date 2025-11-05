@@ -15,7 +15,8 @@ tmux_auto_attach() {
         # Check if we're in a nested SSH session to the same host
         if [[ -n "$SSH_CLIENT" || -n "$SSH_TTY" ]]; then
             # Get the hostname we SSH'd from (first field of SSH_CLIENT)
-            local ssh_from_host=$(echo "$SSH_CLIENT" | awk '{print $1}')
+            local ssh_from_host
+            ssh_from_host=$(echo "$SSH_CLIENT" | awk '{print $1}')
             # Only proceed if it's not a loopback connection
             if [[ "$ssh_from_host" != "127.0.0.1" && "$ssh_from_host" != "::1" ]]; then
                 # Safe to attach - we're SSHing from a different host

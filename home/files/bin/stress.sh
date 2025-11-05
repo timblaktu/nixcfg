@@ -58,7 +58,7 @@ cpu_sequential_120s() {
 }
 
 cpu_random_loads() {
-    for i in {1..4}; do
+    for _ in {1..4}; do
         stress-ng --cpu 1 --cpu-load "$(shuf -i 10-90 -n 1)" --timeout 10s &
     done
     wait
@@ -77,7 +77,7 @@ mem_95pct_5workers_60s() {
 }
 
 mem_random_burst() {
-    for i in {1..3}; do
+    for _ in {1..3}; do
         stress-ng --vm 1 --vm-bytes "$(shuf -i 100-800 -n 1)M" --timeout 10s &
     done
     wait
@@ -96,7 +96,7 @@ disk_io_combined_60s() {
 }
 
 io_random_burst() {
-    for i in {1..5}; do
+    for _ in {1..5}; do
         stress-ng --io "$(shuf -i 1-4 -n 1)" --timeout 5s &
     done
     wait
@@ -115,7 +115,7 @@ random_4stressors_60s() {
 }
 
 mixed_random_burst() {
-    for i in {1..3}; do
+    for _ in {1..3}; do
         stress-ng --random "$(shuf -i 1-6 -n 1)" --timeout 15s --metrics-brief &
     done
     wait

@@ -13,6 +13,7 @@ unset WT_SETTINGS_PATH WT_ALIGNMENT_OK WT_FONT_OK WT_INTENSE_OK WT_NEEDS_FIX
 if [[ -z "${WT_SETTINGS_PATH}" ]]; then
   # Try to get Windows username via PowerShell
   if command -v powershell.exe >/dev/null 2>&1; then
+    # shellcheck disable=SC2016 # $env:USERNAME is PowerShell syntax, not bash
     WIN_USER=$(powershell.exe -NoProfile -Command 'Write-Host $env:USERNAME' 2>/dev/null | tr -d '\r\n')
     if [[ -n "$WIN_USER" ]]; then
       # Check for both regular and Preview versions of Windows Terminal

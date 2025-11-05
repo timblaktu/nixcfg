@@ -19,7 +19,7 @@
   base = {
     userName = "tim";
     userGroups = [ "wheel" "dialout" ];
-    enableClaudeCodeEnterprise = true;
+    enableClaudeCodeEnterprise = false;
     nixMaxJobs = 8;
     nixCores = 0;
     enableBinaryCache = true;

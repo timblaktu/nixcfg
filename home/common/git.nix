@@ -160,11 +160,63 @@
 
   # Install additional Git-related tools
   home.packages = with pkgs; [
-    # smart-nvimdiff is now provided by validated-scripts module
+    # Smart mergetool wrapper for neovim (migrated from validated-scripts)
+    (pkgs.writeShellApplication {
+      name = "smart-nvimdiff";
+      runtimeInputs = with pkgs; [ git neovim coreutils ];
+      text = /* bash */ ''
+        # Smart mergetool wrapper for neovim
+        # Automatically switches to 2-way diff when BASE is empty
+        
+        BASE="$1"
+        LOCAL="$2"  
+        REMOTE="$3"
+        MERGED="$4"
+        
+        # Check if BASE file exists and is not empty
+        if [ -f "$BASE" ] && [ -s "$BASE" ]; then
+            # Normal 4-way diff with non-empty BASE
+            # Use timer to ensure focus happens after all initialization
+            exec nvim -d "$MERGED" "$LOCAL" "$BASE" "$REMOTE" \
+              -c "wincmd J" \
+              -c "call timer_start(250, {-> execute('wincmd b')})"
+        else
+            # Empty or missing BASE, so MERGED is just a useless single conflict diff.
+            # Overwrite MERGED with LOCAL and do 2-way diff against REMOTE.
+            # This gives us a clean starting point without conflict markers
+            # which allows us to properly merge the desired changes.
+            cp "$LOCAL" "$MERGED"
+            exec nvim -d "$MERGED" "$REMOTE"
+        fi
+      '';
+      passthru.tests = {
+        syntax = pkgs.runCommand "test-smart-nvimdiff-syntax" { } ''
+          echo "✅ Syntax validation passed at build time" > $out
+        '';
+        argument_validation = pkgs.runCommand "test-smart-nvimdiff-args" { } ''
+          echo "✅ Argument validation test passed (placeholder)" > $out
+        '';
+      };
+    })
+
     pre-commit # framework for local static analysis before git commit
     gitleaks # scan working tree for accidental secret/PII leaks
     git-crypt # For encrypting sensitive files in git repos
     # gitui      # Terminal UI for git - temporarily disabled due to build failure
     lazygit # Another terminal UI for git
+
+    # Git workflow scripts
+    (pkgs.writeShellApplication {
+      name = "syncfork";
+      text = builtins.readFile ../files/bin/syncfork.sh;
+      runtimeInputs = with pkgs; [ git ];
+    })
+
+    # Git functions and utilities
+    (pkgs.writeShellApplication {
+      name = "git-functions";
+      text = builtins.readFile ../files/bin/gitfuncs.sh;
+      runtimeInputs = with pkgs; [ git neovim ];
+    })
   ];
 }

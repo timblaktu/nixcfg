@@ -57,10 +57,10 @@ with lib;
       description = "Paths to search for project-specific settings";
     };
 
-    permissions = mkOption {
-      type = types.attrs;
-      default = {
-        allow = [
+    permissions = {
+      allow = mkOption {
+        type = types.listOf types.str;
+        default = [
           "Bash"
           "mcp__context7"
           "mcp__mcp-nixos"
@@ -71,13 +71,36 @@ with lib;
           "Edit"
           "WebFetch"
         ];
-        deny = [
+        description = "List of tools/patterns to allow";
+      };
+
+      deny = mkOption {
+        type = types.listOf types.str;
+        default = [
           "Search"
           "Find"
           "Bash(rm -rf /*)"
         ];
+        description = "List of tools/patterns to deny";
       };
-      description = "Permission rules";
+
+      ask = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = "List of tools/patterns to ask permission for";
+      };
+
+      defaultMode = mkOption {
+        type = types.enum [ "acceptEdits" "bypassPermissions" "default" "plan" ];
+        default = "default";
+        description = "Default permission mode for tools not explicitly listed";
+      };
+
+      additionalDirectories = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = "Additional directories to grant access to";
+      };
     };
 
     environmentVariables = mkOption {
@@ -247,16 +270,24 @@ with lib;
             cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
           cleanHooks = filterAttrs (n: v: v != null) cfg._internal.hooks;
           hasStatusline = cfg._internal.statuslineSettings != { };
-          hasMcpServers = claudeCodeMcpServers != { };
+
+          # Build v2.0 permissions object
+          permissionsV2 = {
+            allow = cfg.permissions.allow;
+            deny = cfg.permissions.deny;
+            ask = cfg.permissions.ask;
+            defaultMode = cfg.permissions.defaultMode;
+            additionalDirectories = cfg.permissions.additionalDirectories;
+          };
         in
         {
           model = model;
-        } // optionalAttrs (cfg.permissions != { }) { permissions = cfg.permissions; }
+          permissions = permissionsV2;
+        }
         // optionalAttrs (cfg.environmentVariables != { }) { env = cfg.environmentVariables; }
         // optionalAttrs hasHooks { hooks = cleanHooks; }
         // optionalAttrs (cfg.experimental != { }) { experimental = cfg.experimental; }
         // optionalAttrs hasStatusline cfg._internal.statuslineSettings
-        // optionalAttrs hasMcpServers { mcpServers = claudeCodeMcpServers; }
         // optionalAttrs cfg.enableProjectOverrides {
           projectOverrides = {
             enabled = true;
@@ -283,13 +314,23 @@ with lib;
             cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
           cleanHooks = filterAttrs (n: v: v != null) cfg._internal.hooks;
           hasStatusline = cfg._internal.statuslineSettings != { };
+
+          # Build v2.0 permissions object
+          permissionsV2 = {
+            allow = cfg.permissions.allow;
+            deny = cfg.permissions.deny;
+            ask = cfg.permissions.ask;
+            defaultMode = cfg.permissions.defaultMode;
+            additionalDirectories = cfg.permissions.additionalDirectories;
+          };
         in
         {
           # Core Claude Code configuration (enterprise-managed)
           model = cfg.defaultModel;
 
           # Security and permissions (enforced organization-wide)
-        } // optionalAttrs (cfg.permissions != { }) { permissions = cfg.permissions; }
+          permissions = permissionsV2;
+        }
         // optionalAttrs (cfg.environmentVariables != { }) { env = cfg.environmentVariables; }
         // optionalAttrs hasHooks { hooks = cleanHooks; }
         // optionalAttrs (cfg.experimental != { }) { experimental = cfg.experimental; }
@@ -313,55 +354,6 @@ with lib;
         jq
         uv # Python package manager with uvx for running Python MCP servers
         memoryUpdateScript # Add the memory update script
-        # JSON merging utility for selective field updates
-        (pkgs.writers.writeBashBin "mergejson" ''
-          #!/usr/bin/env bash
-          set -euo pipefail
-        
-          usage() {
-            echo "Usage: mergejson OLD_FILE NEW_FILE JQ_QUERY [--confirm]"
-            echo "  Merges selected fields from NEW_FILE into OLD_FILE"
-            echo "  JQ_QUERY: jq expression selecting fields to merge"
-            echo "  --confirm: prompt before applying changes"
-            exit 1
-          }
-        
-          [[ $# -lt 3 ]] && usage
-        
-          old_file="$1"
-          new_file="$2"
-          jq_query="$3"
-          confirm_flag="''${4:-}"
-        
-          [[ ! -f "$old_file" ]] && { echo "Error: $old_file not found"; exit 1; }
-          [[ ! -f "$new_file" ]] && { echo "Error: $new_file not found"; exit 1; }
-        
-          extract_tmp=$(mktemp)
-          ${jq}/bin/jq "$jq_query" "$new_file" > "$extract_tmp"
-        
-          ${jq}/bin/jq --slurpfile extract_data "$extract_tmp" \
-             '. + $extract_data[0]' \
-             "$old_file" > "$old_file.merged"
-        
-          if ! diff -q "$old_file" "$old_file.merged" >/dev/null 2>&1; then
-            if [[ "$confirm_flag" == "--confirm" ]]; then
-              echo "Changes detected in: $jq_query"
-              read -p "View diff? [y/N]: " choice
-              if [[ ''${choice,,} =~ ^y ]]; then
-                ${neovim}/bin/nvim -d "$old_file" "$old_file.merged"
-                read -p "Apply changes? [y/N]: " apply_choice
-                [[ ''${apply_choice,,} =~ ^y ]] || { rm -f "$extract_tmp" "$old_file.merged"; exit 1; }
-              fi
-            fi
-            mv "$old_file.merged" "$old_file"
-            # Only show message if running interactively with --confirm
-            [[ "$confirm_flag" == "--confirm" ]] && echo "Merged: $jq_query"
-          else
-            rm -f "$old_file.merged"
-          fi
-        
-          rm -f "$extract_tmp"
-        '')
         # Account-specific command scripts now provided by validated-scripts module
       ] ++ [
       ] ++ optionals (cfg.mcpServers.sequentialThinkingPython.enable or false) [
@@ -444,20 +436,20 @@ with lib;
 
         # ACCOUNT CONFIGURATION: Deploy settings for each enabled account
         ${concatStringsSep "\n" (mapAttrsToList (name: account: ''
-          if [[ "${toString account.enable}" == "true" ]]; then
+          if [[ "${toString account.enable}" == "1" ]]; then
             accountDir="${runtimePath}/.claude-${name}"
             echo "⚙️ Configuring account: ${name}"
           
             # RUNTIME-ONLY: Create directories for session data
             $DRY_RUN_CMD mkdir -p "$accountDir"/{logs,projects,shell-snapshots,statsig,todos,commands}
           
-            # SETTINGS: Deploy initial settings with MCP servers, but preserve if exists
-            if [[ -f "$accountDir/settings.json" ]]; then
-              echo "✅ Preserved existing settings: $accountDir/settings.json"
-            else
-              copy_template "${mkSettingsTemplate (if account.model != null then account.model else cfg.defaultModel)}" "$accountDir/settings.json"
-              echo "🆕 Created initial settings with MCP servers: $accountDir/settings.json"
-            fi
+            # SETTINGS: Always deploy v2.0 schema settings (migration-safe)
+            copy_template "${mkSettingsTemplate (if account.model != null then account.model else cfg.defaultModel)}" "$accountDir/settings.json"
+            echo "🔧 Updated settings to v2.0 schema: $accountDir/settings.json"
+          
+            # MCP SERVERS: Always deploy separate .mcp.json file (v2.0 schema)
+            copy_template "${mcpTemplate}" "$accountDir/.mcp.json"
+            echo "🔧 Updated MCP servers configuration: $accountDir/.mcp.json"
           
             # MEMORY: Deploy CLAUDE.md with correct permissions
             if [[ -f "$accountDir/CLAUDE.md" ]]; then
@@ -474,18 +466,22 @@ with lib;
             if [[ -f "$accountDir/.claude.json" ]]; then
               echo "🔧 Enforcing Nix-managed settings in .claude.json..."
             
-              # Use jq with --argjson for safe JSON handling
+              # Use jq with --argjson for safe JSON handling (v2.0: no MCP servers in .claude.json)
               # Build jq arguments dynamically
-              local jq_args=(--argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}')
-              ${optionalString (cfg.permissions != {}) ''jq_args+=(--argjson permissions '${builtins.toJSON cfg.permissions}')''}
+              jq_args=(--argjson permissions '${builtins.toJSON {
+                allow = cfg.permissions.allow;
+                deny = cfg.permissions.deny;
+                ask = cfg.permissions.ask;
+                defaultMode = cfg.permissions.defaultMode;
+                additionalDirectories = cfg.permissions.additionalDirectories;
+              }}')
               ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
               ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
               ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}')''}
             
               $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
                 '. |
-                .mcpServers = $mcpServers
-                ${optionalString (cfg.permissions != {}) ''| .permissions = $permissions''}
+                .permissions = $permissions
                 ${optionalString (cfg.environmentVariables != {}) ''| .env = $env''}
                 ${optionalString (cfg._internal.statuslineSettings != {}) ''| .statusLine = $statusLine''}
                 ${optionalString (cfg._internal.hooks != {}) ''| .hooks = $hooks''}
@@ -494,10 +490,10 @@ with lib;
               $DRY_RUN_CMD mv "$accountDir/.claude.json.tmp" "$accountDir/.claude.json"
               echo "✅ Nix-managed settings enforced in .claude.json"
             else
-              # Create new file with MCP servers
-              echo '${builtins.toJSON { mcpServers = claudeCodeMcpServers; }}' > "$accountDir/.claude.json"
+              # Create new file without MCP servers (v2.0: MCP in separate .mcp.json)
+              echo '{}' > "$accountDir/.claude.json"
               $DRY_RUN_CMD chmod 644 "$accountDir/.claude.json"
-              echo "🆕 Created minimal MCP config: $accountDir/.claude.json"
+              echo "🆕 Created minimal runtime config: $accountDir/.claude.json"
             fi
           
             echo "✅ Account ${name} configured with statusline support"
@@ -512,8 +508,12 @@ with lib;
         # RUNTIME-ONLY: Create directories for session data
         $DRY_RUN_CMD mkdir -p "$baseDir"/{logs,projects,shell-snapshots,statsig,todos,commands}
       
-        # SETTINGS: Deploy base settings with statusline configuration  
+        # SETTINGS: Deploy base settings (v2.0 schema without MCP servers)
         copy_template "${settingsTemplate}" "$baseDir/settings.json"
+      
+        # MCP SERVERS: Always deploy separate .mcp.json file (v2.0 schema)
+        copy_template "${mcpTemplate}" "$baseDir/.mcp.json"
+        echo "🔧 Updated MCP servers configuration: $baseDir/.mcp.json"
       
         # MEMORY: Deploy CLAUDE.md with correct permissions
         if [[ -f "$baseDir/CLAUDE.md" ]]; then
@@ -530,18 +530,23 @@ with lib;
         if [[ -f "$baseDir/.claude.json" ]]; then
           echo "🔧 Enforcing Nix-managed settings in .claude.json..."
         
-          # Use jq with --argjson for safe JSON handling
+          # Use jq with --argjson for safe JSON handling (v2.0: no MCP servers in .claude.json)
           # Build jq arguments dynamically
-          jq_args=(--argjson mcpServers '${builtins.toJSON claudeCodeMcpServers}')
-          ${optionalString (cfg.permissions != {}) ''jq_args+=(--argjson permissions '${builtins.toJSON cfg.permissions}')''}
+          jq_args=(--argjson permissions '${builtins.toJSON {
+            allow = cfg.permissions.allow;
+            deny = cfg.permissions.deny;
+            ask = cfg.permissions.ask;
+            defaultMode = cfg.permissions.defaultMode;
+            disableBypassPermissionsMode = cfg.permissions.disableBypassPermissionsMode;
+            additionalDirectories = cfg.permissions.additionalDirectories;
+          }}')
           ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
           ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
           ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}')''}
         
           $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
             '. |
-            .mcpServers = $mcpServers
-            ${optionalString (cfg.permissions != {}) ''| .permissions = $permissions''}
+            .permissions = $permissions
             ${optionalString (cfg.environmentVariables != {}) ''| .env = $env''}
             ${optionalString (cfg._internal.statuslineSettings != {}) ''| .statusLine = $statusLine''}
             ${optionalString (cfg._internal.hooks != {}) ''| .hooks = $hooks''}
@@ -550,10 +555,10 @@ with lib;
           $DRY_RUN_CMD mv "$baseDir/.claude.json.tmp" "$baseDir/.claude.json"
           echo "✅ Nix-managed settings enforced in .claude.json"
         else
-          # Create new file with MCP servers
-          echo '${builtins.toJSON { mcpServers = claudeCodeMcpServers; }}' > "$baseDir/.claude.json"
+          # Create new file without MCP servers (v2.0: MCP in separate .mcp.json)
+          echo '{}' > "$baseDir/.claude.json"
           $DRY_RUN_CMD chmod 644 "$baseDir/.claude.json"
-          echo "🆕 Created minimal MCP config: $baseDir/.claude.json"
+          echo "🆕 Created minimal runtime config: $baseDir/.claude.json"
         fi
       
         echo "✅ Base directory configured with statusline support"

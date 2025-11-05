@@ -116,7 +116,7 @@ create_session_file() {
   [[ "$verbose" == "true" ]] && echo "Creating session '$session_name' with $window_count windows, $panes_per_window panes each"
 
   # Clear/create output file
-  > "$output_file"
+  true > "$output_file"
 
   # Generate window and pane data
   for ((w=1; w<=window_count; w++)); do
@@ -137,7 +137,7 @@ create_session_file() {
     esac
   
     # Generate window layout (simplified)
-    local layout="$(($RANDOM % 9999)),$(($RANDOM % 200 + 50))x$(($RANDOM % 100 + 20)),0,0"
+    local layout="$((RANDOM % 9999)),$((RANDOM % 200 + 50))x$((RANDOM % 100 + 20)),0,0"
   
     # Add window line
     printf "window\t%s\t%d\t:%s\t%d\t%s\t%s\ton\n" \
@@ -159,7 +159,7 @@ create_session_file() {
       fi
     
       # Generate unique pane ID
-      local pane_id=$((10000 + w * 100 + p))
+      # pane_id=$((10000 + w * 100 + p))  # Currently unused but may be needed for future features
     
       # Add pane line (11 fields as per spec)
       printf "pane\t%s\t%d\t%d\t%s\t%d\ttitle\t:%s\t%d\t%s\t:%s\n" \
@@ -195,7 +195,8 @@ create_sample_sessions() {
     fi
   
     # Generate unique timestamp
-    local timestamp=$(generate_timestamp)
+    local timestamp
+    timestamp=$(generate_timestamp)
     local filename="$output_dir/tmux_resurrect_${timestamp}.txt"
   
     create_session_file "$filename" "$name" "$windows" "$panes" "$verbose"
@@ -275,7 +276,8 @@ main() {
   
     # Mark first session as active if requested
     if [[ -n "$active_session" ]]; then
-      local active_file=$(find "$output_dir" -name "*.txt" | head -1)
+      local active_file
+      active_file=$(find "$output_dir" -name "*.txt" | head -1)
       if [[ -n "$active_file" ]]; then
         ln -sf "$(basename "$active_file")" "$output_dir/last"
         [[ "$verbose" == "true" ]] && echo "✅ Marked $(basename "$active_file") as active session"
@@ -284,7 +286,8 @@ main() {
   fi
 
   # Summary
-  local file_count=$(find "$output_dir" -name "tmux_resurrect_*.txt" | wc -l)
+  local file_count
+  file_count=$(find "$output_dir" -name "tmux_resurrect_*.txt" | wc -l)
   echo "Generated $file_count tmux-resurrect test files in $output_dir"
 
   if [[ "$verbose" == "true" ]]; then

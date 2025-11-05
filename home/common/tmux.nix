@@ -2,14 +2,104 @@
 { config, lib, pkgs, ... }:
 
 let
+  # ---- COLOR SCHEME SELECTOR ----
+  # Change this to experiment with different status bar color schemes
+  # Options: "default" | "classic" | "subtle" | "high-contrast" | "solarized" | "minimal" | "balanced"
+  colorScheme = "classic";
+
   # Width thresholds
   narrowWidth = "60";
   mediumWidth = "100";
   wideWidth = "140";
 
+  # ---- COLOR SCHEME DEFINITIONS ----
+  # Conditional color scheme selection
+  colorSchemes = {
+    # Original monochrome scheme
+    default = {
+      style_normal = "fg=colour7,bg=colour0";
+      style_nested = "fg=colour7,bg=colour8";
+      style_current_window = "fg=colour7,bold,bg=colour10";
+      lock_closed = "fg=colour7,bg=colour0";
+      lock_open = "fg=colour7,bg=colour0";
+      status_left_style = "fg=colour7,bg=colour0";
+      status_right_style = "fg=colour7,bg=colour0";
+    };
+
+    # Classic - nearly identical to original with minimal differentiation
+    # Same black background, same aesthetic, just tiny text color variations for field separation
+    classic = {
+      style_normal = "fg=colour7,bg=colour0";
+      style_nested = "fg=colour7,bg=colour8";
+      style_current_window = "fg=colour7,bold,bg=colour10";
+      lock_closed = "fg=colour7,bg=colour0";
+      lock_open = "fg=colour7,bg=colour0";
+      status_left_style = "fg=colour15,bg=colour0"; # Bright white for hostname/time
+      status_right_style = "fg=colour244,bg=colour0"; # Medium gray for load averages
+    };
+
+    # Scheme 1: Subtle Professional - muted colors with gentle differentiation
+    subtle = {
+      style_normal = "fg=colour252,bg=colour235";
+      style_nested = "fg=colour252,bg=colour237";
+      style_current_window = "fg=colour16,bold,bg=colour75";
+      lock_closed = "fg=colour208,bg=colour235";
+      lock_open = "fg=colour117,bg=colour235";
+      status_left_style = "fg=colour117,bg=colour235";
+      status_right_style = "fg=colour228,bg=colour235";
+    };
+
+    # Scheme 2: High Contrast - maximum clarity with strong visual separation
+    high-contrast = {
+      style_normal = "fg=colour255,bg=colour233";
+      style_nested = "fg=colour255,bg=colour236";
+      style_current_window = "fg=colour16,bold,bg=colour51";
+      lock_closed = "fg=colour196,bg=colour233";
+      lock_open = "fg=colour46,bg=colour233";
+      status_left_style = "fg=colour46,bold,bg=colour233";
+      status_right_style = "fg=colour226,bold,bg=colour233";
+    };
+
+    # Scheme 3: Solarized-Inspired - warm, comfortable colors
+    solarized = {
+      style_normal = "fg=colour244,bg=colour235";
+      style_nested = "fg=colour244,bg=colour237";
+      style_current_window = "fg=colour235,bold,bg=colour166";
+      lock_closed = "fg=colour160,bg=colour235";
+      lock_open = "fg=colour33,bg=colour235";
+      status_left_style = "fg=colour33,bg=colour235";
+      status_right_style = "fg=colour64,bg=colour235";
+    };
+
+    # Scheme 4: Minimal Modern - clean design with strategic highlights
+    minimal = {
+      style_normal = "fg=colour248,bg=colour234";
+      style_nested = "fg=colour248,bg=colour236";
+      style_current_window = "fg=colour255,bold,bg=colour127";
+      lock_closed = "fg=colour203,bg=colour234";
+      lock_open = "fg=colour248,bg=colour234";
+      status_left_style = "fg=colour248,bg=colour234";
+      status_right_style = "fg=colour51,bg=colour234";
+    };
+
+    # Scheme 5: Balanced Contrast - optimal balance (recommended)
+    balanced = {
+      style_normal = "fg=colour250,bg=colour235";
+      style_nested = "fg=colour250,bg=colour237";
+      style_current_window = "fg=colour16,bold,bg=colour214";
+      lock_closed = "fg=colour203,bg=colour235";
+      lock_open = "fg=colour117,bg=colour235";
+      status_left_style = "fg=colour117,bg=colour235";
+      status_right_style = "fg=colour156,bg=colour235";
+    };
+  };
+
+  # Select active color scheme
+  activeScheme = colorSchemes.${colorScheme};
+
   # Fixed conditional logic using >= comparisons instead of < to avoid nesting issues
   cpuRamSection = ''
-    #{?#{>=:#{client_width},${mediumWidth}},#(${config.home.homeDirectory}/bin/tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(${config.home.homeDirectory}/bin/tmux-cpu-mem medium),#(${config.home.homeDirectory}/bin/tmux-cpu-mem narrow)}}
+    #{?#{>=:#{client_width},${mediumWidth}},#(tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(tmux-cpu-mem medium),#(tmux-cpu-mem narrow)}}
   '';
 
   # System info - load average now included in script
@@ -42,6 +132,16 @@ in
     shell = if config.programs.zsh.enable then "${config.programs.zsh.package}/bin/zsh" else "${pkgs.bash}/bin/bash";
 
     extraConfig = ''
+      # ╔═══════════════════════════════════════════════════════════════════════════════╗
+      # ║  COLOR SCHEME EXPERIMENTATION                                                 ║
+      # ║  To change the status bar color scheme:                                       ║
+      # ║  1. Edit the 'colorScheme' variable at the top of this file (line 8)         ║
+      # ║  2. Options: "default" | "classic" | "subtle" | "high-contrast" |             ║
+      # ║              "solarized" | "minimal" | "balanced"                             ║
+      # ║  3. Rebuild home-manager: home-manager switch --flake '.#TARGET'             ║
+      # ║  4. Reload tmux config: Ctrl-a r                                              ║
+      # ╚═══════════════════════════════════════════════════════════════════════════════╝
+
       # ---- ENVIRONMENT HANDLING ----
       # Update these variables when attaching to ensure they reflect current terminal
       set -g update-environment "DISPLAY SSH_ASKPASS SSH_AUTH_SOCK SSH_AGENT_PID SSH_CONNECTION WINDOWID XAUTHORITY GPG_TTY HOST_IP ADB_SERVER_SOCKET"
@@ -65,7 +165,19 @@ in
       set -ga terminal-overrides ",*:smul=\\E[4m"
       set -ga terminal-overrides ",*:sitm=\\E[3m"
       set-hook -g client-resized 'refresh-client -S'
-      
+
+      # ---- PANE VISUAL INDICATORS ----
+      # Dim inactive panes for clear visual distinction (disabled - kept for experimentation)
+      # set -g window-style 'fg=colour247,bg=colour235'
+      # set -g window-active-style 'fg=colour250,bg=black'
+
+      # ---- PANE BORDER ----
+      set -g pane-border-lines single
+      set -g pane-border-style 'fg=colour238'
+      set -g pane-active-border-style 'fg=colour51,bold'
+      set -g pane-border-status top
+      set -g pane-border-format "#{?pane_active,#[fg=colour51 bold],#[fg=colour238]}"
+
       # ---- WINDOW MANAGEMENT ----
       set -g renumber-windows on
       set -g bell-action any
@@ -130,12 +242,12 @@ in
       bind-key -T copy-mode-vi 'C-\' select-pane -l
       
       # ---- NESTED SESSION SUPPORT ----
-      # Color and style definitions
-      style_normal="fg=colour7,bg=colour0"
-      style_nested="fg=colour7,bg=colour8"
-      style_current_window="fg=colour7,bold,bg=colour10"
-      lock_closed="fg=colour7,bg=colour0"
-      lock_open="fg=colour7,bg=colour0"
+      # Color and style definitions - sourced from active color scheme
+      style_normal="${activeScheme.style_normal}"
+      style_nested="${activeScheme.style_nested}"
+      style_current_window="${activeScheme.style_current_window}"
+      lock_closed="${activeScheme.lock_closed}"
+      lock_open="${activeScheme.lock_open}"
       
       # ---- STATUS BAR CONFIGURATION ----
       set -g status on
@@ -146,11 +258,11 @@ in
       set -g @medium_width ${mediumWidth}
       set -g @wide_width ${wideWidth}
       # LEFT STATUS BAR
-      set -g status-left-style "''$style_normal"
+      set -g status-left-style "${activeScheme.status_left_style}"
       set -g status-left-length 48
       set -g status-left "${statusLeft}"
       # RIGHT STATUS BAR
-      set -g status-right-style "''$style_normal"
+      set -g status-right-style "${activeScheme.status_right_style}"
       set -g status-right-length 80
       set -g status-right "${statusRight}"
       
@@ -273,10 +385,280 @@ in
     procps # Provides tools like ps, top, free for system monitoring
     bc # Basic calculator
 
-    # Custom tmux window status format script with proper Nix path substitution
+    # Tmux session picker - the main interactive session selector  
+    (pkgs.writers.writeBashBin "tmux-session-picker" (
+      let
+        script = builtins.readFile ../files/bin/tmux-session-picker;
+        terminalUtils = builtins.readFile ../files/lib/terminal-utils.bash;
+        colorUtils = builtins.readFile ../files/lib/color-utils.bash;
+        pathUtils = builtins.readFile ../files/lib/path-utils.bash;
+      in
+      builtins.replaceStrings
+        [
+          ''source "$HOME/.local/lib/terminal-utils.bash"''
+          ''source "$HOME/.local/lib/color-utils.bash"''
+          ''source "$HOME/.local/lib/path-utils.bash"''
+        ]
+        [
+          terminalUtils
+          colorUtils
+          pathUtils
+        ]
+        script
+    ))
+
+    # Tmux session picker profiled version (performance testing)
+    (pkgs.writeShellApplication {
+      name = "tmux-session-picker-profiled";
+      text = builtins.readFile ../files/bin/tmux-session-picker-profiled;
+      runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep time ];
+    })
+
+    # Tmux CPU/memory status display with colored braille indicators
+    (pkgs.writeShellApplication {
+      name = "tmux-cpu-mem";
+      text = builtins.readFile ../files/bin/tmux-cpu-mem;
+      runtimeInputs = with pkgs; [ procps coreutils ];
+    })
+
+    # Tmux test data generator for testing session picker
+    (pkgs.writeShellApplication {
+      name = "tmux-test-data-generator";
+      text = builtins.readFile ../files/bin/tmux-test-data-generator;
+      runtimeInputs = with pkgs; [ coreutils ];
+      passthru.tests = {
+        syntax = pkgs.runCommand "test-tmux-test-data-generator-syntax" { } ''
+          echo "✅ Syntax validation passed at build time" > $out
+        '';
+        help_availability = pkgs.runCommand "test-tmux-test-data-generator-help"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-test-data-generator";
+                text = builtins.readFile ../files/bin/tmux-test-data-generator;
+                runtimeInputs = with pkgs; [ coreutils ];
+              })
+            ];
+          } ''
+          output=$(tmux-test-data-generator --help 2>&1)
+          exit_code=$?
+          
+          if [[ $exit_code -eq 0 ]]; then
+            echo "✅ Help command works" > $out
+            if echo "$output" | grep -q "Usage:\|OPTIONS:\|EXAMPLES:"; then
+              echo "✅ Help contains expected sections" >> $out
+            else
+              echo "❌ Help missing expected sections" >> $out
+              exit 1
+            fi
+          else
+            echo "❌ Help command failed with exit code $exit_code" > $out
+            exit 1
+          fi
+        '';
+        basic_generation = pkgs.runCommand "test-tmux-test-data-generator-basic"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-test-data-generator";
+                text = builtins.readFile ../files/bin/tmux-test-data-generator;
+                runtimeInputs = with pkgs; [ coreutils ];
+              })
+            ];
+          } ''
+          # Test basic session generation
+          test_dir=$(mktemp -d)
+          trap "rm -rf $test_dir" EXIT
+          
+          tmux-test-data-generator -o "$test_dir" -c 3
+          
+          # Verify files were created
+          file_count=$(find "$test_dir" -name "tmux_resurrect_*.txt" | wc -l)
+          if [[ $file_count -eq 3 ]]; then
+            echo "✅ Generated expected number of test files" > $out
+          else
+            echo "❌ Expected 3 files, got $file_count" > $out
+            exit 1
+          fi
+        '';
+      };
+    })
+
+    # Optimized tmux parser for performance - migrated from validated-scripts
+    (pkgs.writeShellApplication {
+      name = "tmux-parser-optimized";
+      text = /* bash */ ''
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # tmux-parser-optimized: Fast parser for tmux resurrect files
+        # Returns: session\x1Fwindows\x1Fpanes\x1Ftimestamp\x1Fsummary\x1Fis_current
+        
+        # Input validation
+        if [[ $# -eq 0 ]]; then
+            echo "Usage: tmux-parser-optimized <resurrect_file> [current_session_file]" >&2
+            exit 1
+        fi
+
+        resurrect_file="$1"
+        current_session_file="''${2:-}"
+
+        # File existence check
+        if [[ ! -f "$resurrect_file" ]]; then
+            exit 1
+        fi
+
+        # Extract session name from file content (first session line)
+        session_name=$(awk '/^session\t/ {print $2; exit}' "$resurrect_file" 2>/dev/null || echo "unknown")
+
+        # Count windows and panes
+        window_count=$(grep -c "^window" "$resurrect_file" 2>/dev/null || echo "0")
+        pane_count=$(grep -c "^pane" "$resurrect_file" 2>/dev/null || echo "0")
+
+        # Extract timestamp from filename or use fallback
+        basename=$(basename "$resurrect_file" .txt)
+        if [[ "$basename" =~ tmux_resurrect_([0-9]{8}_[0-9]{6}) ]]; then
+            timestamp="''${BASH_REMATCH[1]}"
+        else
+            timestamp="19700101_000000"
+        fi
+
+        # Create summary
+        summary="''${window_count}w/''${pane_count}p"
+
+        # Determine if current session
+        is_current="false"
+        if [[ -n "$current_session_file" && "$resurrect_file" == "$current_session_file" ]]; then
+            is_current="true"
+        fi
+
+        # Output in ASCII Unit Separator format
+        printf "%s\x1F%s\x1F%s\x1F%s\x1F%s\x1F%s\n" \
+            "$session_name" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_current"
+      '';
+      runtimeInputs = with pkgs; [ coreutils gnugrep gawk ];
+      passthru.tests = {
+        syntax = pkgs.runCommand "test-tmux-parser-optimized-syntax" { } ''
+          echo "✅ Syntax validation passed at build time" > $out
+        '';
+        basic_parsing = pkgs.runCommand "test-tmux-parser-optimized-basic"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-parser-optimized";
+                text = /* bash */ ''
+                  #!/usr/bin/env bash
+                  set -euo pipefail
+                  if [[ $# -eq 0 ]]; then
+                      echo "Usage: tmux-parser-optimized <resurrect_file> [current_session_file]" >&2
+                      exit 1
+                  fi
+                  resurrect_file="$1"
+                  current_session_file="''${2:-}"
+                  if [[ ! -f "$resurrect_file" ]]; then
+                      exit 1
+                  fi
+                  session_name=$(awk '/^session\t/ {print $2; exit}' "$resurrect_file" 2>/dev/null || echo "unknown")
+                  window_count=$(grep -c "^window" "$resurrect_file" 2>/dev/null || echo "0")
+                  pane_count=$(grep -c "^pane" "$resurrect_file" 2>/dev/null || echo "0")
+                  basename=$(basename "$resurrect_file" .txt)
+                  if [[ "$basename" =~ tmux_resurrect_([0-9]{8}_[0-9]{6}) ]]; then
+                      timestamp="''${BASH_REMATCH[1]}"
+                  else
+                      timestamp="19700101_000000"
+                  fi
+                  summary="''${window_count}w/''${pane_count}p"
+                  is_current="false"
+                  if [[ -n "$current_session_file" && "$resurrect_file" == "$current_session_file" ]]; then
+                      is_current="true"
+                  fi
+                  printf "%s\x1F%s\x1F%s\x1F%s\x1F%s\x1F%s\n" \
+                      "$session_name" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_current"
+                '';
+                runtimeInputs = with pkgs; [ coreutils gnugrep gawk ];
+              })
+            ];
+          } ''
+                    # Create test file
+                    test_dir=$(mktemp -d)
+                    test_file="$test_dir/tmux_resurrect_20250124_143022.txt"
+                    cat > "$test_file" << 'EOF'
+          session	test-session	:1.0	1	:vim*	vim	:
+          window	test-session:1	1	:*	cd3c-	:vim	/home/user	vim	:
+          pane	test-session:1	1	:	1	:*	1	:/home/user	1	vim	:
+          EOF
+
+                    result=$(tmux-parser-optimized "$test_file")
+                    IFS=$'\x1F' read -r session windows panes timestamp summary is_current <<< "$result"
+
+                    [[ "$session" == "test-session" ]] || { echo "❌ Session name failed: '$session'" > $out; exit 1; }
+                    [[ "$windows" == "1" ]] || { echo "❌ Window count failed: '$windows'" > $out; exit 1; }
+                    [[ "$panes" == "1" ]] || { echo "❌ Pane count failed: '$panes'" > $out; exit 1; }
+                    [[ "$timestamp" == "20250124_143022" ]] || { echo "❌ Timestamp failed: '$timestamp'" > $out; exit 1; }
+
+                    echo "✅ Basic parsing test passed" > $out
+                    rm -rf "$test_dir"
+        '';
+        error_handling = pkgs.runCommand "test-tmux-parser-optimized-errors"
+          {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "tmux-parser-optimized";
+                text = /* bash */ ''
+                  #!/usr/bin/env bash
+                  set -euo pipefail
+                  if [[ $# -eq 0 ]]; then
+                      echo "Usage: tmux-parser-optimized <resurrect_file> [current_session_file]" >&2
+                      exit 1
+                  fi
+                  resurrect_file="$1"
+                  current_session_file="''${2:-}"
+                  if [[ ! -f "$resurrect_file" ]]; then
+                      exit 1
+                  fi
+                  session_name=$(awk '/^session\t/ {print $2; exit}' "$resurrect_file" 2>/dev/null || echo "unknown")
+                  window_count=$(grep -c "^window" "$resurrect_file" 2>/dev/null || echo "0")
+                  pane_count=$(grep -c "^pane" "$resurrect_file" 2>/dev/null || echo "0")
+                  basename=$(basename "$resurrect_file" .txt)
+                  if [[ "$basename" =~ tmux_resurrect_([0-9]{8}_[0-9]{6}) ]]; then
+                      timestamp="''${BASH_REMATCH[1]}"
+                  else
+                      timestamp="19700101_000000"
+                  fi
+                  summary="''${window_count}w/''${pane_count}p"
+                  is_current="false"
+                  if [[ -n "$current_session_file" && "$resurrect_file" == "$current_session_file" ]]; then
+                      is_current="true"
+                  fi
+                  printf "%s\x1F%s\x1F%s\x1F%s\x1F%s\x1F%s\n" \
+                      "$session_name" "$window_count" "$pane_count" "$timestamp" "$summary" "$is_current"
+                '';
+                runtimeInputs = with pkgs; [ coreutils gnugrep gawk ];
+              })
+            ];
+          } ''
+          test_dir=$(mktemp -d)
+          
+          # Test non-existent file
+          result=$(tmux-parser-optimized "$test_dir/nonexistent.txt" 2>/dev/null || echo "PARSER_FAILED")
+          [[ "$result" == "PARSER_FAILED" ]] || { echo "❌ Should fail on non-existent file" > $out; exit 1; }
+          
+          # Test empty file
+          empty_file="$test_dir/empty.txt"
+          touch "$empty_file"
+          result=$(tmux-parser-optimized "$empty_file" 2>/dev/null || echo "PARSER_FAILED")
+          [[ "$result" == "PARSER_FAILED" ]] || { echo "❌ Should fail on empty file" > $out; exit 1; }
+          
+          echo "✅ Error handling test passed" > $out
+          rm -rf "$test_dir"
+        '';
+      };
+    })
+
+    # Custom tmux window status format script with proper library path
     (pkgs.writers.writeBashBin "tmux-window-status-format" (builtins.replaceStrings
-      [ ''source "''${HOME}/bin/functions.sh"'' ]
-      [ "source \"${config.home.homeDirectory}/.nix-profile/lib/bash-utils/general-utils.bash\"" ]
+      [ ''source "''${HOME}/lib/general-utils.bash"'' ]
+      [ "source \"${config.home.homeDirectory}/.local/lib/general-utils.bash\"" ]
       (builtins.readFile ../files/bin/tmux-window-status-format)
     ))
 

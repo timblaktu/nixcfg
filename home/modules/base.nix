@@ -14,17 +14,22 @@ in
     ../common/zsh.nix
     ../common/environment.nix
     ../common/aliases.nix
+    # Import both files modules - they will be conditionally enabled
     ./files
+    ../files
     ../common/development.nix
+    ../common/terminal.nix
+    ../common/system.nix
+    ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
     ./podman-tools.nix # Container tools configuration
-    # Enhanced nix-writers based script management  
-    # TEMPORARY: Force local validated-scripts module for tmux-session-picker fix
-    ./validated-scripts
+    # Enhanced nix-writers based script management (migrated to unified files)
     # Import ESP-IDF development module
-    # ../common/esp-idf.nix
+    ../common/esp-idf.nix
+    # Import OneDrive utilities module (WSL-specific)
+    ../common/onedrive.nix
   ];
 
   options.homeBase = {
@@ -54,6 +59,7 @@ in
         dua
         fd
         ffmpeg
+        ffmpegthumbnailer
         file
         fzf
         glow
@@ -71,7 +77,9 @@ in
         speedtest
         stress-ng
         tree
+        ueberzugpp
         unzip
+        yt-dlp
         zoxide
         p7zip
 
@@ -132,17 +140,38 @@ in
       description = "Enable development packages and tools";
     };
 
+    enableTerminal = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable terminal configuration and font setup tools";
+    };
+
+    enableSystem = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable system administration and bootstrap tools";
+    };
+
+    enableShellUtils = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable shell utilities and library functions";
+    };
+
     enableEspIdf = mkOption {
       type = types.bool;
       default = false;
       description = "Enable ESP-IDF development environment with FHS compatibility";
     };
 
-    enableValidatedScripts = mkOption {
+    enableOneDriveUtils = mkOption {
       type = types.bool;
-      default = true;
-      description = "Enable nix-writers based validated script management";
+      default = false;
+      description = "Enable OneDrive utilities for WSL environments";
     };
+
+    # enableValidatedScripts option removed - all scripts migrated to unified files
+
 
     enableClaudeCode = mkOption {
       type = types.bool;
@@ -222,7 +251,10 @@ in
         } // cfg.environmentVariables;
 
         # Files and scripts
-        file = { };
+        file = {
+          # Glow markdown renderer configuration
+          ".config/glow/glow.yml".source = ../files/glow.yml;
+        };
 
         # THis isn't working. For now just run exec $SHELL manually
         # auto-exec $SHELL after a home-manager switch
@@ -282,13 +314,7 @@ in
         warnOnMisconfiguration = cfg.terminalVerification.warnOnMisconfiguration;
       };
 
-      # Pass validated scripts configuration to the module
-      validatedScripts = {
-        enable = cfg.enableValidatedScripts;
-        enableBashScripts = cfg.enableValidatedScripts; # Ensure bash scripts are enabled
-        # Enable PowerShell scripts on WSL systems where they can coordinate with Windows
-        enablePowerShellScripts = config.targets.wsl.enable or false;
-      };
+      # Validated scripts configuration removed - migrated to unified files
 
       programs.claude-code = {
         enable = cfg.enableClaudeCode;
@@ -326,9 +352,20 @@ in
         plugins = {
           toggle-pane = pkgs.yaziPlugins.toggle-pane;
           mediainfo = pkgs.yaziPlugins.mediainfo;
-          glow = pkgs.yaziPlugins.glow;
+          # Override glow plugin to use dynamic width instead of hardcoded 55
+          glow = pkgs.yaziPlugins.glow.overrideAttrs (old: {
+            postPatch = ''
+              # Replace main.lua with our patched version
+              cp ${../files/yazi-glow-main.lua} main.lua
+            '';
+          });
           miller = pkgs.yaziPlugins.miller;
           ouch = pkgs.yaziPlugins.ouch;
+          # Additional useful plugins
+          chmod = pkgs.yaziPlugins.chmod;
+          full-border = pkgs.yaziPlugins.full-border;
+          git = pkgs.yaziPlugins.git;
+          smart-enter = pkgs.yaziPlugins.smart-enter;
         };
         initLua = ../files/yazi-init.lua;
         settings = {
@@ -347,6 +384,82 @@ in
             sort_sensitive = true;
             mouse_events = [ "click" "scroll" "touch" "move" ];
           };
+          preview = {
+            tab_size = 2;
+            max_width = 600;
+            max_height = 900;
+            cache_dir = "";
+            image_delay = 30;
+            image_filter = "triangle";
+            image_quality = 75;
+            wrap = "no";
+          };
+          plugin = {
+            prepend_previewers = [
+              {
+                name = "*.md";
+                run = "glow";
+              }
+            ];
+          };
+          opener = {
+            edit = [
+              {
+                run = ''$EDITOR "$1"'';
+                desc = "$EDITOR";
+                block = true;
+                for = "unix";
+              }
+            ];
+            open = [
+              {
+                run = ''explorer.exe "$1"'';
+                desc = "Open in Windows Explorer";
+                for = "unix";
+              }
+            ];
+          };
+        };
+        keymap = {
+          mgr.prepend_keymap = [
+            # WSL2 clipboard integration - override default copy commands to use clip.exe
+            {
+              on = "cc";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy path" ];
+              desc = "Copy absolute path to Windows clipboard";
+            }
+            {
+              on = "cd";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy dirname" ];
+              desc = "Copy directory path to Windows clipboard";
+            }
+            {
+              on = "cf";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy filename" ];
+              desc = "Copy filename to Windows clipboard";
+            }
+            {
+              on = "cn";
+              run = [ ''shell -- echo "$1" | clip.exe'' "copy name_without_ext" ];
+              desc = "Copy name without extension to Windows clipboard";
+            }
+            # Additional useful keybindings
+            {
+              on = "T";
+              run = "plugin --sync toggle-pane";
+              desc = "Toggle preview pane";
+            }
+            {
+              on = "<C-s>";
+              run = "plugin --sync smart-enter";
+              desc = "Smart enter (enter dir or open file)";
+            }
+            {
+              on = "cM";
+              run = "plugin --sync chmod";
+              desc = "Change file permissions";
+            }
+          ];
         };
       };
 
@@ -360,6 +473,9 @@ in
           dc = "podman-compose";
         };
       };
+
+      # Unified files module configuration (always enabled)
+      homeFiles.enable = true;
     }
   ];
 }
