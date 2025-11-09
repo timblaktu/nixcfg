@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# tmux-save-with-rename: Save tmux session with auto-rename of default sessions
+
+set -euo pipefail
+
+# Rename default-named sessions before saving
+echo "Auto-renaming default sessions..." >&2
+tmux-session-picker --rename-defaults >&2
+
+# Trigger tmux-resurrect save
+# This will be replaced with the actual script path by Nix
+RESURRECT_SAVE_SCRIPT="TMUX_RESURRECT_SAVE_SCRIPT_NIX_PLACEHOLDER"
+
+if [[ -x "$RESURRECT_SAVE_SCRIPT" ]]; then
+    echo "Saving tmux environment..." >&2
+    "$RESURRECT_SAVE_SCRIPT"
+else
+    echo "Error: Resurrect save script not found: $RESURRECT_SAVE_SCRIPT" >&2
+    exit 1
+fi

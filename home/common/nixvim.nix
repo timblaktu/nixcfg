@@ -174,6 +174,7 @@
       { mode = "n"; key = "<leader>dgb"; action = ":diffget BASE<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>dgr"; action = ":diffget REMOTE<CR>"; options.silent = true; }
       { mode = "n"; key = "<leader>du"; action = ":diffupdate<CR>"; options.silent = true; }
+      { mode = "n"; key = "<leader>di"; action = "<cmd>DiffInfo<CR>"; options = { silent = true; desc = "Show diff context info"; }; }
 
       # Git conflict marker navigation
       { mode = "n"; key = "]x"; action = "/^\\(<\\{7\\}\\|=\\{7\\}\\|>\\{7\\}\\)<CR>"; options = { silent = true; desc = "Next conflict marker"; }; }
@@ -391,6 +392,12 @@
                 { "<leader>c", group = "Colorschemes" },
                 { "<leader>f", group = "Find/Telescope" },
                 { "<leader>d", group = "Diff/Git" },
+                { "<leader>dg", group = "Diff Get" },
+                { "<leader>dgl", desc = "Get from LOCAL (your changes)" },
+                { "<leader>dgb", desc = "Get from BASE (common ancestor)" },
+                { "<leader>dgr", desc = "Get from REMOTE (their changes)" },
+                { "<leader>du", desc = "Update diff highlighting" },
+                { "<leader>di", desc = "Show diff context info" },
                 { "<leader>t", group = "Tasks/Overseer" },
                 { "<leader>/", desc = "Toggle line comment" },
                 { "<leader>?", desc = "Toggle block comment" },
@@ -1402,6 +1409,186 @@
       vim.api.nvim_create_user_command('DiffGetLocal', ':diffget LOCAL', {})
       vim.api.nvim_create_user_command('DiffGetBase', ':diffget BASE', {})
       vim.api.nvim_create_user_command('DiffGetRemote', ':diffget REMOTE', {})
+
+      -- DiffInfo command: Show context about LOCAL, BASE, and REMOTE
+      vim.api.nvim_create_user_command('DiffInfo', function()
+        -- Check if we're in diff mode
+        if not vim.o.diff then
+          vim.notify("Not in diff mode", vim.log.levels.WARN)
+          return
+        end
+
+        -- Get terminal dimensions (use 95% of width for better display)
+        local term_width = vim.o.columns
+        local max_width = math.min(math.floor(term_width * 0.95), 120)
+        local min_width = 70
+        local width = math.max(min_width, max_width)
+
+        -- Inner content width (accounting for box borders ║ on each side)
+        local inner_width = width - 2  -- 2 chars for "║ " and " ║"
+
+        -- Helper: Truncate text to fit within width (middle truncation)
+        local function truncate_middle(text, max_len)
+          if vim.fn.strdisplaywidth(text) <= max_len then
+            return text
+          end
+
+          local ellipsis = "…"
+          local target = max_len - vim.fn.strdisplaywidth(ellipsis)
+          if target <= 3 then return ellipsis end
+
+          local start_len = math.floor(target / 2)
+          local end_len = target - start_len
+
+          -- Simple character-based truncation (good enough for filenames)
+          local start_part = vim.fn.strcharpart(text, 0, start_len)
+          local end_part = vim.fn.strcharpart(text, vim.fn.strchars(text) - end_len, end_len)
+
+          return start_part .. ellipsis .. end_part
+        end
+
+        -- Helper: Pad line to exact width with spaces
+        local function pad_line(content)
+          local display_width = vim.fn.strdisplaywidth(content)
+          local padding = inner_width - display_width
+          if padding > 0 then
+            return content .. string.rep(" ", padding)
+          end
+          return content
+        end
+
+        -- Helper: Create box line
+        local function box_line(content)
+          return "║ " .. pad_line(content) .. " ║"
+        end
+
+        -- Helper: Create separator
+        local function separator()
+          return "╠" .. string.rep("═", width - 2) .. "╣"
+        end
+
+        -- Collect all diff buffers in current tab
+        local diff_bufs = {}
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          local buf = vim.api.nvim_win_get_buf(win)
+          if vim.wo[win].diff then
+            table.insert(diff_bufs, {
+              buf = buf,
+              name = vim.api.nvim_buf_get_name(buf),
+              win = win
+            })
+          end
+        end
+
+        -- Try to identify which buffer is which based on the file path
+        local local_buf, base_buf, remote_buf, merged_buf
+        for _, info in ipairs(diff_bufs) do
+          local name = info.name
+          if name:match("%.LOCAL%.%d+%.") or name:match("/LOCAL$") then
+            local_buf = info
+          elseif name:match("%.BASE%.%d+%.") or name:match("/BASE$") then
+            base_buf = info
+          elseif name:match("%.REMOTE%.%d+%.") or name:match("/REMOTE$") then
+            remote_buf = info
+          elseif name:match("%.BACKUP%.%d+%.") or name:match("%.orig$") then
+            -- skip backup files
+          else
+            -- The file without special suffix is likely the MERGED file
+            merged_buf = info
+          end
+        end
+
+        -- Build the info message
+        local lines = {
+          "╔" .. string.rep("═", width - 2) .. "╗",
+          box_line("GIT MERGE DIFF CONTEXT"),
+          separator(),
+          box_line(""),
+        }
+
+        -- Add responsive diagram
+        local diagram_width = inner_width
+        if diagram_width >= 60 then
+          table.insert(lines, box_line("YOUR BRANCH (LOCAL) ←─── BASE ───→ THEIR BRANCH (REMOTE)"))
+          table.insert(lines, box_line("       │                              │"))
+          table.insert(lines, box_line("       └──────────→ MERGED ←──────────┘"))
+        elseif diagram_width >= 50 then
+          table.insert(lines, box_line("LOCAL ←─── BASE ───→ REMOTE"))
+          table.insert(lines, box_line("  │                     │"))
+          table.insert(lines, box_line("  └─────→ MERGED ←─────┘"))
+        else
+          table.insert(lines, box_line("LOCAL ← BASE → REMOTE"))
+          table.insert(lines, box_line("   └─→ MERGED ←─┘"))
+        end
+
+        table.insert(lines, box_line(""))
+        table.insert(lines, separator())
+
+        -- File information with smart truncation
+        local file_label_width = 8  -- "LOCAL:  " or "REMOTE: "
+        local file_max_width = inner_width - file_label_width
+
+        if local_buf then
+          local fname = truncate_middle(vim.fn.fnamemodify(local_buf.name, ':t'), file_max_width)
+          table.insert(lines, box_line("LOCAL:  " .. fname))
+        end
+        if base_buf then
+          local fname = truncate_middle(vim.fn.fnamemodify(base_buf.name, ':t'), file_max_width)
+          table.insert(lines, box_line("BASE:   " .. fname))
+        end
+        if remote_buf then
+          local fname = truncate_middle(vim.fn.fnamemodify(remote_buf.name, ':t'), file_max_width)
+          table.insert(lines, box_line("REMOTE: " .. fname))
+        end
+        if merged_buf then
+          local fname = truncate_middle(vim.fn.fnamemodify(merged_buf.name, ':t'), file_max_width)
+          table.insert(lines, box_line("MERGED: " .. fname))
+        end
+
+        table.insert(lines, box_line(""))
+        table.insert(lines, separator())
+        table.insert(lines, box_line("KEYBINDINGS:"))
+        table.insert(lines, box_line("  <leader>dgl  - Accept LOCAL (your changes)"))
+        table.insert(lines, box_line("  <leader>dgb  - Accept BASE (common ancestor)"))
+        table.insert(lines, box_line("  <leader>dgr  - Accept REMOTE (their changes)"))
+        table.insert(lines, box_line("  <leader>du   - Update diff highlighting"))
+        table.insert(lines, box_line("  ]c / [c      - Next/previous diff change"))
+        table.insert(lines, box_line("  ]x / [x      - Next/previous conflict marker"))
+        table.insert(lines, "╚" .. string.rep("═", width - 2) .. "╝")
+
+        -- Create floating window
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+        -- Calculate window position (centered)
+        local height = #lines
+        local row = math.floor((vim.o.lines - height) / 2)
+        local col = math.floor((vim.o.columns - width) / 2)
+
+        local opts = {
+          relative = 'editor',
+          width = width,
+          height = height,
+          row = row,
+          col = col,
+          style = 'minimal',
+          border = 'none',
+        }
+
+        local win = vim.api.nvim_open_win(buf, true, opts)
+
+        -- Set buffer options
+        vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+        vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
+
+        -- Close on any key press
+        vim.api.nvim_buf_set_keymap(buf, 'n', 'q', '<cmd>close<CR>', { silent = true, noremap = true })
+        vim.api.nvim_buf_set_keymap(buf, 'n', '<Esc>', '<cmd>close<CR>', { silent = true, noremap = true })
+        vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', '<cmd>close<CR>', { silent = true, noremap = true })
+
+        -- Highlight the window
+        vim.api.nvim_win_set_option(win, 'winhl', 'Normal:Normal,FloatBorder:Normal')
+      end, { desc = 'Show diff context information' })
       
       -- Improved diff navigation with ]c and [c
       vim.keymap.set('n', ']c', function()

@@ -171,8 +171,8 @@ nix build '.#checks.x86_64-linux.build-nixos-wsl-minimal-dryrun' -L
 Automatically format and validate on commit:
 
 ```bash
-# Setup git hooks
-./setup-git-hooks
+# Setup git hooks (archived - see .archive/scripts/setup-git-hooks)
+# Note: Git hooks are already configured via Nix
 
 # Test pre-commit validation
 git add . && git commit -m "test" --dry-run

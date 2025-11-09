@@ -59,7 +59,7 @@ nix build .#homeConfigurations."tim@thinky-nixos".activationPackage
 home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 ```
 
-# 🔧 **IMPORTANT PATHS for local sessions**
+# 🔧 **IMPORTANT PATHS for LOCAL sessions**
 
 1. `/home/tim/src/nixpkgs` - Local nixpkgs fork (active development: writers-auto-detection)
 2. `/home/tim/src/home-manager` - Local home-manager fork (active development: autoValidate + fcitx5 fixes)  
@@ -67,8 +67,19 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 4. `/home/tim/src/git-worktree-superproject` - working tree for MY PROJECT implementing fast worktree switching for multi-repo and nix flake projects. We will eventually USE this here in nixcfg to facilitate multiple concurrent nix- development efforts
 
 
+<<<<<<< HEAD
 ## 🚧 **ACTIVE FORK DEVELOPMENT STATUS** (2025-10-31)
+||||||| e233a2a
+#### Phase 1: Upstream Sync & Assessment (IMMEDIATE PRIORITY)
+1. **Sync Fork with Upstream** - Merge upstream changes to get latest writers structure
+2. **Assess autoWriter Compatibility** - Compare our implementation with upstream's new `auto.nix`
+3. **Evaluate Integration Opportunities** - Determine how to leverage upstream's modular architecture
+4. **Preserve Custom Features** - Ensure our file type detection and library injection patterns survive the sync
+=======
+## 🚧 **ACTIVE FORK DEVELOPMENT** (2025-10-31)
+>>>>>>> cleanup-temp-files
 
+<<<<<<< HEAD
 ### **nixpkgs Fork Development**
 **Branch**: `writers-auto-detection` (ahead 1 commit)
 **Status**: Feature development in progress
@@ -78,7 +89,23 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 - ✅ autoWriterBin for executable binary creation
 - 🔧 Working debug harness (debug-autowriter.nix)
 - 📋 **Upstream Goal**: Submit as RFC/PR for nixpkgs inclusion
+||||||| e233a2a
+#### Phase 2: Enhanced Unified Module (Next Sprint)  
+1. **Leverage Upstream Writers** - Use new modular upstream structure as foundation
+2. **Implement mkValidatedFile** - Build on upstream's `autoWriter` for seamless file type detection
+3. **Library Injection System** - Preserve and enhance our `builtins.replaceStrings` library pattern
+4. **Dynamic Discovery** - Replace hardcoded `validatedScriptNames` with upstream-compatible detection
+5. **Testing Integration** - Combine our validation framework with upstream's enhanced writers
+6. **Backward Compatibility** - Ensure smooth migration from current validated-scripts module
+=======
+### Critical Dependencies
+- **nixpkgs**: `writers-auto-detection` branch - autoWriter/autoWriterBin for file type detection
+- **home-manager**: `auto-validate-feature` + fcitx5 fixes
+- **NixOS-WSL**: `plugin-shim-integration` - VSOCK communication + bare mount support
+- **⚠️ WARNING**: All forks have uncommitted work - coordinate upstream submissions before major upgrades
+>>>>>>> cleanup-temp-files
 
+<<<<<<< HEAD
 ### **home-manager Fork Development**  
 **Branches**: 
 - `auto-validate-feature` (current) - autoValidate feature
@@ -91,7 +118,18 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 2. **fcitx5 Package Path Fix**: Compatibility with recent nixpkgs
    - ✅ Updated package path (libsForQt5.fcitx5-with-addons → fcitx5-with-addons)
 - 📋 **Upstream Goal**: Submit both features for home-manager inclusion
+||||||| e233a2a
+### Key Architectural Decisions Documented:
+- **Universal File Schema**: `mkValidatedFile` supports any file type with validation, testing, and completion generation
+- **Type-Specific Validators**: Modular validation system for scripts, configs, data, assets, and static files  
+- **Elimination of Coordination Overhead**: No more hardcoded cross-module dependencies
+- **Extensible Design**: Easy addition of new file types through type registry
+- **Migration Strategy**: Staged rollout with compatibility layer to ensure zero disruption
+=======
+## 🔄 **MULTI-CONTEXT DEVELOPMENT STRATEGY** (2025-10-31)
+>>>>>>> cleanup-temp-files
 
+<<<<<<< HEAD
 ### **NixOS-WSL Fork Development**
 **Branches**:
 - `plugin-shim-integration` (current) - Plugin architecture development
@@ -147,3 +185,32 @@ See /home/tim/src/git-worktree-superproject for details.
 **Future Development** (DEFERRED until git-worktree-superproject is validated)
 - [ ] Complete ongoing fork development work  
 - [ ] Coordinate upstream contributions post-migration
+||||||| e233a2a
+### Success Criteria:
+- Functional equivalence with existing modules
+- Zero coordination overhead between modules
+- Extensibility for any file type
+- Improved developer experience with unified API
+=======
+### **🎯 Strategic Challenge**
+**Problem**: Fork development blocks other work due to manual flake.nix switching
+- Fork features need months for upstream contribution
+- Other nixcfg development shouldn't be delayed
+- Manual input switching is error-prone and friction-heavy
+- Need clear indication of development context
+
+### **🏗️ PROPOSED CONTEXT SWITCHING STRATEGY: git-worktree-superproject**
+
+For details, see:
+- **LOCAL SESSIONS**: /home/tim/src/git-worktree-superproject 
+- **WEB SESSIONS**:   https://github.com/timblaktu/git-worktree-superproject
+
+## 📋 **CURRENT TASKS**
+
+### Recently Completed
+- **tmux-session-picker fixes** (2025-11-08): Fixed file discovery, session switching, and added auto-rename for uniqueness. See `.archive/tmux-session-picker-fixes-2025-11-08.md`
+
+### Active Development
+- [ ] git-worktree-superproject validation and integration
+- [ ] Fork development upstream coordination
+>>>>>>> cleanup-temp-files

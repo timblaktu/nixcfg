@@ -323,12 +323,13 @@ in
         extraConfig = ''
           # CRITICAL: Set resurrect save directory to a persistent location
           set -g @resurrect-dir '${config.home.homeDirectory}/.local/share/tmux/resurrect'
-          set -g @resurrect-save 'S'
+          # Note: We override the save keybinding below to use auto-rename
+          set -g @resurrect-save 'none'  # Disable default S binding
           set -g @resurrect-restore 'R'
           set -g @resurrect-strategy-nvim 'session'
           set -g @resurrect-strategy-vim 'session'
           set -g @resurrect-capture-pane-contents 'on'
-          
+
           # Processes to restore
           set -g @resurrect-processes '\
               "~mosh *" \
@@ -342,9 +343,12 @@ in
               "~*loop *" \
               "~claude" \
           '
-          
+
           # Cleanup empty resurrect files on save
           set -g @resurrect-save-command-strategy 'tmux-resurrect-cleanup'
+
+          # Override the save keybinding to use our auto-rename script
+          bind-key S run-shell "tmux-save-with-rename"
         '';
       }
       {
@@ -385,27 +389,52 @@ in
     procps # Provides tools like ps, top, free for system monitoring
     bc # Basic calculator
 
-    # Tmux session picker - the main interactive session selector  
-    (pkgs.writers.writeBashBin "tmux-session-picker" (
+    # Tmux session picker - the main interactive session selector
+    # Uses writers.writeBashBin (preferred pattern) wrapped with runtime dependencies
+    (
       let
-        script = builtins.readFile ../files/bin/tmux-session-picker;
-        terminalUtils = builtins.readFile ../files/lib/terminal-utils.bash;
-        colorUtils = builtins.readFile ../files/lib/color-utils.bash;
-        pathUtils = builtins.readFile ../files/lib/path-utils.bash;
+        # The base script using writers.writeBashBin pattern
+        baseScript = pkgs.writers.writeBashBin "tmux-session-picker" (
+          let
+            script = builtins.readFile ../files/bin/tmux-session-picker;
+            terminalUtils = builtins.readFile ../files/lib/terminal-utils.bash;
+            colorUtils = builtins.readFile ../files/lib/color-utils.bash;
+            pathUtils = builtins.readFile ../files/lib/path-utils.bash;
+          in
+          builtins.replaceStrings
+            [
+              ''source "$HOME/.local/lib/terminal-utils.bash"''
+              ''source "$HOME/.local/lib/color-utils.bash"''
+              ''source "$HOME/.local/lib/path-utils.bash"''
+              "TMUX_RESURRECT_RESTORE_SCRIPT_NIX_PLACEHOLDER"
+              "TMUX_CONTINUUM_ENABLED_NIX_PLACEHOLDER"
+            ]
+            [
+              terminalUtils
+              colorUtils
+              pathUtils
+              "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/restore.sh"
+              "true" # continuum is enabled in the tmux config
+            ]
+            script
+        );
+
+        # Runtime dependencies needed by the script
+        runtimeDeps = with pkgs; [ fzf tmux parallel python3 fd ripgrep ];
       in
-      builtins.replaceStrings
-        [
-          ''source "$HOME/.local/lib/terminal-utils.bash"''
-          ''source "$HOME/.local/lib/color-utils.bash"''
-          ''source "$HOME/.local/lib/path-utils.bash"''
-        ]
-        [
-          terminalUtils
-          colorUtils
-          pathUtils
-        ]
-        script
-    ))
+      # Wrap the script to provide runtime dependencies in PATH
+      pkgs.symlinkJoin {
+        name = "tmux-session-picker";
+        paths = [ baseScript ];
+        buildInputs = [ pkgs.makeWrapper ];
+        postBuild = ''
+          wrapProgram $out/bin/tmux-session-picker \
+            --prefix PATH : ${pkgs.lib.makeBinPath runtimeDeps}
+        '';
+        # Preserve ability to add tests (for future use)
+        passthru.tests = { };
+      }
+    )
 
     # Tmux session picker profiled version (performance testing)
     (pkgs.writeShellApplication {
@@ -419,6 +448,16 @@ in
       name = "tmux-cpu-mem";
       text = builtins.readFile ../files/bin/tmux-cpu-mem;
       runtimeInputs = with pkgs; [ procps coreutils ];
+    })
+
+    # Tmux save with auto-rename of default sessions
+    (pkgs.writeShellApplication {
+      name = "tmux-save-with-rename";
+      text = builtins.replaceStrings
+        [ "TMUX_RESURRECT_SAVE_SCRIPT_NIX_PLACEHOLDER" ]
+        [ "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh" ]
+        (builtins.readFile ../files/bin/tmux-save-with-rename);
+      runtimeInputs = with pkgs; [ tmux ];
     })
 
     # Tmux test data generator for testing session picker

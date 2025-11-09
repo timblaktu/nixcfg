@@ -282,12 +282,14 @@ USAGE:
     tmux-session-picker [OPTIONS]
     tmux-session-picker --preview <session-data>
     tmux-session-picker --list
+    tmux-session-picker --rename-defaults
 
 OPTIONS:
     -l, --layout LAYOUT     Set fzf layout: 'horizontal' or 'vertical' (default: $DEFAULT_LAYOUT)
     -s, --size SIZE         Set preview window size, e.g., '60%', '40%' (default: $DEFAULT_PREVIEW_SIZE)
     -v, --verbose          Enable verbose error messages and diagnostics
     -h, --help             Show this help message
+    --rename-defaults      Rename all default-named sessions (0, 1, 2...) to unique names
 
 LAYOUTS:
     horizontal             Preview window on the right side (default)
@@ -300,6 +302,7 @@ ENVIRONMENT VARIABLES:
 TMUX KEY BINDINGS:
     Prefix + t            Launch with vertical layout
     Prefix + T            Launch with horizontal layout
+    Prefix + S            Save session (with auto-rename of default names)
 
 INTERACTIVE KEY BINDINGS (within fzf):
     Ctrl-R                Reload session list
@@ -312,6 +315,7 @@ EXAMPLES:
     tmux-session-picker                               # Use defaults
     tmux-session-picker --layout vertical             # Vertical layout
     tmux-session-picker -l horizontal -s 50%          # Horizontal with 50% preview
+    tmux-session-picker --rename-defaults             # Rename default sessions
     TMUX_SESSION_PICKER_LAYOUT=vertical \\
         tmux-session-picker                            # Set via environment
 
@@ -916,9 +920,9 @@ get_session_files_sorted() {
     
     # Find all resurrect files using fd with stat-based sorting for newest-first
     if [[ -d "$RESURRECT_DIR" && -r "$RESURRECT_DIR" ]]; then
-        # Use fd with stat-based sorting for precise modification time ordering
+        # Use fd with xargs and stat for precise modification time ordering
         local fd_output
-        if fd_output=$(fd --type f "tmux_resurrect_.*\.txt" "$RESURRECT_DIR" --exec stat --format='%Y\t{}' 2>/dev/null | sort -nr | cut -f2); then
+        if fd_output=$(fd --type f "tmux_resurrect_.*\.txt" "$RESURRECT_DIR" -0 2>/dev/null | xargs -0 stat --format='%Y %n' 2>/dev/null | sort -nr | cut -d' ' -f2-); then
             while IFS= read -r file; do
                 # Additional validation: ensure file is readable and non-empty
                 if [[ -f "$file" && -r "$file" && -s "$file" ]]; then
@@ -1032,9 +1036,88 @@ build_fzf_command() {
     fzf "${fzf_args[@]}"
 }
 
+# Names pool for auto-renaming (no tim/timothy, 100 names)
+NAMES=(
+  # Male names ≤7 chars
+  alex ben carl dan eric fred gary hugo ian jack ken leo max ned owen paul quinn rex sam uma van wes xander yuri zack
+  adam brad chad dean evan finn greg hank ivan jake kurt luke matt nick omar pete quentin rick stan todd uriah vince walt xavier york zane
+  # Female names ≤7 chars
+  amy ann beth cara dawn ella fay gina hope ivy jane kate lisa mary nina olga pam quinn rose sara tina uma vera wendy xena yara zoe
+  alice betty claire diana emily faith grace helen irene julia karen linda molly nancy olivia penny rachel susan tracy ursula violet willow ximena yasmin zelda
+)
+
+# Get all session names from resurrect files
+get_all_resurrect_session_names() {
+    local resurrect_dir="${HOME}/.local/share/tmux/resurrect"
+
+    # Extract session names from state lines (format: state<TAB>session_name<TAB>...)
+    rg "^state\t" "$resurrect_dir"/*.txt 2>/dev/null | cut -f2 | sort -u
+
+    # Also extract from pane lines (format: pane<TAB>session_name<TAB>...)
+    rg "^pane\t" "$resurrect_dir"/*.txt 2>/dev/null | cut -f2 | sort -u
+}
+
+# Check if session name is already used
+is_session_name_used() {
+    local name="$1"
+
+    # Check current tmux sessions
+    if tmux has-session -t "$name" 2>/dev/null; then
+        return 0  # name is used
+    fi
+
+    # Check all resurrect files
+    if get_all_resurrect_session_names | rg -qx "$name"; then
+        return 0  # name is used
+    fi
+
+    return 1  # name is available
+}
+
+# Get unique session name
+get_unique_session_name() {
+    local attempts=0
+    local name
+
+    # Try random selection up to 100 times
+    while [ $attempts -lt 100 ]; do
+        name="${NAMES[$RANDOM % ${#NAMES[@]}]}"
+
+        if ! is_session_name_used "$name"; then
+            echo "$name"
+            return 0
+        fi
+
+        ((attempts++))
+    done
+
+    # If all names taken, append random number
+    while true; do
+        name="${NAMES[$RANDOM % ${#NAMES[@]}]}$((RANDOM % 1000))"
+        if ! is_session_name_used "$name"; then
+            echo "$name"
+            return 0
+        fi
+    done
+}
+
+# Rename default-named sessions before save
+rename_default_sessions() {
+    # Check all sessions and rename any with default numeric names
+    tmux list-sessions -F "#{session_name}" 2>/dev/null | while read -r session_name; do
+        # Check if session has a default name (pure numbers)
+        if [[ "$session_name" =~ ^[0-9]+$ ]]; then
+            local new_name
+            new_name=$(get_unique_session_name)
+            echo "Renaming session '$session_name' to '$new_name'" >&2
+            tmux rename-session -t "$session_name" "$new_name" 2>/dev/null || true
+        fi
+    done
+}
+
 # Main execution
 main() {
-    
+
     # Set up colors for interactive use
     setup_colors
     # Parse command line arguments first
@@ -1064,33 +1147,57 @@ main() {
     local timestamp
     timestamp=$(echo "$selected" | cut -d$'\t' -f2)
     local selected_file="$RESURRECT_DIR/tmux_resurrect_${timestamp}.txt"
-    
+
     if [[ ! -f "$selected_file" ]]; then
         echo "Error: Selected file does not exist: $selected_file"
         echo "Timestamp: $timestamp"
         exit 1
     fi
-    
-    # Update the 'last' symlink
-    echo "Setting '$(basename "$selected_file")' as the session to restore..."
-    ln -sf "$(basename "$selected_file")" "$RESURRECT_DIR/last"
-    
-    # Restore session using tmux-resurrect plugin
-    local restore_script="TMUX_RESURRECT_RESTORE_SCRIPT_NIX_PLACEHOLDER"
-    local continuum_enabled="TMUX_CONTINUUM_ENABLED_NIX_PLACEHOLDER"
-    
+
+    # Extract session name from the saved file
+    local session_name
+    session_name=$(grep -m 1 "^window" "$selected_file" | cut -f2 2>/dev/null || echo "")
+
+    if [[ -z "$session_name" ]]; then
+        echo "Error: Could not extract session name from $selected_file"
+        exit 1
+    fi
+
+    # Check if we're inside tmux
     if [[ -n "${TMUX:-}" ]]; then
-        echo "Restoring session in current tmux environment..."
-        tmux run-shell "$restore_script"
-    else
-        if [[ "$continuum_enabled" == "true" ]]; then
-            echo "Starting new tmux session (continuum will auto-restore selected session)..."
-            exec tmux new-session
+        # Check if the session from the file still exists
+        if tmux has-session -t "$session_name" 2>/dev/null; then
+            # Session exists - just switch to it
+            echo "Switching to existing session '$session_name'..."
+            tmux switch-client -t "$session_name"
         else
-            echo "Starting new tmux session..."
-            tmux new-session -d
+            # Session doesn't exist - restore it from file
+            echo "Restoring session '$session_name' from $(basename "$selected_file")..."
+            ln -sf "$(basename "$selected_file")" "$RESURRECT_DIR/last"
+            local restore_script="TMUX_RESURRECT_RESTORE_SCRIPT_NIX_PLACEHOLDER"
             tmux run-shell "$restore_script"
-            exec tmux attach-session
+        fi
+    else
+        # Not inside tmux - check if session exists and attach/restore accordingly
+        local continuum_enabled="TMUX_CONTINUUM_ENABLED_NIX_PLACEHOLDER"
+
+        if tmux has-session -t "$session_name" 2>/dev/null; then
+            # Session exists - just attach to it
+            echo "Attaching to existing session '$session_name'..."
+            exec tmux attach-session -t "$session_name"
+        else
+            # Session doesn't exist - restore it
+            echo "Restoring session '$session_name' from $(basename "$selected_file")..."
+            ln -sf "$(basename "$selected_file")" "$RESURRECT_DIR/last"
+            local restore_script="TMUX_RESURRECT_RESTORE_SCRIPT_NIX_PLACEHOLDER"
+
+            if [[ "$continuum_enabled" == "true" ]]; then
+                exec tmux new-session
+            else
+                tmux new-session -d
+                tmux run-shell "$restore_script"
+                exec tmux attach-session
+            fi
         fi
     fi
 }
@@ -1104,7 +1211,7 @@ case "${1:-}" in
             # Extract timestamp from the tab-delimited line (last field)
             timestamp=$(echo "$2" | cut -d$'\t' -f2)
             file_path="$RESURRECT_DIR/tmux_resurrect_${timestamp}.txt"
-            
+
             if [[ -n "$timestamp" && -f "$file_path" ]]; then
                 # Generate preview directly (no cache)
                 generate_preview "$file_path"
@@ -1118,6 +1225,13 @@ case "${1:-}" in
     --list)
         setup_colors "never"
         get_session_list
+        ;;
+    --rename-defaults)
+        setup_colors
+        echo "Renaming default-named sessions to unique names..."
+        rename_default_sessions
+        echo "Done. Current sessions:"
+        tmux list-sessions -F "  #{session_name}" 2>/dev/null || echo "  (no sessions)"
         ;;
     -h|--help)
         show_help
