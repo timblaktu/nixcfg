@@ -198,9 +198,8 @@ in
       # Pane splitting (more intuitive) - inherit current pane's working directory
       bind | split-window -h -c "#{pane_current_path}"
       bind - split-window -v -c "#{pane_current_path}"
-      bind v split-window -h -c "#{pane_current_path}"  # Also keep your preferred 'v' for vertical split
-      bind s split-window -v -c "#{pane_current_path}"  # Also keep your preferred 's' for horizontal split
-      
+      bind v split-window -h -c "#{pane_current_path}"  # Vertical split with 'v'
+
       # Window navigation
       bind l last-window
       bind-key -n M-h previous-window  # Alt+h => previous window
