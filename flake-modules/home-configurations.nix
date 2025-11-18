@@ -79,6 +79,58 @@
         }
       );
 
+      "tim@pa161878-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
+        inputs.home-manager.lib.homeManagerConfiguration {
+          inherit pkgs;
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            ../home/modules/base.nix
+            {
+              homeBase = {
+                username = "tim";
+                homeDirectory = "/home/tim";
+                enableDevelopment = true;
+                enableEspIdf = true;
+                enableOneDriveUtils = true;
+                enableShellUtils = true;
+                enableTerminal = true;
+                environmentVariables = {
+                  WSL_DISTRO = "nixos";
+                  EDITOR = "nvim";
+                };
+                shellAliases = {
+                  explorer = "explorer.exe .";
+                  code = "code.exe";
+                  code-insiders = "code-insiders.exe";
+                  esp32c5 = "esp-idf-shell";
+                };
+              };
+              home.packages = with pkgs; [
+                wslu
+              ];
+              targets.wsl = {
+                enable = true;
+                windowsUsername = "timbl";
+                windowsTools = {
+                  enablePowerShell = true;
+                  enableCmd = false;
+                  enableWslPath = true;
+                  wslPathPath = "/bin/wslpath";
+                };
+                # Disable bind mount - handled by NixOS-WSL module
+                bindMountRoot.enable = false;
+              };
+            }
+            ../home/modules/mcp-servers.nix
+          ];
+          extraSpecialArgs = {
+            inherit inputs;
+            inherit (inputs) nixpkgs-stable;
+            wslHostname = "pa161878-nixos";
+          };
+        }
+      );
+
       "tim@thinky-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;

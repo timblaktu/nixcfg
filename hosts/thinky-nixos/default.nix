@@ -49,7 +49,7 @@
 
   # WSL-specific configuration
   wsl.enable = true;
-  wsl.defaultUser = "tim";
+  # wsl.defaultUser = "tim";
   wsl.interop.register = true;
   wsl.usbip.enable = true;
   wsl.usbip.autoAttach = [ "3-1" "3-2" ]; # .. the last on new sabrent hub is 8-4
