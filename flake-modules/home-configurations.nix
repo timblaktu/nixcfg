@@ -110,7 +110,7 @@
               ];
               targets.wsl = {
                 enable = true;
-                windowsUsername = "timbl";
+                windowsUsername = "blackt1";
                 windowsTools = {
                   enablePowerShell = true;
                   enableCmd = false;
