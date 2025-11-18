@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# Install Nix in single-user mode for containerized environments
+if ! command -v nix &> /dev/null; then
+    echo "Installing Nix..."
+
+    # Create /nix directory (we're running as root in container)
+    mkdir -p /nix
+    chmod 0755 /nix
+
+    # Configure Nix for single-user mode before installation
+    mkdir -p /etc/nix
+    cat > /etc/nix/nix.conf << 'NIXCONF'
+# Single-user mode configuration
+build-users-group =
+experimental-features = nix-command flakes
+sandbox = false
+NIXCONF
+
+    # Download and extract Nix
+    curl -L https://nixos.org/nix/install -o /tmp/nix-install.sh
+    sh /tmp/nix-install.sh --no-daemon --yes 2>&1 || echo "Installer completed with warnings"
+
+    # Find the nix binary in the store
+    NIX_STORE_PATH=$(find /nix/store -maxdepth 1 -name "*nix-*" -type d | grep -E "nix-[0-9]" | sort -V | tail -1)
+
+    if [ -n "$NIX_STORE_PATH" ]; then
+        # Manually set up profile structure
+        rm -f /root/.nix-profile
+        mkdir -p /nix/var/nix/profiles/per-user/root/profile/bin
+
+        # Link all nix binaries into profile
+        for binary in "$NIX_STORE_PATH"/bin/*; do
+            ln -sf "$binary" /nix/var/nix/profiles/per-user/root/profile/bin/$(basename "$binary")
+        done
+
+        # Create profile symlink
+        ln -s /nix/var/nix/profiles/per-user/root/profile /root/.nix-profile
+
+        echo "Nix installed successfully at $NIX_STORE_PATH"
+    else
+        echo "ERROR: Could not find Nix in store"
+        exit 1
+    fi
+fi
+
+# Add nix to PATH
+export PATH="/root/.nix-profile/bin:$PATH"
+
+# Add to environment for future commands
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+    echo 'export PATH="/root/.nix-profile/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
+fi
+
+# Verify installation
+nix --version && echo "Nix setup complete" || echo "ERROR: Nix installation failed"
