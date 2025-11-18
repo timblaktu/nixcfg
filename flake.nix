@@ -21,8 +21,7 @@
     };
 
     nixos-wsl = {
-      url = "github:timblaktu/home-manager/auto-validate-feature";
-      # url = "github:timblaktu/NixOS-WSL/plugin-shim-integration";
+      url = "github:timblaktu/NixOS-WSL/plugin-shim-integration";
       # url = "github:timblaktu/NixOS-WSL/feature/bare-mount-support";
       # url = "git+file:///home/tim/src/NixOS-WSL";
       inputs.nixpkgs.follows = "nixpkgs";
