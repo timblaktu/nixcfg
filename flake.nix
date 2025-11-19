@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:timblaktu/nixpkgs/writers-auto-detection";
+    # nixpkgs.url = "git+file:///home/tim/src/nixpkgs?ref=writers-auto-detection";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-24.11";
     # nixpkgs-unstable for nixvim (has postgres-lsp and other recent packages)
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -19,10 +20,17 @@
 
     home-manager = {
       url = "github:timblaktu/home-manager/feature-test-with-fcitx5-fix";
+      # url = "git+file:///home/tim/src/home-manager?ref=feature-test-with-fcitx5-fix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nixos-wsl.url = "github:timblaktu/NixOS-WSL/plugin-shim-integration";
+    nixos-wsl = {
+      url = "github:timblaktu/NixOS-WSL/plugin-shim-integration";
+      # url = "github:timblaktu/NixOS-WSL/feature/bare-mount-support";
+      # url = "git+file:///home/tim/src/NixOS-WSL";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
