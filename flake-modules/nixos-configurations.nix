@@ -49,18 +49,6 @@
         }
       );
 
-      pa161878-nixos = withSystem "x86_64-linux" ({ pkgs, ... }:
-        inputs.nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          modules = [ ../hosts/pa161878-nixos ];
-          specialArgs = {
-            inherit inputs;
-            inherit (inputs) nixpkgs-stable;
-            wslHostname = "pa161878-nixos";
-          };
-        }
-      );
-
       nixos-wsl-minimal = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
