@@ -1,7 +1,7 @@
 # Overlays for the Nix configuration
 final: prev: {
   # Custom packages and overrides go here
-  
+
   # Fix watchfiles test failure that affects MCP servers
   # Fallback: Disable problematic tests while working on version update
   pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [

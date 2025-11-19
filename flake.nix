@@ -4,13 +4,17 @@
   inputs = {
     nixpkgs.url = "github:timblaktu/nixpkgs/writers-auto-detection";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-24.11";
+    # nixpkgs-unstable for nixvim (has postgres-lsp and other recent packages)
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
     # flake-parts for modular flake organization
     flake-parts.url = "github:hercules-ci/flake-parts";
 
     nixvim = {
       url = "github:nix-community/nixvim";
-      inputs.nixpkgs.follows = "nixpkgs";
+      # Use nixpkgs-unstable which has postgres-lsp and other packages
+      # that NixVim's LSP server definitions require
+      inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
 
     home-manager = {
