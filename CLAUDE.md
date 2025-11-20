@@ -209,15 +209,53 @@ For details, see:
 
 ### Recently Completed
 - **tmux-session-picker fixes** (2025-11-08): Fixed file discovery, session switching, and added auto-rename for uniqueness. See `.archive/tmux-session-picker-fixes-2025-11-08.md`
-- **GitHub Authentication System** (2025-11-20): Implemented secure Bitwarden-based GitHub auth for automatic CLI/git authentication on new machines
-  - ✅ Created `modules/nixos/bitwarden-github-auth.nix` - Secure token management via Bitwarden
-  - ✅ Added `hosts/thinky-nixos/github-auth.nix` - Example configuration
-  - ✅ Documentation: `docs/GITHUB-AUTH-SETUP.md` and `QUICK-GITHUB-AUTH-SETUP.md`
-  - ✅ Security: Tokens never stored in plaintext, fetched on-demand from Bitwarden
-  - ✅ Integration: Works with existing rbw setup and git configuration
 
 ### Active Development
+
+#### **GitHub Authentication Redesign** (2025-11-20) - IN PROGRESS
+**Status**: 🔴 **CRITICAL ARCHITECTURAL ISSUES FOUND - REDESIGN REQUIRED**
+
+**Problem Identified**:
+- ❌ Original implementation used **NixOS system modules** (wrong scope - should be home-manager)
+- ❌ Requires **per-host configuration** (violates DRY, should work everywhere automatically)
+- ❌ **500+ lines of custom bash** (over-engineered, should use built-in git tools)
+- ❌ **Host-specific files** created (e.g., `hosts/thinky-nixos/github-auth.nix`) - should not exist
+
+**Solution Designed**:
+- ✅ New **home-manager module** (`home/modules/github-auth.nix`) - proper user scope
+- ✅ **150 lines** vs 500+ (70% code reduction)
+- ✅ **Zero activation scripts** (pure declarative config)
+- ✅ **Configure once, works everywhere** (no per-host setup)
+- ✅ **Both Bitwarden and SOPS modes** (unified implementation)
+
+**Design Documents**:
+- 📁 **Full Design**: `docs/redesigns/github-auth-redesign-2025-11-20.md` (comprehensive architecture)
+- 📁 **Task List**: `docs/redesigns/github-auth-tasks-2025-11-20.md` (8 sequential tasks, ~2.5-3.5hrs)
+
+**Next Steps**:
+```
+Prompt: "Begin working on next task, work to completion, validate your work,
+update tasks and status in project memory, stage and commit changes without
+including co-authorship in message."
+```
+
+**Tasks Remaining** (see `.archive/github-auth-tasks-2025-11-20.md` for details):
+1. ⏳ Create new home-manager module (`home/modules/github-auth.nix`)
+2. ⏳ Integrate with base module
+3. ⏳ Test Bitwarden mode
+4. ⏳ Test SOPS mode (optional)
+5. ⏳ Remove old implementation (archive old files)
+6. ⏳ Create new documentation
+7. ⏳ Multi-host verification
+8. ⏳ Final validation and cleanup
+
+**Original Implementation** (TO BE REMOVED):
+- ❌ `modules/nixos/bitwarden-github-auth.nix` - Wrong scope
+- ❌ `modules/nixos/github-auth.nix` - Wrong scope
+- ❌ `hosts/thinky-nixos/github-auth.nix` - Should not exist
+- ❌ `docs/GITHUB-AUTH-SETUP.md` - Outdated
+- ❌ `QUICK-GITHUB-AUTH-SETUP.md` - Outdated
+
+**Other Active Tasks**:
 - [ ] git-worktree-superproject validation and integration
 - [ ] Fork development upstream coordination
-- [ ] GitHub auth module testing and deployment
->>>>>>> cleanup-temp-files

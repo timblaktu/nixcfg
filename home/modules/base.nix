@@ -70,7 +70,10 @@ in
         lbzip2
         nix-diff
         nixfmt-rfc-style
+        openssl
+        openssl.dev
         parallel
+        pkg-config
         poppler
         resvg
         ripgrep
