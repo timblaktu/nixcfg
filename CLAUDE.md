@@ -209,8 +209,15 @@ For details, see:
 
 ### Recently Completed
 - **tmux-session-picker fixes** (2025-11-08): Fixed file discovery, session switching, and added auto-rename for uniqueness. See `.archive/tmux-session-picker-fixes-2025-11-08.md`
+- **GitHub Authentication System** (2025-11-20): Implemented secure Bitwarden-based GitHub auth for automatic CLI/git authentication on new machines
+  - ✅ Created `modules/nixos/bitwarden-github-auth.nix` - Secure token management via Bitwarden
+  - ✅ Added `hosts/thinky-nixos/github-auth.nix` - Example configuration
+  - ✅ Documentation: `docs/GITHUB-AUTH-SETUP.md` and `QUICK-GITHUB-AUTH-SETUP.md`
+  - ✅ Security: Tokens never stored in plaintext, fetched on-demand from Bitwarden
+  - ✅ Integration: Works with existing rbw setup and git configuration
 
 ### Active Development
 - [ ] git-worktree-superproject validation and integration
 - [ ] Fork development upstream coordination
+- [ ] GitHub auth module testing and deployment
 >>>>>>> cleanup-temp-files
