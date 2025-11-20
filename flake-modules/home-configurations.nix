@@ -108,6 +108,7 @@
               home.packages = with pkgs; [
                 wslu
               ];
+              secretsManagement.rbw.email = "timblaktu@gmail.com";
               targets.wsl = {
                 enable = true;
                 windowsUsername = "blackt1";
@@ -160,6 +161,7 @@
               home.packages = with pkgs; [
                 wslu
               ];
+              secretsManagement.rbw.email = "timblaktu@gmail.com";
               targets.wsl = {
                 enable = true;
                 windowsUsername = "timbl";

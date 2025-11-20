@@ -6,14 +6,15 @@ with lib;
 
 let
   cfg = config.secretsManagement;
-in {
+in
+{
   options.secretsManagement = {
     enable = mkOption {
       type = types.bool;
       default = true;
       description = "Enable secrets management configuration";
     };
-    
+
     rbw = {
       email = mkOption {
         type = types.nullOr types.str;
@@ -21,52 +22,52 @@ in {
         example = "user@example.com";
         description = "Email address for Bitwarden account";
       };
-      
+
       baseUrl = mkOption {
         type = types.str;
         default = "https://vault.bitwarden.com";
         description = "Base URL for Bitwarden server";
       };
-      
+
       identityUrl = mkOption {
         type = types.str;
         default = "https://identity.bitwarden.com";
         description = "Identity/authentication server URL";
       };
-      
+
       uiUrl = mkOption {
         type = types.str;
         default = "https://vault.bitwarden.com";
         description = "Web vault URL";
       };
-      
+
       notificationsUrl = mkOption {
         type = types.str;
         default = "https://notifications.bitwarden.com";
         description = "Notifications server URL";
       };
-      
+
       pinentry = mkOption {
         type = types.str;
-        default = "pinentry-curses";
+        default = "pinentry";
         example = "pinentry-gtk2";
         description = "Pinentry program to use for password prompts";
       };
-      
+
       lockTimeout = mkOption {
         type = types.int;
-        default = 86400;  # 24 hours
+        default = 3600; # 1 hour
         description = "Time in seconds before the vault is automatically locked";
       };
-      
+
       syncInterval = mkOption {
         type = types.int;
-        default = 86400;  # 24 hours
+        default = 3600; # 1 hour
         description = "Time in seconds between automatic syncs";
       };
     };
   };
-  
+
   config = mkIf cfg.enable {
     # RBW configuration file
     home.file.".config/rbw/config.json" = mkIf (cfg.rbw.email != null) {
@@ -83,7 +84,7 @@ in {
         client_cert_path = null;
       };
     };
-    
+
     # Helper script for rbw initialization
     home.file.".local/bin/rbw-init" = {
       executable = true;
@@ -124,7 +125,7 @@ in {
         echo "RBW initialization complete!"
       '';
     };
-    
+
     # Helper script for SOPS key generation
     home.file.".local/bin/sops-keygen" = {
       executable = true;
@@ -158,7 +159,7 @@ in {
         echo "Add this public key to your .sops.yaml file"
       '';
     };
-    
+
     # Helper script to backup age key to Bitwarden
     home.file.".local/bin/sops-backup-to-bitwarden" = {
       executable = true;
@@ -205,7 +206,7 @@ in {
         echo "Entry name: $BW_ENTRY_NAME"
       '';
     };
-    
+
     # Add to shell initialization
     programs.bash.initExtra = mkAfter ''
       # Add local bin to PATH if not already there
@@ -218,7 +219,7 @@ in {
         echo "Tip: Run 'rbw-init' to set up your Bitwarden CLI"
       fi
     '';
-    
+
     programs.zsh.initContent = mkAfter ''
       # Add local bin to PATH if not already there
       [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"
