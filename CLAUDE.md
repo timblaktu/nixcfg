@@ -256,6 +256,42 @@ including co-authorship in message."
 - ❌ `docs/GITHUB-AUTH-SETUP.md` - Outdated
 - ❌ `QUICK-GITHUB-AUTH-SETUP.md` - Outdated
 
+#### **WSL Microsoft Terminal Settings Management** (2025-11-21) - RESEARCH COMPLETE
+**Status**: ✅ **COMPREHENSIVE RESEARCH AND DESIGN COMPLETE**
+
+**Documentation**: 📁 `docs/WSL-CONFIGURATION-GUIDE.md` (comprehensive 600+ line guide)
+
+**Current State Analysis**:
+- ✅ Font management working (CaskaydiaMono Nerd Font, Noto Color Emoji)
+- ✅ Font verification via PowerShell interop
+- ✅ Home Manager `targets.wsl` module (in fork, provides PowerShell activation access)
+- ❌ **Missing**: Keybinding management (tab navigation, etc.)
+- ❌ **Missing**: Color scheme management (per-profile colors)
+- ❌ **Missing**: Declarative full settings.json management
+
+**Key Architectural Insight**:
+- Windows Terminal settings.json is **per-Windows-user**, not per-WSL-instance
+- Multiple WSL distributions share same Terminal settings
+- **Recommendation**: Hybrid approach - NixOS module for machine-specific + Home Manager for user preferences
+
+**Recommended Implementation** (see guide for details):
+1. **Phase 1**: Create `modules/nixos/windows-terminal.nix` for declarative settings.json management
+2. **Phase 2**: Integrate with `targets.wsl` in home-manager fork for user overrides
+3. **Phase 3**: Profile auto-generation for all WSL instances
+4. **Phase 4**: Advanced features (theme import, keybinding presets)
+
+**Existing Infrastructure**:
+- `home/modules/terminal-verification.nix` - Font verification (262 lines)
+- `home/files/bin/install-terminal-fonts.ps1` - PowerShell installer (430+ lines)
+- `home/files/bin/font-detection-functions.ps1` - Robust font detection
+- `/home/tim/src/home-manager` branch `wsl-target-module` - PowerShell activation access
+
+**Next Steps** (when ready to implement):
+```
+Review docs/WSL-CONFIGURATION-GUIDE.md and decide on implementation approach.
+Consider which phase to implement first based on immediate needs.
+```
+
 **Other Active Tasks**:
 - [ ] git-worktree-superproject validation and integration
 - [ ] Fork development upstream coordination
