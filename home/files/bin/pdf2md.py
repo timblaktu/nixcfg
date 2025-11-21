@@ -230,7 +230,8 @@ Performance:
   --ignore-images            # Text-only extraction
 
 Quality:
-  --margins 72               # Skip 1" margins (headers/footers/page numbers)
+  --margins 0,72,0,72        # Skip top/bottom 1" margins (headers/footers)
+  --margins 36               # Skip 0.5" on all sides (use single value)
   --no-cleanup               # Disable dot leader/whitespace cleanup
 """)
 
@@ -270,12 +271,35 @@ Quality:
 
     # Quality
     quality = parser.add_argument_group('quality')
-    quality.add_argument('--margins', metavar='PTS', type=int, default=36,
-                         help='skip margins in points (72=1in, default: 36)')
+    quality.add_argument('--margins', metavar='PTS', type=str,
+                         default='0,36,0,36',
+                         help='margins: N or l,t,r,b (default: 0,36,0,36)')
     quality.add_argument('--no-cleanup', action='store_true',
                          help='skip cleanup (dots, whitespace)')
 
     args = parser.parse_args()
+
+    # Parse margins parameter
+    margins_str = args.margins
+    if ',' in margins_str:
+        # Comma-separated: left,top,right,bottom
+        try:
+            margins = tuple(int(x.strip()) for x in margins_str.split(','))
+            if len(margins) != 4:
+                raise ValueError("Must provide exactly 4 values")
+        except (ValueError, AttributeError):
+            print(f"❌ Error: Invalid margins '{margins_str}'. "
+                  f"Use single value or left,top,right,bottom",
+                  file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Single value applies to all sides
+        try:
+            margins = int(margins_str)
+        except ValueError:
+            print(f"❌ Error: Invalid margins '{margins_str}'",
+                  file=sys.stderr)
+            sys.exit(1)
 
     # Parse max chunk size
     size_match = re.match(r'(\d+(?:\.\d+)?)\s*([KMG]?)',
@@ -329,7 +353,7 @@ Quality:
             'ignore_images': args.ignore_images,
             'ignore_graphics': args.ignore_graphics,
             'table_strategy': table_strat,
-            'margins': args.margins,  # Skip headers/footers
+            'margins': margins,  # Skip headers/footers (parsed above)
         }
 
         if args.write_images:
