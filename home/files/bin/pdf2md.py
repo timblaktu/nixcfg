@@ -112,6 +112,27 @@ def build_size_based_chunks(doc, total_pages, max_chunk_size):
     return chunks
 
 
+def cleanup_markdown(text):
+    """Clean up common markdown formatting issues from PDF conversion"""
+    import re
+
+    # Remove excessive dot leaders (TOC artifact)
+    # Match patterns like ". . . . . . . ." with 3+ dot sequences
+    text = re.sub(r'(\s*\.\s+){3,}', ' ', text)
+
+    # Collapse excessive blank lines (3+ → 2)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    # Clean up standalone page numbers that aren't part of content
+    # (Page numbers usually appear alone on a line)
+    text = re.sub(r'^\s*\d+\s*$', '', text, flags=re.MULTILINE)
+
+    # Remove trailing whitespace from lines
+    text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
+
+    return text
+
+
 def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
                   lock):
     """Process a single chunk in parallel"""
@@ -122,9 +143,21 @@ def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
     # Open document (each worker gets its own handle)
     doc = pymupdf.open(input_path)
 
+    # Set up TOC-based header detection for better structure
+    try:
+        toc_headers = pymupdf4llm.TocHeaders(doc)
+        kwargs_with_headers = {**kwargs, 'hdr_info': toc_headers}
+    except Exception:
+        kwargs_with_headers = kwargs
+
     # Process pages
     pages = list(range(start_page, end_page))
-    md_text = pymupdf4llm.to_markdown(doc, pages=pages, **kwargs)
+    md_text = pymupdf4llm.to_markdown(doc, pages=pages,
+                                      **kwargs_with_headers)
+
+    # Clean up markdown formatting issues (unless disabled)
+    if not progress_dict.get('no_cleanup', False):
+        md_text = cleanup_markdown(md_text)
 
     # Generate output filename
     base_name = pathlib.Path(input_path).stem
@@ -195,6 +228,10 @@ Performance:
   --table-strategy none      # Skip tables for 2-3x speedup
   --ignore-graphics          # Skip vector graphics
   --ignore-images            # Text-only extraction
+
+Quality:
+  --margins 72               # Skip 1" margins (headers/footers/page numbers)
+  --no-cleanup               # Disable dot leader/whitespace cleanup
 """)
 
     parser.add_argument('input', metavar='PDF', help='input PDF file')
@@ -230,6 +267,13 @@ Performance:
                       choices=['lines_strict', 'lines', 'text', 'none'],
                       default='lines_strict',
                       help='table detection: lines_strict|lines|text|none')
+
+    # Quality
+    quality = parser.add_argument_group('quality')
+    quality.add_argument('--margins', metavar='PTS', type=int, default=36,
+                         help='skip margins in points (72=1in, default: 36)')
+    quality.add_argument('--no-cleanup', action='store_true',
+                         help='skip cleanup (dots, whitespace)')
 
     args = parser.parse_args()
 
@@ -285,6 +329,7 @@ Performance:
             'ignore_images': args.ignore_images,
             'ignore_graphics': args.ignore_graphics,
             'table_strategy': table_strat,
+            'margins': args.margins,  # Skip headers/footers
         }
 
         if args.write_images:
@@ -297,6 +342,7 @@ Performance:
         progress_dict['completed'] = 0
         progress_dict['total'] = total_pages
         progress_dict['chunks_done'] = 0
+        progress_dict['no_cleanup'] = args.no_cleanup
         lock = manager.Lock()
 
         # Process chunks in parallel
