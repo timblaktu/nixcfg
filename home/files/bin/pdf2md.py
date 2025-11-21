@@ -16,34 +16,40 @@ def sanitize_filename(text):
     return text.strip('-')[:50]  # Limit length
 
 
-def estimate_chunk_size(doc, pages):
-    """Estimate markdown size for a page range in bytes"""
-    # Sample first page to estimate bytes-per-page ratio
-    if not pages:
-        return 0
+def estimate_bytes_per_page(doc, sample_pages=3):
+    """Estimate average bytes per page by sampling a few pages"""
+    total_pages = len(doc)
+    # Sample up to 3 pages evenly distributed through the document
+    sample_indices = [
+        0,  # First page
+        total_pages // 2,  # Middle page
+        total_pages - 1  # Last page
+    ]
+    # Only use valid indices
+    sample_indices = [i for i in sample_indices
+                      if 0 <= i < total_pages][:sample_pages]
 
-    sample_page = min(pages)
-    sample_text = pymupdf4llm.to_markdown(doc, pages=[sample_page])
-    bytes_per_page = len(sample_text.encode('utf-8'))
+    total_bytes = 0
+    for idx in sample_indices:
+        sample_text = pymupdf4llm.to_markdown(doc, pages=[idx])
+        total_bytes += len(sample_text.encode('utf-8'))
 
-    # Estimate total size
-    return bytes_per_page * len(pages)
+    return total_bytes // len(sample_indices)
 
 
-def split_large_chunk(doc, toc_entry, max_size):
+def split_large_chunk(toc_entry, max_size, bytes_per_page):
     """Split a TOC entry into smaller chunks if it exceeds max_size"""
     level, title, start_page, end_page = toc_entry
     pages = list(range(start_page, end_page))
 
-    estimated_size = estimate_chunk_size(doc, [start_page])
-    total_estimated = estimated_size * len(pages)
+    total_estimated = bytes_per_page * len(pages)
 
     if total_estimated <= max_size:
         return [toc_entry]
 
     # Split into smaller chunks
     chunks = []
-    pages_per_chunk = max(1, int(max_size / estimated_size))
+    pages_per_chunk = max(1, int(max_size / bytes_per_page))
 
     for i in range(0, len(pages), pages_per_chunk):
         chunk_pages = pages[i:i + pages_per_chunk]
@@ -68,6 +74,9 @@ def build_toc_chunks(doc, max_chunk_size):
         except Exception:
             return build_size_based_chunks(doc, total_pages, max_chunk_size)
 
+    # Sample once to estimate bytes per page (avoid repeated conversions)
+    bytes_per_page = estimate_bytes_per_page(doc)
+
     # Build hierarchical structure
     chunks = []
     for i, (level, title, page) in enumerate(toc):
@@ -81,7 +90,8 @@ def build_toc_chunks(doc, max_chunk_size):
         entry = (level, title, page - 1, next_page)  # Convert to 0-indexed
 
         # Split if too large
-        split_chunks = split_large_chunk(doc, entry, max_chunk_size)
+        split_chunks = split_large_chunk(entry, max_chunk_size,
+                                         bytes_per_page)
         chunks.extend(split_chunks)
 
     return chunks
