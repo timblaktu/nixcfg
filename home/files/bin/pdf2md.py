@@ -2,7 +2,6 @@ import sys
 import argparse
 import pathlib
 import re
-import os
 from multiprocessing import Pool, Manager, cpu_count
 from functools import partial
 import pymupdf
@@ -49,7 +48,8 @@ def split_large_chunk(doc, toc_entry, max_size):
     for i in range(0, len(pages), pages_per_chunk):
         chunk_pages = pages[i:i + pages_per_chunk]
         chunk_title = f"{title} (Part {i//pages_per_chunk + 1})"
-        chunks.append((level, chunk_title, chunk_pages[0], chunk_pages[-1] + 1))
+        chunks.append((level, chunk_title, chunk_pages[0],
+                       chunk_pages[-1] + 1))
 
     return chunks
 
@@ -62,10 +62,10 @@ def build_toc_chunks(doc, max_chunk_size):
     if not toc:
         # Fallback: use IdentifyHeaders for structure detection
         try:
-            hdr_info = pymupdf4llm.IdentifyHeaders(doc)
+            pymupdf4llm.IdentifyHeaders(doc)
             # Even without TOC, split by max_chunk_size
             return build_size_based_chunks(doc, total_pages, max_chunk_size)
-        except:
+        except Exception:
             return build_size_based_chunks(doc, total_pages, max_chunk_size)
 
     # Build hierarchical structure
@@ -102,7 +102,8 @@ def build_size_based_chunks(doc, total_pages, max_chunk_size):
     return chunks
 
 
-def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict, lock):
+def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
+                  lock):
     """Process a single chunk in parallel"""
     level, title, start_page, end_page = chunk_info
     chunk_id = f"{start_page:04d}"
@@ -127,7 +128,8 @@ def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict, loc
         progress_dict['completed'] += len(pages)
         progress_dict['chunks_done'] += 1
         pct = 100 * progress_dict['completed'] / progress_dict['total']
-        print(f"[{pct:5.1f}%] Completed: {title} (pages {start_page+1}-{end_page})")
+        print(f"[{pct:5.1f}%] Completed: {title} "
+              f"(pages {start_page+1}-{end_page})")
 
     doc.close()
 
@@ -186,36 +188,47 @@ Performance:
 """)
 
     parser.add_argument('input', metavar='PDF', help='input PDF file')
-    parser.add_argument('-o', '--output', metavar='DIR', help='output directory (default: {input}-markdown)')
+    parser.add_argument('-o', '--output', metavar='DIR',
+                        help='output directory (default: {input}-markdown)')
 
     # Chunking
     chunk = parser.add_argument_group('chunking')
     chunk.add_argument('--max-chunk-size', metavar='SIZE', default='1M',
                        help='max chunk size: 1M, 500K, 2G (default: 1M)')
-    chunk.add_argument('--workers', metavar='N', type=int, default=cpu_count(),
+    chunk.add_argument('--workers', metavar='N', type=int,
+                       default=cpu_count(),
                        help=f'parallel workers (default: {cpu_count()})')
 
     # Images
     img = parser.add_argument_group('images')
-    img.add_argument('--embed-images', action='store_true', help='embed as base64')
-    img.add_argument('--write-images', action='store_true', help='save to files')
-    img.add_argument('--image-path', metavar='DIR', default='./images', help='image directory')
-    img.add_argument('--image-format', metavar='FMT', default='png', help='png|jpg|webp')
-    img.add_argument('--ignore-images', action='store_true', help='skip all images')
+    img.add_argument('--embed-images', action='store_true',
+                     help='embed as base64')
+    img.add_argument('--write-images', action='store_true',
+                     help='save to files')
+    img.add_argument('--image-path', metavar='DIR', default='./images',
+                     help='image directory')
+    img.add_argument('--image-format', metavar='FMT', default='png',
+                     help='png|jpg|webp')
+    img.add_argument('--ignore-images', action='store_true',
+                     help='skip all images')
 
     # Performance
     perf = parser.add_argument_group('performance')
-    perf.add_argument('--ignore-graphics', action='store_true', help='skip vector graphics')
-    perf.add_argument('--table-strategy', choices=['lines_strict', 'lines', 'text', 'none'],
-                      default='lines_strict', metavar='STRAT',
+    perf.add_argument('--ignore-graphics', action='store_true',
+                      help='skip vector graphics')
+    perf.add_argument('--table-strategy', metavar='STRAT',
+                      choices=['lines_strict', 'lines', 'text', 'none'],
+                      default='lines_strict',
                       help='table detection: lines_strict|lines|text|none')
 
     args = parser.parse_args()
 
     # Parse max chunk size
-    size_match = re.match(r'(\d+(?:\.\d+)?)\s*([KMG]?)', args.max_chunk_size.upper())
+    size_match = re.match(r'(\d+(?:\.\d+)?)\s*([KMG]?)',
+                          args.max_chunk_size.upper())
     if not size_match:
-        print(f"❌ Error: Invalid chunk size '{args.max_chunk_size}'", file=sys.stderr)
+        print(f"❌ Error: Invalid chunk size '{args.max_chunk_size}'",
+              file=sys.stderr)
         sys.exit(1)
 
     size_value = float(size_match.group(1))
@@ -244,7 +257,7 @@ Performance:
         total_pages = len(doc)
 
         print(f"📊 Total pages: {total_pages}")
-        print(f"🔍 Analyzing document structure...")
+        print("🔍 Analyzing document structure...")
 
         # Build chunks from TOC
         chunks = build_toc_chunks(doc, max_chunk_size)
@@ -254,12 +267,14 @@ Performance:
         doc.close()
 
         # Build kwargs for to_markdown
+        table_strat = (None if args.table_strategy == 'none'
+                       else args.table_strategy)
         kwargs = {
             'embed_images': args.embed_images,
             'write_images': args.write_images,
             'ignore_images': args.ignore_images,
             'ignore_graphics': args.ignore_graphics,
-            'table_strategy': None if args.table_strategy == 'none' else args.table_strategy,
+            'table_strategy': table_strat,
         }
 
         if args.write_images:
@@ -288,7 +303,7 @@ Performance:
             results = pool.map(worker_func, chunks)
 
         print()
-        print(f"✅ Conversion complete!")
+        print("✅ Conversion complete!")
         print(f"📝 Generated {len(results)} markdown files")
 
         # Generate index
