@@ -158,55 +158,57 @@ def generate_index(results, output_dir, base_name):
 
 
 def main():
-    examples = """
-Examples:
-  pdf2md input.pdf                           # Convert with smart chunking
-  pdf2md input.pdf -o ./output/              # Specify output directory
-  pdf2md input.pdf --max-chunk-size 2M       # 2MB chunks
-  pdf2md input.pdf --embed-images            # Embed images as base64
-  pdf2md input.pdf --write-images            # Save images to ./images/
-  pdf2md input.pdf --workers 8               # Use 8 parallel workers
-    """
-
     parser = argparse.ArgumentParser(
-        description='Convert PDF to Markdown (parallel, TOC-aware)',
+        prog='pdf2md',
+        description='Parallel TOC-aware PDF to Markdown converter',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=examples
-    )
+        epilog="""
+Examples:
+  pdf2md book.pdf                    # Auto-chunk by TOC, use all cores
+  pdf2md book.pdf -o ./md/           # Specify output directory
+  pdf2md book.pdf --max-chunk-size 2M --workers 8
 
-    parser.add_argument('input', help='Input PDF file')
-    parser.add_argument(
-        '-o', '--output',
-        help='Output directory (default: same as input)')
-    parser.add_argument(
-        '--max-chunk-size', default='1M',
-        help='Maximum chunk size (e.g., 1M, 500K) (default: 1M)')
-    parser.add_argument(
-        '--workers', type=int, default=cpu_count(),
-        help=f'Number of parallel workers (default: {cpu_count()})')
-    parser.add_argument(
-        '--embed-images', action='store_true',
-        help='Embed images as base64 in markdown')
-    parser.add_argument(
-        '--write-images', action='store_true',
-        help='Save images as separate files')
-    parser.add_argument(
-        '--image-path', default='./images',
-        help='Directory for saved images (default: ./images)')
-    parser.add_argument(
-        '--image-format', default='png',
-        help='Image format (default: png)')
-    parser.add_argument(
-        '--ignore-images', action='store_true',
-        help='Skip all images')
-    parser.add_argument(
-        '--ignore-graphics', action='store_true',
-        help='Skip all graphics')
-    parser.add_argument(
-        '--table-strategy',
-        choices=['lines_strict', 'lines', 'text', 'none'],
-        default='lines_strict',
-        help='Table detection strategy')
+Output:
+  Creates directory: {input}-markdown/
+  Files: {input}-{page:04d}-{chapter-title}.md
+  Index: {input}-index.md (with cross-document links)
+
+Chunking Strategy:
+  1. Extract TOC → split by chapters/sections
+  2. No TOC → font-based header detection (IdentifyHeaders)
+  3. Fallback → equal page distribution
+  Chunks exceeding --max-chunk-size are automatically split.
+
+Performance:
+  --table-strategy none      # Skip tables for 2-3x speedup
+  --ignore-graphics          # Skip vector graphics
+  --ignore-images            # Text-only extraction
+""")
+
+    parser.add_argument('input', metavar='PDF', help='input PDF file')
+    parser.add_argument('-o', '--output', metavar='DIR', help='output directory (default: {input}-markdown)')
+
+    # Chunking
+    chunk = parser.add_argument_group('chunking')
+    chunk.add_argument('--max-chunk-size', metavar='SIZE', default='1M',
+                       help='max chunk size: 1M, 500K, 2G (default: 1M)')
+    chunk.add_argument('--workers', metavar='N', type=int, default=cpu_count(),
+                       help=f'parallel workers (default: {cpu_count()})')
+
+    # Images
+    img = parser.add_argument_group('images')
+    img.add_argument('--embed-images', action='store_true', help='embed as base64')
+    img.add_argument('--write-images', action='store_true', help='save to files')
+    img.add_argument('--image-path', metavar='DIR', default='./images', help='image directory')
+    img.add_argument('--image-format', metavar='FMT', default='png', help='png|jpg|webp')
+    img.add_argument('--ignore-images', action='store_true', help='skip all images')
+
+    # Performance
+    perf = parser.add_argument_group('performance')
+    perf.add_argument('--ignore-graphics', action='store_true', help='skip vector graphics')
+    perf.add_argument('--table-strategy', choices=['lines_strict', 'lines', 'text', 'none'],
+                      default='lines_strict', metavar='STRAT',
+                      help='table detection: lines_strict|lines|text|none')
 
     args = parser.parse_args()
 
