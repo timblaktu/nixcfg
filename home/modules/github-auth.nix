@@ -193,7 +193,8 @@ in
     }
 
     # SOPS mode: configure secret (only if sops-nix module is loaded)
-    (mkIf (cfg.mode == "sops") {
+    # Check if sops options are available before trying to configure them
+    (mkIf (cfg.mode == "sops" && (builtins.hasAttr "sops" options)) {
       sops.secrets."${cfg.sops.secretName}" = {
         sopsFile = cfg.sops.secretsFile;
         path = "${config.home.homeDirectory}/.config/github/token";
