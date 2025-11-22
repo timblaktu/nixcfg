@@ -296,67 +296,34 @@ Consider which phase to implement first based on immediate needs.
 - [ ] git-worktree-superproject validation and integration
 - [ ] Fork development upstream coordination
 
-#### **pdf2md Markdown Conversion Quality** (2025-11-21) - INVESTIGATION NEEDED
-**Status**: 🟡 **TRUNCATION FIXED, FORMATTING ISSUES REMAIN**
+#### **pdf2md Markdown Conversion Quality** (2025-11-21) - ✅ COMPLETE
+**Status**: ✅ **ALL FORMATTING ISSUES FIXED**
 
 **Script Location**: `home/files/bin/pdf2md.py`
 **Library**: pymupdf4llm (PyMuPDF extension for LLM-optimized output)
 
-**Completed Fixes**:
-- ✅ Fixed margins parameter - single value now applies to top/bottom only (not left/right)
-- ✅ Fixed lint errors (line length)
+**Completed Fixes** (2025-11-21):
+- ✅ Fixed margins parameter - single value applies to top/bottom only
+- ✅ Fixed all PEP 8 lint errors (E128, E501)
+- ✅ Implemented dual-mode header detection (TOC + font-based)
+- ✅ Added list reconstruction for orphan numbers/bullets
+- ✅ Added header promotion for Title Case/ALL CAPS lines
+- ✅ Added paragraph merging for broken text flows
+- ✅ home-manager build validated and passing
 
-**Remaining Issues** (observed in test conversion):
-1. **Header Detection Failure**: Headers not being detected as markdown headers
-   - Example: "Quick Start Overview" rendered as plain text, not `## Quick Start Overview`
-2. **List Detection Failure**: Numbered lists rendered as separate paragraphs with orphan numbers
-   - Example: "1." on separate line, then "2." etc., with list items below as plain text
-3. **Structure Loss**: Document structure (sections, subsections) not preserved in output
-4. **Potential Over-reliance on TOC**: Font-based header detection (`IdentifyHeaders`) may not work well for all PDFs
+**New Command-Line Options Added**:
+- `--header-strategy` (toc|font|both|none) - Choose detection method
+- `--body-limit` (default: 11pt) - Font size threshold for headers
+- `--max-header-levels` (default: 4) - Limit header depth
+- `--no-fix-lists` - Disable list reconstruction
+- `--no-fix-headers` - Disable header promotion
 
-**Investigation Tasks for Next Session**:
-1. **Research pymupdf4llm API thoroughly**:
-   - `IdentifyHeaders` vs `TocHeaders` - when to use each
-   - `hdr_info` parameter configuration options
-   - `body_limit` and `max_levels` for header detection tuning
-   - Font size thresholds for header identification
-2. **Test with different header detection strategies**:
-   - Try `IdentifyHeaders` with custom `body_limit` values
-   - Try disabling TOC-based detection to force font-based
-   - Compare outputs with different configurations
-3. **Investigate list detection**:
-   - Check if pymupdf4llm has list detection options
-   - May need post-processing regex to fix list formatting
-4. **Consider cleanup_markdown() enhancements**:
-   - Add list reconstruction logic
-   - Add header promotion based on font patterns
-5. **Test with multiple PDF types**:
-   - PDFs with proper TOC structure
-   - PDFs with visual-only headers (no TOC)
-   - PDFs with numbered lists, bullet lists
+**Implementation Summary**:
+- Dual-mode header detection: tries TOC first, falls back to font-based
+- List reconstruction: merges orphan numbers/bullets with content
+- Header promotion: detects Title Case (60%+ cap words) and ALL CAPS as headers
+- Paragraph fixing: merges lines without punctuation + lowercase continuations
 
-**Context7 Research Done**:
-- Library ID: `/pymupdf/pymupdf4llm`
-- Key parameters: `margins`, `hdr_info`, `table_strategy`, `page_chunks`
-- Header detection: `IdentifyHeaders(doc, body_limit=N, max_levels=N)`
-- TOC detection: `TocHeaders(doc)`
-
-**Example Bad Output** (from test PDF):
-```markdown
-Quick Start Overview        <-- Should be ## Quick Start Overview
-
-This guide will help you...
-
-1.                          <-- Orphan number
-
-2.                          <-- List items separated
-
-Connect: Physical connection...
-```
-
-**Next Session Prompt**:
-```
-Review the pdf2md investigation notes in CLAUDE.md. Research pymupdf4llm's
-header and list detection features in depth. Create a comprehensive fix
-plan addressing all formatting issues, then implement and test.
-```
+**Commits**:
+- `1ad60ba` feat(pdf2md): enhance PDF to markdown conversion with better formatting
+- `fbffe66` style(pdf2md): fix PEP 8 linting errors
