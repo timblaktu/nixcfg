@@ -169,7 +169,9 @@ def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
     # Update progress
     with lock:
         progress_dict['chunks_done'] += 1
-        pct = 100 * progress_dict['chunks_done'] / progress_dict['total_chunks']
+        done = progress_dict['chunks_done']
+        total = progress_dict['total_chunks']
+        pct = 100 * done / total
         print(f"[{pct:5.1f}%] Completed: {title} "
               f"(pages {start_page+1}-{end_page})")
 
@@ -297,7 +299,8 @@ Quality:
         # Left/right margins stay at 0 to avoid truncating line beginnings
         try:
             margin_val = int(margins_str)
-            margins = (0, margin_val, 0, margin_val)  # (left, top, right, bottom)
+            # (left, top, right, bottom)
+            margins = (0, margin_val, 0, margin_val)
         except ValueError:
             print(f"❌ Error: Invalid margins '{margins_str}'",
                   file=sys.stderr)
