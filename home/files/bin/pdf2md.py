@@ -168,9 +168,8 @@ def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
 
     # Update progress
     with lock:
-        progress_dict['completed'] += len(pages)
         progress_dict['chunks_done'] += 1
-        pct = 100 * progress_dict['completed'] / progress_dict['total']
+        pct = 100 * progress_dict['chunks_done'] / progress_dict['total_chunks']
         print(f"[{pct:5.1f}%] Completed: {title} "
               f"(pages {start_page+1}-{end_page})")
 
@@ -363,9 +362,8 @@ Quality:
         # Set up parallel processing with progress tracking
         manager = Manager()
         progress_dict = manager.dict()
-        progress_dict['completed'] = 0
-        progress_dict['total'] = total_pages
         progress_dict['chunks_done'] = 0
+        progress_dict['total_chunks'] = len(chunks)
         progress_dict['no_cleanup'] = args.no_cleanup
         lock = manager.Lock()
 
