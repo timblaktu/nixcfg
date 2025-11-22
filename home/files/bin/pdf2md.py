@@ -229,8 +229,8 @@ Performance:
   --ignore-images            # Text-only extraction
 
 Quality:
-  --margins 0,72,0,72        # Skip top/bottom 1" margins (headers/footers)
-  --margins 36               # Skip 0.5" on all sides (use single value)
+  --margins 72               # Skip 1" top/bottom (headers/footers)
+  --margins 0,72,0,72        # Same as above, explicit l,t,r,b format
   --no-cleanup               # Disable dot leader/whitespace cleanup
 """)
 
@@ -272,7 +272,8 @@ Quality:
     quality = parser.add_argument_group('quality')
     quality.add_argument('--margins', metavar='PTS', type=str,
                          default='0,36,0,36',
-                         help='margins: N or l,t,r,b (default: 0,36,0,36)')
+                         help='margins to ignore: N (top/bottom only) or '
+                              'l,t,r,b (default: 0,36,0,36)')
     quality.add_argument('--no-cleanup', action='store_true',
                          help='skip cleanup (dots, whitespace)')
 
@@ -292,9 +293,11 @@ Quality:
                   file=sys.stderr)
             sys.exit(1)
     else:
-        # Single value applies to all sides
+        # Single value applies to top/bottom only (for header/footer removal)
+        # Left/right margins stay at 0 to avoid truncating line beginnings
         try:
-            margins = int(margins_str)
+            margin_val = int(margins_str)
+            margins = (0, margin_val, 0, margin_val)  # (left, top, right, bottom)
         except ValueError:
             print(f"❌ Error: Invalid margins '{margins_str}'",
                   file=sys.stderr)
