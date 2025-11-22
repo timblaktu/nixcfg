@@ -122,25 +122,29 @@ def cleanup_markdown(text, fix_lists=True, fix_headers=True):
 
     # Fix orphaned list items (numbered lists)
     if fix_lists:
-        # Pattern 1: Orphan numbers on separate lines (e.g., "1.\n" or "2.\n")
-        # Merge with following line
-        text = re.sub(r'^(\s*)(\d+\.)\s*\n+(.+)$', r'\1\2 \3', text,
-                     flags=re.MULTILINE)
+        # Pattern 1: Orphan numbers (e.g., "1.\n") - merge with following
+        text = re.sub(
+            r'^(\s*)(\d+\.)\s*\n+(.+)$', r'\1\2 \3',
+            text, flags=re.MULTILINE)
 
         # Pattern 2: Bullet points that got separated
-        bullet_patterns = r'[•◦▪▸▹►◆◇○●■□▶▷]'
-        text = re.sub(rf'^(\s*)({bullet_patterns})\s*\n+(.+)$', r'\1\2 \3', text,
-                     flags=re.MULTILINE)
+        bullets = r'[•◦▪▸▹►◆◇○●■□▶▷]'
+        text = re.sub(
+            rf'^(\s*)({bullets})\s*\n+(.+)$', r'\1\2 \3',
+            text, flags=re.MULTILINE)
 
         # Pattern 3: Hyphen/asterisk bullets
-        text = re.sub(r'^(\s*)([-*])\s*\n+([^\n-*].+)$', r'\1\2 \3', text,
-                     flags=re.MULTILINE)
+        text = re.sub(
+            r'^(\s*)([-*])\s*\n+([^\n-*].+)$', r'\1\2 \3',
+            text, flags=re.MULTILINE)
 
         # Fix multi-level lists (e.g., "a.", "i.", etc.)
-        text = re.sub(r'^(\s*)([a-z]\.)\s*\n+(.+)$', r'\1\2 \3', text,
-                     flags=re.MULTILINE | re.IGNORECASE)
-        text = re.sub(r'^(\s*)([ivxIVX]+\.)\s*\n+(.+)$', r'\1\2 \3', text,
-                     flags=re.MULTILINE)
+        text = re.sub(
+            r'^(\s*)([a-z]\.)\s*\n+(.+)$', r'\1\2 \3',
+            text, flags=re.MULTILINE | re.IGNORECASE)
+        text = re.sub(
+            r'^(\s*)([ivxIVX]+\.)\s*\n+(.+)$', r'\1\2 \3',
+            text, flags=re.MULTILINE)
 
     # Fix headers that weren't detected (lines that look like headers)
     if fix_headers:
@@ -148,23 +152,28 @@ def cleanup_markdown(text, fix_lists=True, fix_headers=True):
         lines = text.split('\n')
         for i, line in enumerate(lines):
             stripped = line.strip()
-            if (stripped and len(stripped) < 60 and
+            is_candidate = (
+                stripped and len(stripped) < 60 and
                 not stripped.startswith('#') and
-                not re.match(r'^\d+\.', stripped)):  # Not a list item
+                not re.match(r'^\d+\.', stripped)
+            )
+            if not is_candidate:
+                continue
 
-                # Check if it looks like a header
-                # Title Case: Most words start with capital
-                words = stripped.split()
-                if len(words) <= 8:  # Headers are usually short
-                    cap_words = sum(1 for w in words if w and w[0].isupper())
-                    if cap_words >= len(words) * 0.6:  # 60% or more capitalized
-                        # Check context: usually followed by paragraph or blank line
-                        next_line = lines[i + 1] if i + 1 < len(lines) else ""
-                        if not next_line.strip() or len(next_line) > len(stripped):
-                            lines[i] = f"## {stripped}"
-                    elif stripped.isupper() and len(stripped) > 3:
-                        # ALL CAPS headers
-                        lines[i] = f"## {stripped.title()}"
+            # Check if it looks like a header (Title Case)
+            words = stripped.split()
+            if len(words) <= 8:  # Headers are usually short
+                cap_words = sum(1 for w in words if w and w[0].isupper())
+                # 60% or more capitalized words
+                if cap_words >= len(words) * 0.6:
+                    # Check context: followed by paragraph/blank
+                    next_line = lines[i + 1] if i + 1 < len(lines) else ""
+                    next_is_longer = len(next_line) > len(stripped)
+                    if not next_line.strip() or next_is_longer:
+                        lines[i] = f"## {stripped}"
+                elif stripped.isupper() and len(stripped) > 3:
+                    # ALL CAPS headers
+                    lines[i] = f"## {stripped.title()}"
 
         text = '\n'.join(lines)
 
@@ -178,20 +187,26 @@ def cleanup_markdown(text, fix_lists=True, fix_headers=True):
     # Remove trailing whitespace from lines
     text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
 
-    # Fix broken paragraphs (lines that should be continuous)
-    # If a line doesn't end with punctuation and next line starts lowercase, merge
+    # Fix broken paragraphs: merge lines that should be continuous
+    # (no punctuation at end + next line starts lowercase)
     lines = text.split('\n')
     merged_lines = []
+    list_pattern = r'^\s*[\d•◦▪▸▹►◆◇○●■□▶▷\-*]'
+    end_punct = ('.', '!', '?', ':', ';', '"', "'")
     i = 0
     while i < len(lines):
         line = lines[i]
-        if (i + 1 < len(lines) and
-            line and not line.startswith('#') and  # Not a header
-            not re.match(r'^\s*[\d•◦▪▸▹►◆◇○●■□▶▷\-*]', line) and  # Not a list
-            not line.rstrip().endswith(('.', '!', '?', ':', ';', '"', "'")) and
-            lines[i + 1] and lines[i + 1][0].islower()):
-            # Merge with next line
-            merged_lines.append(line + ' ' + lines[i + 1])
+        has_next = i + 1 < len(lines)
+        next_line = lines[i + 1] if has_next else ""
+        should_merge = (
+            has_next and line and
+            not line.startswith('#') and
+            not re.match(list_pattern, line) and
+            not line.rstrip().endswith(end_punct) and
+            next_line and next_line[0].islower()
+        )
+        if should_merge:
+            merged_lines.append(line + ' ' + next_line)
             i += 2
         else:
             merged_lines.append(line)
@@ -258,9 +273,11 @@ def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
     # Clean up markdown formatting issues (unless disabled)
     if not progress_dict.get('no_cleanup', False):
         fix_lists = progress_dict.get('fix_lists', True)
-        fix_headers = progress_dict.get('fix_headers', True) and header_strategy != 'none'
-        md_text = cleanup_markdown(md_text, fix_lists=fix_lists,
-                                 fix_headers=fix_headers)
+        do_fix_headers = (
+            progress_dict.get('fix_headers', True) and
+            header_strategy != 'none')
+        md_text = cleanup_markdown(
+            md_text, fix_lists=fix_lists, fix_headers=do_fix_headers)
 
     # Generate output filename
     base_name = pathlib.Path(input_path).stem
@@ -404,15 +421,15 @@ Quality:
     # Header detection
     headers = parser.add_argument_group('header detection')
     headers.add_argument('--header-strategy', metavar='STRAT',
-                        choices=['toc', 'font', 'both', 'none'],
-                        default='both',
-                        help='header detection: toc|font|both|none (default: both)')
+                         choices=['toc', 'font', 'both', 'none'],
+                         default='both',
+                         help='header detection: toc|font|both|none')
     headers.add_argument('--body-limit', metavar='PTS', type=int,
-                        default=11,
-                        help='font size threshold for headers (default: 11pt)')
+                         default=11,
+                         help='font size threshold for headers (11pt)')
     headers.add_argument('--max-header-levels', metavar='N', type=int,
-                        default=4,
-                        help='maximum header levels to detect (default: 4)')
+                         default=4,
+                         help='max header levels to detect (default: 4)')
 
     args = parser.parse_args()
 
