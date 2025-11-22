@@ -112,7 +112,7 @@ def build_size_based_chunks(doc, total_pages, max_chunk_size):
     return chunks
 
 
-def cleanup_markdown(text):
+def cleanup_markdown(text, fix_lists=True, fix_headers=True):
     """Clean up common markdown formatting issues from PDF conversion"""
     import re
 
@@ -120,15 +120,84 @@ def cleanup_markdown(text):
     # Match patterns like ". . . . . . . ." with 3+ dot sequences
     text = re.sub(r'(\s*\.\s+){3,}', ' ', text)
 
+    # Fix orphaned list items (numbered lists)
+    if fix_lists:
+        # Pattern 1: Orphan numbers on separate lines (e.g., "1.\n" or "2.\n")
+        # Merge with following line
+        text = re.sub(r'^(\s*)(\d+\.)\s*\n+(.+)$', r'\1\2 \3', text,
+                     flags=re.MULTILINE)
+
+        # Pattern 2: Bullet points that got separated
+        bullet_patterns = r'[•◦▪▸▹►◆◇○●■□▶▷]'
+        text = re.sub(rf'^(\s*)({bullet_patterns})\s*\n+(.+)$', r'\1\2 \3', text,
+                     flags=re.MULTILINE)
+
+        # Pattern 3: Hyphen/asterisk bullets
+        text = re.sub(r'^(\s*)([-*])\s*\n+([^\n-*].+)$', r'\1\2 \3', text,
+                     flags=re.MULTILINE)
+
+        # Fix multi-level lists (e.g., "a.", "i.", etc.)
+        text = re.sub(r'^(\s*)([a-z]\.)\s*\n+(.+)$', r'\1\2 \3', text,
+                     flags=re.MULTILINE | re.IGNORECASE)
+        text = re.sub(r'^(\s*)([ivxIVX]+\.)\s*\n+(.+)$', r'\1\2 \3', text,
+                     flags=re.MULTILINE)
+
+    # Fix headers that weren't detected (lines that look like headers)
+    if fix_headers:
+        # Pattern: Short lines (< 60 chars) in Title Case or ALL CAPS
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if (stripped and len(stripped) < 60 and
+                not stripped.startswith('#') and
+                not re.match(r'^\d+\.', stripped)):  # Not a list item
+
+                # Check if it looks like a header
+                # Title Case: Most words start with capital
+                words = stripped.split()
+                if len(words) <= 8:  # Headers are usually short
+                    cap_words = sum(1 for w in words if w and w[0].isupper())
+                    if cap_words >= len(words) * 0.6:  # 60% or more capitalized
+                        # Check context: usually followed by paragraph or blank line
+                        next_line = lines[i + 1] if i + 1 < len(lines) else ""
+                        if not next_line.strip() or len(next_line) > len(stripped):
+                            lines[i] = f"## {stripped}"
+                    elif stripped.isupper() and len(stripped) > 3:
+                        # ALL CAPS headers
+                        lines[i] = f"## {stripped.title()}"
+
+        text = '\n'.join(lines)
+
     # Collapse excessive blank lines (3+ → 2)
     text = re.sub(r'\n{3,}', '\n\n', text)
 
     # Clean up standalone page numbers that aren't part of content
-    # (Page numbers usually appear alone on a line)
-    text = re.sub(r'^\s*\d+\s*$', '', text, flags=re.MULTILINE)
+    # More sophisticated: only remove if truly standalone (not part of lists)
+    text = re.sub(r'^(?!\s*\d+\.)\s*\d{1,4}\s*$', '', text, flags=re.MULTILINE)
 
     # Remove trailing whitespace from lines
     text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
+
+    # Fix broken paragraphs (lines that should be continuous)
+    # If a line doesn't end with punctuation and next line starts lowercase, merge
+    lines = text.split('\n')
+    merged_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if (i + 1 < len(lines) and
+            line and not line.startswith('#') and  # Not a header
+            not re.match(r'^\s*[\d•◦▪▸▹►◆◇○●■□▶▷\-*]', line) and  # Not a list
+            not line.rstrip().endswith(('.', '!', '?', ':', ';', '"', "'")) and
+            lines[i + 1] and lines[i + 1][0].islower()):
+            # Merge with next line
+            merged_lines.append(line + ' ' + lines[i + 1])
+            i += 2
+        else:
+            merged_lines.append(line)
+            i += 1
+
+    text = '\n'.join(merged_lines)
 
     return text
 
@@ -143,12 +212,43 @@ def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
     # Open document (each worker gets its own handle)
     doc = pymupdf.open(input_path)
 
-    # Set up TOC-based header detection for better structure
-    try:
-        toc_headers = pymupdf4llm.TocHeaders(doc)
-        kwargs_with_headers = {**kwargs, 'hdr_info': toc_headers}
-    except Exception:
-        kwargs_with_headers = kwargs
+    # Set up header detection based on strategy
+    header_strategy = progress_dict.get('header_strategy', 'both')
+    hdr_info = None
+
+    if header_strategy in ('toc', 'both'):
+        # Try TOC-based header detection first
+        try:
+            hdr_info = pymupdf4llm.TocHeaders(doc)
+        except Exception:
+            if header_strategy == 'toc':
+                # TOC-only mode failed, no headers
+                hdr_info = False
+
+    if header_strategy in ('font', 'both') and hdr_info is None:
+        # Use font-based header detection
+        try:
+            body_limit = progress_dict.get('body_limit', 11)
+            max_levels = progress_dict.get('max_header_levels', 4)
+            # Analyze first few pages for font sizes
+            sample_pages = list(range(min(3, end_page - start_page)))
+            hdr_info = pymupdf4llm.IdentifyHeaders(
+                doc,
+                pages=[start_page + p for p in sample_pages],
+                body_limit=body_limit,
+                max_levels=max_levels
+            )
+        except Exception:
+            # Fallback to no headers
+            hdr_info = False
+
+    if header_strategy == 'none':
+        hdr_info = False
+
+    # Update kwargs with header info
+    kwargs_with_headers = {**kwargs}
+    if hdr_info is not None:
+        kwargs_with_headers['hdr_info'] = hdr_info
 
     # Process pages
     pages = list(range(start_page, end_page))
@@ -157,7 +257,10 @@ def process_chunk(chunk_info, input_path, output_dir, kwargs, progress_dict,
 
     # Clean up markdown formatting issues (unless disabled)
     if not progress_dict.get('no_cleanup', False):
-        md_text = cleanup_markdown(md_text)
+        fix_lists = progress_dict.get('fix_lists', True)
+        fix_headers = progress_dict.get('fix_headers', True) and header_strategy != 'none'
+        md_text = cleanup_markdown(md_text, fix_lists=fix_lists,
+                                 fix_headers=fix_headers)
 
     # Generate output filename
     base_name = pathlib.Path(input_path).stem
@@ -213,6 +316,7 @@ Examples:
   pdf2md book.pdf                    # Auto-chunk by TOC, use all cores
   pdf2md book.pdf -o ./md/           # Specify output directory
   pdf2md book.pdf --max-chunk-size 2M --workers 8
+  pdf2md book.pdf --header-strategy font --body-limit 12
 
 Output:
   Creates directory: {input}-markdown/
@@ -225,6 +329,20 @@ Chunking Strategy:
   3. Fallback → equal page distribution
   Chunks exceeding --max-chunk-size are automatically split.
 
+Header Detection:
+  --header-strategy both     # Try TOC first, fallback to font-based (default)
+  --header-strategy toc      # TOC metadata only
+  --header-strategy font     # Font-size based detection
+  --header-strategy none     # No header detection
+  --body-limit 12            # Font size threshold for headers (default: 11pt)
+  --max-header-levels 3      # Detect up to h3 (default: 4)
+
+List & Format Fixes:
+  --no-fix-lists             # Disable list reconstruction
+  --no-fix-headers           # Disable header promotion
+  List reconstruction merges orphan numbers/bullets with their content.
+  Header promotion detects Title Case/ALL CAPS lines as headers.
+
 Performance:
   --table-strategy none      # Skip tables for 2-3x speedup
   --ignore-graphics          # Skip vector graphics
@@ -233,7 +351,7 @@ Performance:
 Quality:
   --margins 72               # Skip 1" top/bottom (headers/footers)
   --margins 0,72,0,72        # Same as above, explicit l,t,r,b format
-  --no-cleanup               # Disable dot leader/whitespace cleanup
+  --no-cleanup               # Disable all cleanup features
 """)
 
     parser.add_argument('input', metavar='PDF', help='input PDF file')
@@ -278,6 +396,23 @@ Quality:
                               'l,t,r,b (default: 0,36,0,36)')
     quality.add_argument('--no-cleanup', action='store_true',
                          help='skip cleanup (dots, whitespace)')
+    quality.add_argument('--no-fix-lists', action='store_true',
+                         help='disable list reconstruction')
+    quality.add_argument('--no-fix-headers', action='store_true',
+                         help='disable header promotion')
+
+    # Header detection
+    headers = parser.add_argument_group('header detection')
+    headers.add_argument('--header-strategy', metavar='STRAT',
+                        choices=['toc', 'font', 'both', 'none'],
+                        default='both',
+                        help='header detection: toc|font|both|none (default: both)')
+    headers.add_argument('--body-limit', metavar='PTS', type=int,
+                        default=11,
+                        help='font size threshold for headers (default: 11pt)')
+    headers.add_argument('--max-header-levels', metavar='N', type=int,
+                        default=4,
+                        help='maximum header levels to detect (default: 4)')
 
     args = parser.parse_args()
 
@@ -371,6 +506,11 @@ Quality:
         progress_dict['chunks_done'] = 0
         progress_dict['total_chunks'] = len(chunks)
         progress_dict['no_cleanup'] = args.no_cleanup
+        progress_dict['fix_lists'] = not args.no_fix_lists
+        progress_dict['fix_headers'] = not args.no_fix_headers
+        progress_dict['header_strategy'] = args.header_strategy
+        progress_dict['body_limit'] = args.body_limit
+        progress_dict['max_header_levels'] = args.max_header_levels
         lock = manager.Lock()
 
         # Process chunks in parallel
