@@ -8,7 +8,7 @@
       in
       {
         # Include all custom packages
-        inherit (customPkgs) nixvim-anywhere markitdown;
+        inherit (customPkgs) nixvim-anywhere markitdown marker-pdf;
 
         # nixvim-anywhere convenience targets (Type 2 conversion approach - RECOMMENDED)
         # Temporarily disabled during API migration

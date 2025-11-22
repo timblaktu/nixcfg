@@ -8,6 +8,7 @@
     ../../modules/wsl-common.nix
     ../../modules/wsl-tarball-checks.nix
     ../../modules/nixos/sops-nix.nix
+    ../../modules/nixos/wsl-cuda.nix
     inputs.sops-nix.nixosModules.sops
     inputs.nixos-wsl.nixosModules.default
   ];
@@ -54,6 +55,10 @@
   wsl.usbip.enable = true;
   wsl.usbip.autoAttach = [ "3-1" "3-2" ]; # .. the last on new sabrent hub is 8-4
   wsl.usbip.snippetIpAddress = "localhost"; # Fix for auto-attach
+
+  # WSL CUDA support - enables GPU passthrough for ML workloads
+  # GPU: NVIDIA RTX 2000 Ada (8GB VRAM) via WSL2 passthrough
+  wslCuda.enable = true;
 
   # SSH service configuration
   services.openssh = {
