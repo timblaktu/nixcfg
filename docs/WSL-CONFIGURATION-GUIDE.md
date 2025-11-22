@@ -11,7 +11,57 @@ This guide documents the comprehensive WSL-specific configuration in this NixOS 
 
 **Last Updated**: 2025-11-21
 **Target Audience**: WSL NixOS system administrators
-**Status**: In Development
+**Status**: Research Complete - Ready for Implementation
+
+---
+
+## Quick Reference: Task Status
+
+### Current State Summary
+
+| Feature | Status | Location |
+|---------|--------|----------|
+| Font management | ✅ Working | `home/modules/terminal-verification.nix` |
+| Font verification | ✅ Working | PowerShell interop via activation |
+| PowerShell activation access | ✅ Working | home-manager fork `wsl-target-module` |
+| Keybinding management | ❌ Missing | N/A |
+| Color scheme management | ❌ Missing | N/A |
+| Declarative settings.json | ❌ Missing | N/A |
+
+### Implementation Tasks (Self-Contained Checklist)
+
+**Phase 1: Foundation** (Priority: High)
+- [ ] Create `modules/nixos/windows-terminal.nix` skeleton
+- [ ] Implement options for profiles.defaults, keybindings, colorSchemes
+- [ ] Create PowerShell script for settings.json merge/update
+- [ ] Add NixOS activation script
+- [ ] Test on current WSL instance
+- [ ] Add host configuration to `hosts/thinky-nixos/default.nix`
+
+**Phase 2: Enhancement** (Priority: Medium)
+- [ ] Implement WSL instance detection for profile auto-generation
+- [ ] Add settings merge modes (overlay/replace/backup)
+- [ ] Improve backup and recovery mechanisms
+- [ ] Test on multiple WSL instances
+
+**Phase 3: Integration** (Priority: Low)
+- [ ] Extend `targets.wsl` in home-manager fork with Terminal options
+- [ ] Create user override mechanism
+- [ ] Prepare for upstream contribution
+
+**Phase 4: Polish** (Priority: Future)
+- [ ] Theme import/export functionality
+- [ ] Advanced keybinding presets
+- [ ] Community testing and upstream PR
+
+### Next Session Prompt
+
+```
+Continue implementing WSL Terminal settings management. Review
+docs/WSL-CONFIGURATION-GUIDE.md for context and task list.
+Start with Phase 1: Create modules/nixos/windows-terminal.nix
+with basic keybinding and color scheme support.
+```
 
 ---
 
