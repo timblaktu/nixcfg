@@ -311,19 +311,45 @@ Consider which phase to implement first based on immediate needs.
 - ✅ Added paragraph merging for broken text flows
 - ✅ home-manager build validated and passing
 
-**New Command-Line Options Added**:
-- `--header-strategy` (toc|font|both|none) - Choose detection method
-- `--body-limit` (default: 11pt) - Font size threshold for headers
-- `--max-header-levels` (default: 4) - Limit header depth
-- `--no-fix-lists` - Disable list reconstruction
-- `--no-fix-headers` - Disable header promotion
-
-**Implementation Summary**:
-- Dual-mode header detection: tries TOC first, falls back to font-based
-- List reconstruction: merges orphan numbers/bullets with content
-- Header promotion: detects Title Case (60%+ cap words) and ALL CAPS as headers
-- Paragraph fixing: merges lines without punctuation + lowercase continuations
-
 **Commits**:
 - `1ad60ba` feat(pdf2md): enhance PDF to markdown conversion with better formatting
 - `fbffe66` style(pdf2md): fix PEP 8 linting errors
+
+#### **marker-pdf ML-Based PDF Converter** (2025-11-24) - 🔴 IN PROGRESS
+**Status**: 🔴 **VENV TORCH IMPORT ISSUE - NEEDS FIX**
+
+**Goal**: High-quality PDF to Markdown conversion using ML-based OCR with GPU acceleration
+
+**Implementation**:
+- Package: `pkgs/marker-pdf/default.nix` - Hybrid Nix + pip venv approach
+- WSL CUDA: `modules/nixos/wsl-cuda.nix` - GPU passthrough via WSL2
+- Integration: Added to overlays and base home packages
+- Wrapper: `marker-pdf-env` command available in PATH
+
+**Current Issue**:
+- ❌ `import torch` fails in venv despite `--system-site-packages`
+- Venv created with pythonEnv that includes torch-bin
+- System-site-packages torch not visible to venv Python
+- pip installing its own torch (currently in progress)
+
+**Files Modified**:
+- `pkgs/marker-pdf/default.nix` - Package definition
+- `overlays/default.nix` - Added marker-pdf overlay
+- `home/modules/base.nix` - Added to basePackages
+- `modules/nixos/wsl-cuda.nix` - WSL CUDA support
+- `hosts/pa161878-nixos/default.nix` - Enabled wslCuda
+
+**GPU Verification**:
+- ✅ nvidia-smi works (RTX 2000 Ada, 8GB VRAM detected)
+- ✅ CUDA Version: 13.0, Driver Version: 581.80
+- ✅ LD_LIBRARY_PATH includes /usr/lib/wsl/lib
+
+**Next Steps**:
+1. Fix venv torch import issue (system-site-packages not working)
+2. Test CUDA availability in marker-pdf environment
+3. Validate PDF conversion with GPU acceleration
+4. Performance testing with real PDFs
+
+**Commits**:
+- `219cae0` feat(wsl): add CUDA support module and marker-pdf package
+- `6f4b418` feat(marker-pdf): improve venv torch integration and add to home packages
