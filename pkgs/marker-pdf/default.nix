@@ -18,8 +18,8 @@
 }:
 
 let
-  # Use Python with CUDA-enabled PyTorch for GPU acceleration
-  pythonEnv = python3.withPackages (ps: with ps; [
+  # Core packages that will be visible to venv via PYTHONPATH
+  pythonPackages = with python3.pkgs; [
     pip
     virtualenv
     # Pre-install some dependencies that have Nix packages
@@ -31,14 +31,19 @@ let
     requests
     regex
     ftfy
-    # torch-bin includes CUDA support from pre-built wheels
   ] ++ lib.optionals cudaSupport [
-    ps.torch-bin
-    ps.torchvision-bin
+    torch-bin
+    torchvision-bin
   ] ++ lib.optionals (!cudaSupport) [
-    ps.torch
-    ps.torchvision
-  ]);
+    torch
+    torchvision
+  ];
+
+  # Build environment that makes packages discoverable
+  pythonEnv = python3.buildEnv.override {
+    extraLibs = pythonPackages;
+    ignoreCollisions = true;
+  };
 
   # Version of marker-pdf to install
   version = "1.6.0";
@@ -53,6 +58,10 @@ writeShellScriptBin "marker-pdf-env" ''
 
     VENV_DIR="''${XDG_DATA_HOME:-$HOME/.local/share}/marker-pdf-venv"
 
+    # Ensure Nix Python packages are discoverable
+    export PYTHONPATH="${pythonEnv}/${python3.sitePackages}:''${PYTHONPATH:-}"
+    export LD_LIBRARY_PATH="/usr/lib/wsl/lib:''${LD_LIBRARY_PATH:-}"
+
     # Create venv if it doesn't exist
     if [ ! -d "$VENV_DIR" ]; then
       echo "Creating marker-pdf virtual environment..."
@@ -62,21 +71,18 @@ writeShellScriptBin "marker-pdf-env" ''
       echo "Installing marker-pdf ${version}..."
       "$VENV_DIR/bin/pip" install --upgrade pip
 
-      # Verify torch is available from system-site-packages
-      if "$VENV_DIR/bin/python" -c "import torch" 2>/dev/null; then
-        echo "✓ Using Nix-provided PyTorch $(${pythonEnv}/bin/python -c 'import torch; print(torch.__version__)')"
+      # Verify torch is available
+      if "$VENV_DIR/bin/python" -c "import torch; print(f'✓ PyTorch {torch.__version__} with CUDA: {torch.cuda.is_available()}')" 2>/dev/null; then
+        echo "✓ Using Nix-provided PyTorch"
       else
-        echo "⚠ Warning: PyTorch not found in system-site-packages, pip will install it"
+        echo "⚠ Warning: PyTorch not found, pip will install it"
       fi
 
-      # Install marker-pdf (will reuse torch from system-site-packages if available)
-      "$VENV_DIR/bin/pip" install "marker-pdf==${version}"
+      # Install marker-pdf with compatible versions (surya-ocr 0.13 has config issues)
+      "$VENV_DIR/bin/pip" install "marker-pdf==${version}" "surya-ocr>=0.12.0,<0.13" "transformers>=4.45.2,<4.50"
 
       echo "Installation complete!"
     fi
-
-    # Ensure WSL CUDA libraries are in path
-    export LD_LIBRARY_PATH="/usr/lib/wsl/lib:''${LD_LIBRARY_PATH:-}"
 
     # If arguments provided, run marker commands directly
     if [ $# -gt 0 ]; then
