@@ -70,6 +70,7 @@ in
         inotify-tools
         lbzip2
         markitdown
+        marker-pdf
         nix-diff
         nixfmt-rfc-style
         openssl

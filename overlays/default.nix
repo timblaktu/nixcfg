@@ -6,6 +6,7 @@ in
 {
   # Custom packages and overrides go here
   markitdown = customPkgs.markitdown;
+  marker-pdf = customPkgs.marker-pdf;
 
   # Fix watchfiles test failure that affects MCP servers
   # Fallback: Disable problematic tests while working on version update

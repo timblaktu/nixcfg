@@ -61,6 +61,15 @@ writeShellScriptBin "marker-pdf-env" ''
       # Install marker-pdf and its dependencies
       echo "Installing marker-pdf ${version}..."
       "$VENV_DIR/bin/pip" install --upgrade pip
+
+      # Verify torch is available from system-site-packages
+      if "$VENV_DIR/bin/python" -c "import torch" 2>/dev/null; then
+        echo "✓ Using Nix-provided PyTorch $(${pythonEnv}/bin/python -c 'import torch; print(torch.__version__)')"
+      else
+        echo "⚠ Warning: PyTorch not found in system-site-packages, pip will install it"
+      fi
+
+      # Install marker-pdf (will reuse torch from system-site-packages if available)
       "$VENV_DIR/bin/pip" install "marker-pdf==${version}"
 
       echo "Installation complete!"
