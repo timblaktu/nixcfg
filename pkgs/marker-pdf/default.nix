@@ -73,7 +73,7 @@ writeShellScriptBin "marker-pdf-env" ''
 
       # Validate installation at build time (fail fast if broken)
       echo "Validating marker-pdf installation..."
-      if ! "$VENV_DIR/bin/python" -c 'import marker, surya, torch; print(f"✓ marker: {marker.__version__}, surya: {surya.__version__}, torch: {torch.__version__}, CUDA: {torch.cuda.is_available()}")'; then
+      if ! "$VENV_DIR/bin/python" -c 'import marker, surya, torch; print("✓ Imports successful - torch:", torch.__version__, "CUDA:", torch.cuda.is_available())'; then
         echo "ERROR: marker-pdf dependencies failed validation"
         rm -rf "$VENV_DIR"
         exit 1
