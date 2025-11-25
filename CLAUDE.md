@@ -257,8 +257,13 @@ including co-authorship in message."
 - ❌ `docs/GITHUB-AUTH-SETUP.md` - Outdated
 - ❌ `QUICK-GITHUB-AUTH-SETUP.md` - Outdated
 
-#### **WSL Microsoft Terminal Settings Management** (2025-11-21) - RESEARCH COMPLETE
-**Status**: ✅ **COMPREHENSIVE RESEARCH AND DESIGN COMPLETE**
+#### **WSL Microsoft Terminal Settings Management** (2025-11-25) - READY FOR IMPLEMENTATION
+**Status**: 🔴 **IMMEDIATE NEED: Color Scheme Management (Solarized Dark)**
+
+**User Issue Identified (2025-11-25)**:
+- ❌ Microsoft's built-in "Solarized Dark" uses **incorrect colors** (teal background instead of #002b36)
+- ❌ Cyan text nearly invisible against wrong background color
+- ✅ **Solution**: Deploy canonical Solarized Dark via nix-managed settings.json
 
 **Documentation**: 📁 `docs/WSL-CONFIGURATION-GUIDE.md` (comprehensive 600+ line guide)
 
@@ -266,8 +271,9 @@ including co-authorship in message."
 - ✅ Font management working (CaskaydiaMono Nerd Font, Noto Color Emoji)
 - ✅ Font verification via PowerShell interop
 - ✅ Home Manager `targets.wsl` module (in fork, provides PowerShell activation access)
+- ✅ PowerShell infrastructure for settings.json manipulation
 - ❌ **Missing**: Keybinding management (tab navigation, etc.)
-- ❌ **Missing**: Color scheme management (per-profile colors)
+- ❌ **CRITICAL MISSING**: Color scheme management (per-profile colors)
 - ❌ **Missing**: Declarative full settings.json management
 
 **Key Architectural Insight**:
@@ -282,15 +288,68 @@ including co-authorship in message."
 4. **Phase 4**: Advanced features (theme import, keybinding presets)
 
 **Existing Infrastructure**:
-- `home/modules/terminal-verification.nix` - Font verification (262 lines)
+- `home/modules/terminal-verification.nix` - Font verification (262 lines, read-only)
 - `home/files/bin/install-terminal-fonts.ps1` - PowerShell installer (430+ lines)
-- `home/files/bin/font-detection-functions.ps1` - Robust font detection
+- `home/files/bin/font-detection-functions.ps1` - Robust font detection (246 lines)
+- `home/files/bin/fix-terminal-fonts.ps1` - Settings.json manipulation (60 lines)
 - `/home/tim/src/home-manager` branch `wsl-target-module` - PowerShell activation access
 
-**Next Steps** (when ready to implement):
+**Canonical Solarized Dark Colors** (to be deployed):
+```json
+{
+  "name": "Solarized Dark (Correct)",
+  "background": "#002b36",
+  "foreground": "#839496",
+  "black": "#073642",
+  "red": "#dc322f",
+  "green": "#859900",
+  "yellow": "#b58900",
+  "blue": "#268bd2",
+  "purple": "#d33682",
+  "cyan": "#2aa198",
+  "white": "#eee8d5",
+  "brightBlack": "#002b36",
+  "brightRed": "#cb4b16",
+  "brightGreen": "#586e75",
+  "brightYellow": "#657b83",
+  "brightBlue": "#839496",
+  "brightPurple": "#6c71c4",
+  "brightCyan": "#93a1a1",
+  "brightWhite": "#fdf6e3"
+}
 ```
-Review docs/WSL-CONFIGURATION-GUIDE.md and decide on implementation approach.
-Consider which phase to implement first based on immediate needs.
+
+**Implementation Needed**:
+1. **Extend terminal-verification.nix** (or create new module):
+   - Add color scheme definitions (Solarized Dark, potentially others)
+   - Create PowerShell script to merge color schemes into settings.json
+   - Update profile colorScheme references to use correct scheme name
+   - Preserve existing font management functionality
+
+2. **PowerShell Script Requirements**:
+   - Read existing settings.json
+   - Merge color schemes into `schemes` array (avoid duplicates)
+   - Update `profiles.defaults.colorScheme` if needed
+   - Create backup before modification
+   - Idempotent (safe to run multiple times)
+
+3. **Validation**:
+   - Verify settings.json syntax (valid JSON)
+   - Verify color scheme applied correctly
+   - Test with htop to confirm cyan visibility
+
+**Windows Terminal Settings Path**:
+```
+WSL: /mnt/c/Users/blackt1/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
+Windows: %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+**Next Steps** (READY TO START):
+```
+Implement color scheme management for Windows Terminal settings.json.
+Add canonical Solarized Dark color scheme to nix-managed configuration.
+Start with extending existing terminal-verification.nix or creating new module.
+Use existing PowerShell infrastructure as template.
 ```
 
 **Other Active Tasks**:
