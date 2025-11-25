@@ -316,38 +316,33 @@ Consider which phase to implement first based on immediate needs.
 - `1ad60ba` feat(pdf2md): enhance PDF to markdown conversion with better formatting
 - `fbffe66` style(pdf2md): fix PEP 8 linting errors
 
-#### **marker-pdf ML-Based PDF Converter** (2025-11-24) - 🔴 BLOCKED
-**Status**: 🔴 **BLOCKED - surya-ocr 0.13.x config compatibility issue**
+#### **marker-pdf ML-Based PDF Converter** (2025-11-24) - ✅ FIXED
+**Status**: ✅ **WORKING - Upgraded to 1.10.1 with build-time validation**
 
-**Progress Made**:
-- ✅ Fixed venv torch import using `buildEnv` + PYTHONPATH
-- ✅ PyTorch 2.8.0+cu128 loads successfully
-- ✅ CUDA detected: RTX 2000 Ada, 8GB VRAM
-- ✅ All marker-pdf dependencies install correctly
-- ❌ **BLOCKED**: surya-ocr 0.13.1 has breaking config bug (KeyError: 'encoder')
+**Root Cause (Post-Mortem)**:
+- Package was using **marker-pdf 1.6.0** (3 days old, never tested end-to-end)
+- Version 1.6.0 pinned surya-ocr ~0.13.0 (broken with KeyError: 'encoder')
+- **Hybrid venv approach hid the failure** - build succeeded, runtime failed
+- No validation meant bug only discovered when actually trying to use it
 
-**Root Cause**:
-- marker-pdf 1.6.0 requires surya-ocr>=0.13.0
-- surya-ocr 0.13.x has incompatible SuryaOCRConfig initialization
-- transformers library version conflicts with surya config structure
-- Upstream bug in surya-ocr, not our packaging
+**Solution Implemented** (2025-11-24):
+- ✅ Upgraded to marker-pdf 1.10.1 (latest, uses surya-ocr 0.17.0)
+- ✅ Removed torch pre-install (let pip install correct CUDA version)
+- ✅ Added build-time import validation (fails fast if dependencies broken)
+- ✅ Fixed LD_LIBRARY_PATH for PyTorch libstdc++ dependency
+- ✅ Simplified to use marker-pdf's pyproject.toml dependencies
 
-**Options**:
-1. Wait for surya-ocr 0.13.2+ fix (recommended)
-2. Fork surya-ocr and patch config (high maintenance)
-3. Downgrade marker-pdf to version that uses surya-ocr<0.13 (may lose features)
-4. Use alternative PDF converter (pdf2md with pymupdf4llm already works)
-
-**Recommendation**:
-Keep package definition for future use. Use pdf2md (already working) for current needs. Monitor surya-ocr releases for fix.
+**Key Learnings**:
+- **Never use random versions** - always check latest and known issues
+- **Hybrid approach needs validation** - "nix build succeeded" ≠ "package works"
+- **For future projects**: Use poetry2nix or uv2nix for build-time validation
+- **For ML packages with PyTorch CUDA**: Hybrid + validation is acceptable
 
 **Files Modified**:
-- `pkgs/marker-pdf/default.nix` - Working package definition (venv torch fixed)
-- `overlays/default.nix` - Added marker-pdf overlay
-- `home/modules/base.nix` - Added to basePackages (can disable until fixed)
-- `modules/nixos/wsl-cuda.nix` - WSL CUDA support (working)
-- `hosts/pa161878-nixos/default.nix` - Enabled wslCuda
+- `pkgs/marker-pdf/default.nix` - Upgraded, added validation, fixed LD_LIBRARY_PATH
 
 **Commits**:
 - `219cae0` feat(wsl): add CUDA support module and marker-pdf package
 - `6f4b418` feat(marker-pdf): improve venv torch integration and add to home packages
+- `7dd88d7` fix(marker-pdf): resolve venv torch import and document upstream blocker
+- `19d9415` fix(marker-pdf): upgrade to 1.10.1 with build-time validation
