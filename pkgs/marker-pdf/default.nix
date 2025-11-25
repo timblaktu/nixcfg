@@ -19,10 +19,12 @@
 
 let
   # Core packages that will be visible to venv via PYTHONPATH
+  # Note: torch is NOT pre-installed - pip will install the correct version
+  # with CUDA support as specified in marker-pdf's dependencies
   pythonPackages = with python3.pkgs; [
     pip
     virtualenv
-    # Pre-install some dependencies that have Nix packages
+    # Pre-install some common dependencies that have Nix packages
     pillow
     pydantic
     pydantic-settings
@@ -31,12 +33,6 @@ let
     requests
     regex
     ftfy
-  ] ++ lib.optionals cudaSupport [
-    torch-bin
-    torchvision-bin
-  ] ++ lib.optionals (!cudaSupport) [
-    torch
-    torchvision
   ];
 
   # Build environment that makes packages discoverable
@@ -46,7 +42,7 @@ let
   };
 
   # Version of marker-pdf to install
-  version = "1.6.0";
+  version = "1.10.1";
 
 in
 writeShellScriptBin "marker-pdf-env" ''
@@ -60,7 +56,8 @@ writeShellScriptBin "marker-pdf-env" ''
 
     # Ensure Nix Python packages are discoverable
     export PYTHONPATH="${pythonEnv}/${python3.sitePackages}:''${PYTHONPATH:-}"
-    export LD_LIBRARY_PATH="/usr/lib/wsl/lib:''${LD_LIBRARY_PATH:-}"
+    # Add CUDA libs and stdenv C++ library for PyTorch
+    export LD_LIBRARY_PATH="/usr/lib/wsl/lib:${stdenv.cc.cc.lib}/lib:''${LD_LIBRARY_PATH:-}"
 
     # Create venv if it doesn't exist
     if [ ! -d "$VENV_DIR" ]; then
@@ -71,17 +68,18 @@ writeShellScriptBin "marker-pdf-env" ''
       echo "Installing marker-pdf ${version}..."
       "$VENV_DIR/bin/pip" install --upgrade pip
 
-      # Verify torch is available
-      if "$VENV_DIR/bin/python" -c "import torch; print(f'✓ PyTorch {torch.__version__} with CUDA: {torch.cuda.is_available()}')" 2>/dev/null; then
-        echo "✓ Using Nix-provided PyTorch"
-      else
-        echo "⚠ Warning: PyTorch not found, pip will install it"
+      # Install marker-pdf (lets pyproject.toml specify all dependencies)
+      "$VENV_DIR/bin/pip" install "marker-pdf==${version}"
+
+      # Validate installation at build time (fail fast if broken)
+      echo "Validating marker-pdf installation..."
+      if ! "$VENV_DIR/bin/python" -c 'import marker, surya, torch; print(f"✓ marker: {marker.__version__}, surya: {surya.__version__}, torch: {torch.__version__}, CUDA: {torch.cuda.is_available()}")'; then
+        echo "ERROR: marker-pdf dependencies failed validation"
+        rm -rf "$VENV_DIR"
+        exit 1
       fi
 
-      # Install marker-pdf with compatible versions (surya-ocr 0.13 has config issues)
-      "$VENV_DIR/bin/pip" install "marker-pdf==${version}" "surya-ocr>=0.12.0,<0.13" "transformers>=4.45.2,<4.50"
-
-      echo "Installation complete!"
+      echo "✓ Installation complete and validated!"
     fi
 
     # If arguments provided, run marker commands directly
