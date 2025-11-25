@@ -19,8 +19,8 @@
     };
 
     home-manager = {
-      url = "github:timblaktu/home-manager/feature-test-with-fcitx5-fix";
-      # url = "git+file:///home/tim/src/home-manager?ref=feature-test-with-fcitx5-fix";
+      # url = "github:timblaktu/home-manager/wsl-windows-terminal";
+      url = "git+file:///home/tim/src/home-manager?ref=wsl-windows-terminal";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -30,7 +30,7 @@
       # url = "git+file:///home/tim/src/NixOS-WSL";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    
+
     darwin = {
       url = "github:lnl7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";

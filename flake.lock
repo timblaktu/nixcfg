@@ -173,18 +173,18 @@
         ]
       },
       "locked": {
-        "lastModified": 1758039242,
-        "narHash": "sha256-1Ucdt5m9AbGSgVdAZXONCvmgTU1i4HWkHlU2ij2cdBw=",
-        "owner": "timblaktu",
-        "repo": "home-manager",
-        "rev": "436988ee26a1725d9f138618c594e82a8c8e0a41",
-        "type": "github"
+        "lastModified": 1764108665,
+        "narHash": "sha256-S3pdmuMGkW0ewtxCFRYTSDXcWmKuXR81UmCHojKDt84=",
+        "ref": "wsl-windows-terminal",
+        "rev": "27029e8da3cbddcd5d94e7412220575de2b34411",
+        "revCount": 4850,
+        "type": "git",
+        "url": "file:///home/tim/src/home-manager"
       },
       "original": {
-        "owner": "timblaktu",
-        "ref": "feature-test-with-fcitx5-fix",
-        "repo": "home-manager",
-        "type": "github"
+        "ref": "wsl-windows-terminal",
+        "type": "git",
+        "url": "file:///home/tim/src/home-manager"
       }
     },
     "ixx": {

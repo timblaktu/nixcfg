@@ -57,14 +57,12 @@
               };
               targets.wsl = {
                 enable = true;
-                windowsUsername = "timbl";
                 windowsTools = {
                   enablePowerShell = true;
                   enableCmd = false;
                   enableWslPath = true;
                   wslPathPath = "/bin/wslpath";
                 };
-                bindMountRoot.enable = true;
               };
             }
             ../hosts/thinky-ubuntu
@@ -111,15 +109,43 @@
               secretsManagement.rbw.email = "timblaktu@gmail.com";
               targets.wsl = {
                 enable = true;
-                windowsUsername = "blackt1";
                 windowsTools = {
                   enablePowerShell = true;
                   enableCmd = false;
                   enableWslPath = true;
                   wslPathPath = "/bin/wslpath";
                 };
-                # Disable bind mount - handled by NixOS-WSL module
-                bindMountRoot.enable = false;
+
+                # Windows Terminal settings management
+                windowsTerminal = {
+                  enable = true;
+                  colorSchemes = [{
+                    name = "Solarized Dark (Correct)";
+                    background = "#002b36";
+                    foreground = "#839496";
+                    black = "#073642";
+                    red = "#dc322f";
+                    green = "#859900";
+                    yellow = "#b58900";
+                    blue = "#268bd2";
+                    purple = "#d33682";
+                    cyan = "#2aa198";
+                    white = "#eee8d5";
+                    brightBlack = "#002b36";
+                    brightRed = "#cb4b16";
+                    brightGreen = "#586e75";
+                    brightYellow = "#657b83";
+                    brightBlue = "#839496";
+                    brightPurple = "#6c71c4";
+                    brightCyan = "#93a1a1";
+                    brightWhite = "#fdf6e3";
+                  }];
+                  defaultColorScheme = "Solarized Dark (Correct)";
+                  font = {
+                    face = "CaskaydiaMono Nerd Font Mono, Noto Color Emoji";
+                    size = 11;
+                  };
+                };
               };
             }
             ../home/modules/mcp-servers.nix
@@ -164,15 +190,12 @@
               secretsManagement.rbw.email = "timblaktu@gmail.com";
               targets.wsl = {
                 enable = true;
-                windowsUsername = "timbl";
                 windowsTools = {
                   enablePowerShell = true;
                   enableCmd = false;
                   enableWslPath = true;
                   wslPathPath = "/bin/wslpath";
                 };
-                # Disable bind mount - handled by NixOS-WSL module
-                bindMountRoot.enable = false;
               };
             }
             # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration

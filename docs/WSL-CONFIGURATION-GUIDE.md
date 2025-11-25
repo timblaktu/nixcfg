@@ -9,9 +9,72 @@ This guide documents the comprehensive WSL-specific configuration in this NixOS 
 - Home Manager WSL target module integration
 - Recommendations for managing Terminal settings declaratively
 
-**Last Updated**: 2025-11-21
+**Last Updated**: 2025-11-25
 **Target Audience**: WSL NixOS system administrators
-**Status**: Research Complete - Ready for Implementation
+**Status**: ✅ **IMPLEMENTED - Windows Terminal Management via home-manager**
+
+---
+
+## ✅ Implementation Summary (2025-11-25)
+
+**Decision**: Home Manager `targets.wsl` approach (not NixOS module)
+**Branch**: `wsl-windows-terminal` in `/home/tim/src/home-manager`
+**Status**: Working and validated
+
+### What Was Built
+
+**Module Location**: `modules/targets/wsl/default.nix` (extended)
+
+**New Options**:
+```nix
+targets.wsl.windowsTerminal = {
+  enable = true;
+  colorSchemes = [ ... ];      # Array of color scheme definitions
+  defaultColorScheme = "...";  # Name of default scheme
+  font = { face = "..."; size = 11; };  # Font configuration
+  keybindings = [ ... ];       # Keybinding definitions
+};
+```
+
+**Features**:
+- ✅ Color scheme management (merge into settings.json schemes array)
+- ✅ Default color scheme configuration (profiles.defaults.colorScheme)
+- ✅ Font management (profiles.defaults.font)
+- ✅ Keybinding management (merge into actions array)
+- ✅ Automatic PowerShell enablement
+- ✅ Timestamped backups before modification
+- ✅ Idempotent (safe to run multiple times)
+- ✅ Error handling with automatic rollback
+
+**Implementation Details**:
+- PowerShell script generated at activation time
+- Uses `ConvertFrom-Json` for safe JSON manipulation
+- Preserves existing user customizations
+- Works with both stable and preview versions of Windows Terminal
+
+**Tested Configuration** (tim@pa161878-nixos):
+```nix
+targets.wsl.windowsTerminal = {
+  enable = true;
+  colorSchemes = [{
+    name = "Solarized Dark (Correct)";
+    background = "#002b36";
+    foreground = "#839496";
+    # ... 16 canonical Solarized colors
+  }];
+  defaultColorScheme = "Solarized Dark (Correct)";
+  font = {
+    face = "CaskaydiaMono Nerd Font Mono, Noto Color Emoji";
+    size = 11;
+  };
+};
+```
+
+**Validation**:
+- ✅ Activation successful (2025-11-25)
+- ✅ Color scheme added to settings.json
+- ✅ Default color scheme set correctly
+- ✅ Font configuration applied correctly
 
 ---
 
@@ -21,12 +84,12 @@ This guide documents the comprehensive WSL-specific configuration in this NixOS 
 
 | Feature | Status | Location |
 |---------|--------|----------|
-| Font management | ✅ Working | `home/modules/terminal-verification.nix` |
+| Font management | ✅ Working | `targets.wsl.windowsTerminal.font` |
 | Font verification | ✅ Working | PowerShell interop via activation |
-| PowerShell activation access | ✅ Working | home-manager fork `wsl-target-module` |
-| Keybinding management | ❌ Missing | N/A |
-| Color scheme management | ❌ Missing | N/A |
-| Declarative settings.json | ❌ Missing | N/A |
+| PowerShell activation access | ✅ Working | home-manager fork `wsl-windows-terminal` |
+| Keybinding management | ✅ Working | `targets.wsl.windowsTerminal.keybindings` |
+| Color scheme management | ✅ Working | `targets.wsl.windowsTerminal.colorSchemes` |
+| Declarative settings.json | ✅ Working | `targets.wsl.windowsTerminal.*` |
 
 ### Implementation Tasks (Self-Contained Checklist)
 
