@@ -375,8 +375,9 @@ Use existing PowerShell infrastructure as template.
 - `1ad60ba` feat(pdf2md): enhance PDF to markdown conversion with better formatting
 - `fbffe66` style(pdf2md): fix PEP 8 linting errors
 
-#### **marker-pdf ML-Based PDF Converter** (2025-11-24) - ✅ FIXED
+#### **marker-pdf ML-Based PDF Converter** (2025-11-24) - ✅ FIXED, 🔵 ENHANCEMENT PENDING
 **Status**: ✅ **WORKING - Upgraded to 1.10.1 with build-time validation**
+**Next**: 🔵 **ADD: Intelligent chunking + memory limits for large PDFs**
 
 **Root Cause (Post-Mortem)**:
 - Package was using **marker-pdf 1.6.0** (3 days old, never tested end-to-end)
@@ -405,3 +406,80 @@ Use existing PowerShell infrastructure as template.
 - `6f4b418` feat(marker-pdf): improve venv torch integration and add to home packages
 - `7dd88d7` fix(marker-pdf): resolve venv torch import and document upstream blocker
 - `19d9415` fix(marker-pdf): upgrade to 1.10.1 with build-time validation
+
+---
+
+#### **marker-pdf Memory Exhaustion & Chunking** (2025-11-26) - 🔵 READY FOR IMPLEMENTATION
+**Status**: 🔵 **DESIGN COMPLETE - Ready to implement pragmatic solution**
+
+**Problem Identified**:
+- marker-pdf exhausts system RAM on large PDFs (28GB RAM consumed processing 750-page PDF)
+- Known upstream memory leaks (GitHub issues #205, #583, #825)
+- Reports of 256GB RAM + 256GB swap exhaustion on large files
+- No built-in chunking or memory limiting in marker-pdf
+
+**Research Completed** (2025-11-26):
+1. **Memory Limiting Options**:
+   - ✅ systemd-run with cgroups v2 (RECOMMENDED - modern, reliable)
+   - ❌ ulimit (ineffective on modern kernels)
+   - ❌ Direct cgroups (too complex, systemd-run provides better UX)
+
+2. **PDF Splitting Tools** (all available in nixpkgs):
+   - ✅ qpdf 11.10.1 (RECOMMENDED - fast, clean, --split-pages, --json for TOC)
+   - ✅ poppler-utils 25.07.0 (pdfseparate/pdfunite - good alternative)
+   - ✅ pdftk 3.3.3 (Java-based, available)
+
+3. **Structure Extraction**:
+   - ✅ qpdf --json --json-key=outlines (extract TOC/bookmarks)
+   - ✅ PyMuPDF (fitz) available in marker-pdf venv for fallback analysis
+   - ⚠️ Font-based heading detection (complex, fragile, deferred)
+
+4. **Memory Usage Estimates**:
+   - marker-pdf base: ~2-3GB VRAM (GPU)
+   - System RAM: Highly variable, memory leaks dominate
+   - 750-page PDF: 20GB+ RAM (non-linear scaling)
+   - No reliable formula exists due to upstream leaks
+
+**Pragmatic Solution Designed**:
+```bash
+# Enhanced marker-pdf-env with --auto-chunk flag
+marker-pdf-env marker_single large.pdf output/ --auto-chunk [--chunk-size 100] [--memory-high 20G] [--memory-max 24G]
+
+# Behavior:
+# 1. Get page count via qpdf
+# 2. Extract TOC if available (qpdf --json --json-key=outlines)
+# 3. IF TOC exists: chunk by chapters (respecting max chunk size)
+# 4. IF NO TOC: chunk by fixed page count (default: 100 pages)
+# 5. Use qpdf --split-pages for actual splitting
+# 6. Process each chunk with systemd-run memory limits
+# 7. Name chunks: input-pages-001-100.pdf OR input-chapter1-intro-pages-001-050.pdf
+```
+
+**Memory Limit Recommendations**:
+| PDF Size | MemoryHigh | MemoryMax | Notes |
+|----------|------------|-----------|-------|
+| < 100 pages | 8G | 10G | Conservative |
+| 100-500 pages | 16G | 20G | Balanced |
+| 500+ pages | 20G | 24G | Max safe on 28GB system |
+
+**Implementation Plan**:
+1. Modify `pkgs/marker-pdf/default.nix`:
+   - Add `qpdf`, `systemd` to build inputs
+   - Extend marker-pdf-env script with chunking logic
+   - Add `--auto-chunk`, `--chunk-size`, `--memory-high`, `--memory-max` flags
+   - Implement TOC-based chunking (qpdf JSON parsing)
+   - Fallback to fixed-size chunking
+   - Wrap chunk processing with systemd-run memory limits
+   - Generate descriptive chunk filenames
+
+2. Updated help text with:
+   - Memory limit defaults and active config
+   - Warning about upstream memory leaks (concise, actionable)
+   - Chunking options and recommendations
+
+**Deferred for Later**:
+- ❌ Font-size-based heading detection (fragile, complex, requires full PDF load)
+- ❌ Precise memory estimation (impossible due to memory leaks)
+- ❌ Separate wrapper scripts (keeping all in marker-pdf-env)
+
+**Next Steps**: Begin implementation in new session with context prompt
