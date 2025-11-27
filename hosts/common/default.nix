@@ -57,7 +57,8 @@
   users.users.tim = {
     isNormalUser = true;
     extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
-    openssh.authorizedKeys.keys = [];
+    openssh.authorizedKeys.keys = [ ];
+    linger = true; # Enable systemd user session persistence
   };
 
   # System-wide aliases
