@@ -68,8 +68,9 @@ writeShellScriptBin "marker-pdf-env" ''
     MEMORY_MAX="24G"
     AUTO_CHUNK=false
 
-    # Parse flags before processing commands
+    # Parse wrapper flags and return non-wrapper args
     parse_flags() {
+      local passthrough_args=()
       while [[ $# -gt 0 ]]; do
         case "$1" in
           --auto-chunk)
@@ -89,12 +90,14 @@ writeShellScriptBin "marker-pdf-env" ''
             shift 2
             ;;
           *)
-            # Not a flag, return remaining args
-            echo "$@"
-            return
+            # Not a wrapper flag, pass through
+            passthrough_args+=("$1")
+            shift
             ;;
         esac
       done
+      # Return non-wrapper args
+      printf '%s\n' "''${passthrough_args[@]}"
     }
 
     # Extract TOC from PDF and generate chunk boundaries
@@ -182,21 +185,27 @@ writeShellScriptBin "marker-pdf-env" ''
       echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
 
       # Check if systemd user session is available
-      if ${systemd}/bin/systemctl --user is-system-running &>/dev/null || \
-         ${systemd}/bin/systemctl --user status &>/dev/null; then
-        # Use systemd-run for memory limiting
-        ${systemd}/bin/systemd-run \
-          --user \
-          --scope \
-          --quiet \
-          -p MemoryHigh="$MEMORY_HIGH" \
-          -p MemoryMax="$MEMORY_MAX" \
-          "$VENV_DIR/bin/marker_single" "$input_pdf" "$output_dir" "''${extra_args[@]}"
-      else
-        # Fallback: run without systemd (no memory limits)
-        echo "⚠️  Warning: systemd user session not available, running without memory limits"
-        "$VENV_DIR/bin/marker_single" "$input_pdf" "$output_dir" "''${extra_args[@]}"
+      if ! ${systemd}/bin/systemctl --user status &>/dev/null; then
+        echo "ERROR: systemd user session not available"
+        echo ""
+        echo "Memory limiting requires systemd user session. To enable it:"
+        echo "  1. Ensure systemd is running"
+        echo "  2. Start user session: systemctl --user start"
+        echo "  3. Or enable lingering: loginctl enable-linger $USER"
+        echo ""
+        echo "Alternatively, if you don't need memory limits, you can:"
+        echo "  - Run marker_single directly: ~/.local/share/marker-pdf-venv/bin/marker_single"
+        exit 1
       fi
+
+      # Use systemd-run for memory limiting
+      ${systemd}/bin/systemd-run \
+        --user \
+        --scope \
+        --quiet \
+        -p MemoryHigh="$MEMORY_HIGH" \
+        -p MemoryMax="$MEMORY_MAX" \
+        "$VENV_DIR/bin/marker_single" "$input_pdf" "$output_dir" "''${extra_args[@]}"
     }
 
     # Process PDF with auto-chunking
@@ -277,9 +286,9 @@ writeShellScriptBin "marker-pdf-env" ''
 
     # If arguments provided, run marker commands
     if [ $# -gt 0 ]; then
-      # Parse flags and get remaining args
-      remaining_args=$(parse_flags "$@")
-      eval "set -- $remaining_args"
+      # Parse wrapper flags and get remaining args
+      mapfile -t remaining_args < <(parse_flags "$@")
+      set -- "''${remaining_args[@]}"
 
       case "$1" in
         shell)
