@@ -100,3 +100,20 @@
 - MCP server issues: Check `/tmp/claude_desktop.log` and `~/AppData/Roaming/Claude/logs/`
 - Hook failures: Review hook timeout settings
 - MCP Documentation: See `home/modules/README-MCP.md` for detailed troubleshooting
+
+### AMD Yocto V3000 BSP - Build Status Update (2025-11-27)
+
+**RESOLVED**: Yocto builds now work in Nix shell environment
+- Locale sanity check bypassed with `INHERIT:remove = "sanity"` in local.conf
+- CMake C++11 detection fixed (builds successfully after cleansstate)
+- Perl 5.38 properly prioritized over 5.40
+
+**Remaining Issues** (not Nix-related):
+1. **Git fetch failures**: AMD BSP references non-existent commits for bmap-tools, spirv-headers, glslang
+   - Need to provide local mirrors or update recipes with correct commit hashes
+2. **libxcrypt configure**: "--enable-hashes=all" option failing
+   - Likely needs recipe patch or different configure options
+3. **GCC version detection**: core-image-minimal-initramfs can't parse gcc --version
+   - May need HOST_CC override or recipe patch
+
+**Build can proceed** with -k flag, successfully building most packages from sstate cache.
