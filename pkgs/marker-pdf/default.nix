@@ -181,13 +181,22 @@ writeShellScriptBin "marker-pdf-env" ''
       echo "Processing: $input_pdf -> $output_dir"
       echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
 
-      ${systemd}/bin/systemd-run \
-        --user \
-        --scope \
-        --quiet \
-        -p MemoryHigh="$MEMORY_HIGH" \
-        -p MemoryMax="$MEMORY_MAX" \
+      # Check if systemd user session is available
+      if ${systemd}/bin/systemctl --user is-system-running &>/dev/null || \
+         ${systemd}/bin/systemctl --user status &>/dev/null; then
+        # Use systemd-run for memory limiting
+        ${systemd}/bin/systemd-run \
+          --user \
+          --scope \
+          --quiet \
+          -p MemoryHigh="$MEMORY_HIGH" \
+          -p MemoryMax="$MEMORY_MAX" \
+          "$VENV_DIR/bin/marker_single" "$input_pdf" "$output_dir" "''${extra_args[@]}"
+      else
+        # Fallback: run without systemd (no memory limits)
+        echo "⚠️  Warning: systemd user session not available, running without memory limits"
         "$VENV_DIR/bin/marker_single" "$input_pdf" "$output_dir" "''${extra_args[@]}"
+      fi
     }
 
     # Process PDF with auto-chunking
@@ -283,15 +292,40 @@ writeShellScriptBin "marker-pdf-env" ''
           "$VENV_DIR/bin/pip" install --upgrade "marker-pdf"
           ;;
         marker_single)
-          if [ $# -lt 3 ]; then
-            echo "Error: marker_single requires <input.pdf> <output_dir>"
+          # Parse remaining args for input/output
+          shift  # Remove 'marker_single'
+
+          input_pdf=""
+          output_dir=""
+          extra_args=()
+
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --output_dir)
+                output_dir="$2"
+                shift 2
+                ;;
+              *)
+                if [ -z "$input_pdf" ]; then
+                  input_pdf="$1"
+                  shift
+                elif [ -z "$output_dir" ]; then
+                  output_dir="$1"
+                  shift
+                else
+                  extra_args+=("$1")
+                  shift
+                fi
+                ;;
+            esac
+          done
+
+          if [ -z "$input_pdf" ] || [ -z "$output_dir" ]; then
+            echo "Error: marker_single requires <input.pdf> and <output_dir> (or --output_dir)"
+            echo "Usage: marker-pdf-env marker_single <input.pdf> <output_dir> [OPTIONS]"
+            echo "   or: marker-pdf-env marker_single <input.pdf> --output_dir <dir> [OPTIONS]"
             exit 1
           fi
-
-          input_pdf="$2"
-          output_dir="$3"
-          shift 3
-          extra_args=("$@")
 
           if [ "$AUTO_CHUNK" = true ]; then
             process_chunked "$input_pdf" "$output_dir" "''${extra_args[@]}"
