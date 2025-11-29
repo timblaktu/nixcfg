@@ -409,8 +409,8 @@ Use existing PowerShell infrastructure as template.
 
 ---
 
-#### **marker-pdf Memory Exhaustion & Chunking** (2025-11-26) - 🔴 BLOCKED
-**Status**: 🔴 **IMPLEMENTATION COMPLETE - BLOCKED BY SYSTEMD USER SESSION**
+#### **marker-pdf Memory Exhaustion & Chunking** (2025-11-29) - ✅ COMPLETE
+**Status**: ✅ **FULLY OPERATIONAL - All components working**
 
 **Problem Identified**:
 - marker-pdf exhausts system RAM on large PDFs (28GB RAM consumed processing 750-page PDF)
@@ -492,39 +492,29 @@ marker-pdf-env marker_single large.pdf output/ --auto-chunk [--chunk-size 100] [
 **Commit**:
 - `3e7af7c` feat(marker-pdf): add intelligent chunking and memory limiting
 
-**Blocking Issues** (2025-11-26):
-1. **Systemd User Session Not Starting**:
-   - ❌ Added `users.users.tim.linger = true` to `hosts/common/default.nix`
-   - ❌ Rebuilt with `sudo nixos-rebuild switch`
-   - ❌ Lingering NOT activated (no files in `/var/lib/systemd/linger/`)
-   - ❌ `systemctl --user status` still fails: "Failed to connect to user scope bus"
-   - ❌ No `systemd --user` process running
-   - 🔴 **ROOT CAUSE**: NixOS doesn't auto-enable lingering during activation
-   - 🔴 **REQUIRES**: WSL restart or manual `sudo systemctl start user@$(id -u)`
+**Issues Resolved** (2025-11-29):
+1. **Systemd User Session Fixed**:
+   - ✅ Lingering enabled: `/var/lib/systemd/linger/tim` created
+   - ✅ Fixed `/run/user/1000` ownership (was `root:root`, now `tim:users`)
+   - ✅ systemd --user running successfully (PID 502178, 153 units loaded)
+   - 🔧 **Root Cause**: Runtime directory ownership prevented systemd --user from starting
+   - 🔧 **Solution**: `sudo chown -R tim:users /run/user/1000` + `sudo systemctl start user@1000`
 
-2. **marker-pdf Venv Broken**:
-   - ❌ Hybrid venv approach doesn't work (Nix packages not visible to pip)
-   - ❌ Pydantic and other deps missing from venv
-   - ✅ **WORKAROUND**: Deleted `~/.local/share/marker-pdf-venv` (will recreate on next run)
-   - ⚠️ **PENDING**: Needs testing after systemd user session fixed
+2. **Wrapper Script Fixes**:
+   - ✅ Fixed `--help` flag handling (was trying to execute as binary)
+   - ✅ Fixed passthrough command argument handling (split cmd and args properly)
+   - ✅ Added explicit help case (`help|--help|-h`)
+   - ✅ Help shown when only wrapper flags provided
 
-**Next Steps** (New Session):
-```
-Resume marker-pdf systemd user session configuration.
+3. **Venv Validation**:
+   - ✅ marker-pdf 1.10.1 installed successfully
+   - ✅ PyTorch 2.9.1+cu128 with CUDA detected
+   - ✅ All dependencies validated at build time
+   - ✅ Import validation passes: `✓ Imports successful - torch: 2.9.1+cu128 CUDA: True`
 
-Current state:
-- linger = true added to hosts/common/default.nix (commit 775b6d2)
-- NixOS rebuilt but linger not activated
-- No files in /var/lib/systemd/linger/
-- systemd --user not running
-
-Tasks:
-1. WSL restart: wsl --shutdown (from Windows) or reboot WSL instance
-2. Verify linger: ls /var/lib/systemd/linger/ (should show 'tim')
-3. Verify systemd --user: systemctl --user status (should work)
-4. Test marker-pdf: marker-pdf-env marker_single test.pdf --output_dir out --auto-chunk
-5. If still broken, investigate alternative systemd user session activation
-```
+**Commits**:
+- `775b6d2` feat: enable systemd user session lingering
+- `b303fe6` fix(marker-pdf): properly handle --help flag and passthrough commands
 
 **Deferred for Later**:
 - ❌ Full TOC parsing (complex, current stub falls back to page-based)
