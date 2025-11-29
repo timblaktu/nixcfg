@@ -290,7 +290,56 @@ writeShellScriptBin "marker-pdf-env" ''
       mapfile -t remaining_args < <(parse_flags "$@")
       set -- "''${remaining_args[@]}"
 
+      # Show help if no commands remain after flag parsing
+      if [ $# -eq 0 ]; then
+        set -- help
+      fi
+
       case "$1" in
+        help|--help|-h)
+          # Show help text
+          cat <<EOF
+  marker-pdf-env: Marker PDF to Markdown converter with GPU support
+
+  Commands:
+    marker-pdf-env marker_single <input.pdf> <output_dir> [OPTIONS]
+      Convert single PDF to Markdown
+
+    marker-pdf-env marker <input_dir> <output_dir> [OPTIONS]
+      Batch convert PDFs in directory
+
+    marker-pdf-env shell
+      Enter Python shell with marker-pdf available
+
+    marker-pdf-env update
+      Update marker-pdf to latest version
+
+    marker-pdf-env python ...
+      Run Python directly in marker-pdf environment
+
+  Options:
+    --auto-chunk              Enable automatic chunking for large PDFs
+    --chunk-size N            Pages per chunk (default: 100)
+    --memory-high SIZE        Soft memory limit (default: 20G)
+    --memory-max SIZE         Hard memory limit (default: 24G)
+
+  Active Config:
+    Chunk size: $CHUNK_SIZE pages
+    Memory limits: $MEMORY_HIGH soft / $MEMORY_MAX hard
+    VENV: $VENV_DIR
+    CUDA: ${if cudaSupport then "enabled" else "disabled"}
+
+  ⚠️  Large PDFs may exhaust RAM due to upstream memory leaks. Use --auto-chunk for 500+ page PDFs.
+
+  Recommended memory limits (28GB system):
+    <100 pages:    --memory-high 8G  --memory-max 10G
+    100-500 pages: --memory-high 16G --memory-max 20G
+    500+ pages:    --memory-high 20G --memory-max 24G (use --auto-chunk)
+
+  For GPU acceleration, ensure your NixOS config has:
+    wslCuda.enable = true;
+  EOF
+          ;;
         shell)
           echo "Entering marker-pdf environment..."
           exec "$VENV_DIR/bin/python" -c "import marker; print(f'marker-pdf ready. Python: {marker.__file__}')" && \
@@ -344,13 +393,15 @@ writeShellScriptBin "marker-pdf-env" ''
           ;;
         *)
           # Pass through to marker CLI with memory limits
+          local cmd="$1"
+          shift
           ${systemd}/bin/systemd-run \
             --user \
             --scope \
             --quiet \
             -p MemoryHigh="$MEMORY_HIGH" \
             -p MemoryMax="$MEMORY_MAX" \
-            "$VENV_DIR/bin/$@"
+            "$VENV_DIR/bin/$cmd" "$@"
           ;;
       esac
     else
