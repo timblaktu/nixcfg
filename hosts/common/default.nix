@@ -61,6 +61,15 @@
     linger = true; # Enable systemd user session persistence
   };
 
+  # Fix user runtime directory ownership
+  # WSL creates /run/user/UID tmpfs mounts with root ownership by default
+  # This ensures correct ownership after the mount is created
+  systemd.services."user-runtime-dir@" = {
+    serviceConfig = {
+      ExecStartPost = "${pkgs.coreutils}/bin/chown %i:users /run/user/%i";
+    };
+  };
+
   # System-wide aliases
   environment.shellAliases = {
     ll = "ls -la";
