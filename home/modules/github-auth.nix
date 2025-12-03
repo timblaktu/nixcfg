@@ -50,8 +50,8 @@ let
     # Read git's credential request from stdin
     eval "$(cat | sed 's/^/INPUT_/')"
 
-    # Only handle gitlab.com
-    if [[ "$INPUT_host" != "gitlab.com" ]]; then
+    # Only handle the configured GitLab host
+    if [[ "$INPUT_host" != "${cfg.gitlab.host}" ]]; then
       exit 0
     fi
 
@@ -60,7 +60,7 @@ let
 
     if [ -n "$TOKEN" ]; then
       echo "protocol=https"
-      echo "host=gitlab.com"
+      echo "host=${cfg.gitlab.host}"
       echo "username=${cfg.gitlab.git.userName}"
       echo "password=$TOKEN"
     fi
@@ -95,7 +95,7 @@ let
 
     eval "$(cat | sed 's/^/INPUT_/')"
 
-    if [[ "$INPUT_host" != "gitlab.com" ]]; then
+    if [[ "$INPUT_host" != "${cfg.gitlab.host}" ]]; then
       exit 0
     fi
 
@@ -104,7 +104,7 @@ let
     if [ -f "$TOKEN_FILE" ]; then
       TOKEN=$(cat "$TOKEN_FILE")
       echo "protocol=https"
-      echo "host=gitlab.com"
+      echo "host=${cfg.gitlab.host}"
       echo "username=${cfg.gitlab.git.userName}"
       echo "password=$TOKEN"
     fi
@@ -347,7 +347,7 @@ in
       # GitLab CLI installation and configuration
       home.packages = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [ pkgs.glab ];
 
-      # GitLab CLI configuration file
+      # GitLab CLI configuration file with proper permissions
       home.file.".config/glab-cli/config.yml" = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) {
         text = ''
           # GitLab CLI configuration
@@ -360,7 +360,92 @@ in
           glamour_style: dark
           editor: ${config.home.sessionVariables.EDITOR or "vim"}
         '';
+        # glab requires 600 permissions on its config file
+        onChange = ''
+          chmod 600 "$HOME/.config/glab-cli/config.yml"
+        '';
       };
+
+      # Shell integration for automatic CLI authentication
+      programs.bash.initExtra = mkIf cfg.enable ''
+        # GitHub CLI automatic authentication
+        ${optionalString cfg.gh.enable ''
+          # Function to get GitHub token
+          _get_github_token() {
+            ${mkRbwCommand cfg.bitwarden} 2>/dev/null
+          }
+
+          # Export GH_TOKEN dynamically when needed
+          if command -v gh &>/dev/null; then
+            # Create a wrapper function for gh that sets token if needed
+            gh() {
+              if [ -z "$GH_TOKEN" ]; then
+                export GH_TOKEN="$(_get_github_token)"
+              fi
+              command gh "$@"
+            }
+          fi
+        ''}
+
+        # GitLab CLI automatic authentication
+        ${optionalString (cfg.gitlab.enable && cfg.gitlab.glab.enable) ''
+          # Function to get GitLab token
+          _get_gitlab_token() {
+            ${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null
+          }
+
+          # Export GITLAB_TOKEN dynamically when needed
+          if command -v glab &>/dev/null; then
+            # Create a wrapper function for glab that sets token if needed
+            glab() {
+              if [ -z "$GITLAB_TOKEN" ]; then
+                export GITLAB_TOKEN="$(_get_gitlab_token)"
+              fi
+              command glab "$@"
+            }
+          fi
+        ''}
+      '';
+
+      programs.zsh.initContent = mkIf cfg.enable ''
+        # GitHub CLI automatic authentication
+        ${optionalString cfg.gh.enable ''
+          # Function to get GitHub token
+          _get_github_token() {
+            ${mkRbwCommand cfg.bitwarden} 2>/dev/null
+          }
+
+          # Export GH_TOKEN dynamically when needed
+          if command -v gh &>/dev/null; then
+            # Create a wrapper function for gh that sets token if needed
+            gh() {
+              if [ -z "$GH_TOKEN" ]; then
+                export GH_TOKEN="$(_get_github_token)"
+              fi
+              command gh "$@"
+            }
+          fi
+        ''}
+
+        # GitLab CLI automatic authentication
+        ${optionalString (cfg.gitlab.enable && cfg.gitlab.glab.enable) ''
+          # Function to get GitLab token
+          _get_gitlab_token() {
+            ${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null
+          }
+
+          # Export GITLAB_TOKEN dynamically when needed
+          if command -v glab &>/dev/null; then
+            # Create a wrapper function for glab that sets token if needed
+            glab() {
+              if [ -z "$GITLAB_TOKEN" ]; then
+                export GITLAB_TOKEN="$(_get_gitlab_token)"
+              fi
+              command glab "$@"
+            }
+          fi
+        ''}
+      '';
 
       # Bitwarden mode: informational activation check
       home.activation.githubAuthBitwarden = mkIf (cfg.mode == "bitwarden")

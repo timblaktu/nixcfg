@@ -74,7 +74,7 @@
 
 ## Troubleshooting
 
-- Check logs at: ~/.claude/logs/tool-usage.log
+- Check logs at: $HOME/.claude/logs/tool-usage.log
 - Debug mode: Set `programs.claude-code.debug = true`
 - MCP server issues: Check `/tmp/claude_desktop.log` and `~/AppData/Roaming/Claude/logs/`
 - Hook failures: Review hook timeout settings

@@ -117,8 +117,17 @@
               githubAuth = {
                 enable = true;
                 mode = "bitwarden";
+                bitwarden = {
+                  item = "github.com";
+                  field = "PAT-timtam2026";
+                };
                 gitlab = {
                   enable = true;
+                  host = "git.panasonic.aero"; # Set the GitLab host
+                  bitwarden = {
+                    item = "GitLab git.panasonic.aero";
+                    field = "wlord (access token)";
+                  };
                   glab.enable = true;
                 };
               };
