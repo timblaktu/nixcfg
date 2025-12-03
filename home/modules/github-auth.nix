@@ -7,6 +7,17 @@ with lib;
 let
   cfg = config.githubAuth;
 
+  # Helper function to construct rbw command based on configuration
+  # Supports both old tokenName format and new item/field format
+  mkRbwCommand = bwCfg:
+    if bwCfg.field != null then
+      ''${pkgs.rbw}/bin/rbw get --field "${bwCfg.field}" "${bwCfg.item}"''
+    else if bwCfg.item != null then
+      ''${pkgs.rbw}/bin/rbw get "${bwCfg.item}"''
+    else
+    # Backward compatibility: use tokenName if item is not set
+      ''${pkgs.rbw}/bin/rbw get "${bwCfg.tokenName}"'';
+
   # Bitwarden credential helper script for GitHub
   rbwCredentialHelper = pkgs.writeShellScript "git-credential-rbw" ''
     #!/usr/bin/env bash
@@ -21,7 +32,7 @@ let
     fi
 
     # Fetch token from Bitwarden
-    TOKEN=$(${pkgs.rbw}/bin/rbw get "${cfg.bitwarden.tokenName}" 2>/dev/null)
+    TOKEN=$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)
 
     if [ -n "$TOKEN" ]; then
       echo "protocol=https"
@@ -45,7 +56,7 @@ let
     fi
 
     # Fetch token from Bitwarden
-    TOKEN=$(${pkgs.rbw}/bin/rbw get "${cfg.gitlab.bitwarden.tokenName}" 2>/dev/null)
+    TOKEN=$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)
 
     if [ -n "$TOKEN" ]; then
       echo "protocol=https"
@@ -120,7 +131,31 @@ in
       tokenName = mkOption {
         type = types.str;
         default = "github-token";
-        description = "Bitwarden entry name for GitHub token";
+        description = ''
+          Bitwarden entry name for GitHub token.
+          Deprecated: Use 'item' and 'field' for more control.
+        '';
+      };
+
+      item = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Bitwarden item name (e.g., "github.com").
+          Takes precedence over tokenName if set.
+        '';
+        example = "github.com";
+      };
+
+      field = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Custom field name within the Bitwarden item.
+          If null, retrieves the password field.
+          Only used when 'item' is set.
+        '';
+        example = "token";
       };
     };
 
@@ -189,7 +224,31 @@ in
         tokenName = mkOption {
           type = types.str;
           default = "gitlab-token";
-          description = "Bitwarden entry name for GitLab token";
+          description = ''
+            Bitwarden entry name for GitLab token.
+            Deprecated: Use 'item' and 'field' for more control.
+          '';
+        };
+
+        item = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            Bitwarden item name (e.g., "gitlab.com").
+            Takes precedence over tokenName if set.
+          '';
+          example = "gitlab.com";
+        };
+
+        field = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            Custom field name within the Bitwarden item.
+            If null, retrieves the password field.
+            Only used when 'item' is set.
+          '';
+          example = "api-token";
         };
       };
 

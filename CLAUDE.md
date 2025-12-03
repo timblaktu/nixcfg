@@ -239,6 +239,52 @@ githubAuth = {
 - Store tokens in Bitwarden: `rbw add gitlab-token` and `rbw add github-token`
 - Both CLIs authenticate automatically via Bitwarden credential helpers
 
+**Enhanced Bitwarden Configuration** (2025-12-03):
+- ✅ **Flexible token storage** - Supports both standalone items AND custom fields
+- ✅ **Backward compatible** - Old `tokenName` config still works
+- ✅ **Structured configuration** - Use `item` and `field` for precise control
+
+**Configuration Examples**:
+```nix
+# Option 1: Legacy (standalone token item)
+githubAuth.bitwarden.tokenName = "github-token";
+
+# Option 2: Custom field in login item (NEW)
+githubAuth.bitwarden = {
+  item = "github.com";     # Your login item
+  field = "token";         # Custom field name (null = password)
+};
+
+# Option 3: Password field of specific item
+githubAuth.bitwarden = {
+  item = "github.com";     # Gets password field
+  field = null;            # Or omit field entirely
+};
+
+# Full example with GitLab
+githubAuth = {
+  enable = true;
+  mode = "bitwarden";
+  bitwarden = {
+    item = "github.com";
+    field = "api_token";   # Your custom field name
+  };
+  gitlab = {
+    enable = true;
+    bitwarden = {
+      item = "gitlab.com";
+      field = "personal_access_token";
+    };
+  };
+};
+```
+
+**How it works**:
+- If `item` is set, uses that (ignores `tokenName`)
+- If `field` is set, uses `rbw get --field "field" "item"`
+- If `field` is null/unset, uses `rbw get "item"` (gets password)
+- If neither `item` nor `field` set, falls back to `tokenName` (legacy)
+
 #### **GitHub Authentication Redesign** (2025-11-20) - IN PROGRESS
 **Status**: 🔴 **CRITICAL ARCHITECTURAL ISSUES FOUND - REDESIGN REQUIRED**
 
