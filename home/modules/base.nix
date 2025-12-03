@@ -22,6 +22,7 @@ in
     ../common/system.nix
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
+    ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
     ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
     ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
