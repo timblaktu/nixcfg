@@ -368,9 +368,14 @@ in
 
       # Create writable glab config file
       home.activation.glabConfig = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable)
-        (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
           mkdir -p "$HOME/.config/glab-cli"
           CONFIG_FILE="$HOME/.config/glab-cli/config.yml"
+
+          # Remove symlink if it exists
+          if [ -L "$CONFIG_FILE" ]; then
+            rm -f "$CONFIG_FILE"
+          fi
 
           # Always create/update the config file with proper content
           cat > "$CONFIG_FILE" <<'EOF'
