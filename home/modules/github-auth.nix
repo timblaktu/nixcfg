@@ -244,7 +244,8 @@ in
         extraConfig = mkMerge [
           (mkIf cfg.git.enableCredentialHelper {
             credential = {
-              helper = [
+              # Use mkForce to override the existing helper definition from git.nix
+              helper = mkForce [
                 "cache --timeout=${toString cfg.git.cacheTimeout}"
                 (if cfg.mode == "bitwarden" then "${rbwCredentialHelper}" else "${sopsCredentialHelper}")
               ];
@@ -266,20 +267,22 @@ in
       # GitHub CLI configuration
       programs.gh = mkIf cfg.gh.enable {
         enable = true;
-        gitProtocol = cfg.protocol;
 
-        settings = {
-          git_protocol = cfg.protocol;
-          # Token fetched via git credential helper
-        };
-
-        # Additional useful aliases (merged with existing)
-        aliases = mkIf cfg.gh.enableAliases {
-          pv = "pr view";
-          rv = "repo view";
-          prs = "pr list";
-          issues = "issue list";
-        };
+        settings = mkMerge [
+          {
+            git_protocol = cfg.protocol;
+            # Token fetched via git credential helper
+          }
+          # Additional useful aliases (merged with existing)
+          (mkIf cfg.gh.enableAliases {
+            aliases = {
+              pv = "pr view";
+              rv = "repo view";
+              prs = "pr list";
+              issues = "issue list";
+            };
+          })
+        ];
       };
 
       # GitLab CLI installation and configuration
