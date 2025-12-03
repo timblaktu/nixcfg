@@ -213,6 +213,32 @@ For details, see:
 
 ### Active Development
 
+#### **GitLab CLI Integration** (2025-12-03) - ✅ COMPLETE
+**Status**: Successfully integrated GitLab CLI (glab) with Bitwarden authentication
+
+**Implementation**:
+- ✅ Extended `home/modules/github-auth.nix` to support GitLab CLI alongside GitHub CLI
+- ✅ Created separate credential helpers for GitLab (Bitwarden and SOPS modes)
+- ✅ Fixed Home Manager compatibility issues (no `programs.glab` option - install as package)
+- ✅ Resolved deprecated `programs.gh` options and credential helper type conflicts
+- ✅ Enabled for pa161878-nixos with Bitwarden backend
+
+**Configuration**:
+```nix
+githubAuth = {
+  enable = true;
+  mode = "bitwarden";
+  gitlab = {
+    enable = true;
+    glab.enable = true;
+  };
+};
+```
+
+**Usage**:
+- Store tokens in Bitwarden: `rbw add gitlab-token` and `rbw add github-token`
+- Both CLIs authenticate automatically via Bitwarden credential helpers
+
 #### **GitHub Authentication Redesign** (2025-11-20) - IN PROGRESS
 **Status**: 🔴 **CRITICAL ARCHITECTURAL ISSUES FOUND - REDESIGN REQUIRED**
 
