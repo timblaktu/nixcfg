@@ -24,7 +24,7 @@ in
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
-    # ./github-auth.nix # GitHub authentication (Bitwarden/SOPS) - DISABLED: requires sops-nix module
+    ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
     ./podman-tools.nix # Container tools configuration
     # Enhanced nix-writers based script management (migrated to unified files)
     # Import ESP-IDF development module

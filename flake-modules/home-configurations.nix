@@ -106,7 +106,23 @@
               home.packages = with pkgs; [
                 wslu
               ];
-              secretsManagement.rbw.email = "timblaktu@gmail.com";
+
+              # Secrets management
+              secretsManagement = {
+                enable = true;
+                rbw.email = "timblaktu@gmail.com";
+              };
+
+              # GitHub and GitLab authentication
+              githubAuth = {
+                enable = true;
+                mode = "bitwarden";
+                gitlab = {
+                  enable = true;
+                  glab.enable = true;
+                };
+              };
+
               targets.wsl = {
                 enable = true;
                 windowsTools = {
