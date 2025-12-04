@@ -146,15 +146,15 @@
               windowsTerminal = {
                 enable = true;
                 font = {
-                  face = "CaskaydiaMono Nerd Font Mono, Noto Emoji"; # Fixed font name
+                  face = "CaskaydiaMono NFM"; # Correct Windows font name for CaskaydiaMono Nerd Font Mono
                   size = 15; # Your preferred size from backups
                 };
                 keybindings = [
-                  { id = "Terminal.CopyToClipboard"; keys = "ctrl+c"; }
-                  { id = "Terminal.PasteFromClipboard"; keys = "ctrl+v"; }
+                  { id = "Terminal.CopyToClipboard"; keys = "ctrl+shift+c"; }
+                  { id = "Terminal.PasteFromClipboard"; keys = "ctrl+shift+v"; }
                   { id = "Terminal.DuplicatePaneAuto"; keys = "alt+shift+d"; }
-                  { id = "Terminal.NextTab"; keys = "ctrl+tab"; }
-                  { id = "Terminal.PrevTab"; keys = "ctrl+shift+tab"; }
+                  { id = "Terminal.NextTab"; keys = "alt+ctrl+l"; }
+                  { id = "Terminal.PrevTab"; keys = "alt+ctrl+h"; }
                 ];
               };
             }

@@ -7,7 +7,7 @@ with lib;
 
 let
   cfg = config.terminalVerification;
-  
+
   # Font configuration settings - Configurable terminal font
   fontConfig = {
     terminal = {
@@ -30,20 +30,21 @@ let
       emoji = {
         name = "Noto Color Emoji";
         downloadUrl = "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf";
-        files = ["NotoColorEmoji.ttf"];
-        aliases = [];
+        files = [ "NotoColorEmoji.ttf" ];
+        aliases = [ ];
       };
     };
   };
-  
+
   # Nerd Fonts to install
   nerdFonts = [
-    "CascadiaMono"    # For terminal (includes CaskaydiaMono Nerd Font Mono)
+    "CascadiaMono" # For terminal (includes CaskaydiaMono Nerd Font Mono)
   ];
-  
+
   # Expected font configuration for Windows Terminal - simplified
-  expectedFontFace = "${fontConfig.terminal.primary.name}, ${fontConfig.terminal.emoji.name}";
-  
+  # Using the Windows-recognized font name (CaskaydiaMono NFM)
+  expectedFontFace = "CaskaydiaMono NFM";
+
   # Terminal verification script for activation
   terminalVerificationScript = ''
     # Terminal Font Verification Script
@@ -216,13 +217,13 @@ let
     echo "✨ Terminal verification complete"
     echo ""
   '';
-  
+
   # Script to check Windows Terminal settings
   checkWindowsTerminalScript = pkgs.writeScriptBin "check-windows-terminal" ''
     #!${pkgs.bash}/bin/bash
     ${terminalVerificationScript}
   '';
-  
+
   wslToolsVerification = mkIf (config.targets.wsl.enable or false) ''
     # WSL tools verification  
     echo "🔧 Checking WSL tools availability..."
@@ -273,19 +274,19 @@ in
       default = true;
       description = "Enable terminal verification and font installation";
     };
-    
+
     verbose = mkOption {
       type = types.bool;
       default = false;
       description = "Show verbose output during verification";
     };
-    
+
     warnOnMisconfiguration = mkOption {
       type = types.bool;
       default = true;
       description = "Show warnings when terminal configuration doesn't match expectations";
     };
-    
+
     terminalFont = mkOption {
       type = types.str;
       default = "CaskaydiaMono Nerd Font";
@@ -298,28 +299,28 @@ in
   config = mkIf cfg.enable {
     # Install Nerd Fonts (provides a selection of programming fonts with icons)
     fonts.fontconfig.enable = lib.mkDefault true;
-    
+
     home.packages = with pkgs; [
       # Install only the Nerd Font we actually use
-      nerd-fonts.caskaydia-mono  # CaskaydiaMono Nerd Font Mono
-      
+      nerd-fonts.caskaydia-mono # CaskaydiaMono Nerd Font Mono
+
       # Font management utilities
-      fontconfig  # Provides fc-list, fc-cache, etc.
-      
+      fontconfig # Provides fc-list, fc-cache, etc.
+
       # Terminal verification script
       checkWindowsTerminalScript
     ];
-    
+
     # Activation script to verify terminal configuration
-    home.activation.terminalVerificationCheck = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    home.activation.terminalVerificationCheck = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       ${terminalVerificationScript}
     '';
-    
+
     # WSL-specific tools check
     home.activation.wslToolsVerification = mkIf (config.targets.wsl.enable or false) (
-      lib.hm.dag.entryAfter ["writeBoundary"] wslToolsVerification
+      lib.hm.dag.entryAfter [ "writeBoundary" ] wslToolsVerification
     );
-    
+
     # Set environment variables for terminal verification
     home.sessionVariables = {
       TERMINAL_EXPECTED_FONT = expectedFontFace;
@@ -329,13 +330,13 @@ in
       WT_EXPECTED_FONT = expectedFontFace;
       # WT_SETTINGS_PATH will be detected dynamically by scripts
     };
-    
+
     # Convenience alias for checking terminal configuration
     programs.zsh.shellAliases = mkIf config.programs.zsh.enable {
       check-terminal = "check-windows-terminal";
       verify-terminal = "check-windows-terminal";
     };
-    
+
     programs.bash.shellAliases = mkIf config.programs.bash.enable {
       check-terminal = "check-windows-terminal";
       verify-terminal = "check-windows-terminal";
