@@ -564,21 +564,21 @@ marker-pdf-env marker_single large.pdf output/ --auto-chunk [--chunk-size 100] [
 **Commit**:
 - `3e7af7c` feat(marker-pdf): add intelligent chunking and memory limiting
 
-**Issues Resolved** (2025-12-03):
+**Issues Resolved** (2025-12-04):
 1. **Systemd User Session Fixed**:
    - ✅ Lingering enabled: `/var/lib/systemd/linger/tim` created
    - ✅ Fixed `/run/user/1000` ownership (was `root:root`, now `tim:users`)
    - ✅ systemd --user running successfully (153 units loaded)
    - 🔧 **Root Cause**: Runtime directory ownership prevented systemd --user from starting
-   - 🔧 **Solution**: `sudo chown -R tim:users /run/user/1000` + `sudo systemctl start user@1000`
-   - ⚠️ **Manual fix required**: NixOS doesn't auto-fix runtime dir ownership after WSL restart
-   - 📋 **Future improvement**: Consider systemd tmpfiles.d rule to manage /run/user/1000 ownership
+   - 🔧 **Solution**: `sudo chown -R tim:users /run/user/1000 && sudo systemctl start user@1000`
+   - ⚠️ **Manual fix required after each WSL restart**: NixOS configuration not generating expected files
+   - 📋 **Investigation ongoing**: See `/tmp/nixos-wsl-runtime-dir-investigation.md`
 
-2. **Wrapper Script Fixes**:
-   - ✅ Fixed `--help` flag handling (was trying to execute as binary)
-   - ✅ Fixed passthrough command argument handling (split cmd and args properly)
-   - ✅ Added explicit help case (`help|--help|-h`)
-   - ✅ Help shown when only wrapper flags provided
+2. **Wrapper Script Fixes** (2025-12-03):
+   - ✅ Fixed `local` variable error (line 396: can only be used in functions)
+   - ✅ Fixed marker_single argument format (uses `--output_dir` flag, not positional arg)
+   - ✅ Added `--help` passthrough for marker_single
+   - ✅ All tested and working: `marker-pdf-env marker_single --help` shows actual help
 
 3. **Venv Validation**:
    - ✅ marker-pdf 1.10.1 installed successfully
@@ -586,9 +586,17 @@ marker-pdf-env marker_single large.pdf output/ --auto-chunk [--chunk-size 100] [
    - ✅ All dependencies validated at build time
    - ✅ Import validation passes: `✓ Imports successful - torch: 2.9.1+cu128 CUDA: True`
 
+4. **End-to-End Verification** (2025-12-04):
+   - ✅ Manual ownership fix applied after WSL restart
+   - ✅ systemd --user session started successfully
+   - ✅ marker-pdf-env help working correctly
+   - ✅ Ready for production use with manual systemd fix
+
 **Commits**:
-- `775b6d2` feat: enable systemd user session lingering
-- `b303fe6` fix(marker-pdf): properly handle --help flag and passthrough commands
+- `9174550` fix(marker-pdf): fix shell script errors and marker_single arguments
+- `032e520` docs(wsl): document /run/user/1000 ownership issue and attempted fixes
+- `5f6570c` docs(marker-pdf): document systemd user session ownership fix
+- `2d43375` wip: attempt activation script for /run/user/1000 ownership fix
 
 **Deferred for Later**:
 - ❌ Full TOC parsing (complex, current stub falls back to page-based)
