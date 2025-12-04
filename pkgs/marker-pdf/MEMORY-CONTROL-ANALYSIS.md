@@ -17,23 +17,27 @@ Your observation is correct: The previous "fix" only implemented **failsafe mech
 
 #### A. Batch Size Control
 ```bash
-# Default marker-pdf uses batch_multiplier=1.0
-# Reducing this DIRECTLY reduces memory usage
-marker_single input.pdf output/ --batch_multiplier 0.5  # 50% memory
-marker_single input.pdf output/ --batch_multiplier 0.25 # 25% memory
+# marker-pdf-env wrapper translates batch_multiplier to actual batch sizes
+# These are passed as individual model batch size options:
+marker-pdf-env marker_single input.pdf output/ --batch-multiplier 0.5   # 50% batch sizes
+marker-pdf-env marker_single input.pdf output/ --batch-multiplier 0.25  # 25% batch sizes
+
+# Internally sets:
+#   --layout_batch_size, --detection_batch_size,
+#   --recognition_batch_size, --ocr_error_batch_size
 ```
 
-**Impact**: Linear reduction in peak memory usage
+**Impact**: Reduces GPU memory usage by controlling model batch processing
 
 #### B. PyTorch Memory Configuration
 ```bash
-# Set before running marker-pdf
-export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:256,garbage_collection_threshold:0.7,expandable_segments:True"
+# Automatically set by marker-pdf-env wrapper
+export PYTORCH_ALLOC_CONF="max_split_size_mb:256,garbage_collection_threshold:0.6,expandable_segments:True"
 ```
 
 **Options explained**:
-- `max_split_size_mb`: Prevents allocating blocks larger than this (MB)
-- `garbage_collection_threshold`: Triggers GC at 70% memory usage
+- `max_split_size_mb`: Prevents allocating blocks larger than 256MB
+- `garbage_collection_threshold`: Triggers GC at 60% memory usage
 - `expandable_segments`: Reduces fragmentation
 
 #### C. Precision Reduction
