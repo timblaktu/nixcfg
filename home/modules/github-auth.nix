@@ -347,52 +347,50 @@ in
       # GitLab CLI installation
       home.packages = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [ pkgs.glab ];
 
-      # Setup shell aliases for automatic authentication
-      programs.bash.shellAliases = mkMerge [
-        (mkIf cfg.gh.enable {
-          gh = "GH_TOKEN=\"$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)\" ${pkgs.gh}/bin/gh";
-        })
-        (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) {
-          glab = "GITLAB_TOKEN=\"$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)\" ${pkgs.glab}/bin/glab";
-        })
-      ];
+      # Setup shell alias for GitHub CLI automatic authentication
+      # Note: GitLab CLI (glab) doesn't need an alias - token is written to config file
+      programs.bash.shellAliases = mkIf cfg.gh.enable {
+        gh = "GH_TOKEN=\"$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)\" ${pkgs.gh}/bin/gh";
+      };
 
-      programs.zsh.shellAliases = mkMerge [
-        (mkIf cfg.gh.enable {
-          gh = "GH_TOKEN=\"$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)\" ${pkgs.gh}/bin/gh";
-        })
-        (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) {
-          glab = "GITLAB_TOKEN=\"$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)\" ${pkgs.glab}/bin/glab";
-        })
-      ];
+      programs.zsh.shellAliases = mkIf cfg.gh.enable {
+        gh = "GH_TOKEN=\"$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)\" ${pkgs.gh}/bin/gh";
+      };
 
-      # Create writable glab config file
+      # Create glab config file with token from Bitwarden
       home.activation.glabConfig = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable)
         (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
-          mkdir -p "$HOME/.config/glab-cli"
-          CONFIG_FILE="$HOME/.config/glab-cli/config.yml"
+                    mkdir -p "$HOME/.config/glab-cli"
+                    CONFIG_FILE="$HOME/.config/glab-cli/config.yml"
 
-          # Remove symlink if it exists
-          if [ -L "$CONFIG_FILE" ]; then
-            rm -f "$CONFIG_FILE"
-          fi
+                    # Remove symlink if it exists
+                    if [ -L "$CONFIG_FILE" ]; then
+                      rm -f "$CONFIG_FILE"
+                    fi
 
-          # Always create/update the config file with proper content
-          cat > "$CONFIG_FILE" <<'EOF'
+                    # Fetch token from Bitwarden
+                    TOKEN=$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null || echo "")
+
+                    if [ -n "$TOKEN" ]; then
+                      # Create config file with token
+                      cat > "$CONFIG_FILE" <<EOF
           # GitLab CLI configuration
-          # Token authentication handled via environment variable
+          # Token fetched from Bitwarden and written by home-manager
           host: ${cfg.gitlab.host}
           hosts:
             ${cfg.gitlab.host}:
               git_protocol: ${cfg.protocol}
               api_protocol: https
+              token: $TOKEN
           display_hyperlinks: true
           glamour_style: dark
           editor: ${config.home.sessionVariables.EDITOR or "vim"}
           EOF
-
-          # Set proper permissions
-          chmod 600 "$CONFIG_FILE"
+                      chmod 600 "$CONFIG_FILE"
+                      $DRY_RUN_CMD echo "✅ GitLab CLI configured for ${cfg.gitlab.host}"
+                    else
+                      $DRY_RUN_CMD echo "⚠️  Warning: Could not fetch GitLab token from Bitwarden. Run 'rbw unlock' and try again."
+                    fi
         '');
 
       # Bitwarden mode: informational activation check
