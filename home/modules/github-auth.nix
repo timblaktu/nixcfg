@@ -381,6 +381,7 @@ in
           cat > "$CONFIG_FILE" <<'EOF'
           # GitLab CLI configuration
           # Token authentication handled via environment variable
+          host: ${cfg.gitlab.host}
           hosts:
             ${cfg.gitlab.host}:
               git_protocol: ${cfg.protocol}

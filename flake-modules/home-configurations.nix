@@ -126,7 +126,7 @@
                   host = "git.panasonic.aero"; # Set the GitLab host
                   bitwarden = {
                     item = "GitLab git.panasonic.aero";
-                    field = "wlord (access token)";
+                    field = "lord (access token)";
                   };
                   glab.enable = true;
                 };
@@ -146,8 +146,8 @@
               windowsTerminal = {
                 enable = true;
                 font = {
-                  face = "CaskaydiaMono NFM, Noto Color Emoji"; # Monospace + proper emoji font
-                  size = 15; # Your preferred size from backups
+                  face = "CaskaydiaMono NFM, Noto Color Emoji";
+                  size = 12;
                 };
                 keybindings = [
                   { id = "Terminal.CopyToClipboard"; keys = "ctrl+shift+c"; }

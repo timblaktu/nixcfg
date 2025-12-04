@@ -15,6 +15,7 @@
 , qpdf        # PDF splitting and TOC extraction
 , systemd     # Memory limiting via systemd-run
 , jq          # JSON parsing for qpdf output
+, gawk        # Arithmetic for batch size calculation
   # CUDA support
 , cudaSupport ? true
 , cudaPackages ? { }
@@ -63,7 +64,7 @@ writeShellScriptBin "marker-pdf-env" ''
 
     # PyTorch memory optimization for 8GB GPU
     # These settings actually reduce memory allocation, not just kill on excess
-    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:256,garbage_collection_threshold:0.6,expandable_segments:True"
+    export PYTORCH_ALLOC_CONF="max_split_size_mb:256,garbage_collection_threshold:0.6,expandable_segments:True"
 
     # Limit PyTorch threads to reduce CPU memory overhead
     export OMP_NUM_THREADS=4
@@ -81,8 +82,8 @@ writeShellScriptBin "marker-pdf-env" ''
     # Default settings optimized for 8GB GPU + memory efficiency
     BATCH_MULTIPLIER="''${MARKER_BATCH_MULTIPLIER:-0.5}"  # Reduce batch size by default
     CHUNK_SIZE="''${MARKER_CHUNK_SIZE:-50}"  # Smaller chunks for 8GB GPU
-    MEMORY_HIGH="''${MARKER_MEMORY_HIGH:-12G}"  # Conservative for typical system
-    MEMORY_MAX="''${MARKER_MEMORY_MAX:-16G}"  # Reasonable max
+    MEMORY_HIGH="''${MARKER_MEMORY_HIGH:-20G}"  # Soft limit for warnings
+    MEMORY_MAX="''${MARKER_MEMORY_MAX:-24G}"  # Hard limit - needs headroom for model loading
     AUTO_CHUNK="''${MARKER_AUTO_CHUNK:-false}"
 
     # Parse wrapper flags and return non-wrapper args
@@ -204,7 +205,7 @@ writeShellScriptBin "marker-pdf-env" ''
 
       echo "Processing: $input_pdf -> $output_dir"
       echo "Memory optimization: batch_multiplier=$BATCH_MULTIPLIER (lower = less memory)"
-      echo "PyTorch config: $PYTORCH_CUDA_ALLOC_CONF"
+      echo "PyTorch config: $PYTORCH_ALLOC_CONF"
       echo "GPU VRAM limit: $INFERENCE_RAM GB (of 8GB total)"
 
       # Detect if running in WSL
@@ -228,6 +229,28 @@ writeShellScriptBin "marker-pdf-env" ''
           ;;
       esac
 
+      # Calculate actual batch sizes based on multiplier
+      # Default batch sizes in marker-pdf are model-dependent, but we can set them all
+      local batch_args=()
+      if [ "$BATCH_MULTIPLIER" != "1.0" ]; then
+        # Apply multiplier to common batch size options
+        # Default batch sizes vary but we'll scale them proportionally
+        # Layout model typically uses batch_size=2, detection uses 2, recognition uses 8
+        local layout_batch=$(${gawk}/bin/awk "BEGIN {v = int(2 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+        local detection_batch=$(${gawk}/bin/awk "BEGIN {v = int(2 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+        local recognition_batch=$(${gawk}/bin/awk "BEGIN {v = int(8 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+        local ocr_error_batch=$(${gawk}/bin/awk "BEGIN {v = int(4 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+
+        batch_args=(
+          "--layout_batch_size" "$layout_batch"
+          "--detection_batch_size" "$detection_batch"
+          "--recognition_batch_size" "$recognition_batch"
+          "--ocr_error_batch_size" "$ocr_error_batch"
+        )
+
+        echo "Batch sizes: layout=$layout_batch, detection=$detection_batch, recognition=$recognition_batch, ocr_error=$ocr_error_batch"
+      fi
+
       if [ "$is_wsl" = true ]; then
         echo "WSL detected: Using ulimit for memory limiting (systemd-run doesn't enforce limits in WSL)"
         echo "Memory limit: $MEMORY_MAX (''${memory_limit_kb}KB virtual memory)"
@@ -237,7 +260,7 @@ writeShellScriptBin "marker-pdf-env" ''
         # is not properly enforced by the WSL2 kernel
         (
           ulimit -v "$memory_limit_kb"
-          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" --batch_multiplier "$BATCH_MULTIPLIER" "''${extra_args[@]}"
+          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${batch_args[@]}" "''${extra_args[@]}"
         )
       else
         echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
@@ -263,7 +286,7 @@ writeShellScriptBin "marker-pdf-env" ''
           --quiet \
           -p MemoryHigh="$MEMORY_HIGH" \
           -p MemoryMax="$MEMORY_MAX" \
-          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" --batch_multiplier "$BATCH_MULTIPLIER" "''${extra_args[@]}"
+          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${batch_args[@]}" "''${extra_args[@]}"
       fi
     }
 
