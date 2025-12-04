@@ -86,41 +86,6 @@ writeShellScriptBin "marker-pdf-env" ''
     MEMORY_MAX="''${MARKER_MEMORY_MAX:-24G}"  # Hard limit - needs headroom for model loading
     AUTO_CHUNK="''${MARKER_AUTO_CHUNK:-false}"
 
-    # Parse wrapper flags and return non-wrapper args
-    parse_flags() {
-      local passthrough_args=()
-      while [[ $# -gt 0 ]]; do
-        case "$1" in
-          --batch-multiplier|--batch_multiplier)
-            BATCH_MULTIPLIER="$2"
-            shift 2
-            ;;
-          --auto-chunk)
-            AUTO_CHUNK=true
-            shift
-            ;;
-          --chunk-size)
-            CHUNK_SIZE="$2"
-            shift 2
-            ;;
-          --memory-high)
-            MEMORY_HIGH="$2"
-            shift 2
-            ;;
-          --memory-max)
-            MEMORY_MAX="$2"
-            shift 2
-            ;;
-          *)
-            # Not a wrapper flag, pass through
-            passthrough_args+=("$1")
-            shift
-            ;;
-        esac
-      done
-      # Return non-wrapper args
-      printf '%s\n' "''${passthrough_args[@]}"
-    }
 
     # Extract TOC from PDF and generate chunk boundaries
     extract_toc_chunks() {
@@ -368,8 +333,43 @@ writeShellScriptBin "marker-pdf-env" ''
 
     # If arguments provided, run marker commands
     if [ $# -gt 0 ]; then
-      # Parse wrapper flags and get remaining args
-      mapfile -t remaining_args < <(parse_flags "$@")
+      # Parse wrapper flags FIRST to set variables
+      # We need to parse in the current shell, not a subshell
+      wrapper_args=()
+      remaining_args=()
+
+      # Parse flags inline to avoid subshell issues
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --batch-multiplier|--batch_multiplier)
+            BATCH_MULTIPLIER="$2"
+            shift 2
+            ;;
+          --auto-chunk)
+            AUTO_CHUNK=true
+            shift
+            ;;
+          --chunk-size)
+            CHUNK_SIZE="$2"
+            shift 2
+            ;;
+          --memory-high)
+            MEMORY_HIGH="$2"
+            shift 2
+            ;;
+          --memory-max)
+            MEMORY_MAX="$2"
+            shift 2
+            ;;
+          *)
+            # Not a wrapper flag, keep it
+            remaining_args+=("$1")
+            shift
+            ;;
+        esac
+      done
+
+      # Reset args to non-wrapper arguments
       set -- "''${remaining_args[@]}"
 
       # Show help if no commands remain after flag parsing
