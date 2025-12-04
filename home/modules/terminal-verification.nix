@@ -162,59 +162,52 @@ let
     
     # Primary font already has Nerd Font icons, no need for separate check
     
-    # WSL-specific font checks
+    # WSL-specific font checks - Check registry instead of System.Drawing
     if [[ -n "''${WSL_DISTRO:-}" ]]; then
       echo ""
-      echo "🔍 Checking Windows font installation..."
-      
-      # Check for fonts in Windows using PowerShell
-      WINDOWS_FONTS=$(powershell.exe -NoProfile -Command "
-        \$fonts = @()
-        
-        # Check for CaskaydiaMono Nerd Font
-        \$cascadiaCheck = [System.Drawing.Text.InstalledFontCollection]::new()
-        \$cascadiaFonts = \$cascadiaCheck.Families | Where-Object { 
-          \$_.Name -like '*Cascadia*' -or \$_.Name -like '*Caskaydia*'
-        }
-        
-        if (\$cascadiaFonts) {
-          \$fonts += 'CASCADIA:YES'
+      echo "🔍 Checking Windows font installation (via registry)..."
+
+      # Check for fonts in Windows registry (more reliable than System.Drawing)
+      CASCADIA_CHECK=$(powershell.exe -NoProfile -Command "
+        \$fonts = Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts' -ErrorAction SilentlyContinue
+        if (\$fonts -and (\$fonts.PSObject.Properties | Where-Object { \$_.Name -like '*CaskaydiaMono NFM*' })) {
+          'YES'
         } else {
-          \$fonts += 'CASCADIA:NO'
+          'NO'
         }
-        
-        # Check for Noto Color Emoji
-        \$notoCheck = \$cascadiaCheck.Families | Where-Object { 
-          \$_.Name -like '*Noto*Color*Emoji*'
-        }
-        
-        if (\$notoCheck) {
-          \$fonts += 'NOTO:YES'
+      " 2>/dev/null | tr -d '\r\n ')
+
+      NOTO_CHECK=$(powershell.exe -NoProfile -Command "
+        \$fonts = Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts' -ErrorAction SilentlyContinue
+        if (\$fonts -and (\$fonts.PSObject.Properties | Where-Object { \$_.Name -like '*Noto Color Emoji*' })) {
+          'YES'
         } else {
-          \$fonts += 'NOTO:NO'
+          'NO'
         }
-        
-        \$fonts -join '|'
-      " 2>/dev/null | tr -d '\r')
-      
+      " 2>/dev/null | tr -d '\r\n ')
+
       # Parse results
-      if [[ "$WINDOWS_FONTS" == *"CASCADIA:YES"* ]]; then
-        echo "  ✅ Cascadia/CaskaydiaMono fonts installed in Windows"
+      if [[ "$CASCADIA_CHECK" == "YES" ]]; then
+        echo "  ✅ CaskaydiaMono NFM fonts registered in Windows"
       else
-        echo "  ⚠️  CaskaydiaMono Nerd Font not found in Windows"
+        echo "  ⚠️  CaskaydiaMono NFM not registered"
         echo "     Download from: ${fontConfig.terminal.primary.downloadUrl}"
       fi
-      
-      if [[ "$WINDOWS_FONTS" == *"NOTO:YES"* ]]; then
-        echo "  ✅ Noto Color Emoji installed in Windows"
+
+      if [[ "$NOTO_CHECK" == "YES" ]]; then
+        echo "  ✅ Noto Color Emoji registered in Windows"
       else
-        echo "  ⚠️  Noto Color Emoji not found - better emoji rendering available"
+        echo "  ⚠️  Noto Color Emoji not registered"
         echo "     Install with this command (copy and run in PowerShell):"
         echo ""
         echo "     irm https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf -OutFile \$env:TEMP\NotoColorEmoji.ttf; \$f=\"\$env:LOCALAPPDATA\Microsoft\Windows\Fonts\"; md \$f -ea 0; cp \$env:TEMP\NotoColorEmoji.ttf \$f; reg add \"HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts\" /v \"Noto Color Emoji (TrueType)\" /d \"\$f\NotoColorEmoji.ttf\" /f >nul"
         echo ""
         echo "     Or run: powershell.exe ~/bin/install-noto-emoji.ps1"
       fi
+
+      echo ""
+      echo "  ℹ️  Note: User fonts may not appear in System.Drawing until after logout/reboot"
+      echo "      but Windows Terminal can still use them immediately"
     fi
     
     echo ""
