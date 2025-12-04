@@ -208,8 +208,8 @@ let
       if [[ "$WINDOWS_FONTS" == *"NOTO:YES"* ]]; then
         echo "  ✅ Noto Color Emoji installed in Windows"
       else
-        echo "  ⚠️  Noto Color Emoji not found in Windows"
-        echo "     Install via: winget install Google.NotoEmoji"
+        echo "  ℹ️  Noto Color Emoji not found (optional - Terminal has emoji fallback)"
+        echo "     Note: Not available via winget - must manually download if needed"
       fi
     fi
     
