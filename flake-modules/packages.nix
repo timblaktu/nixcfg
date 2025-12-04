@@ -8,7 +8,7 @@
       in
       {
         # Include all custom packages
-        inherit (customPkgs) nixvim-anywhere markitdown marker-pdf;
+        inherit (customPkgs) nixvim-anywhere markitdown marker-pdf tomd;
 
         # nixvim-anywhere convenience targets (Type 2 conversion approach - RECOMMENDED)
         # Temporarily disabled during API migration
@@ -20,7 +20,7 @@
         #   };
         #   configName = "tim@tblack-t14-nixos";
         # };
-        # 
+        #
         # nixvim-anywhere-mbp = customPkgs.nixvim-anywhere.override {
         #   nixvim-config = {
         #     initFile = self.homeConfigurations."tim@mbp".config.programs.nixvim.build.initFile;
