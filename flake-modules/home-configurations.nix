@@ -146,7 +146,7 @@
               windowsTerminal = {
                 enable = true;
                 font = {
-                  face = "CaskaydiaMono NFM"; # Use only monospace font, no emoji font mixing
+                  face = "CaskaydiaMono NFM, Noto Color Emoji"; # Monospace + proper emoji font
                   size = 15; # Your preferred size from backups
                 };
                 keybindings = [

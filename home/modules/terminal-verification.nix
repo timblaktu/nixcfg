@@ -41,9 +41,9 @@ let
     "CascadiaMono" # For terminal (includes CaskaydiaMono Nerd Font Mono)
   ];
 
-  # Expected font configuration for Windows Terminal - simplified
-  # Using only the monospace Nerd Font - emoji fonts cause rendering issues
-  expectedFontFace = "CaskaydiaMono NFM";
+  # Expected font configuration for Windows Terminal
+  # Noto Color Emoji provides better emoji rendering than fallback
+  expectedFontFace = "CaskaydiaMono NFM, Noto Color Emoji";
 
   # Terminal verification script for activation
   terminalVerificationScript = ''
@@ -208,8 +208,12 @@ let
       if [[ "$WINDOWS_FONTS" == *"NOTO:YES"* ]]; then
         echo "  ✅ Noto Color Emoji installed in Windows"
       else
-        echo "  ℹ️  Noto Color Emoji not found (optional - Terminal has emoji fallback)"
-        echo "     Note: Not available via winget - must manually download if needed"
+        echo "  ⚠️  Noto Color Emoji not found - better emoji rendering available"
+        echo "     Install with this command (copy and run in PowerShell):"
+        echo ""
+        echo "     irm https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf -OutFile \$env:TEMP\NotoColorEmoji.ttf; \$f=\"\$env:LOCALAPPDATA\Microsoft\Windows\Fonts\"; md \$f -ea 0; cp \$env:TEMP\NotoColorEmoji.ttf \$f; reg add \"HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts\" /v \"Noto Color Emoji (TrueType)\" /d \"\$f\NotoColorEmoji.ttf\" /f >nul"
+        echo ""
+        echo "     Or run: powershell.exe ~/bin/install-noto-emoji.ps1"
       fi
     fi
     
