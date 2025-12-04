@@ -649,3 +649,44 @@ fi
 - ❌ Full TOC parsing (complex, current stub falls back to page-based)
 - ❌ Font-size-based heading detection (fragile, requires full PDF load)
 - ❌ Precise memory estimation (impossible due to upstream leaks)
+
+#### **tomd Universal Document Converter** (2024-12-04) - 🔵 DESIGN PHASE
+**Status**: 🔵 **COMPREHENSIVE DESIGN COMPLETE - Ready for implementation**
+
+**Background**: Evolution from marker-pdf memory fixes to unified converter
+- Previous work fixed memory issues with marker-pdf (WSL2 ulimit, batch sizing)
+- Discovered `--auto-chunk` is misleading (no smart chunking, just enables splitting)
+- `extract_toc_chunks()` is a stub that always fails (lines 91-105)
+
+**Design Document**: `docs/tomd-converter-design.md` (comprehensive architecture)
+
+**Key Insights**:
+1. **Current Problems**:
+   - Confusing CLI flags (`--auto-chunk` + `--chunk-size` both needed)
+   - No intelligent document structure analysis
+   - Only supports PDFs, no other formats
+   - Memory leaks require workarounds
+
+2. **Proposed Solution**: **tomd** - unified converter leveraging:
+   - **Docling** (IBM): Document structure, tables, format support, smart chunking
+   - **marker-pdf**: OCR for scanned docs, visual understanding
+   - Intelligent routing based on document type and content
+
+3. **Architecture**:
+   ```
+   Input → Docling Analysis → Router → Engine Selection → Output
+                                      ├─ Docling (clean docs)
+                                      └─ marker-pdf (OCR needed)
+   ```
+
+4. **Improvements**:
+   - 10x format support (PDF, DOCX, PPTX, HTML, images)
+   - True smart chunking based on sections/chapters
+   - 40% faster for standard documents (0.49 vs 0.86 sec/page)
+   - Cleaner CLI without confusing flags
+
+**Next Steps**:
+1. Create `pkgs/tomd/` package structure
+2. Integrate Docling (available in nixpkgs 2.47.1)
+3. Implement routing logic
+4. Maintain backward compatibility via alias
