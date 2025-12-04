@@ -199,13 +199,14 @@ writeShellScriptBin "marker-pdf-env" ''
       fi
 
       # Use systemd-run for memory limiting
+      # marker_single uses Click which expects --output_dir, not positional arg
       ${systemd}/bin/systemd-run \
         --user \
         --scope \
         --quiet \
         -p MemoryHigh="$MEMORY_HIGH" \
         -p MemoryMax="$MEMORY_MAX" \
-        "$VENV_DIR/bin/marker_single" "$input_pdf" "$output_dir" "''${extra_args[@]}"
+        "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${extra_args[@]}"
     }
 
     # Process PDF with auto-chunking
@@ -353,6 +354,12 @@ writeShellScriptBin "marker-pdf-env" ''
           # Parse remaining args for input/output
           shift  # Remove 'marker_single'
 
+          # If --help requested, pass through to actual marker_single
+          if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+            "$VENV_DIR/bin/marker_single" --help
+            exit 0
+          fi
+
           input_pdf=""
           output_dir=""
           extra_args=()
@@ -393,7 +400,7 @@ writeShellScriptBin "marker-pdf-env" ''
           ;;
         *)
           # Pass through to marker CLI with memory limits
-          local cmd="$1"
+          cmd="$1"
           shift
           ${systemd}/bin/systemd-run \
             --user \
