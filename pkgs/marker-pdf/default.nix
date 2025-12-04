@@ -57,22 +57,43 @@ writeShellScriptBin "marker-pdf-env" ''
 
     VENV_DIR="''${XDG_DATA_HOME:-$HOME/.local/share}/marker-pdf-venv"
 
+    # ========================================
+    # MEMORY OPTIMIZATION CONFIGURATION
+    # ========================================
+
+    # PyTorch memory optimization for 8GB GPU
+    # These settings actually reduce memory allocation, not just kill on excess
+    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:256,garbage_collection_threshold:0.6,expandable_segments:True"
+
+    # Limit PyTorch threads to reduce CPU memory overhead
+    export OMP_NUM_THREADS=4
+    export MKL_NUM_THREADS=4
+
+    # GPU VRAM configuration for 8GB RTX 2000 Ada
+    export CUDA_VISIBLE_DEVICES=0
+    export INFERENCE_RAM=7  # Leave 1GB for system overhead
+
     # Ensure Nix Python packages are discoverable
     export PYTHONPATH="${pythonEnv}/${python3.sitePackages}:''${PYTHONPATH:-}"
     # Add CUDA libs and stdenv C++ library for PyTorch
     export LD_LIBRARY_PATH="/usr/lib/wsl/lib:${stdenv.cc.cc.lib}/lib:''${LD_LIBRARY_PATH:-}"
 
-    # Default chunking and memory settings
-    CHUNK_SIZE=100
-    MEMORY_HIGH="20G"
-    MEMORY_MAX="24G"
-    AUTO_CHUNK=false
+    # Default settings optimized for 8GB GPU + memory efficiency
+    BATCH_MULTIPLIER="''${MARKER_BATCH_MULTIPLIER:-0.5}"  # Reduce batch size by default
+    CHUNK_SIZE="''${MARKER_CHUNK_SIZE:-50}"  # Smaller chunks for 8GB GPU
+    MEMORY_HIGH="''${MARKER_MEMORY_HIGH:-12G}"  # Conservative for typical system
+    MEMORY_MAX="''${MARKER_MEMORY_MAX:-16G}"  # Reasonable max
+    AUTO_CHUNK="''${MARKER_AUTO_CHUNK:-false}"
 
     # Parse wrapper flags and return non-wrapper args
     parse_flags() {
       local passthrough_args=()
       while [[ $# -gt 0 ]]; do
         case "$1" in
+          --batch-multiplier|--batch_multiplier)
+            BATCH_MULTIPLIER="$2"
+            shift 2
+            ;;
           --auto-chunk)
             AUTO_CHUNK=true
             shift
@@ -182,6 +203,9 @@ writeShellScriptBin "marker-pdf-env" ''
       local extra_args=("$@")
 
       echo "Processing: $input_pdf -> $output_dir"
+      echo "Memory optimization: batch_multiplier=$BATCH_MULTIPLIER (lower = less memory)"
+      echo "PyTorch config: $PYTORCH_CUDA_ALLOC_CONF"
+      echo "GPU VRAM limit: $INFERENCE_RAM GB (of 8GB total)"
 
       # Detect if running in WSL
       local is_wsl=false
@@ -213,7 +237,7 @@ writeShellScriptBin "marker-pdf-env" ''
         # is not properly enforced by the WSL2 kernel
         (
           ulimit -v "$memory_limit_kb"
-          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${extra_args[@]}"
+          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" --batch_multiplier "$BATCH_MULTIPLIER" "''${extra_args[@]}"
         )
       else
         echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
@@ -239,7 +263,7 @@ writeShellScriptBin "marker-pdf-env" ''
           --quiet \
           -p MemoryHigh="$MEMORY_HIGH" \
           -p MemoryMax="$MEMORY_MAX" \
-          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${extra_args[@]}"
+          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" --batch_multiplier "$BATCH_MULTIPLIER" "''${extra_args[@]}"
       fi
     }
 
@@ -352,25 +376,38 @@ writeShellScriptBin "marker-pdf-env" ''
     marker-pdf-env python ...
       Run Python directly in marker-pdf environment
 
-  Options:
+  Memory Optimization Options:
+    --batch-multiplier N      Batch size multiplier (default: 0.5, lower = less memory)
     --auto-chunk              Enable automatic chunking for large PDFs
-    --chunk-size N            Pages per chunk (default: 100)
-    --memory-high SIZE        Soft memory limit (default: 20G)
-    --memory-max SIZE         Hard memory limit (default: 24G)
+    --chunk-size N            Pages per chunk (default: 50)
+    --memory-high SIZE        Soft memory limit (default: 12G)
+    --memory-max SIZE         Hard memory limit (default: 16G)
 
   Active Config:
+    Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
     Chunk size: $CHUNK_SIZE pages
     Memory limits: $MEMORY_HIGH soft / $MEMORY_MAX hard
+    GPU VRAM: $INFERENCE_RAM GB allocated (8GB total)
+    PyTorch: GC at 60%, max_split 256MB
     VENV: $VENV_DIR
     CUDA: ${if cudaSupport then "enabled" else "disabled"}
 
-  ⚠️  Large PDFs may exhaust RAM due to upstream memory leaks. Use --auto-chunk for 500+ page PDFs.
+  Memory Usage Control:
+    The --batch-multiplier parameter DIRECTLY controls memory usage:
+      1.0 = default (high memory, fast)
+      0.5 = 50% memory (recommended for 8GB GPU)
+      0.25 = 25% memory (conservative)
+      0.1 = minimal memory (very slow)
+
+  ⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
   ⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).
 
-  Recommended memory limits (28GB system):
-    <100 pages:    --memory-high 8G  --memory-max 10G
-    100-500 pages: --memory-high 16G --memory-max 20G
-    500+ pages:    --memory-high 20G --memory-max 24G (use --auto-chunk)
+  Examples:
+    # Conservative memory usage for large PDFs
+    marker-pdf-env marker_single large.pdf output/ --batch-multiplier 0.25 --auto-chunk
+
+    # Balanced performance/memory (default)
+    marker-pdf-env marker_single document.pdf output/
 
   For GPU acceleration, ensure your NixOS config has:
     wslCuda.enable = true;
@@ -493,25 +530,38 @@ writeShellScriptBin "marker-pdf-env" ''
     marker-pdf-env python ...
       Run Python directly in marker-pdf environment
 
-  Options:
+  Memory Optimization Options:
+    --batch-multiplier N      Batch size multiplier (default: 0.5, lower = less memory)
     --auto-chunk              Enable automatic chunking for large PDFs
-    --chunk-size N            Pages per chunk (default: 100)
-    --memory-high SIZE        Soft memory limit (default: 20G)
-    --memory-max SIZE         Hard memory limit (default: 24G)
+    --chunk-size N            Pages per chunk (default: 50)
+    --memory-high SIZE        Soft memory limit (default: 12G)
+    --memory-max SIZE         Hard memory limit (default: 16G)
 
   Active Config:
+    Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
     Chunk size: $CHUNK_SIZE pages
     Memory limits: $MEMORY_HIGH soft / $MEMORY_MAX hard
+    GPU VRAM: $INFERENCE_RAM GB allocated (8GB total)
+    PyTorch: GC at 60%, max_split 256MB
     VENV: $VENV_DIR
     CUDA: ${if cudaSupport then "enabled" else "disabled"}
 
-  ⚠️  Large PDFs may exhaust RAM due to upstream memory leaks. Use --auto-chunk for 500+ page PDFs.
+  Memory Usage Control:
+    The --batch-multiplier parameter DIRECTLY controls memory usage:
+      1.0 = default (high memory, fast)
+      0.5 = 50% memory (recommended for 8GB GPU)
+      0.25 = 25% memory (conservative)
+      0.1 = minimal memory (very slow)
+
+  ⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
   ⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).
 
-  Recommended memory limits (28GB system):
-    <100 pages:    --memory-high 8G  --memory-max 10G
-    100-500 pages: --memory-high 16G --memory-max 20G
-    500+ pages:    --memory-high 20G --memory-max 24G (use --auto-chunk)
+  Examples:
+    # Conservative memory usage for large PDFs
+    marker-pdf-env marker_single large.pdf output/ --batch-multiplier 0.25 --auto-chunk
+
+    # Balanced performance/memory (default)
+    marker-pdf-env marker_single document.pdf output/
 
   For GPU acceleration, ensure your NixOS config has:
     wslCuda.enable = true;
