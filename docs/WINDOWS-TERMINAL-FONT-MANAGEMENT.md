@@ -232,8 +232,12 @@ home/modules/
 3. Reopen Terminal
 
 ### Issue: Emoji font not rendering
-**Cause**: Noto Color Emoji not installed or wrong variant
-**Fix**: Use Segoe UI Emoji as fallback (built into Windows)
+**Cause**: Mixed monospace and non-monospace fonts cause rendering issues
+**Fix**:
+1. DO NOT mix emoji fonts with monospace fonts in font face
+2. Windows Terminal automatically uses emoji fallback fonts
+3. CaskaydiaMono NFM includes many symbols/icons via Nerd Fonts
+4. Noto Color Emoji is NOT available via winget (documentation was incorrect)
 
 ### Issue: Font looks different than expected
 **Cause**: Using wrong variant (NFM vs NF vs NFP)

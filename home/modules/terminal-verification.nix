@@ -42,8 +42,8 @@ let
   ];
 
   # Expected font configuration for Windows Terminal - simplified
-  # Using the Windows-recognized font names that are actually installed
-  expectedFontFace = "CaskaydiaMono NFM, Segoe UI Emoji";
+  # Using only the monospace Nerd Font - emoji fonts cause rendering issues
+  expectedFontFace = "CaskaydiaMono NFM";
 
   # Terminal verification script for activation
   terminalVerificationScript = ''
