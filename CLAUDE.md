@@ -564,13 +564,15 @@ marker-pdf-env marker_single large.pdf output/ --auto-chunk [--chunk-size 100] [
 **Commit**:
 - `3e7af7c` feat(marker-pdf): add intelligent chunking and memory limiting
 
-**Issues Resolved** (2025-11-29):
+**Issues Resolved** (2025-12-03):
 1. **Systemd User Session Fixed**:
    - ✅ Lingering enabled: `/var/lib/systemd/linger/tim` created
    - ✅ Fixed `/run/user/1000` ownership (was `root:root`, now `tim:users`)
-   - ✅ systemd --user running successfully (PID 502178, 153 units loaded)
+   - ✅ systemd --user running successfully (153 units loaded)
    - 🔧 **Root Cause**: Runtime directory ownership prevented systemd --user from starting
    - 🔧 **Solution**: `sudo chown -R tim:users /run/user/1000` + `sudo systemctl start user@1000`
+   - ⚠️ **Manual fix required**: NixOS doesn't auto-fix runtime dir ownership after WSL restart
+   - 📋 **Future improvement**: Consider systemd tmpfiles.d rule to manage /run/user/1000 ownership
 
 2. **Wrapper Script Fixes**:
    - ✅ Fixed `--help` flag handling (was trying to execute as binary)
