@@ -49,9 +49,7 @@ let
   terminalVerificationScript = ''
     # Terminal Font Verification Script
     # This script runs during home-manager activation to verify terminal configuration
-    
-    echo "🔍 Verifying terminal configuration..."
-    
+
     # Function to check terminal emulator
     detect_terminal() {
       if [[ -n "''${WT_SESSION:-}" ]]; then
@@ -69,14 +67,11 @@ let
         echo "Unknown"
       fi
     }
-    
+
     TERMINAL=$(detect_terminal)
-    echo "  Terminal: $TERMINAL"
     
     # Windows Terminal specific verification (WSL only)
     if [[ "$TERMINAL" == "WindowsTerminal" ]] && [[ -n "''${WSL_DISTRO:-}" ]]; then
-      echo "  Checking Windows Terminal settings..."
-      
       # Read Windows Terminal settings using PowerShell
       WT_SETTINGS=$(powershell.exe -NoProfile -Command "
         try {
@@ -85,16 +80,16 @@ let
             \"\$env:LOCALAPPDATA\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json\",
             \"\$env:LOCALAPPDATA\\Packages\\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\\LocalState\\settings.json\"
           ) | Where-Object { Test-Path \$_ } | Select-Object -First 1
-          
+
           if (\$settingsPath) {
             \$settings = Get-Content \$settingsPath -Raw | ConvertFrom-Json
-            
+
             # Find the profile for this WSL distro
             \$profileName = \"''${WSL_DISTRO_NAME:-NixOS}\"
-            \$profile = \$settings.profiles.list | Where-Object { 
+            \$profile = \$settings.profiles.list | Where-Object {
               \$_.name -eq \$profileName -or \$_.source -eq \"Windows.Terminal.Wsl\"
             } | Select-Object -First 1
-            
+
             # Get font face (check profile first, then defaults)
             \$fontFace = if (\$profile.font.face) {
               \$profile.font.face
@@ -103,70 +98,26 @@ let
             } else {
               \"Cascadia Mono\"
             }
-            
+
             Write-Output \"FONT:\$fontFace\"
           }
         } catch {
           Write-Output \"ERROR:Could not read settings\"
         }
       " 2>/dev/null | tr -d '\r' | grep -E '^(FONT|ERROR):')
-      
+
       if [[ "$WT_SETTINGS" == FONT:* ]]; then
         CURRENT_FONT="''${WT_SETTINGS#FONT:}"
-        echo "  Current Font: $CURRENT_FONT"
-        
+
         if [[ "$CURRENT_FONT" != "${expectedFontFace}" ]]; then
-          echo ""
-          echo "⚠️  Windows Terminal configuration needs update:"
-          echo "  Expected Font: ${expectedFontFace}"
-          echo ""
-          echo "  To fix this, update Windows Terminal:"
-          echo "  1. Open Windows Terminal Settings (Ctrl+,)"
-          echo "  2. Navigate to Profiles → ''${WSL_DISTRO_NAME:-NixOS}"
-          echo "  3. Go to Appearance → Font face"
-          echo "  4. Set to: ${expectedFontFace}"
-          echo ""
-        else
-          echo "  ✅ Font configuration correct"
+          echo "⚠️  Windows Terminal font mismatch: '$CURRENT_FONT' (expected: '${expectedFontFace}')"
         fi
-      else
-        echo "  ⚠️  Could not read Windows Terminal settings"
       fi
     fi
     
-    # Check for Nerd Font installation
-    echo ""
-    echo "🔍 Checking font availability..."
-    
-    # Function to check if font is available
-    check_font() {
-      local font_name="$1"
-      # Use fontconfig from the Nix store if fc-list isn't in PATH yet
-      if command -v fc-list &>/dev/null; then
-        fc-list | grep -qi "$font_name"
-      elif [[ -x "${pkgs.fontconfig}/bin/fc-list" ]]; then
-        "${pkgs.fontconfig}/bin/fc-list" | grep -qi "$font_name"
-      else
-        # Fallback: assume font is not available if we can't check
-        return 1
-      fi
-    }
-    
-    # Check each configured font
-    for font_alias in ${concatMapStringsSep " " (x: ''"${x}"'') fontConfig.terminal.primary.aliases}; do
-      if check_font "$font_alias"; then
-        echo "  ✅ Primary font available: $font_alias"
-        break
-      fi
-    done
-    
-    # Primary font already has Nerd Font icons, no need for separate check
     
     # WSL-specific font checks - Check registry instead of System.Drawing
     if [[ -n "''${WSL_DISTRO:-}" ]]; then
-      echo ""
-      echo "🔍 Checking Windows font installation (via registry)..."
-
       # Check for fonts in Windows registry (more reliable than System.Drawing)
       CASCADIA_CHECK=$(powershell.exe -NoProfile -Command "
         \$fonts = Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts' -ErrorAction SilentlyContinue
@@ -186,33 +137,16 @@ let
         }
       " 2>/dev/null | tr -d '\r\n ')
 
-      # Parse results
-      if [[ "$CASCADIA_CHECK" == "YES" ]]; then
-        echo "  ✅ CaskaydiaMono NFM fonts registered in Windows"
-      else
-        echo "  ⚠️  CaskaydiaMono NFM not registered"
-        echo "     Download from: ${fontConfig.terminal.primary.downloadUrl}"
+      # Only show warnings if fonts are missing
+      if [[ "$CASCADIA_CHECK" != "YES" ]]; then
+        echo "⚠️  CaskaydiaMono NFM not found. Download: ${fontConfig.terminal.primary.downloadUrl}"
       fi
 
-      if [[ "$NOTO_CHECK" == "YES" ]]; then
-        echo "  ✅ Noto Color Emoji registered in Windows"
-      else
-        echo "  ⚠️  Noto Color Emoji not registered"
-        echo "     Install with this command (copy and run in PowerShell):"
-        echo ""
-        echo "     irm https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf -OutFile \$env:TEMP\NotoColorEmoji.ttf; \$f=\"\$env:LOCALAPPDATA\Microsoft\Windows\Fonts\"; md \$f -ea 0; cp \$env:TEMP\NotoColorEmoji.ttf \$f; reg add \"HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts\" /v \"Noto Color Emoji (TrueType)\" /d \"\$f\NotoColorEmoji.ttf\" /f >nul"
-        echo ""
-        echo "     Or run: powershell.exe ~/bin/install-noto-emoji.ps1"
+      if [[ "$NOTO_CHECK" != "YES" ]]; then
+        echo "⚠️  Noto Color Emoji not found. Install:"
+        echo "    powershell.exe ~/bin/install-noto-emoji.ps1"
       fi
-
-      echo ""
-      echo "  ℹ️  Note: User fonts may not appear in System.Drawing until after logout/reboot"
-      echo "      but Windows Terminal can still use them immediately"
     fi
-    
-    echo ""
-    echo "✨ Terminal verification complete"
-    echo ""
   '';
 
   # Script to check Windows Terminal settings
@@ -222,45 +156,21 @@ let
   '';
 
   wslToolsVerification = mkIf (config.targets.wsl.enable or false) ''
-    # WSL tools verification  
-    echo "🔧 Checking WSL tools availability..."
-    
+    # WSL tools verification - only show errors
     # Ensure Windows paths are in PATH for this check
     export PATH="$PATH:/mnt/c/Windows/System32:/mnt/c/Windows:/mnt/c/Windows/System32/WindowsPowerShell/v1.0"
-    
-    # Check for wslpath
-    if command -v wslpath &>/dev/null; then
-      echo "  ✅ wslpath: available"
-    else
-      echo "  ⚠️  wslpath: not found"
-      # Check common locations
-      for path in /usr/bin/wslpath /bin/wslpath; do
-        if [[ -x "$path" ]]; then
-          echo "     Found at: $path (not in PATH)"
-          break
-        fi
-      done
-    fi
-    
-    # Check for Windows utilities
-    if command -v clip.exe &>/dev/null; then
-      echo "  ✅ clip.exe: available"
-    else
-      echo "  ⚠️  clip.exe: not found"
-      # Check if it exists but not in PATH
-      if [[ -x "/mnt/c/Windows/System32/clip.exe" ]]; then
-        echo "     Found at: /mnt/c/Windows/System32/clip.exe (not in PATH)"
-      fi
-    fi
-    
-    # Check for other common Windows tools
-    for tool in powershell.exe cmd.exe explorer.exe code.exe; do
-      if command -v $tool &>/dev/null; then
-        echo "  ✅ $tool: available"
+
+    # Check for critical tools and only report if missing
+    MISSING_TOOLS=""
+    for tool in wslpath clip.exe powershell.exe; do
+      if ! command -v $tool &>/dev/null; then
+        MISSING_TOOLS="$MISSING_TOOLS $tool"
       fi
     done
-    
-    echo ""
+
+    if [[ -n "$MISSING_TOOLS" ]]; then
+      echo "⚠️  Missing WSL tools:$MISSING_TOOLS"
+    fi
   '';
 in
 {
