@@ -586,11 +586,54 @@ marker-pdf-env marker_single large.pdf output/ --auto-chunk [--chunk-size 100] [
    - ✅ All dependencies validated at build time
    - ✅ Import validation passes: `✓ Imports successful - torch: 2.9.1+cu128 CUDA: True`
 
-4. **End-to-End Verification** (2025-12-04):
-   - ✅ Manual ownership fix applied after WSL restart
-   - ✅ systemd --user session started successfully
-   - ✅ marker-pdf-env help working correctly
-   - ✅ Ready for production use with manual systemd fix
+**🔴 CRITICAL ISSUE DISCOVERED** (2025-12-04):
+
+### Memory Limiting Completely Failing
+
+**Problem**: systemd-run memory limits are NOT being enforced. Processes exceed limits by 3x.
+
+**Evidence from production run**:
+```bash
+# Command with limits specified:
+marker-pdf-env marker_single ROS_211025_0809_10218.pdf ROS_211025_0809_10218-markdown \
+  --auto-chunk --chunk-size 100 --memory-high 20G --memory-max 24G
+
+# Output confirms limits set:
+Memory limits: MemoryHigh=20G, MemoryMax=24G
+
+# Actual memory usage (from htop):
+- Process 65645: 78.2G (3.26x over 24G limit!)
+- Process 66019: 78.2G
+- System: 21.2G used + 7.0G/7.0G swap (100% exhausted)
+- Load average: 2.34 (system struggling)
+```
+
+**Expected Behavior**: systemd-run should enforce MemoryMax=24G hard limit, killing process if exceeded.
+
+**Actual Behavior**: Processes consume 78.2G each, completely ignoring memory limits.
+
+**Impact**:
+- ❌ Memory exhaustion protection not working
+- ❌ System becomes unresponsive
+- ❌ Swap exhausted (OOM risk)
+- ❌ Must manually kill processes
+
+**Possible Root Causes**:
+1. systemd-run scope not actually created/applied
+2. Child processes escaping the scope
+3. cgroups v1 vs v2 mismatch
+4. Memory accounting not enabled for user slices
+5. systemd-run command syntax error (silently failing)
+6. Processes forking before scope applied
+
+**Next Steps**:
+- Investigate actual systemd scope creation during run
+- Verify cgroups version and memory controller status
+- Check if processes are actually in the expected cgroup
+- Test with simpler memory-hungry program to isolate issue
+- Examine systemd-run logs for errors
+
+**Investigation Document**: Will be created at `/tmp/marker-pdf-memory-limit-investigation.md`
 
 **Commits**:
 - `9174550` fix(marker-pdf): fix shell script errors and marker_single arguments
