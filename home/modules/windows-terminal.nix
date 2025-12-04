@@ -180,7 +180,7 @@ in
     font = {
       face = mkOption {
         type = types.str;
-        default = "CaskaydiaMono Nerd Font Mono, Noto Color Emoji";
+        default = "CaskaydiaMono Nerd Font Mono, Noto Emoji";
         description = "Font face for Windows Terminal";
       };
 
@@ -233,10 +233,10 @@ in
         { id = "Terminal.CopyToClipboard"; keys = "ctrl+c"; }
         { id = "Terminal.PasteFromClipboard"; keys = "ctrl+v"; }
         { id = "Terminal.DuplicatePaneAuto"; keys = "alt+shift+d"; }
-        # Add tab navigation if you want
-        { command = "nextTab"; keys = "ctrl+tab"; }
-        { command = "prevTab"; keys = "ctrl+shift+tab"; }
-        # Or vim-style navigation
+        # Tab navigation with standard keys
+        { id = "Terminal.NextTab"; keys = "ctrl+tab"; }
+        { id = "Terminal.PrevTab"; keys = "ctrl+shift+tab"; }
+        # Vim-style navigation (uncomment if desired)
         # { command = "nextTab"; keys = "alt+l"; }
         # { command = "prevTab"; keys = "alt+h"; }
       ];
