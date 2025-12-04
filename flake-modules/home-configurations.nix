@@ -146,7 +146,7 @@
               windowsTerminal = {
                 enable = true;
                 font = {
-                  face = "CaskaydiaMono NFM"; # Correct Windows font name for CaskaydiaMono Nerd Font Mono
+                  face = "CaskaydiaMono NFM, Segoe UI Emoji"; # Both fonts are installed in Windows
                   size = 15; # Your preferred size from backups
                 };
                 keybindings = [

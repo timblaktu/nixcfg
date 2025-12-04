@@ -180,7 +180,7 @@ in
     font = {
       face = mkOption {
         type = types.str;
-        default = "CaskaydiaMono NFM";
+        default = "CaskaydiaMono NFM, Segoe UI Emoji";
         description = "Font face for Windows Terminal";
       };
 

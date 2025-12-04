@@ -42,8 +42,8 @@ let
   ];
 
   # Expected font configuration for Windows Terminal - simplified
-  # Using the Windows-recognized font name (CaskaydiaMono NFM)
-  expectedFontFace = "CaskaydiaMono NFM";
+  # Using the Windows-recognized font names that are actually installed
+  expectedFontFace = "CaskaydiaMono NFM, Segoe UI Emoji";
 
   # Terminal verification script for activation
   terminalVerificationScript = ''
