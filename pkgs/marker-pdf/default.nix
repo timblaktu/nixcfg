@@ -182,31 +182,65 @@ writeShellScriptBin "marker-pdf-env" ''
       local extra_args=("$@")
 
       echo "Processing: $input_pdf -> $output_dir"
-      echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
 
-      # Check if systemd user session is available
-      if ! ${systemd}/bin/systemctl --user status &>/dev/null; then
-        echo "ERROR: systemd user session not available"
-        echo ""
-        echo "Memory limiting requires systemd user session. To enable it:"
-        echo "  1. Ensure systemd is running"
-        echo "  2. Start user session: systemctl --user start"
-        echo "  3. Or enable lingering: loginctl enable-linger $USER"
-        echo ""
-        echo "Alternatively, if you don't need memory limits, you can:"
-        echo "  - Run marker_single directly: ~/.local/share/marker-pdf-venv/bin/marker_single"
-        exit 1
+      # Detect if running in WSL
+      local is_wsl=false
+      if uname -r | grep -qi microsoft; then
+        is_wsl=true
       fi
 
-      # Use systemd-run for memory limiting
-      # marker_single uses Click which expects --output_dir, not positional arg
-      ${systemd}/bin/systemd-run \
-        --user \
-        --scope \
-        --quiet \
-        -p MemoryHigh="$MEMORY_HIGH" \
-        -p MemoryMax="$MEMORY_MAX" \
-        "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${extra_args[@]}"
+      # Convert memory limit to KB for ulimit
+      local memory_limit_kb
+      case "$MEMORY_MAX" in
+        *G)
+          memory_limit_kb=$(( ''${MEMORY_MAX%G} * 1024 * 1024 ))
+          ;;
+        *M)
+          memory_limit_kb=$(( ''${MEMORY_MAX%M} * 1024 ))
+          ;;
+        *)
+          echo "ERROR: Invalid memory limit format: $MEMORY_MAX (use format like 20G or 20480M)"
+          exit 1
+          ;;
+      esac
+
+      if [ "$is_wsl" = true ]; then
+        echo "WSL detected: Using ulimit for memory limiting (systemd-run doesn't enforce limits in WSL)"
+        echo "Memory limit: $MEMORY_MAX (''${memory_limit_kb}KB virtual memory)"
+
+        # Use ulimit -v for virtual memory limiting in WSL
+        # Note: This is the only reliable method in WSL2 as cgroups v2 memory controller
+        # is not properly enforced by the WSL2 kernel
+        (
+          ulimit -v "$memory_limit_kb"
+          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${extra_args[@]}"
+        )
+      else
+        echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
+
+        # Check if systemd user session is available
+        if ! ${systemd}/bin/systemctl --user status &>/dev/null; then
+          echo "ERROR: systemd user session not available"
+          echo ""
+          echo "Memory limiting requires systemd user session. To enable it:"
+          echo "  1. Ensure systemd is running"
+          echo "  2. Start user session: systemctl --user start"
+          echo "  3. Or enable lingering: loginctl enable-linger $USER"
+          echo ""
+          echo "Alternatively, if you don't need memory limits, you can:"
+          echo "  - Run marker_single directly: ~/.local/share/marker-pdf-venv/bin/marker_single"
+          exit 1
+        fi
+
+        # Use systemd-run for memory limiting on native Linux
+        ${systemd}/bin/systemd-run \
+          --user \
+          --scope \
+          --quiet \
+          -p MemoryHigh="$MEMORY_HIGH" \
+          -p MemoryMax="$MEMORY_MAX" \
+          "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "''${extra_args[@]}"
+      fi
     }
 
     # Process PDF with auto-chunking
@@ -331,6 +365,7 @@ writeShellScriptBin "marker-pdf-env" ''
     CUDA: ${if cudaSupport then "enabled" else "disabled"}
 
   ⚠️  Large PDFs may exhaust RAM due to upstream memory leaks. Use --auto-chunk for 500+ page PDFs.
+  ⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).
 
   Recommended memory limits (28GB system):
     <100 pages:    --memory-high 8G  --memory-max 10G
@@ -402,13 +437,39 @@ writeShellScriptBin "marker-pdf-env" ''
           # Pass through to marker CLI with memory limits
           cmd="$1"
           shift
-          ${systemd}/bin/systemd-run \
-            --user \
-            --scope \
-            --quiet \
-            -p MemoryHigh="$MEMORY_HIGH" \
-            -p MemoryMax="$MEMORY_MAX" \
-            "$VENV_DIR/bin/$cmd" "$@"
+
+          # Detect if running in WSL
+          if uname -r | grep -qi microsoft; then
+            # WSL detected - use ulimit for memory limiting
+            # Convert memory limit to KB for ulimit
+            memory_limit_kb=""
+            case "$MEMORY_MAX" in
+              *G)
+                memory_limit_kb=$(( ''${MEMORY_MAX%G} * 1024 * 1024 ))
+                ;;
+              *M)
+                memory_limit_kb=$(( ''${MEMORY_MAX%M} * 1024 ))
+                ;;
+              *)
+                echo "ERROR: Invalid memory limit format: $MEMORY_MAX"
+                exit 1
+                ;;
+            esac
+
+            (
+              ulimit -v "$memory_limit_kb"
+              "$VENV_DIR/bin/$cmd" "$@"
+            )
+          else
+            # Native Linux - use systemd-run
+            ${systemd}/bin/systemd-run \
+              --user \
+              --scope \
+              --quiet \
+              -p MemoryHigh="$MEMORY_HIGH" \
+              -p MemoryMax="$MEMORY_MAX" \
+              "$VENV_DIR/bin/$cmd" "$@"
+          fi
           ;;
       esac
     else
@@ -445,6 +506,7 @@ writeShellScriptBin "marker-pdf-env" ''
     CUDA: ${if cudaSupport then "enabled" else "disabled"}
 
   ⚠️  Large PDFs may exhaust RAM due to upstream memory leaks. Use --auto-chunk for 500+ page PDFs.
+  ⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).
 
   Recommended memory limits (28GB system):
     <100 pages:    --memory-high 8G  --memory-max 10G
