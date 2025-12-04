@@ -61,14 +61,19 @@
     linger = true; # Enable systemd user session persistence
   };
 
-  # Fix user runtime directory ownership
-  # WSL creates /run/user/UID tmpfs mounts with root ownership by default
-  # This ensures correct ownership after the mount is created
-  systemd.services."user-runtime-dir@" = {
-    serviceConfig = {
-      ExecStartPost = "${pkgs.coreutils}/bin/chown %i:users /run/user/%i";
-    };
-  };
+  # Fix user runtime directory ownership for WSL
+  # WSL creates /run/user/UID with root:root ownership instead of user:group
+  # This prevents systemd --user from starting (pam_systemd ownership check fails)
+  #
+  # WORKAROUND: Manual fix required after WSL restart
+  # Run: sudo chown -R tim:users /run/user/1000 && sudo systemctl start user@1000
+  #
+  # TODO: Investigate why tmpfiles.d/systemd service approaches don't work
+  # Attempted solutions:
+  # - systemd.tmpfiles.rules (not included in generated config)
+  # - systemd.tmpfiles.settings (config file not created)
+  # - system.activationScripts (script not executed)
+  # - systemd.services (service unit not created)
 
   # System-wide aliases
   environment.shellAliases = {
