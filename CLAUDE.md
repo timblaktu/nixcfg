@@ -213,44 +213,47 @@ For details, see:
 
 ### Active Development
 
-#### **GitLab CLI Integration** (2025-12-04) - 🔴 NEEDS REDESIGN
-**Status**: Working but implementation is WRONG - needs to match gh pattern
+#### **GitLab CLI Integration** (2025-12-05) - ✅ FIXED
+**Status**: ✅ **Runtime env var injection implemented - matches gh pattern**
 
-**Current Issue** (commit efd64fb):
+**Problem Identified** (commit efd64fb):
 - ❌ Token written to `~/.config/glab-cli/config.yml` at home-manager switch
-- ❌ Token becomes stale if changed in Bitwarden
-- ❌ Violates declarative principles (secrets in managed files)
-- ❌ Doesn't match gh pattern (which uses runtime env var injection)
+- ❌ Token became stale if changed in Bitwarden
+- ❌ Violated declarative principles (secrets in managed files)
+- ❌ Didn't match gh pattern (which uses runtime env var injection)
 
-**Research Completed** (2025-12-04):
-- ✅ Confirmed glab checks `GITLAB_TOKEN` env var FIRST (official docs)
-- ✅ No git credential helper integration (glab doesn't read from git)
-- ✅ No external credential provider API (only env vars and config file)
-- ✅ 1Password integration proves env var pattern works (shell plugin injection)
-- ✅ `glab auth git-credential` is for git→glab (not glab→git)
+**Solution Implemented** (commit 5be4f25):
+- ✅ Removed token fetching from activation script
+- ✅ Added glab shell aliases (bash + zsh) with runtime `GITLAB_TOKEN` injection
+- ✅ Config file now has NO token field (only host, protocol, display settings)
+- ✅ Mirrors gh implementation exactly
 
-**Correct Solution Designed**:
+**Implementation**:
 ```nix
-# Shell alias with runtime token fetching (like gh)
-programs.zsh.shellAliases.glab =
-  "GITLAB_TOKEN=\"$(rbw get --field 'lord (access token)' 'GitLab git.panasonic.aero' 2>/dev/null)\" glab";
+# Shell aliases with runtime token fetching
+programs.bash.shellAliases = mkMerge [
+  (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) {
+    glab = "GITLAB_TOKEN=\"$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)\" ${pkgs.glab}/bin/glab";
+  })
+];
 
-# Config file WITHOUT token field
+# Config file WITHOUT token
 host: git.panasonic.aero
 hosts:
   git.panasonic.aero:
     git_protocol: https
     api_protocol: https
-    # NO token here - provided via GITLAB_TOKEN env var
+    # NO token - provided via GITLAB_TOKEN env var
 ```
 
-**Design Document**: `docs/redesigns/gitlab-auth-fix-2025-12-04.md`
+**Key Benefits**:
+1. ✅ Token fetched fresh from Bitwarden on every glab command
+2. ✅ Token never stored on disk (security improvement)
+3. ✅ Token stays current when changed in Bitwarden (no staleness)
+4. ✅ Consistent pattern with gh (maintainability)
 
-**Next Steps**:
-1. Revert token storage in activation script
-2. Restore shell aliases for glab (bash + zsh)
-3. Remove token field from config file generation
-4. Test: `glab project list --member` should work via env var
+**Design Document**: `docs/redesigns/gitlab-auth-fix-2025-12-04.md`
+**Commit**: `5be4f25` fix(gitlab-auth): use runtime env var injection instead of writing tokens to disk
 
 **Enhanced Bitwarden Configuration** (2025-12-03):
 - ✅ **Flexible token storage** - Supports both standalone items AND custom fields
