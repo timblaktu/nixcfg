@@ -1,34 +1,86 @@
-# Fresh Session Prompt for tomd Implementation
+# Fresh Session Prompt for tomd Enhancement
 
 ## Context
-I need to implement the `tomd` universal document-to-markdown converter based on the comprehensive design document at `docs/tomd-converter-design.md`. This refactors the existing `marker-pdf` package into a more general tool that leverages both Docling (for document structure) and marker-pdf (for OCR).
+The basic `tomd` universal document-to-markdown converter has been implemented and is working with PyMuPDF as a fallback. The infrastructure is in place, but the full vision from `docs/tomd-converter-design.md` needs to be realized by fixing engine integrations.
 
-## Current State
-- **Design Complete**: Full architecture documented in `docs/tomd-converter-design.md`
-- **marker-pdf Working**: Memory controls, batch sizing, and WSL2 fixes all operational
-- **Problem Identified**: Current `--auto-chunk` flag is misleading (no smart chunking)
-- **Docling Available**: Version 2.47.1 in nixpkgs, ready to integrate
+## Current State (2024-12-04)
+- **Branch**: `claude/tomd-implementation` (committed, working)
+- **Package Location**: `pkgs/tomd/` (complete Nix derivation)
+- **Status**: Basic PDF conversion working via PyMuPDF fallback
+- **Design Document**: `docs/tomd-converter-design.md` (full architecture)
 
-## Key Requirements
-1. Create new `pkgs/tomd/` package that combines Docling and marker-pdf
-2. Use Docling for document structure analysis and smart chunking
-3. Route to appropriate engine based on document type
-4. Support PDF, DOCX, PPTX, HTML, and images
-5. Maintain backward compatibility with alias from `marker-pdf-env` to `tomd`
+### What's Working
+- ✅ CLI interface with format detection and engine routing
+- ✅ PyMuPDF-based PDF to markdown conversion
+- ✅ WSL-compatible memory limiting (ulimit/systemd-run auto-detection)
+- ✅ Package builds successfully and passes flake check
+- ✅ Tested with simple PDF conversion
 
-## First Task
-Start implementing the tomd package structure in `pkgs/tomd/default.nix` following the architecture in the design document. Begin with:
+### What's Not Working
+- ❌ **Docling**: `docling-parse` 4.5.0 fails C++ compilation in nixpkgs
+- ❌ **marker-pdf**: Not packaged in nixpkgs (needs custom derivation)
+- ❌ **Smart Chunking**: Requires Docling for structure analysis
+- ❌ **Format Support**: DOCX/PPTX/HTML need Docling to work
 
-1. Basic package structure with both docling and marker-pdf as dependencies
-2. Simple routing logic (start with format detection)
-3. CLI interface that accepts various document types
-4. Test with a simple PDF to verify basic functionality
+## Technical Issues Discovered
 
-The existing marker-pdf wrapper at `pkgs/marker-pdf/default.nix` provides a good template for the wrapper script structure, but we'll be extending it significantly.
+### 1. Docling Build Failure
+```
+error: Cannot build '/nix/store/p1bcgd431wfi4dzjq5bdp86xipy27iyg-python3.13-docling-parse-4.5.0.drv'
+subprocess.CalledProcessError: Command '['.../python3.13', 'build.py']' returned non-zero exit status 1
+```
+- CMake/C++ compilation issue during wheel build
+- Consider using `docling-serve` (1.5.1) as alternative
+- Or pin to older working version of docling
+
+### 2. marker-pdf Packaging Needed
+- Not available in nixpkgs
+- Requires: PyTorch, transformers, surya-ocr, huggingface-hub
+- Previous work exists in marker-pdf memory fix implementation
+- Complex CUDA dependencies for GPU acceleration
+
+## Priority Next Steps
+
+### Option A: Fix Docling Integration (Recommended)
+1. Debug docling-parse compilation issue
+   - Check CMake dependencies
+   - Try older docling version
+   - Or use docling-serve instead
+2. Once working, implement:
+   - Document structure analysis
+   - Smart chunking based on TOC/sections
+   - DOCX/PPTX/HTML support
+
+### Option B: Package marker-pdf First
+1. Create proper Nix package for marker-pdf
+   - Reuse existing work from memory fixes
+   - Include all ML dependencies
+   - Test GPU acceleration
+2. Implement OCR engine routing
+3. Test with scanned PDFs
+
+### Option C: Enhance Current Implementation
+1. Improve PyMuPDF processing
+   - Add better text extraction
+   - Implement basic structure detection
+   - Add table extraction
+2. Create temporary chunking solution
+3. Add basic format support without Docling
+
+## Testing Resources
+- Test PDF creation script: Can use PyMuPDF to create test documents
+- Existing test successful: `/tmp/test.pdf` → `/tmp/output.md`
+- Memory limiting verified working in WSL2
+
+## Files to Review
+- `pkgs/tomd/default.nix` - Main package definition
+- `pkgs/tomd/process_docling.py` - Docling processor (with PyMuPDF fallback)
+- `pkgs/tomd/process_marker.py` - Marker processor (stub)
+- `docs/tomd-converter-design.md` - Full architecture vision
 
 ## Additional Context
 - GPU: RTX 2000 Ada with 8GB VRAM
-- Environment: WSL2 (consider ulimit vs systemd-run for memory limits)
-- Branch: Work on branch `claude/tomd-implementation` (create from main)
+- Environment: WSL2 (ulimit memory limiting works)
+- Previous marker-pdf work has memory control solutions
 
-Please start by creating the basic package structure and initial routing logic.
+Please continue by either fixing the Docling integration or packaging marker-pdf properly to achieve the full vision of the universal document converter.
