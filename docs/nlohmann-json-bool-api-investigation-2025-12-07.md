@@ -131,3 +131,35 @@ result = nlohmann::json::parse(val ? "true" : "false");
 
 ## Priority
 **BLOCKED** - The template resolution issue is deeper than initially thought. Consider using nlohmann_json 3.11.x as a workaround.
+
+## Final Investigation Results (2025-12-07 21:00 AEDT)
+
+### Comprehensive Testing Completed
+We've exhaustively tested multiple approaches to fix the bool conversion issue in docling-parse with nlohmann_json:
+
+1. **Downgrade to nlohmann_json 3.11.3** - FAILED: Same template resolution errors
+2. **Explicit constructor with literals** - FAILED: `nlohmann::json(true)` doesn't match any constructor
+3. **Ternary with constructors** - FAILED: `val ? nlohmann::json(true) : nlohmann::json(false)` same error
+4. **Parse approach** - FAILED: Ambiguous overloads for string literals
+5. **Static cast** - FAILED: Still returns bool, doesn't resolve to json
+
+### Root Cause Confirmed
+The issue is NOT with nlohmann_json itself but with the interaction between:
+- **C++20 standard** (hardcoded in docling-parse CMakeLists.txt)
+- **Template instantiation context** in docling-parse's build environment
+- **SFINAE conditions** that fail to recognize bool as a valid conversion type
+
+The error "'bool' is not a class, struct, or union type" occurs during template resolution, preventing ANY form of bool-to-json conversion from working.
+
+### Attempted Fixes Summary
+- **Patches created**: 5 different patch versions, all failed
+- **Fork commits**: 5 attempts with various approaches
+- **Nix overrides**: Multiple versions tested with both 3.11.x and 3.12.x
+
+### Current Workaround
+The only working solution is to use the venv-based approach in `pkgs/tomd/default-with-docling.nix` which installs docling via pip, avoiding the nixpkgs build entirely.
+
+### Recommended Next Steps
+1. **Short-term**: Continue using venv approach for docling functionality
+2. **Medium-term**: Create upstream issue with docling-parse about C++20 compatibility
+3. **Long-term**: Wait for upstream to address the template resolution issue or provide official C++20 support

@@ -1,0 +1,41 @@
+diff --git a/src/v2/qpdf/to_json.h b/src/v2/qpdf/to_json.h
+index 1234567..8901234 100644
+--- a/src/v2/qpdf/to_json.h
++++ b/src/v2/qpdf/to_json.h
+@@ -162,7 +162,7 @@ inline nlohmann::json to_json(
+         }
+         else if(child.isBool()) {
+             auto val = child.getBoolValue();
+-            result = val;
++            result = nlohmann::json(val);
+         }
+         else if(child.isNull()) {
+             result = nullptr;
+diff --git a/src/v2/pdf_resources/page_cell.h b/src/v2/pdf_resources/page_cell.h
+index 2345678..9012345 100644
+--- a/src/v2/pdf_resources/page_cell.h
++++ b/src/v2/pdf_resources/page_cell.h
+@@ -185,8 +185,8 @@ public:
+       cell.push_back(row_span);     // 16
+       cell.push_back(bottom_text_distance); // 17
+       cell.push_back(top_text_distance);    // 18
+-      cell.push_back(widget); // 19
+-      cell.push_back(left_to_right); // 20
++      cell.push_back(nlohmann::json(widget)); // 19 - explicit bool conversion
++      cell.push_back(nlohmann::json(left_to_right)); // 20 - explicit bool conversion
+
+       return cell;
+     }
+diff --git a/src/v2/pdf_sanitators/cells.h b/src/v2/pdf_sanitators/cells.h
+index 3456789..0123456 100644
+--- a/src/v2/pdf_sanitators/cells.h
++++ b/src/v2/pdf_sanitators/cells.h
+@@ -227,7 +227,7 @@ inline std::tuple<cells_type, refs_type, cells_type, cells_type, cells_type> e
+                       && cell["nrow"]>0 && cell["ncol"]>0) {
+
+                         // add to PARENT-cells
+-                        cell.push_back(is_header); // 19
++                        cell.push_back(nlohmann::json(is_header)); // 19 - explicit bool conversion
+                         parent_cells.push_back(cell);
+
+                         // also add to body/caption
