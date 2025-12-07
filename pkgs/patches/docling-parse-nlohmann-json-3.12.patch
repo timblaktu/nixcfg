@@ -1,0 +1,23 @@
+--- a/src/v2/qpdf/to_json.h
++++ b/src/v2/qpdf/to_json.h
+@@ -162,7 +162,7 @@
+        else if(obj.isBool())
+          {
+            bool val = obj.getBoolValue();
+-            result = val;
++            result = nlohmann::json(val);
+          }
+        else
+          {
+--- a/src/v2/pdf_resources/page_cell.h
++++ b/src/v2/pdf_resources/page_cell.h
+@@ -185,8 +185,8 @@
+      cell.push_back(font_key); // 17
+      cell.push_back(font_name); // 18
+
+-      cell.push_back(widget); // 19
+-      cell.push_back(left_to_right); // 20
++      cell.push_back(nlohmann::json(widget)); // 19
++      cell.push_back(nlohmann::json(left_to_right)); // 20
+    }
+    assert(cell.size()==header.size());
