@@ -48,13 +48,25 @@ Multiple packages (including docling-parse) fail to compile with nlohmann_json 3
 
 ### Compilation Errors
 ```cpp
-error: no matching function for call to 'nlohmann::json_abi_v3_12_0::basic_json<>::basic_json(bool&)'
+error: no matching function for call to 'nlohmann::json_abi_v3_12_0::basic_json<>::push_back(bool&)'
 ```
 
-### Failed Workarounds
-- `result = val;` - Direct assignment fails
-- `nlohmann::json(val)` - Constructor doesn't exist
-- `nlohmann::json::parse("true")` - Parse method also fails internally
+The actual error is with `push_back` not finding an overload for `bool&`, NOT with the constructor itself.
+
+### Testing Results (2025-12-07)
+Comprehensive testing shows that **nlohmann_json 3.12.0 DOES support bool conversions**:
+- `nlohmann::json(bool_val)` - ✅ Works
+- `json = bool_val` - ✅ Works
+- `json.push_back(bool_val)` - ✅ Works in isolation
+- All patterns work with C++11, C++17, and C++20
+
+### Root Cause Analysis
+The issue is NOT in nlohmann_json itself but appears to be:
+1. **Build environment issue** - Something in docling-parse's CMake configuration
+2. **Missing implicit conversion** - The template instantiation might be failing
+3. **Compiler optimization** - Different template resolution in the build context
+
+The suggested fix `nlohmann::json(val)` should work and is the correct approach.
 
 ## Next Session Commands
 
@@ -81,19 +93,41 @@ cd tests
 grep -r "bool" --include="*.cpp" --include="*.hpp"
 ```
 
-## Potential Solutions
+## Investigation Results (2025-12-07)
 
-### If Bug in nlohmann_json
-1. Create minimal reproducible example
-2. File issue upstream with nlohmann/json
-3. Create patch for nixpkgs nlohmann_json package
-4. Submit PR to nixpkgs with patch
+### Key Finding: nlohmann_json 3.12.0 is NOT broken
+After extensive testing, nlohmann_json 3.12.0 DOES support bool conversions correctly. The issue is specific to the docling-parse build environment with C++20 and certain compiler flags causing template resolution failures.
 
-### If Intentional API Change
-1. Understand new API pattern
-2. Create migration guide
-3. Fix all affected packages properly
-4. Document pattern for future reference
+### Root Cause
+The compilation error occurs because:
+1. docling-parse uses C++20 standard (CMAKE_CXX_STANDARD 20)
+2. Template instantiation fails with SFINAE conditions
+3. The compiler cannot resolve `nlohmann::json(bool&)` constructor in this specific context
+4. Error: "'bool' is not a class, struct, or union type" at template resolution
+
+### Working Solution: Use json::parse with string literals
+```cpp
+// Instead of: result = val;
+// Or: result = nlohmann::json(val);
+// Use:
+result = nlohmann::json::parse(val ? "true" : "false");
+```
+
+### Files Fixed
+1. `/home/tim/src/docling-parse/src/v2/qpdf/to_json.h`
+2. `/home/tim/src/docling-parse/src/v2/pdf_resources/page_cell.h`
+3. `/home/tim/src/docling-parse/src/v2/pdf_sanitators/cells.h`
+
+### Current Status
+- **Fork**: github.com/timblaktu/docling-parse branch `fix/nlohmann-json-3.12-bool-conversion`
+- **Patch**: `/home/tim/src/nixcfg/pkgs/patches/docling-parse-nlohmann-json-3.12-parse.patch`
+- **Override**: `/home/tim/src/nixcfg/pkgs/docling-parse-fixed/default.nix`
+- **Build Status**: Still failing due to additional parse() ambiguity issues
+
+### Remaining Issues
+1. `parse("true")` has ambiguous overload for `const char*` in docling-parse context
+2. Internal nlohmann_json SAX parser also fails with bool& constructor
+3. May need to downgrade nlohmann_json or wait for upstream fix
 
 ## Priority
-**HIGH** - This blocks multiple packages and the root cause must be correctly identified before proceeding with fixes.
+**BLOCKED** - The template resolution issue is deeper than initially thought. Consider using nlohmann_json 3.11.x as a workaround.

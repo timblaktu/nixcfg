@@ -2,7 +2,7 @@
 
 pkgs.python312Packages.docling-parse.overrideAttrs (oldAttrs: {
   patches = (oldAttrs.patches or [ ]) ++ [
-    ../patches/docling-parse-nlohmann-json-3.12.patch
+    ../patches/docling-parse-nlohmann-json-3.12-parse.patch
   ];
 
   # Optional: search for and fix any additional bool assignments we might have missed

@@ -1,0 +1,30 @@
+diff --git a/src/v2/pdf_resources/page_cell.h b/src/v2/pdf_resources/page_cell.h
+index b5f3b5a..a66a70a 100644
+--- a/src/v2/pdf_resources/page_cell.h
++++ b/src/v2/pdf_resources/page_cell.h
+@@ -185,8 +185,9 @@ namespace pdflib
+       cell.push_back(font_key); // 17
+       cell.push_back(font_name); // 18
+ 
+-      cell.push_back(widget); // 19
+-      cell.push_back(left_to_right); // 20
++      // Fix for nlohmann_json 3.12: explicit construction from bool
++      cell.push_back(nlohmann::json(widget)); // 19
++      cell.push_back(nlohmann::json(left_to_right)); // 20
+     }
+     assert(cell.size()==header.size());
+ 
+diff --git a/src/v2/qpdf/to_json.h b/src/v2/qpdf/to_json.h
+index f21af58..a444a39 100644
+--- a/src/v2/qpdf/to_json.h
++++ b/src/v2/qpdf/to_json.h
+@@ -162,7 +162,8 @@ namespace pdflib
+         else if(obj.isBool())
+           {
+             bool val = obj.getBoolValue();
+-            result = val;
++            // Fix for nlohmann_json 3.12: explicit construction from bool
++            result = nlohmann::json(val);
+           }
+         else
+           {
