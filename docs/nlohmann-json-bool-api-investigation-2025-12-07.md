@@ -159,7 +159,31 @@ The error "'bool' is not a class, struct, or union type" occurs during template 
 ### Current Workaround
 The only working solution is to use the venv-based approach in `pkgs/tomd/default-with-docling.nix` which installs docling via pip, avoiding the nixpkgs build entirely.
 
-### Recommended Next Steps
-1. **Short-term**: Continue using venv approach for docling functionality
-2. **Medium-term**: Create upstream issue with docling-parse about C++20 compatibility
-3. **Long-term**: Wait for upstream to address the template resolution issue or provide official C++20 support
+### Recommended Next Steps - UPSTREAM FIX REQUIRED (NO WORKAROUNDS)
+1. **PRIORITY 1 - CMake C++17 Fix**:
+   - Modify docling-parse CMakeLists.txt to use C++17 instead of C++20
+   - Test if this resolves the template resolution issues
+   - Create PR to docling-parse if successful
+
+2. **PRIORITY 2 - Nixpkgs Package Fix**:
+   - Override CMAKE_CXX_STANDARD in nixpkgs docling-parse package
+   - Test with both nlohmann_json 3.11.x and 3.12.x
+   - Submit PR to nixpkgs with working override
+
+3. **PRIORITY 3 - Upstream Issue**:
+   - Report C++20/nlohmann_json incompatibility to docling-parse
+   - Provide minimal reproducible example
+   - Suggest C++17 as stable alternative
+
+### Critical Session Continuity Information
+**IMPORTANT**: User requires UPSTREAM FIXES only. NO pip/venv workarounds accepted.
+
+**Local Forks for Development**:
+- `/home/tim/src/docling-parse` - docling-parse source (branch: fix/nlohmann-json-3.12-bool-conversion)
+- `/home/tim/src/nixpkgs` - nixpkgs fork (needs branch for docling-parse fix)
+
+**Next Session Must**:
+1. Check docling-parse fork status
+2. Try C++17 fix in CMakeLists.txt
+3. Test build with modified CMake
+4. If successful, create PRs to both docling-parse and nixpkgs

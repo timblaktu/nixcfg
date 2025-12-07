@@ -213,52 +213,48 @@ For details, see:
 
 ### Active Development
 
-#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - 🔴 DOCLING BLOCKED BY C++20 TEMPLATE ISSUE
-**Status**: marker-pdf ✅ WORKING | docling ❌ BROKEN (C++20 template resolution with nlohmann_json 3.12)
+#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - 🔴 DOCLING BLOCKED - UPSTREAM FIX IN PROGRESS
+**Status**: marker-pdf ✅ WORKING | docling ❌ BROKEN (C++20 template resolution with nlohmann_json)
 
-**Working Tools**:
-1. **pdf2md.py** - Simple PyMuPDF-based converter with formatting fixes (✅ COMPLETE)
-2. **marker-pdf** - ML-based OCR with chunking & memory limits (✅ WORKING)
-3. **tomd** - Universal converter using marker-pdf (✅ FUNCTIONAL)
+**PRIORITY**: Fix docling-parse in nixpkgs/upstream - NO WORKAROUNDS
 
-**The Docling Problem - INVESTIGATION COMPLETE (2025-12-07 20:30 AEDT)**:
-- **Root Cause**: docling-parse C++20 build environment causes template resolution failure with nlohmann_json 3.12
-- **NOT a bug in nlohmann_json**: Standalone tests confirm bool conversions work correctly
-- **Issue**: SFINAE conditions fail to recognize `bool` as valid type in docling-parse context
+**The Problem - C++20 Template Resolution Failure**:
+- **Root Cause**: docling-parse C++20 build environment incompatible with nlohmann_json bool conversions
+- **Affects**: Both nlohmann_json 3.11.x and 3.12.x versions
+- **Error**: "'bool' is not a class, struct, or union type" during SFINAE template resolution
 
-**Investigation Findings**:
-1. **nlohmann_json 3.12.0 is NOT broken** - bool conversions work in isolation
-2. **docling-parse uses C++20** (CMAKE_CXX_STANDARD 20) which triggers template instantiation issues
-3. **Error**: "'bool' is not a class, struct, or union type" during template resolution
-4. **Fork created**: github.com/timblaktu/docling-parse branch `fix/nlohmann-json-3.12-bool-conversion`
+**Active Work - UPSTREAM CONTRIBUTIONS REQUIRED**:
+1. **docling-parse fork**: `/home/tim/src/docling-parse` (branch: `fix/nlohmann-json-3.12-bool-conversion`)
+2. **nixpkgs fork**: `/home/tim/src/nixpkgs` (needs docling-parse package fix)
+3. **Investigation docs**: `docs/nlohmann-json-bool-api-investigation-2025-12-07.md`
 
-**Attempted Fixes (ALL FAILED)**:
-1. Direct constructor: `nlohmann::json(val)` - template resolution fails
-2. Static cast: `static_cast<nlohmann::json::boolean_t>(val)` - still returns bool
-3. Ternary with literals: `val ? nlohmann::json(true) : nlohmann::json(false)` - same template issue
-4. Parse approach: `nlohmann::json::parse(val ? "true" : "false")` - ambiguous overload for const char*
+**Fix Strategy - IN ORDER OF PRIORITY**:
+1. **CMake Fix**: Modify docling-parse CMakeLists.txt to use C++17 instead of C++20
+2. **Compiler Flags**: Add flags to resolve template instantiation issues
+3. **Code Patches**: Fix bool conversions to work with C++20 template resolution
+4. **Nixpkgs Override**: Package the fixed version in nixpkgs
 
-**Current State**:
-- **Fork**: `/home/tim/src/docling-parse` with multiple fix attempts (5 commits)
-- **Patches**: Multiple versions in `pkgs/patches/docling-parse-nlohmann-json-3.12-*.patch`
-- **Override**: `pkgs/docling-parse-fixed/default.nix` (still not working)
-- **Documentation**: `docs/nlohmann-json-bool-api-investigation-2025-12-07.md`
-
-**Recommended Next Steps**:
-1. **Option A**: Downgrade nlohmann_json to 3.11.x in docling-parse override
-2. **Option B**: Wait for upstream docling-parse to address C++20 compatibility
-3. **Option C**: Investigate if different compiler flags can resolve template issues
-
-**Commands to Resume Investigation**:
+**Next Session Commands - CRITICAL FOR CONTINUITY**:
 ```bash
-# Check fork status
+# PRIORITY 1: Test CMake C++17 fix
 cd /home/tim/src/docling-parse
-git status  # Currently on fix/nlohmann-json-3.12-bool-conversion
-git log --oneline -5  # Shows multiple fix attempts
+git checkout -b fix/cmake-cpp17
+sed -i 's/CMAKE_CXX_STANDARD.*20/CMAKE_CXX_STANDARD 17/g' CMakeLists.txt
+git add CMakeLists.txt && git commit -m "fix: use C++17 for nlohmann_json compatibility"
 
-# View investigation documentation
-cat /home/tim/src/nixcfg/docs/nlohmann-json-bool-api-investigation-2025-12-07.md
+# Build test with C++17
+nix-build -E 'with import <nixpkgs> {}; python312Packages.docling-parse.overrideAttrs (old: {
+  src = /home/tim/src/docling-parse;
+})'
 
-# Test patches
-nix-build /home/tim/src/nixcfg/pkgs/docling-parse-fixed/default.nix
+# PRIORITY 2: If C++17 works, create nixpkgs PR
+cd /home/tim/src/nixpkgs
+git checkout -b fix/docling-parse-cpp17
+# Edit pkgs/development/python-modules/docling-parse/default.nix
 ```
+
+**Session Continuity Requirements**:
+- ALWAYS check `/home/tim/src/docling-parse` fork status first
+- NEVER suggest pip/venv workarounds - fix must be in nixpkgs
+- Document all attempts in investigation file
+- Create upstream issues/PRs as needed
