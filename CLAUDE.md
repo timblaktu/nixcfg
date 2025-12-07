@@ -258,3 +258,13 @@ git checkout -b fix/docling-parse-cpp17
 - NEVER suggest pip/venv workarounds - fix must be in nixpkgs
 - Document all attempts in investigation file
 - Create upstream issues/PRs as needed
+- **CRITICAL**: ALWAYS end EVERY response with a ready-to-paste prompt for next session
+
+## MANDATORY: Next Session Prompt Template
+After EVERY response, provide this format:
+```
+Continue working on [SPECIFIC TASK]. Current status: [WHAT WAS JUST DONE].
+Next step: [SPECIFIC ACTION].
+Key context: [CRITICAL INFO].
+Check: [FILE/LOCATION TO VERIFY].
+```

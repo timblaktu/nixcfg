@@ -22,6 +22,7 @@
 - Address remaining git fetch failures (bmap-tools, spirv-headers, glslang) if needed
 
 ## ⚠️ CRITICAL RULES ⚠️
+- **MANDATORY RESPONSE ENDING**: EVERY response MUST end with a ready-to-paste prompt for the next session after context is cleared. NO EXCEPTIONS.
 - NEVER clutter this user-global CLAUDE.md file with project- or session-specific content, e.g. tasks, status, etc
 - **NO AI attribution in commit messages** - they should appear human-authored
 - **Commit messages focus on technical content** - describe what changed and why
