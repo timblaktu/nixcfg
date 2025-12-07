@@ -269,11 +269,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1765145907,
-        "narHash": "sha256-LSOE9+dHdCwpxeijJnv6aIT/aYsBk1LhBvp1PMFbPo8=",
+        "lastModified": 1765149448,
+        "narHash": "sha256-+imffrXGATisuFj6FitBrA8yqGIlqM4TF1/sHPP6+/E=",
         "owner": "timblaktu",
         "repo": "nixpkgs",
-        "rev": "ae056b2e79cb21336b8e550a5b6f4d073c82865b",
+        "rev": "259687eb0ee49053ceb477962de7b5a62866d070",
         "type": "github"
       },
       "original": {

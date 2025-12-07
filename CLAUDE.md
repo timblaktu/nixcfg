@@ -213,51 +213,24 @@ For details, see:
 
 ### Active Development
 
-#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - 🟢 PR CHECKS PASSING
-**Status**: marker-pdf ✅ WORKING | docling ⏳ PR #184 PENDING (C++20 template resolution fix)
+#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - ✅ RESOLVED
+**Status**: marker-pdf ✅ WORKING | docling ✅ WORKING (nlohmann_json downgraded)
 
-**UPSTREAM PR SUBMITTED**: https://github.com/docling-project/docling-parse/pull/184
-- **PR Title**: "fix: use nlohmann::json::boolean_t wrapper for bool conversion" (follows conventional commit)
-- **Branch**: `fix/boolean-t-wrapper` (pushed to timblaktu/docling-parse fork)
-- **Solution**: Use `nlohmann::json::boolean_t()` wrapper for proper C++20 template resolution
-- **Testing**: Verified with nlohmann_json 3.11.x/3.12.x and C++17/C++20 modes
-- **PR Status**: ✅ All CI checks passing (DCO signed, conventional commit format)
+**Resolution Summary**:
+- **Root Cause**: nlohmann_json 3.12.0 has internal bug where SAX parser uses deleted bool constructor
+- **Solution Implemented**: Downgraded nlohmann_json to 3.11.3 in nixpkgs fork
+- **nixpkgs Branch**: `docling-parse-fix` (commit 259687eb0)
+- **Result**: docling-parse and docling build successfully
 
-**Active Work - AWAITING UPSTREAM REVIEW**:
-1. **docling-parse PR #184**: All checks passing, awaiting maintainer review
-2. **nixpkgs fork**: `/home/tim/src/nixpkgs` (will update package after upstream merge)
-3. **Investigation docs**: `docs/nlohmann-json-bool-api-investigation-2025-12-07.md`
+**Lessons Learned**:
+1. **docling-parse PR #184** was attempting impossible workarounds - the bug is in nlohmann_json itself
+2. The correct fix would require patching nlohmann_json, not docling-parse
+3. Downgrading nlohmann_json is the pragmatic solution until upstream fixes their SAX parser
 
-**Next Steps - AFTER PR MERGE**:
-1. **Update nixpkgs**: Add patch or bump to fixed version once released
-2. **Test in nixcfg**: Verify docling works with fixed docling-parse
-3. **Close investigation**: Archive investigation docs and clean up temporary branches
-
-**Next Session Commands - CRITICAL FOR CONTINUITY**:
-```bash
-# PRIORITY 1: Test CMake C++17 fix
-cd /home/tim/src/docling-parse
-git checkout -b fix/cmake-cpp17
-sed -i 's/CMAKE_CXX_STANDARD.*20/CMAKE_CXX_STANDARD 17/g' CMakeLists.txt
-git add CMakeLists.txt && git commit -m "fix: use C++17 for nlohmann_json compatibility"
-
-# Build test with C++17
-nix-build -E 'with import <nixpkgs> {}; python312Packages.docling-parse.overrideAttrs (old: {
-  src = /home/tim/src/docling-parse;
-})'
-
-# PRIORITY 2: If C++17 works, create nixpkgs PR
-cd /home/tim/src/nixpkgs
-git checkout -b fix/docling-parse-cpp17
-# Edit pkgs/development/python-modules/docling-parse/default.nix
-```
-
-**Session Continuity Requirements**:
-- ALWAYS check `/home/tim/src/docling-parse` fork status first
-- NEVER suggest pip/venv workarounds - fix must be in nixpkgs
-- Document all attempts in investigation file
-- Create upstream issues/PRs as needed
-- **CRITICAL**: ALWAYS end EVERY response with a ready-to-paste prompt for next session
+**Documentation**:
+- Full investigation: `docs/nlohmann-json-3.12-incompatibility.md`
+- Shows all attempted fixes and why they fail
+- Explains the internal contradiction in nlohmann_json 3.12.0
 
 ## MANDATORY: Next Session Prompt Template
 After EVERY response, provide this format:

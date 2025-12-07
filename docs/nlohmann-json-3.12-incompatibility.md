@@ -16,21 +16,22 @@ docling-parse cannot build with nlohmann_json 3.12.0 due to a fundamental incomp
 5. **Assignment**: `result = bool_value` - FAILS (assignment operator doesn't accept bool)
 
 ## PR Status
-- **PR #184**: Submitted to docling-parse with workarounds
+- **PR #184**: Submitted to docling-parse with attempted workarounds
 - **Branch**: `fix/boolean-t-wrapper` on github:timblaktu/docling-parse
-- **Status**: Workarounds applied but build still fails due to nlohmann_json internal bug
+- **Status**: Workarounds cannot fix the nlohmann_json internal bug
+- **Recommendation**: PR should be closed as the approach is fundamentally flawed
 
-## Solution Options
-1. **Downgrade nlohmann_json**: Use version 3.11.x which doesn't have this issue
-2. **Wait for fix**: nlohmann_json needs to fix their internal SAX parser
-3. **Patch nlohmann_json**: Apply a patch to restore bool constructor compatibility
-4. **Use different JSON library**: Replace nlohmann_json with alternative
+## Solution Implemented
+✅ **Downgraded nlohmann_json to 3.11.3 in nixpkgs**
+- Branch: `docling-parse-fix` on github:timblaktu/nixpkgs
+- Commit: 259687eb0 "downgrade nlohmann_json to 3.11.3 for docling-parse compatibility"
+- Result: docling-parse builds successfully
 
 ## Current State
-- All bool conversion workarounds have been applied to docling-parse
-- nixpkgs fork configured to use the patched docling-parse
-- Build fails due to nlohmann_json 3.12.0 internal bug
-- This is a known issue with nlohmann_json 3.12.0
+- nlohmann_json downgraded to 3.11.3 in nixpkgs fork
+- docling-parse builds successfully with the downgraded nlohmann_json
+- docling and all dependencies build without errors
+- This is a temporary fix until nlohmann_json fixes their 3.12.x SAX parser
 
 ## Next Steps
 1. Report issue to nlohmann_json if not already reported
