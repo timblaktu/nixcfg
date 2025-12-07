@@ -213,26 +213,24 @@ For details, see:
 
 ### Active Development
 
-#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - 🔴 DOCLING BLOCKED - UPSTREAM FIX IN PROGRESS
-**Status**: marker-pdf ✅ WORKING | docling ❌ BROKEN (C++20 template resolution with nlohmann_json)
+#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - 🟡 UPSTREAM PR SUBMITTED
+**Status**: marker-pdf ✅ WORKING | docling ⏳ PR #184 PENDING (C++20 template resolution fix)
 
-**PRIORITY**: Fix docling-parse in nixpkgs/upstream - NO WORKAROUNDS
+**UPSTREAM PR SUBMITTED**: https://github.com/docling-project/docling-parse/pull/184
+- **PR Title**: "Fix: Use nlohmann::json::boolean_t wrapper for bool conversion"
+- **Branch**: `fix/boolean-t-wrapper` (pushed to timblaktu/docling-parse fork)
+- **Solution**: Use `nlohmann::json::boolean_t()` wrapper for proper C++20 template resolution
+- **Testing**: Verified with nlohmann_json 3.11.x/3.12.x and C++17/C++20 modes
 
-**The Problem - C++20 Template Resolution Failure**:
-- **Root Cause**: docling-parse C++20 build environment incompatible with nlohmann_json bool conversions
-- **Affects**: Both nlohmann_json 3.11.x and 3.12.x versions
-- **Error**: "'bool' is not a class, struct, or union type" during SFINAE template resolution
-
-**Active Work - UPSTREAM CONTRIBUTIONS REQUIRED**:
-1. **docling-parse fork**: `/home/tim/src/docling-parse` (branch: `fix/nlohmann-json-3.12-bool-conversion`)
-2. **nixpkgs fork**: `/home/tim/src/nixpkgs` (needs docling-parse package fix)
+**Active Work - AWAITING UPSTREAM REVIEW**:
+1. **docling-parse PR #184**: Awaiting maintainer review and merge
+2. **nixpkgs fork**: `/home/tim/src/nixpkgs` (will update package after upstream merge)
 3. **Investigation docs**: `docs/nlohmann-json-bool-api-investigation-2025-12-07.md`
 
-**Fix Strategy - IN ORDER OF PRIORITY**:
-1. **CMake Fix**: Modify docling-parse CMakeLists.txt to use C++17 instead of C++20
-2. **Compiler Flags**: Add flags to resolve template instantiation issues
-3. **Code Patches**: Fix bool conversions to work with C++20 template resolution
-4. **Nixpkgs Override**: Package the fixed version in nixpkgs
+**Next Steps - AFTER PR MERGE**:
+1. **Update nixpkgs**: Add patch or bump to fixed version once released
+2. **Test in nixcfg**: Verify docling works with fixed docling-parse
+3. **Close investigation**: Archive investigation docs and clean up temporary branches
 
 **Next Session Commands - CRITICAL FOR CONTINUITY**:
 ```bash
