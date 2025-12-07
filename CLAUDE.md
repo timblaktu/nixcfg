@@ -327,7 +327,20 @@ programs.git.extraConfig = {
 - `sopsGitlabCredentialHelper` - Custom SOPS GitLab credential helper
 - Shell aliases for gh and glab (replaced by wrapper packages)
 
-**Testing Status**: ⚠️ Not tested (per user request - concurrent session working on marker-pdf)
+**Testing Status**: ✅ **TESTED AND WORKING**
+
+**Test Results** (2025-12-06):
+- ✅ home-manager build successful
+- ✅ gh wrapper created and executes (gh 2.82.0)
+- ✅ glab wrapper created and executes (glab 1.73.0)
+- ✅ Wrappers inject tokens from Bitwarden correctly
+- ✅ Git credential helpers configured to use wrapped commands
+- ✅ No package conflicts (gh module uses wrapper as package)
+
+**Implementation Notes**:
+- Used `programs.gh.package` to install wrapper instead of adding to `home.packages`
+- Used `mkForce` on credential helpers to override gh module defaults
+- Wrappers fetch tokens from Bitwarden on every invocation (fresh, never stale)
 
 **Session Prompt**: `docs/auth-refactoring-session-2025-12-05.md`
 **Research Document**: `docs/git-auth-integration-research-2025-12-05.md` (448 lines)

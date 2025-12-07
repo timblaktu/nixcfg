@@ -241,17 +241,12 @@ in
 
   config = mkIf cfg.enable (mkMerge [
     {
-      # Install wrapper scripts as the actual gh/glab commands
+      # Install glab wrapper (gh wrapper is installed via programs.gh.package)
       # These wrappers inject tokens from Bitwarden/SOPS and are used for:
-      # 1. CLI operations (when user types 'gh' or 'glab')
-      # 2. Git credential operations (via 'gh auth git-credential' / 'glab auth git-credential')
-      home.packages = mkMerge [
-        (mkIf cfg.gh.enable [
-          (if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops)
-        ])
-        (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [
-          (if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops)
-        ])
+      # 1. CLI operations (when user types 'glab')
+      # 2. Git credential operations (via 'glab auth git-credential')
+      home.packages = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [
+        (if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops)
       ];
 
       # Git credential configuration using wrapper scripts
@@ -264,18 +259,22 @@ in
               # the official 'gh auth git-credential' subcommand
               "https://github.com" = {
                 username = cfg.git.userName;
-                helper =
-                  let
-                    ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
-                  in
-                  "!${ghWrapper}/bin/gh auth git-credential";
+                helper = mkForce
+                  (
+                    let
+                      ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
+                    in
+                    "!${ghWrapper}/bin/gh auth git-credential"
+                  );
               };
               "https://gist.github.com" = {
-                helper =
-                  let
-                    ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
-                  in
-                  "!${ghWrapper}/bin/gh auth git-credential";
+                helper = mkForce
+                  (
+                    let
+                      ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
+                    in
+                    "!${ghWrapper}/bin/gh auth git-credential"
+                  );
               };
             };
           })
@@ -297,6 +296,9 @@ in
       # GitHub CLI configuration
       programs.gh = mkIf cfg.gh.enable {
         enable = true;
+
+        # Use our wrapper instead of the regular gh package
+        package = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
 
         settings = mkMerge [
           {
