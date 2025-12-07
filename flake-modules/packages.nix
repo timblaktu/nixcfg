@@ -10,6 +10,9 @@
         # Include all custom packages
         inherit (customPkgs) nixvim-anywhere markitdown marker-pdf tomd;
 
+        # Docling package with fixed docling-parse
+        docling = pkgs.docling;
+
         # nixvim-anywhere convenience targets (Type 2 conversion approach - RECOMMENDED)
         # Temporarily disabled during API migration
         # nixvim-anywhere-tblack-t14 = customPkgs.nixvim-anywhere.override {

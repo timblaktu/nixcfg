@@ -269,16 +269,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1763176762,
-        "narHash": "sha256-//x8bdcDtZuvrNj3AMXR8E5nyhyvf+Cyy4Z1XpJ4Y6w=",
+        "lastModified": 1765144675,
+        "narHash": "sha256-Bh45vlBinRaRq3a5lDhETw+cQZbqV+DrI3q3J5euvIg=",
         "owner": "timblaktu",
         "repo": "nixpkgs",
-        "rev": "322d2a7a41bfcf18847e49a184f23886ea6f77c0",
+        "rev": "b9394a5831d353ad473c1ec37d20b6a4939b79e7",
         "type": "github"
       },
       "original": {
         "owner": "timblaktu",
-        "ref": "writers-auto-detection",
+        "ref": "docling-parse-fix",
         "repo": "nixpkgs",
         "type": "github"
       }
