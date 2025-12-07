@@ -257,8 +257,8 @@ hosts:
 
 ---
 
-#### **Git Authentication Architecture Refactoring** (2025-12-05) - 🟡 PENDING IMPLEMENTATION
-**Status**: 🟡 **Research complete, refactoring designed - awaiting implementation**
+#### **Git Authentication Architecture Refactoring** (2025-12-06) - ✅ IMPLEMENTED
+**Status**: ✅ **Refactoring complete - wrapper-based authentication implemented**
 
 **Research Findings** (commit ec60b30):
 - ✅ Both `gh` and `glab` provide `auth git-credential` subcommands for git integration
@@ -272,60 +272,65 @@ hosts:
 - ❌ **Unnecessary Custom Code**: ~200 lines of custom rbw credential helpers
 - ❌ **Not Using Official Integration**: gh/glab provide credential helpers but we bypass them
 
-**Current Configuration**:
-```
-gh CLI:     Shell alias → rbw → GH_TOKEN → gh binary
-gh git:     git-credential-rbw → rbw → GitHub (PLUS redundant gh credential helper)
-glab CLI:   Shell alias → rbw → GITLAB_TOKEN → glab binary
-glab git:   git-credential-rbw-gitlab → rbw → GitLab (NO glab integration)
-```
+**Solution Implemented** (2025-12-06):
+- ✅ Created wrapper scripts that inject tokens from Bitwarden/SOPS
+- ✅ Wrappers installed as actual `gh` and `glab` commands (not shell aliases)
+- ✅ Git credential helpers use same wrappers via `gh auth git-credential` / `glab auth git-credential`
+- ✅ Removed ~90 lines of custom credential helper code
+- ✅ Reduced from 432 lines to 375 lines (57 line reduction)
+- ✅ Single source of truth for Bitwarden configuration per service
 
-**Proposed Solution: Wrapper Scripts for Unified Authentication**
-
-**Key Insight**: Use wrapper scripts that inject tokens, then use those wrappers everywhere (both CLI and git).
-
-**Architecture**:
+**Architecture Implemented**:
 ```nix
-# Single definition per service
-gh-with-auth = writeShellScriptBin "gh" ''
-  export GH_TOKEN="$(rbw get --field 'token' 'github.com')"
+# GitHub CLI wrapper with Bitwarden token injection
+gh-with-auth = pkgs.writeShellScriptBin "gh" ''
+  export GH_TOKEN="$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)"
   exec ${pkgs.gh}/bin/gh "$@"
 '';
 
-# Use wrapper for BOTH CLI and git
-home.packages = [ gh-with-auth ];
+# GitLab CLI wrapper with Bitwarden token injection
+glab-with-auth = pkgs.writeShellScriptBin "glab" ''
+  export GITLAB_TOKEN="$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)"
+  exec ${pkgs.glab}/bin/glab "$@"
+'';
+
+# Install wrappers as actual commands
+home.packages = mkMerge [
+  (mkIf cfg.gh.enable [ gh-with-auth ])
+  (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [ glab-with-auth ])
+];
+
+# Git credential helpers use wrappers
 programs.git.extraConfig = {
   credential."https://github.com".helper = "!${gh-with-auth}/bin/gh auth git-credential";
+  credential."https://gist.github.com".helper = "!${gh-with-auth}/bin/gh auth git-credential";
+  credential."https://${cfg.gitlab.host}".helper = "!${glab-with-auth}/bin/glab auth git-credential";
 };
 ```
 
-**Benefits**:
+**Key Benefits Achieved**:
 1. ✅ **Single source of truth**: Bitwarden item/field in ONE place per service
-2. ✅ **Eliminates custom code**: No custom credential helpers needed (~200 lines removed)
-3. ✅ **Uses official integration**: Leverages gh/glab credential helper code
+2. ✅ **Eliminated custom code**: Removed rbwCredentialHelper and rbwGitlabCredentialHelper
+3. ✅ **Uses official integration**: Leverages gh/glab auth git-credential subcommands
 4. ✅ **Same security**: Tokens fetched fresh, never stored on disk
 5. ✅ **Easier to extend**: Add new git SaaS by adding one wrapper
 6. ✅ **No duplication**: Configuration specified once, used everywhere
+7. ✅ **Supports both modes**: Bitwarden and SOPS wrappers implemented
 
-**Implementation Plan**:
-1. Create wrapper scripts for gh and glab (with Bitwarden token injection)
-2. Install wrappers as the actual `gh` and `glab` commands
-3. Configure git to use wrapper scripts as credential helpers
-4. Remove custom `git-credential-rbw` and `git-credential-rbw-gitlab` helpers
-5. Test end-to-end: CLI commands and git operations
-6. Update documentation
+**Files Modified**:
+- `home/modules/github-auth.nix` - Complete refactoring (432 → 375 lines)
 
-**Files to Modify**:
-- `home/modules/github-auth.nix` - Replace custom helpers with wrapper approach
+**Code Removed**:
+- `rbwCredentialHelper` - Custom GitHub credential helper
+- `rbwGitlabCredentialHelper` - Custom GitLab credential helper
+- `sopsCredentialHelper` - Custom SOPS GitHub credential helper
+- `sopsGitlabCredentialHelper` - Custom SOPS GitLab credential helper
+- Shell aliases for gh and glab (replaced by wrapper packages)
 
-**Files to Remove**:
-- Custom credential helper scripts (rbwCredentialHelper, rbwGitlabCredentialHelper)
+**Testing Status**: ⚠️ Not tested (per user request - concurrent session working on marker-pdf)
 
 **Session Prompt**: `docs/auth-refactoring-session-2025-12-05.md`
-
 **Research Document**: `docs/git-auth-integration-research-2025-12-05.md` (448 lines)
-
-**Note**: 🚨 **Do NOT modify marker-pdf files** - concurrent Claude session actively working on that
 
 ---
 

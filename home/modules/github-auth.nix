@@ -18,96 +18,39 @@ let
     # Backward compatibility: use tokenName if item is not set
       ''${pkgs.rbw}/bin/rbw get "${bwCfg.tokenName}"'';
 
-  # Bitwarden credential helper script for GitHub
-  rbwCredentialHelper = pkgs.writeShellScript "git-credential-rbw" ''
-    #!/usr/bin/env bash
-    # Git credential helper that fetches token from Bitwarden via rbw
-
-    # Read git's credential request from stdin
-    eval "$(cat | sed 's/^/INPUT_/')"
-
-    # Only handle github.com
-    if [[ "$INPUT_host" != "github.com" ]]; then
-      exit 0
-    fi
-
-    # Fetch token from Bitwarden
-    TOKEN=$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)
-
-    if [ -n "$TOKEN" ]; then
-      echo "protocol=https"
-      echo "host=github.com"
-      echo "username=${cfg.git.userName}"
-      echo "password=$TOKEN"
-    fi
+  # GitHub CLI wrapper with Bitwarden token injection
+  # This wrapper fetches the token from Bitwarden and exports it as GH_TOKEN
+  # Used for BOTH CLI operations and git credential helper operations
+  gh-with-auth = pkgs.writeShellScriptBin "gh" ''
+    export GH_TOKEN="$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)"
+    exec ${pkgs.gh}/bin/gh "$@"
   '';
 
-  # Bitwarden credential helper script for GitLab
-  rbwGitlabCredentialHelper = pkgs.writeShellScript "git-credential-rbw-gitlab" ''
-    #!/usr/bin/env bash
-    # Git credential helper that fetches GitLab token from Bitwarden via rbw
-
-    # Read git's credential request from stdin
-    eval "$(cat | sed 's/^/INPUT_/')"
-
-    # Only handle the configured GitLab host
-    if [[ "$INPUT_host" != "${cfg.gitlab.host}" ]]; then
-      exit 0
-    fi
-
-    # Fetch token from Bitwarden
-    TOKEN=$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)
-
-    if [ -n "$TOKEN" ]; then
-      echo "protocol=https"
-      echo "host=${cfg.gitlab.host}"
-      echo "username=${cfg.gitlab.git.userName}"
-      echo "password=$TOKEN"
-    fi
+  # GitLab CLI wrapper with Bitwarden token injection
+  # This wrapper fetches the token from Bitwarden and exports it as GITLAB_TOKEN
+  # Used for BOTH CLI operations and git credential helper operations
+  glab-with-auth = pkgs.writeShellScriptBin "glab" ''
+    export GITLAB_TOKEN="$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)"
+    exec ${pkgs.glab}/bin/glab "$@"
   '';
 
-  # SOPS credential helper script for GitHub
-  sopsCredentialHelper = pkgs.writeShellScript "git-credential-sops" ''
-    #!/usr/bin/env bash
-    # Git credential helper that reads token from SOPS secret
-
-    eval "$(cat | sed 's/^/INPUT_/')"
-
-    if [[ "$INPUT_host" != "github.com" ]]; then
-      exit 0
-    fi
-
+  # SOPS-based wrappers (for when mode == "sops")
+  # GitHub CLI wrapper with SOPS token injection
+  gh-with-auth-sops = pkgs.writeShellScriptBin "gh" ''
     TOKEN_FILE="${config.sops.secrets."${cfg.sops.secretName}".path}"
-
     if [ -f "$TOKEN_FILE" ]; then
-      TOKEN=$(cat "$TOKEN_FILE")
-      echo "protocol=https"
-      echo "host=github.com"
-      echo "username=${cfg.git.userName}"
-      echo "password=$TOKEN"
+      export GH_TOKEN="$(cat "$TOKEN_FILE")"
     fi
+    exec ${pkgs.gh}/bin/gh "$@"
   '';
 
-  # SOPS credential helper script for GitLab
-  sopsGitlabCredentialHelper = pkgs.writeShellScript "git-credential-sops-gitlab" ''
-    #!/usr/bin/env bash
-    # Git credential helper that reads GitLab token from SOPS secret
-
-    eval "$(cat | sed 's/^/INPUT_/')"
-
-    if [[ "$INPUT_host" != "${cfg.gitlab.host}" ]]; then
-      exit 0
-    fi
-
+  # GitLab CLI wrapper with SOPS token injection
+  glab-with-auth-sops = pkgs.writeShellScriptBin "glab" ''
     TOKEN_FILE="${config.sops.secrets."${cfg.gitlab.sops.secretName}".path}"
-
     if [ -f "$TOKEN_FILE" ]; then
-      TOKEN=$(cat "$TOKEN_FILE")
-      echo "protocol=https"
-      echo "host=${cfg.gitlab.host}"
-      echo "username=${cfg.gitlab.git.userName}"
-      echo "password=$TOKEN"
+      export GITLAB_TOKEN="$(cat "$TOKEN_FILE")"
     fi
+    exec ${pkgs.glab}/bin/glab "$@"
   '';
 
 in
@@ -298,18 +241,41 @@ in
 
   config = mkIf cfg.enable (mkMerge [
     {
-      # Git credential configuration for GitHub
+      # Install wrapper scripts as the actual gh/glab commands
+      # These wrappers inject tokens from Bitwarden/SOPS and are used for:
+      # 1. CLI operations (when user types 'gh' or 'glab')
+      # 2. Git credential operations (via 'gh auth git-credential' / 'glab auth git-credential')
+      home.packages = mkMerge [
+        (mkIf cfg.gh.enable [
+          (if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops)
+        ])
+        (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [
+          (if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops)
+        ])
+      ];
+
+      # Git credential configuration using wrapper scripts
       programs.git = {
         extraConfig = mkMerge [
           (mkIf cfg.git.enableCredentialHelper {
             credential = {
-              # Use mkForce to override the existing helper definition from git.nix
-              helper = mkForce [
-                "cache --timeout=${toString cfg.git.cacheTimeout}"
-                (if cfg.mode == "bitwarden" then "${rbwCredentialHelper}" else "${sopsCredentialHelper}")
-              ];
+              # Use the wrapped gh command for GitHub credential operations
+              # The wrapper injects the token from Bitwarden/SOPS, then calls
+              # the official 'gh auth git-credential' subcommand
               "https://github.com" = {
                 username = cfg.git.userName;
+                helper =
+                  let
+                    ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
+                  in
+                  "!${ghWrapper}/bin/gh auth git-credential";
+              };
+              "https://gist.github.com" = {
+                helper =
+                  let
+                    ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
+                  in
+                  "!${ghWrapper}/bin/gh auth git-credential";
               };
             };
           })
@@ -317,7 +283,12 @@ in
           (mkIf (cfg.gitlab.enable && cfg.gitlab.git.enableCredentialHelper) {
             credential."https://${cfg.gitlab.host}" = {
               username = cfg.gitlab.git.userName;
-              helper = (if cfg.mode == "bitwarden" then "${rbwGitlabCredentialHelper}" else "${sopsGitlabCredentialHelper}");
+              # Use the wrapped glab command for GitLab credential operations
+              helper =
+                let
+                  glabWrapper = if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops;
+                in
+                "!${glabWrapper}/bin/glab auth git-credential";
             };
           })
         ];
@@ -330,7 +301,7 @@ in
         settings = mkMerge [
           {
             git_protocol = cfg.protocol;
-            # Token fetched via git credential helper
+            # Token fetched via wrapper script (not via git credential helper)
           }
           # Additional useful aliases (merged with existing)
           (mkIf cfg.gh.enableAliases {
@@ -343,28 +314,6 @@ in
           })
         ];
       };
-
-      # GitLab CLI installation
-      home.packages = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [ pkgs.glab ];
-
-      # Setup shell aliases for GitHub and GitLab CLI automatic authentication
-      programs.bash.shellAliases = mkMerge [
-        (mkIf cfg.gh.enable {
-          gh = "GH_TOKEN=\"$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)\" ${pkgs.gh}/bin/gh";
-        })
-        (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) {
-          glab = "GITLAB_TOKEN=\"$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)\" ${pkgs.glab}/bin/glab";
-        })
-      ];
-
-      programs.zsh.shellAliases = mkMerge [
-        (mkIf cfg.gh.enable {
-          gh = "GH_TOKEN=\"$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)\" ${pkgs.gh}/bin/gh";
-        })
-        (mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) {
-          glab = "GITLAB_TOKEN=\"$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)\" ${pkgs.glab}/bin/glab";
-        })
-      ];
 
       # Create glab config file WITHOUT token (token provided via GITLAB_TOKEN env var)
       home.activation.glabConfig = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable)
