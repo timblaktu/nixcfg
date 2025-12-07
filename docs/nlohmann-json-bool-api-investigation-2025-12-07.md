@@ -187,3 +187,31 @@ The only working solution is to use the venv-based approach in `pkgs/tomd/defaul
 2. Try C++17 fix in CMakeLists.txt
 3. Test build with modified CMake
 4. If successful, create PRs to both docling-parse and nixpkgs
+
+## C++17 Fix Test Results (2025-12-07 Session Continuation)
+
+### Test Performed
+Modified docling-parse CMakeLists.txt to use C++17 instead of C++20:
+- Changed `CMAKE_CXX_STANDARD 20` to `CMAKE_CXX_STANDARD 17` (line 69)
+- Changed executable CXX_STANDARD properties from 20 to 17 (lines 153-155)
+- Committed changes in branch `fix/cmake-cpp17`
+
+### Build Test Results - FAILED
+The build with C++17 still fails with the same template resolution errors:
+```
+error: no matching function for call to 'nlohmann::json_abi_v3_12_0::basic_json<>::push_back(bool&)'
+error: no matching function for call to 'nlohmann::json_abi_v3_12_0::basic_json<>::basic_json(bool&)'
+error: 'bool' is not a class, struct, or union type
+```
+
+### Analysis
+1. C++17 vs C++20 is NOT the root cause - errors persist with both standards
+2. The template resolution failure is deeper in the build system
+3. The issue appears to be in how docling-parse's build system interacts with nlohmann_json templates
+
+### Next Steps Required
+Since C++17 didn't solve the issue, we need to investigate:
+1. **Compiler flags**: Check if specific GCC flags might help with template resolution
+2. **Header inclusion order**: The way nlohmann_json is included might affect template instantiation
+3. **Build system patches**: May need to patch the actual C++ code, not just CMake settings
+4. **Alternative approach**: Consider creating a proper nixpkgs override with custom patches
