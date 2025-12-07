@@ -789,6 +789,17 @@ fi
   - Memory management and chunking support
   - Progress indicators in verbose mode
   - Handles scanned PDFs and images
+- ✅ **Comprehensive documentation created** (2025-12-06)
+  - `docs/tools/tomd-usage-guide.md` - Full usage guide with examples
+  - Engine capabilities comparison
+  - Memory recommendations by document size
+  - Troubleshooting section
+
+**Testing Completed** (2025-12-06):
+- ✅ HTML conversion tested - working with PyMuPDF fallback
+- ✅ PDF conversion tested - working with PyMuPDF (12-page document)
+- ⚠️ Image OCR requires marker-pdf in environment (expected)
+- ⚠️ DOCX/PPTX await Docling fix for optimal processing
 
 **Docling Integration Issue** (Still Blocked):
 - **Problem**: docling-parse 4.5.0 has C++ compilation errors
@@ -802,6 +813,7 @@ fi
 - `pkgs/tomd/process_marker.py` - **COMPLETE** marker-pdf OCR processor
 - `pkgs/default.nix` - Updated to pass marker-pdf to tomd
 - `home/modules/base.nix` - Added tomd to packages
+- `docs/tools/tomd-usage-guide.md` - **NEW** comprehensive usage documentation
 
 **Usage**:
 ```bash
@@ -821,8 +833,16 @@ tomd document.pdf output.md --engine=marker --verbose
 **Commits**:
 - `f0e91bc` feat(tomd): implement universal document converter with PyMuPDF4LLM
 - `54b19e7` feat(tomd): integrate marker-pdf for OCR processing
+- `b279fb4` docs(tomd): add comprehensive usage guide with engine details and troubleshooting
 
 **Next Steps When Docling Fixed**:
 1. Monitor nixpkgs for docling-parse fix
 2. Re-enable Docling in pythonEnv for superior structure extraction
 3. Test Docling's smart chunking and table extraction
+
+**Future Enhancements**:
+- Add progress indicators for large document processing
+- Create benchmark/comparison mode to evaluate engines
+- Batch processing support
+- Configuration file support
+- Output format options (GFM, CommonMark, etc.)
