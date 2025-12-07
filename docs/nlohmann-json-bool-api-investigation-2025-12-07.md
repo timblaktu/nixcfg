@@ -210,11 +210,32 @@ The issue is NOT the C++ standard version but rather how docling-parse's templat
    - `-ftemplate-backtrace-limit=0`
    - `-fconcepts` (for C++20 concepts-based resolution)
 
-**Next Session Must**:
-1. Test boolean_t wrapper approach
-2. If that fails, try direct construction with value_t
-3. If both fail, create nixpkgs patch to use older nlohmann_json
-4. File upstream issue with minimal reproducible example
+**boolean_t Wrapper Solution - CONFIRMED WORKING (2025-12-07 Session Continuation)**
+
+### Solution Found
+The `nlohmann::json::boolean_t` wrapper approach successfully resolves the template resolution issue:
+```cpp
+// Instead of: result = val;
+// Use: result = nlohmann::json::boolean_t(val);
+```
+
+This works because `boolean_t` is a type alias that nlohmann_json's templates understand, avoiding the SFINAE failure with raw `bool` type.
+
+### Test Results
+- Created minimal test program with `nlohmann::json::boolean_t(bool_val)`
+- Compiled successfully with C++20 standard
+- Runtime test confirmed proper JSON boolean conversion
+
+### Implementation
+- Fixed in fork: `/home/tim/src/docling-parse` branch `fix/boolean-t-wrapper`
+- Applied to: `src/v2/qpdf/to_json.h` line 167
+- Commit: a652fd3 "fix: use nlohmann::json::boolean_t wrapper for bool conversion"
+
+**Next Steps**:
+1. Create proper nixpkgs patch from the fork changes
+2. Test full docling-parse build with the patch
+3. Submit upstream PR to docling-parse with the fix
+4. Create nixpkgs override while waiting for upstream merge
 
 ## C++17 Fix Test Results (2025-12-07 Session Continuation)
 
