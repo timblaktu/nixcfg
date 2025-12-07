@@ -230,17 +230,22 @@ For details, see:
 **Research Findings** (2025-12-07):
 - ✅ Confirmed nixpkgs build fails with exact same errors we documented
 - ✅ No one else has publicly solved this issue
-- ✅ Our local parse("true") workaround is pioneering but incomplete
+- ❌ parse("true")/parse("false") workaround causes internal nlohmann_json errors
 - ❌ Upstream docling-parse hasn't updated for nlohmann_json 3.12
 - ❌ Nixpkgs maintainers unaware of root cause
 
-**Fork Strategy** (NEW PLAN):
-1. **Fork DS4SD/docling-parse** to timblaktu/docling-parse
-2. **Apply comprehensive bool conversion fixes** (all 3 affected files)
-3. **Fork NixOS/nixpkgs** to timblaktu/nixpkgs
-4. **Override docling-parse** to use our fixed fork
-5. **Submit PRs** to both upstreams once validated
-6. **Local development** in /home/tim/src/ for all forks
+**Current Status** (2025-12-07 18:00 AEDT):
+- **Local Repository**: `/home/tim/src/docling-parse` (branch: fix/nlohmann-json-3.12-bool-conversion)
+- **Fixes Applied**: Comprehensive bool conversion changes to all 3 affected files (commit 4d6fb6c)
+- **Build Status**: ❌ FAILED - parse() approach causes compilation errors
+- **Blocker**: Need alternative bool-to-json conversion approach
+- **GitHub**: Cannot fork - authentication not configured in Claude Code session
+
+**Next Actions Required**:
+1. **Find Working Fix**: Explore alternative bool conversion methods
+2. **Manual GitHub Setup**: User needs to configure GitHub auth (`gh auth login`) or manually fork
+3. **Test & Validate**: Once working fix found, thoroughly test
+4. **Submit PRs**: To both DS4SD/docling-parse and NixOS/nixpkgs
 
 **Documentation**:
 - `docs/docling-parse-bool-conversion-fix-2025-12-07.md` - Problem analysis

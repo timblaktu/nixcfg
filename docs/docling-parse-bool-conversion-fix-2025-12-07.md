@@ -61,12 +61,28 @@ This blocks the tomd universal document converter from using Docling for:
 
 Until docling-parse is fixed, tomd can only use marker-pdf for OCR.
 
+## Implementation Status (2025-12-07)
+
+### Fixes Applied
+- Created comprehensive bool conversion fixes in local docling-parse repository
+- Applied parse("true")/parse("false") workaround to all 3 affected files
+- Committed changes to local git repository (commit 4d6fb6c)
+
+### Current Blocker
+The parse("true")/parse("false") approach itself appears to cause compilation errors within nlohmann_json's internal parsing code. The error suggests that even the parsed JSON cannot be directly converted to bool in the nlohmann_json 3.12 environment.
+
+### Repository Status
+- Local fixes: `/home/tim/src/docling-parse` (branch: fix/nlohmann-json-3.12-bool-conversion)
+- Cannot fork to GitHub: Authentication not configured in Claude Code session
+- Multiple Nix package attempts created in `/home/tim/src/nixcfg/pkgs/`
+
 ## Next Steps
 
-1. Test the parse-based solution thoroughly
-2. Submit patch upstream to DS4SD/docling-parse
-3. Create nixpkgs PR with the fix
-4. Re-enable Docling in tomd once working
+1. **Alternative Fix Approach Needed**: The parse() method doesn't work - need to explore other bool conversion methods
+2. **Manual Fork Required**: User needs to manually fork and push the repository with fixes
+3. **Submit patch upstream to DS4SD/docling-parse** once a working solution is found
+4. **Create nixpkgs PR with the fix** after validation
+5. **Re-enable Docling in tomd** once working
 
 ## Lessons Learned
 
