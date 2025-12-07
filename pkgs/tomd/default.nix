@@ -16,8 +16,6 @@ let
   # Python environment with required packages
   pythonEnv = python3.withPackages (ps: with ps; [
     # Common dependencies
-    pymupdf
-    pymupdf4llm
     pillow
 
     # PDF processing
@@ -31,7 +29,7 @@ let
     httpx
 
     # Note: Docling will be added once build issues are fixed
-    # Note: marker-pdf integration pending
+    # marker-pdf is used via external binary (not Python package)
   ]);
 
   # Main tomd wrapper script
@@ -44,7 +42,7 @@ let
     DEFAULT_MEMORY_MAX="24G"
     DEFAULT_MEMORY_HIGH="20G"
     DEFAULT_BATCH_MULTIPLIER="0.5"
-    DEFAULT_ENGINE="auto"
+    DEFAULT_ENGINE="marker"  # marker-pdf is the only working engine currently
 
     # Variables
     INPUT_FILE=""
@@ -73,7 +71,8 @@ let
       output               Output markdown file or directory
 
     OPTIONS:
-      --engine=ENGINE      Processing engine: auto (default), docling, marker
+      --engine=ENGINE      Processing engine: marker (default, uses ML-based OCR)
+                          Note: docling is not yet available due to build issues
       --chunk-size=N       Maximum pages per chunk (default: $DEFAULT_CHUNK_SIZE)
       --smart-chunks       Use document structure for chunking (default)
       --no-chunks          Process as single file (may use lots of memory)
@@ -91,23 +90,24 @@ let
       • Images - PNG, JPG, TIFF (with OCR)
 
     EXAMPLES:
-      # Simple conversion
+      # Simple conversion (uses marker-pdf automatically)
       tomd document.pdf document.md
 
-      # Force specific engine
-      tomd scanned.pdf output.md --engine=marker
+      # For scanned PDFs (marker-pdf handles OCR)
+      tomd scanned.pdf output.md
 
-      # Control memory usage
+      # Control memory usage for large files
       tomd large.pdf output.md --memory-max=16G --chunk-size=50
 
-      # Process without chunking
+      # Process without chunking (small files)
       tomd small.pdf output.md --no-chunks
 
     NOTES:
-      • The tool automatically detects the best engine for each document
-      • Smart chunking respects document structure (chapters, sections)
+      • Currently uses marker-pdf for all document types (ML-based OCR)
+      • Smart chunking respects document structure when possible
       • Memory limits are enforced via systemd-run or ulimit (WSL)
-      • GPU acceleration is used when available
+      • GPU acceleration is used when available for marker-pdf
+      • Docling support will be added once build issues are resolved
 
     EOF
     }
@@ -225,28 +225,14 @@ let
       local engine="$3"
 
       # If engine is explicitly specified, use it
-      if [[ "$engine" != "auto" ]]; then
+      if [[ "$engine" != "auto" ]] && [[ "$engine" != "marker" ]]; then
         echo "$engine"
         return
       fi
 
-      # Auto-select based on format
-      case "$format" in
-        docx|pptx|html)
-          echo "docling"
-          ;;
-        image)
-          echo "marker"  # Images need OCR
-          ;;
-        pdf)
-          # For PDFs, we need to analyze if OCR is needed
-          # For now, default to docling as it's faster
-          echo "docling"
-          ;;
-        *)
-          echo "docling"
-          ;;
-      esac
+      # Currently only marker-pdf is available
+      # Once Docling build issues are fixed, we can enable smart selection
+      echo "marker"
     }
 
     # Check if running in WSL
@@ -401,7 +387,8 @@ stdenv.mkDerivation rec {
     longDescription = ''
       tomd is a comprehensive document-to-markdown converter that intelligently
       processes various document formats including PDF, DOCX, PPTX, HTML, and images.
-      It uses Docling for document structure analysis and marker-pdf for OCR tasks.
+      It uses marker-pdf for ML-based OCR and layout analysis. Support for Docling
+      (advanced structure extraction) will be added once build issues are resolved.
     '';
     homepage = "https://github.com/timblaktu/nixcfg";
     license = licenses.mit;

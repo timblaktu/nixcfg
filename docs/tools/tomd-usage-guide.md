@@ -7,24 +7,20 @@
 ## Current Status (2025-12-06)
 
 ### Working Components
-- **PyMuPDF4LLM Engine**: ✅ Operational for PDFs and HTML files
-  - Fast processing
-  - Good text extraction
-  - Basic formatting preservation
-  - Suitable for most text-based documents
-
-- **marker-pdf Integration**: ✅ Complete (requires marker-pdf in environment)
+- **marker-pdf Engine**: ✅ Primary and only operational engine
   - Full OCR support for scanned PDFs and images
   - ML-based layout understanding
-  - Memory management and chunking
-  - Progress indicators
+  - Memory management and intelligent chunking
+  - Progress indicators with verbose mode
+  - Handles all document types (PDF, images, etc.)
+  - GPU acceleration when available
 
 ### Pending Components
 - **Docling Engine**: ⏳ Blocked by docling-parse 4.5.0 build issues
   - Superior document structure extraction
   - Better table and list handling
   - Advanced formatting preservation
-  - Will be preferred engine when available
+  - Will complement marker-pdf when available
 
 ## Installation
 
@@ -54,19 +50,21 @@ tomd document.pdf output.md --verbose
 
 ### Engine Selection
 
-tomd automatically selects the best engine based on file type:
-- **PDFs**: Uses PyMuPDF4LLM (Docling when available)
-- **HTML**: Uses PyMuPDF4LLM (Docling when available)
-- **DOCX/PPTX**: Will use Docling when available
-- **Images**: Requires marker engine for OCR
+tomd currently uses marker-pdf for all document types:
+- **PDFs**: Automatic OCR detection and processing
+- **Images**: Direct OCR processing
+- **DOCX/PPTX/HTML**: Converted through marker-pdf
+- **Default**: marker-pdf handles everything with ML-based analysis
 
-Force a specific engine:
 ```bash
-# Force marker engine for OCR processing
+# Default usage (automatically uses marker-pdf)
+tomd document.pdf output.md
+
+# Explicitly specify marker (same as default)
 tomd scanned.pdf output.md --engine=marker
 
-# Force docling engine (when available)
-tomd document.pdf output.md --engine=docling
+# Docling will be available in future
+# tomd document.pdf output.md --engine=docling
 ```
 
 ### Memory Management
@@ -98,26 +96,7 @@ tomd document.pdf output.md --chunk-size=25
 
 ## Engine Capabilities
 
-### PyMuPDF4LLM (Default/Fallback)
-**Strengths:**
-- Fast processing
-- Reliable text extraction
-- Low memory usage
-- Works with most PDF versions
-
-**Limitations:**
-- Basic formatting only
-- No OCR support
-- Limited structure recognition
-- Tables may lose formatting
-
-**Best for:**
-- Quick conversions
-- Text-heavy documents
-- When speed is priority
-- Documents with simple layouts
-
-### marker-pdf (OCR Engine)
+### marker-pdf (Primary Engine)
 **Strengths:**
 - Full OCR for scanned documents
 - ML-based layout analysis
@@ -131,10 +110,11 @@ tomd document.pdf output.md --chunk-size=25
 - May struggle with very large files
 
 **Best for:**
-- Scanned PDFs
-- Documents with images
-- Complex layouts
-- When OCR is needed
+- All document types (currently the only engine)
+- Scanned PDFs requiring OCR
+- Documents with complex layouts
+- Images and diagrams extraction
+- Text-based PDFs with good layout preservation
 
 ### Docling (When Available)
 **Strengths:**
@@ -187,13 +167,13 @@ tomd document.pdf output.md --chunk-size=25
 - Reduce chunk size: `--chunk-size=25`
 - Lower memory limits: `--memory-max=8G`
 - Enable auto-chunking: `--auto-chunk`
-- Use PyMuPDF engine instead of marker
+- Process smaller sections of the document
 
 #### Poor Output Quality
-- Try different engines
-- For scanned PDFs, use marker engine
-- For structured documents, wait for Docling
 - Check if document has text layer with `pdftotext`
+- For scanned PDFs, ensure OCR is running (use --verbose)
+- For structured documents, wait for Docling support
+- Consider adjusting chunk size for better context
 
 #### Processing Hangs
 - Large files may take several minutes
@@ -225,10 +205,7 @@ find /nix/store -name "marker-pdf-env" -type f
 1. **Start Conservative**: Begin with default settings, adjust if needed
 2. **Use Verbose Mode**: When debugging, always use `--verbose`
 3. **Monitor Resources**: Keep an eye on RAM usage for large files
-4. **Choose Right Engine**:
-   - Quick extraction: PyMuPDF
-   - Scanned docs: marker
-   - Complex structure: Docling (when available)
+4. **marker-pdf Handles All**: Currently the only engine, works for all document types
 5. **Chunk Large Files**: Files > 100MB should use chunking
 6. **Test Small First**: Try a few pages before processing entire document
 
@@ -253,16 +230,15 @@ find /nix/store -name "marker-pdf-env" -type f
 ```bash
 # Research papers often have complex structure
 tomd research.pdf output.md \
-  --engine=docling \  # When available
   --smart-chunks \
   --chunk-size=50
+# Note: Docling will provide better structure extraction when available
 ```
 
 ### Convert Scanned Book
 ```bash
-# Scanned books need OCR
+# Scanned books need OCR (marker-pdf handles this automatically)
 tomd scanned-book.pdf book.md \
-  --engine=marker \
   --auto-chunk \
   --memory-max=20G \
   --verbose
@@ -294,16 +270,15 @@ done
 
 ### Dependencies
 - Python 3.x with packages:
-  - pymupdf
-  - pymupdf4llm
-  - pdfplumber
-  - pypdfium2
-  - pillow
-  - filetype
-  - httpx
-- System tools:
-  - qpdf (chunking)
-  - pdftotext (OCR detection)
+  - pdfplumber (PDF analysis)
+  - pypdfium2 (PDF processing)
+  - pillow (image handling)
+  - filetype (format detection)
+  - httpx (for future Docling API)
+- External tools:
+  - marker-pdf (ML-based OCR and layout analysis)
+  - qpdf (PDF chunking and manipulation)
+  - pdftotext (text layer detection)
   - systemd (Linux memory management)
 
 ### File Locations

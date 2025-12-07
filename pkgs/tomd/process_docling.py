@@ -2,6 +2,9 @@
 """
 Docling-based document processor for tomd.
 Handles document structure analysis and conversion to markdown.
+
+NOTE: This processor requires Docling to be available.
+If Docling is not available, use --engine=marker instead.
 """
 
 import sys
@@ -18,15 +21,6 @@ try:
     HAS_DOCLING = True
 except ImportError:
     HAS_DOCLING = False
-    # Silently handle missing docling for now
-
-# Use PyMuPDF as primary processor for now
-try:
-    import pymupdf
-    import pymupdf4llm
-    HAS_PYMUPDF = True
-except ImportError:
-    HAS_PYMUPDF = False
 
 
 def parse_arguments():
@@ -150,39 +144,6 @@ def create_smart_chunks(doc_path: Path, structure: Dict[str, Any],
     return chunks
 
 
-def process_with_pymupdf_fallback(doc_path: Path, output_path: Path,
-                                 verbose: bool = False) -> bool:
-    """
-    Process document using PyMuPDF4LLM (optimized markdown extraction).
-    """
-    if not HAS_PYMUPDF:
-        print("Error: PyMuPDF is not available", file=sys.stderr)
-        return False
-
-    try:
-        if verbose:
-            print(f"Processing {doc_path} with PyMuPDF4LLM...")
-
-        # Use pymupdf4llm for better markdown extraction
-        markdown_content = pymupdf4llm.to_markdown(
-            str(doc_path),
-            page_chunks=False,
-            write_images=False,
-            margins=(0, 50, 0, 50)  # top, right, bottom, left
-        )
-
-        # Write output
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(markdown_content, encoding='utf-8')
-
-        if verbose:
-            print(f"Successfully wrote markdown to {output_path}")
-
-        return True
-
-    except Exception as e:
-        print(f"Error processing document with PyMuPDF: {e}", file=sys.stderr)
-        return False
 
 
 def process_with_docling(doc_path: Path, output_path: Path,
@@ -191,10 +152,10 @@ def process_with_docling(doc_path: Path, output_path: Path,
     Process document using Docling and convert to markdown.
     """
     if not HAS_DOCLING:
-        # Fall back to PyMuPDF
-        if verbose:
-            print("Docling not available, using PyMuPDF fallback...")
-        return process_with_pymupdf_fallback(doc_path, output_path, verbose)
+        print("ERROR: Docling is not available.", file=sys.stderr)
+        print("Docling is currently blocked by build issues in nixpkgs.", file=sys.stderr)
+        print("Please use --engine=marker instead for document conversion.", file=sys.stderr)
+        return False
 
     try:
         if verbose:

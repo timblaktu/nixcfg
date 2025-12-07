@@ -2,6 +2,9 @@
 """
 Docling-based document processor for tomd using docling-serve.
 This version uses docling-serve to avoid the docling-parse build issue.
+
+NOTE: This processor requires docling-serve to be available.
+If docling-serve is not available, use --engine=marker instead.
 """
 
 import sys
@@ -13,14 +16,6 @@ import json
 import httpx
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-
-# Use PyMuPDF as fallback
-try:
-    import pymupdf
-    import pymupdf4llm
-    HAS_PYMUPDF = True
-except ImportError:
-    HAS_PYMUPDF = False
 
 
 def parse_arguments():
@@ -138,39 +133,6 @@ def process_with_docling_serve(doc_path: Path, output_path: Path,
         return False
 
 
-def process_with_pymupdf_fallback(doc_path: Path, output_path: Path,
-                                 verbose: bool = False) -> bool:
-    """
-    Process document using PyMuPDF4LLM as a fallback.
-    """
-    if not HAS_PYMUPDF:
-        print("Error: PyMuPDF is not available", file=sys.stderr)
-        return False
-
-    try:
-        if verbose:
-            print(f"Processing {doc_path} with PyMuPDF4LLM (fallback)...")
-
-        # Use pymupdf4llm for better markdown extraction
-        markdown_content = pymupdf4llm.to_markdown(
-            str(doc_path),
-            page_chunks=False,
-            write_images=False,
-            margins=(0, 50, 0, 50)  # top, right, bottom, left
-        )
-
-        # Write output
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(markdown_content, encoding='utf-8')
-
-        if verbose:
-            print(f"Successfully wrote markdown to {output_path}")
-
-        return True
-
-    except Exception as e:
-        print(f"Error processing document with PyMuPDF: {e}", file=sys.stderr)
-        return False
 
 
 def main():
@@ -184,47 +146,42 @@ def main():
         print(f"Error: Input file does not exist: {input_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Check if docling-serve is available
+    result = subprocess.run(
+        ["which", "docling-serve"],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print("ERROR: docling-serve is not available.", file=sys.stderr)
+        print("Docling is currently blocked by build issues in nixpkgs.", file=sys.stderr)
+        print("Please use --engine=marker instead for document conversion.", file=sys.stderr)
+        sys.exit(1)
+
     # Try to use docling-serve
     server_process = None
     success = False
 
     try:
-        # Check if docling-serve is available
-        result = subprocess.run(
-            ["which", "docling-serve"],
-            capture_output=True,
-            text=True
+        # Start docling server
+        server_process = start_docling_server(verbose=args.verbose)
+
+        # Process with docling-serve
+        success = process_with_docling_serve(
+            input_path, output_path,
+            verbose=args.verbose
         )
 
-        if result.returncode == 0:
-            # Start docling server
-            server_process = start_docling_server(verbose=args.verbose)
-
-            # Process with docling-serve
-            success = process_with_docling_serve(
-                input_path, output_path,
-                verbose=args.verbose
-            )
-        else:
-            if args.verbose:
-                print("docling-serve not found, using fallback...")
-
     except Exception as e:
-        if args.verbose:
-            print(f"Error with docling-serve: {e}")
+        print(f"Error with docling-serve: {e}", file=sys.stderr)
+        success = False
 
     finally:
         # Clean up server process
         if server_process:
             server_process.terminate()
             server_process.wait(timeout=5)
-
-    # If docling-serve failed, use fallback
-    if not success:
-        success = process_with_pymupdf_fallback(
-            input_path, output_path,
-            args.verbose
-        )
 
     if success:
         print(f"Successfully converted to: {output_path}")
