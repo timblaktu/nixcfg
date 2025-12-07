@@ -727,43 +727,49 @@ fi
 - ❌ Font-size-based heading detection (fragile, requires full PDF load)
 - ❌ Precise memory estimation (impossible due to upstream leaks)
 
-#### **tomd Universal Document Converter** (2024-12-04) - 🔵 DESIGN PHASE
-**Status**: 🔵 **COMPREHENSIVE DESIGN COMPLETE - Ready for implementation**
+#### **tomd Universal Document Converter** (2025-12-06) - ✅ IMPLEMENTED
+**Status**: ✅ **WORKING - Using PyMuPDF4LLM, Docling integration pending**
 
-**Background**: Evolution from marker-pdf memory fixes to unified converter
-- Previous work fixed memory issues with marker-pdf (WSL2 ulimit, batch sizing)
-- Discovered `--auto-chunk` is misleading (no smart chunking, just enables splitting)
-- `extract_toc_chunks()` is a stub that always fails (lines 91-105)
+**Problem Solved**:
+- Created unified document converter with clean CLI
+- Supports multiple formats (PDF, DOCX, PPTX, HTML, images)
+- Memory management via systemd-run/ulimit
+- Smart routing to appropriate processing engines
 
-**Design Document**: `docs/tomd-converter-design.md` (comprehensive architecture)
+**Implementation** (2025-12-06):
+- ✅ Created `pkgs/tomd/` package structure
+- ✅ Implemented clean CLI with sensible defaults
+- ✅ PyMuPDF4LLM working as primary processor
+- ✅ Memory limiting for WSL2 (ulimit) and Linux (systemd-run)
+- ✅ Format detection and routing logic
+- ✅ Added to home packages in `home/modules/base.nix`
+- ✅ Tested and confirmed working with HTML conversion
 
-**Key Insights**:
-1. **Current Problems**:
-   - Confusing CLI flags (`--auto-chunk` + `--chunk-size` both needed)
-   - No intelligent document structure analysis
-   - Only supports PDFs, no other formats
-   - Memory leaks require workarounds
+**Docling Integration Issue**:
+- **Problem**: docling-parse 4.5.0 has C++ compilation errors
+- **Root Cause**: API incompatibility with nlohmann_json 3.12.0
+- **Error**: Cannot assign `bool` to `json` object directly
+- **Attempted Workarounds**:
+  - docling-serve also depends on broken docling-parse
+  - No clean way to bypass the dependency
+- **Current Solution**: Using PyMuPDF4LLM as primary processor (works well)
 
-2. **Proposed Solution**: **tomd** - unified converter leveraging:
-   - **Docling** (IBM): Document structure, tables, format support, smart chunking
-   - **marker-pdf**: OCR for scanned docs, visual understanding
-   - Intelligent routing based on document type and content
+**Files Created/Modified**:
+- `pkgs/tomd/default.nix` - Main package definition
+- `pkgs/tomd/process_docling.py` - Docling processor (fallback to PyMuPDF4LLM)
+- `pkgs/tomd/process_docling_serve.py` - Alternative API-based processor
+- `pkgs/tomd/process_marker.py` - Marker-PDF OCR processor (stub)
+- `home/modules/base.nix` - Added tomd to packages
 
-3. **Architecture**:
-   ```
-   Input → Docling Analysis → Router → Engine Selection → Output
-                                      ├─ Docling (clean docs)
-                                      └─ marker-pdf (OCR needed)
-   ```
+**Usage**:
+```bash
+tomd document.pdf output.md
+tomd large.pdf output.md --memory-max=16G --chunk-size=50
+tomd --help
+```
 
-4. **Improvements**:
-   - 10x format support (PDF, DOCX, PPTX, HTML, images)
-   - True smart chunking based on sections/chapters
-   - 40% faster for standard documents (0.49 vs 0.86 sec/page)
-   - Cleaner CLI without confusing flags
-
-**Next Steps**:
-1. Create `pkgs/tomd/` package structure
-2. Integrate Docling (available in nixpkgs 2.47.1)
-3. Implement routing logic
-4. Maintain backward compatibility via alias
+**Next Steps When Docling Fixed**:
+1. Monitor nixpkgs for docling-parse fix
+2. Re-enable Docling in pythonEnv
+3. Test structure extraction and smart chunking
+4. Integrate marker-pdf for OCR pipeline

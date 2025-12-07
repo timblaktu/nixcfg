@@ -20,9 +20,10 @@ except ImportError:
     HAS_DOCLING = False
     # Silently handle missing docling for now
 
-# Use PyMuPDF as fallback
+# Use PyMuPDF as primary processor for now
 try:
     import pymupdf
+    import pymupdf4llm
     HAS_PYMUPDF = True
 except ImportError:
     HAS_PYMUPDF = False
@@ -152,30 +153,27 @@ def create_smart_chunks(doc_path: Path, structure: Dict[str, Any],
 def process_with_pymupdf_fallback(doc_path: Path, output_path: Path,
                                  verbose: bool = False) -> bool:
     """
-    Process document using PyMuPDF as a fallback when Docling is not available.
+    Process document using PyMuPDF4LLM (optimized markdown extraction).
     """
     if not HAS_PYMUPDF:
-        print("Error: Neither Docling nor PyMuPDF is available", file=sys.stderr)
+        print("Error: PyMuPDF is not available", file=sys.stderr)
         return False
 
     try:
         if verbose:
-            print(f"Processing {doc_path} with PyMuPDF (fallback)...")
+            print(f"Processing {doc_path} with PyMuPDF4LLM...")
 
-        doc = pymupdf.open(str(doc_path))
-        markdown_content = []
-
-        for page_num, page in enumerate(doc, 1):
-            if verbose:
-                print(f"  Processing page {page_num}/{len(doc)}...")
-            text = page.get_text()
-            markdown_content.append(f"## Page {page_num}\n\n{text}\n")
-
-        doc.close()
+        # Use pymupdf4llm for better markdown extraction
+        markdown_content = pymupdf4llm.to_markdown(
+            str(doc_path),
+            page_chunks=False,
+            write_images=False,
+            margins=(0, 50, 0, 50)  # top, right, bottom, left
+        )
 
         # Write output
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text('\n'.join(markdown_content), encoding='utf-8')
+        output_path.write_text(markdown_content, encoding='utf-8')
 
         if verbose:
             print(f"Successfully wrote markdown to {output_path}")

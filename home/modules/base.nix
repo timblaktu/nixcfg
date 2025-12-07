@@ -72,6 +72,7 @@ in
         lbzip2
         markitdown
         marker-pdf
+        (pkgs.callPackage ../../pkgs/tomd { })
         nix-diff
         nixfmt-rfc-style
         openssl

@@ -15,6 +15,7 @@ let
   pythonEnv = python3.withPackages (ps: with ps; [
     # Common dependencies
     pymupdf
+    pymupdf4llm
     pillow
 
     # PDF processing
@@ -24,7 +25,11 @@ let
     # File type detection
     filetype
 
-    # Note: Docling and marker-pdf will be added once build issues are resolved
+    # For API client if docling-serve is available
+    httpx
+
+    # Note: Docling will be added once build issues are fixed
+    # Note: marker-pdf integration pending
   ]);
 
   # Main tomd wrapper script
@@ -305,12 +310,22 @@ let
     case "$ENGINE" in
       docling)
         [[ "$VERBOSE" == "true" ]] && echo "Processing with Docling engine..."
-        apply_memory_limit ${pythonEnv}/bin/python ${./process_docling.py} \
-          "$INPUT_FILE" "$OUTPUT_FILE" \
-          --chunk-size "$CHUNK_SIZE" \
-          --smart-chunks "$SMART_CHUNKS" \
-          --no-chunks "$NO_CHUNKS" \
-          --verbose "$VERBOSE"
+        # Try docling-serve first, fallback to regular docling
+        if command -v docling-serve &> /dev/null; then
+          apply_memory_limit ${pythonEnv}/bin/python ${./process_docling_serve.py} \
+            "$INPUT_FILE" "$OUTPUT_FILE" \
+            --chunk-size "$CHUNK_SIZE" \
+            --smart-chunks "$SMART_CHUNKS" \
+            --no-chunks "$NO_CHUNKS" \
+            --verbose "$VERBOSE"
+        else
+          apply_memory_limit ${pythonEnv}/bin/python ${./process_docling.py} \
+            "$INPUT_FILE" "$OUTPUT_FILE" \
+            --chunk-size "$CHUNK_SIZE" \
+            --smart-chunks "$SMART_CHUNKS" \
+            --no-chunks "$NO_CHUNKS" \
+            --verbose "$VERBOSE"
+        fi
         ;;
       marker)
         [[ "$VERBOSE" == "true" ]] && echo "Processing with Marker engine (OCR)..."
@@ -356,6 +371,7 @@ stdenv.mkDerivation rec {
 
     # Copy Python processing scripts
     cp ${./process_docling.py} $out/bin/process_docling.py
+    cp ${./process_docling_serve.py} $out/bin/process_docling_serve.py
     cp ${./process_marker.py} $out/bin/process_marker.py
 
     # Wrap with PATH
