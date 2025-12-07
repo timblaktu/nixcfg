@@ -811,7 +811,7 @@ tomd document.pdf output.md --verbose
 - `f0e91bc` feat(tomd): implement universal document converter with PyMuPDF4LLM
 - `54b19e7` feat(tomd): integrate marker-pdf for OCR processing
 - `b279fb4` docs(tomd): add comprehensive usage guide with engine details and troubleshooting
-- `[PENDING]` fix(tomd): remove PyMuPDF and make marker-pdf the sole engine
+- `00ef26e` fix(tomd): remove PyMuPDF and make marker-pdf the sole engine
 
 **Next Steps When Docling Fixed**:
 1. Monitor nixpkgs for docling-parse fix
