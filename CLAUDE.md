@@ -341,6 +341,26 @@ programs.git.extraConfig = {
 - Used `programs.gh.package` to install wrapper instead of adding to `home.packages`
 - Used `mkForce` on credential helpers to override gh module defaults
 - Wrappers fetch tokens from Bitwarden on every invocation (fresh, never stale)
+- SOPS mode implemented but not tested (Bitwarden is primary use case)
+
+**Known Issues/Limitations**:
+- ⚠️ `git.cacheTimeout` option exists but has no effect (credential cache not used with wrapper approach)
+- ⚠️ `gitlab.glab.enableAliases` option exists but not implemented (glab doesn't have home-manager module)
+- Both are harmless - options exist for backward compatibility but don't affect functionality
+
+**Architecture Details**:
+- Wrappers defined in `let` block (always built, available in /nix/store)
+- gh wrapper installed via `programs.gh.package` (integrates with home-manager gh module)
+- glab wrapper installed via `home.packages` (no glab home-manager module exists)
+- Git credential helpers use full store paths (work even if not in PATH)
+- `mkForce` required only for GitHub (gh module also sets credential helpers)
+- GitLab doesn't need `mkForce` (no conflicting module)
+
+**Edge Cases Handled**:
+- ✅ `gh.enable = false` + `git.enableCredentialHelper = true`: Wrapper built but not in PATH, git can still use it via store path
+- ✅ Bitwarden locked: Commands fail gracefully (gh/glab show their own auth errors)
+- ✅ SOPS file missing: Commands exec without token env var (fall back to other auth methods)
+- ✅ Package conflicts: gh module uses wrapper as package, glab installed separately
 
 **Session Prompt**: `docs/auth-refactoring-session-2025-12-05.md`
 **Research Document**: `docs/git-auth-integration-research-2025-12-05.md` (448 lines)
