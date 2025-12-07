@@ -745,14 +745,15 @@ fi
 - ❌ Font-size-based heading detection (fragile, requires full PDF load)
 - ❌ Precise memory estimation (impossible due to upstream leaks)
 
-#### **tomd Universal Document Converter** (2025-12-06) - ✅ IMPLEMENTED
-**Status**: ✅ **WORKING - Using PyMuPDF4LLM, Docling integration pending**
+#### **tomd Universal Document Converter** (2025-12-06) - ✅ COMPLETE
+**Status**: ✅ **FULLY OPERATIONAL - PyMuPDF4LLM + marker-pdf working, Docling pending**
 
 **Problem Solved**:
 - Created unified document converter with clean CLI
 - Supports multiple formats (PDF, DOCX, PPTX, HTML, images)
 - Memory management via systemd-run/ulimit
 - Smart routing to appropriate processing engines
+- OCR pipeline fully integrated via marker-pdf
 
 **Implementation** (2025-12-06):
 - ✅ Created `pkgs/tomd/` package structure
@@ -761,33 +762,47 @@ fi
 - ✅ Memory limiting for WSL2 (ulimit) and Linux (systemd-run)
 - ✅ Format detection and routing logic
 - ✅ Added to home packages in `home/modules/base.nix`
-- ✅ Tested and confirmed working with HTML conversion
+- ✅ Tested and confirmed working with HTML and PDF conversion
+- ✅ **marker-pdf integration complete** (2025-12-06)
+  - Full OCR pipeline through marker-pdf-env wrapper
+  - Automatic OCR detection using pdftotext
+  - Memory management and chunking support
+  - Progress indicators in verbose mode
+  - Handles scanned PDFs and images
 
-**Docling Integration Issue**:
+**Docling Integration Issue** (Still Blocked):
 - **Problem**: docling-parse 4.5.0 has C++ compilation errors
 - **Root Cause**: API incompatibility with nlohmann_json 3.12.0
-- **Error**: Cannot assign `bool` to `json` object directly
-- **Attempted Workarounds**:
-  - docling-serve also depends on broken docling-parse
-  - No clean way to bypass the dependency
-- **Current Solution**: Using PyMuPDF4LLM as primary processor (works well)
+- **Current Solution**: PyMuPDF4LLM (fast) + marker-pdf (OCR) cover all use cases
 
 **Files Created/Modified**:
-- `pkgs/tomd/default.nix` - Main package definition
+- `pkgs/tomd/default.nix` - Main package with marker-pdf integration
 - `pkgs/tomd/process_docling.py` - Docling processor (fallback to PyMuPDF4LLM)
 - `pkgs/tomd/process_docling_serve.py` - Alternative API-based processor
-- `pkgs/tomd/process_marker.py` - Marker-PDF OCR processor (stub)
+- `pkgs/tomd/process_marker.py` - **COMPLETE** marker-pdf OCR processor
+- `pkgs/default.nix` - Updated to pass marker-pdf to tomd
 - `home/modules/base.nix` - Added tomd to packages
 
 **Usage**:
 ```bash
+# Simple conversion (auto-detects engine)
 tomd document.pdf output.md
+
+# Force OCR engine for scanned PDFs
+tomd scanned.pdf output.md --engine=marker
+
+# Control memory usage for large PDFs
 tomd large.pdf output.md --memory-max=16G --chunk-size=50
-tomd --help
+
+# Verbose mode shows OCR progress
+tomd document.pdf output.md --engine=marker --verbose
 ```
+
+**Commits**:
+- `f0e91bc` feat(tomd): implement universal document converter with PyMuPDF4LLM
+- `54b19e7` feat(tomd): integrate marker-pdf for OCR processing
 
 **Next Steps When Docling Fixed**:
 1. Monitor nixpkgs for docling-parse fix
-2. Re-enable Docling in pythonEnv
-3. Test structure extraction and smart chunking
-4. Integrate marker-pdf for OCR pipeline
+2. Re-enable Docling in pythonEnv for superior structure extraction
+3. Test Docling's smart chunking and table extraction
