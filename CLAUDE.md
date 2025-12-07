@@ -214,13 +214,23 @@ For details, see:
 ### Active Development
 
 #### **PDF-to-Markdown Conversion Tools** (2025-12-07) - ✅ RESOLVED
-**Status**: marker-pdf ✅ WORKING | docling ✅ WORKING (nlohmann_json downgraded)
+**Status**: marker-pdf ✅ WORKING | docling ✅ BUILDS (nlohmann_json 3.11.3) | tomd 🔧 TESTING
 
 **Resolution Summary**:
 - **Root Cause**: nlohmann_json 3.12.0 has internal bug where SAX parser uses deleted bool constructor
 - **Solution Implemented**: Downgraded nlohmann_json to 3.11.3 in nixpkgs fork
 - **nixpkgs Branch**: `docling-parse-fix` (commit 259687eb0)
 - **Result**: docling-parse and docling build successfully
+
+**Current Testing Status** (2025-12-07 15:55):
+- ✅ **marker-pdf**: Confirmed working - processes PDFs with OCR (slower but functional)
+- 🔧 **docling**: Package builds but runtime testing pending due to build times
+- 🔧 **tomd**: Package definition exists but full build takes time due to dependencies
+- **Test Files Created**: `test.html`, `test_input.pdf` for pipeline verification
+
+**Build Dependencies Taking Time**:
+- google-cloud-cpp, arrow-cpp, pyarrow (required for pandas dependencies)
+- onnxruntime, transformers (for ML models)
 
 **Lessons Learned**:
 1. **docling-parse PR #184** was attempting impossible workarounds - the bug is in nlohmann_json itself
