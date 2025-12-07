@@ -179,14 +179,42 @@ The only working solution is to use the venv-based approach in `pkgs/tomd/defaul
 **IMPORTANT**: User requires UPSTREAM FIXES only. NO pip/venv workarounds accepted.
 
 **Local Forks for Development**:
-- `/home/tim/src/docling-parse` - docling-parse source (branch: fix/nlohmann-json-3.12-bool-conversion)
+- `/home/tim/src/docling-parse` - docling-parse source (branch: fix/cmake-cpp17)
 - `/home/tim/src/nixpkgs` - nixpkgs fork (needs branch for docling-parse fix)
 
+## Root Cause Analysis - CONFIRMED (2025-12-07 continued)
+
+### The Core Problem
+The error occurs at line 1148 of nlohmann_json's json.hpp where a template tries to access `typename JsonRef::value_type` when `JsonRef` is `bool`. The template metaprogramming assumes the type has nested types, which fundamental types like `bool` don't have.
+
+### Why C++17 Didn't Fix It
+The issue is NOT the C++ standard version but rather how docling-parse's templates interact with nlohmann_json's SFINAE patterns. The template instantiation path that leads to treating `bool` as a class type exists in both C++17 and C++20.
+
+### Potential Solutions Still To Try
+
+1. **Use nlohmann::json::boolean_t wrapper**:
+   ```cpp
+   result = nlohmann::json::boolean_t(val);
+   ```
+
+2. **Direct JSON object construction with type tag**:
+   ```cpp
+   result = nlohmann::json(nlohmann::json::value_t::boolean);
+   result.get_ref<bool&>() = val;
+   ```
+
+3. **Patch nlohmann_json itself** to add explicit bool handling in the problematic template
+
+4. **Use compiler flags** to change template instantiation behavior:
+   - `-fno-implicit-templates`
+   - `-ftemplate-backtrace-limit=0`
+   - `-fconcepts` (for C++20 concepts-based resolution)
+
 **Next Session Must**:
-1. Check docling-parse fork status
-2. Try C++17 fix in CMakeLists.txt
-3. Test build with modified CMake
-4. If successful, create PRs to both docling-parse and nixpkgs
+1. Test boolean_t wrapper approach
+2. If that fails, try direct construction with value_t
+3. If both fail, create nixpkgs patch to use older nlohmann_json
+4. File upstream issue with minimal reproducible example
 
 ## C++17 Fix Test Results (2025-12-07 Session Continuation)
 
