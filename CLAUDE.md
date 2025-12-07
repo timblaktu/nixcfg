@@ -765,41 +765,33 @@ fi
 - ❌ Font-size-based heading detection (fragile, requires full PDF load)
 - ❌ Precise memory estimation (impossible due to upstream leaks)
 
-#### **tomd Universal Document Converter** (2025-12-06) - ✅ COMPLETE
-**Status**: ✅ **FULLY OPERATIONAL - PyMuPDF4LLM + marker-pdf working, Docling pending**
+#### **tomd Universal Document Converter** (2025-12-06) - ❌ CRITICAL FIX REQUIRED
+**Status**: ❌ **WRONG IMPLEMENTATION - Using PyMuPDF instead of marker-pdf**
 
-**Problem Solved**:
-- Created unified document converter with clean CLI
-- Supports multiple formats (PDF, DOCX, PPTX, HTML, images)
-- Memory management via systemd-run/ulimit
-- Smart routing to appropriate processing engines
-- OCR pipeline fully integrated via marker-pdf
+**CRITICAL ISSUE IDENTIFIED** (2025-12-06):
+- ❌ **WRONG ENGINE**: Implementation uses PyMuPDF4LLM as default/fallback
+- ❌ **USER REQUIREMENT VIOLATED**: PyMuPDF was explicitly rejected for poor performance
+- ❌ **INCORRECT FALLBACK**: Should use marker-pdf, NOT PyMuPDF when Docling unavailable
+- ❌ **MISLEADING TESTS**: All testing done with wrong engine (PyMuPDF instead of marker-pdf)
+- ❌ **DOCUMENTATION WRONG**: Describes incorrect implementation
 
-**Implementation** (2025-12-06):
-- ✅ Created `pkgs/tomd/` package structure
-- ✅ Implemented clean CLI with sensible defaults
-- ✅ PyMuPDF4LLM working as primary processor
-- ✅ Memory limiting for WSL2 (ulimit) and Linux (systemd-run)
-- ✅ Format detection and routing logic
-- ✅ Added to home packages in `home/modules/base.nix`
-- ✅ Tested and confirmed working with HTML and PDF conversion
-- ✅ **marker-pdf integration complete** (2025-12-06)
-  - Full OCR pipeline through marker-pdf-env wrapper
-  - Automatic OCR detection using pdftotext
-  - Memory management and chunking support
-  - Progress indicators in verbose mode
-  - Handles scanned PDFs and images
-- ✅ **Comprehensive documentation created** (2025-12-06)
-  - `docs/tools/tomd-usage-guide.md` - Full usage guide with examples
-  - Engine capabilities comparison
-  - Memory recommendations by document size
-  - Troubleshooting section
+**What User Actually Required**:
+1. **PRIMARY**: Docling (when available) - best structure extraction
+2. **FALLBACK**: marker-pdf - ML-based OCR and layout analysis
+3. **NEVER USE**: PyMuPDF/PyMuPDF4LLM - explicitly rejected for poor performance
 
-**Testing Completed** (2025-12-06):
-- ✅ HTML conversion tested - working with PyMuPDF fallback
-- ✅ PDF conversion tested - working with PyMuPDF (12-page document)
-- ⚠️ Image OCR requires marker-pdf in environment (expected)
-- ⚠️ DOCX/PPTX await Docling fix for optimal processing
+**What Was Incorrectly Built**:
+- PyMuPDF4LLM as primary processor when Docling unavailable
+- Silent fallback to PyMuPDF (process_docling.py line 197)
+- pymupdf/pymupdf4llm in Python environment
+- Documentation describing PyMuPDF as "default"
+
+**Required Fixes**:
+1. Remove ALL PyMuPDF/PyMuPDF4LLM code
+2. Make marker-pdf the ONLY engine until Docling available
+3. Update all documentation to reflect marker-pdf as primary
+4. Re-test everything with correct marker-pdf engine
+5. See `docs/tomd-correction-prompt-2025-12-06.md` for detailed fix plan
 
 **Docling Integration Issue** (Still Blocked):
 - **Problem**: docling-parse 4.5.0 has C++ compilation errors
