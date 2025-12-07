@@ -213,17 +213,18 @@ For details, see:
 
 ### Active Development
 
-#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - 🟡 UPSTREAM PR SUBMITTED
+#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - 🟢 PR CHECKS PASSING
 **Status**: marker-pdf ✅ WORKING | docling ⏳ PR #184 PENDING (C++20 template resolution fix)
 
 **UPSTREAM PR SUBMITTED**: https://github.com/docling-project/docling-parse/pull/184
-- **PR Title**: "Fix: Use nlohmann::json::boolean_t wrapper for bool conversion"
+- **PR Title**: "fix: use nlohmann::json::boolean_t wrapper for bool conversion" (follows conventional commit)
 - **Branch**: `fix/boolean-t-wrapper` (pushed to timblaktu/docling-parse fork)
 - **Solution**: Use `nlohmann::json::boolean_t()` wrapper for proper C++20 template resolution
 - **Testing**: Verified with nlohmann_json 3.11.x/3.12.x and C++17/C++20 modes
+- **PR Status**: ✅ All CI checks passing (DCO signed, conventional commit format)
 
 **Active Work - AWAITING UPSTREAM REVIEW**:
-1. **docling-parse PR #184**: Awaiting maintainer review and merge
+1. **docling-parse PR #184**: All checks passing, awaiting maintainer review
 2. **nixpkgs fork**: `/home/tim/src/nixpkgs` (will update package after upstream merge)
 3. **Investigation docs**: `docs/nlohmann-json-bool-api-investigation-2025-12-07.md`
 
