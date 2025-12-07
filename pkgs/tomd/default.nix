@@ -8,6 +8,8 @@
 , jq
 , gawk
 , coreutils
+, poppler_utils  # For pdftotext to check if OCR is needed
+, marker-pdf ? null  # Optional: marker-pdf package for OCR
 }:
 
 let
@@ -329,10 +331,23 @@ let
         ;;
       marker)
         [[ "$VERBOSE" == "true" ]] && echo "Processing with Marker engine (OCR)..."
+
+        # Check if large PDF and suggest auto-chunking
+        FILE_SIZE_MB=$(stat -c%s "$INPUT_FILE" 2>/dev/null | awk '{print int($1/1024/1024)}')
+        if [[ "$FILE_SIZE_MB" -gt 50 ]] && [[ "$NO_CHUNKS" != "true" ]]; then
+          AUTO_CHUNK_FLAG="--auto-chunk"
+          [[ "$VERBOSE" == "true" ]] && echo "Large file detected (''${FILE_SIZE_MB}MB), enabling auto-chunking"
+        else
+          AUTO_CHUNK_FLAG=""
+        fi
+
         apply_memory_limit ${pythonEnv}/bin/python ${./process_marker.py} \
           "$INPUT_FILE" "$OUTPUT_FILE" \
           --chunk-size "$CHUNK_SIZE" \
           --batch-multiplier "$BATCH_MULTIPLIER" \
+          --memory-max "$MEMORY_MAX" \
+          --memory-high "$MEMORY_HIGH" \
+          $AUTO_CHUNK_FLAG \
           --verbose "$VERBOSE"
         ;;
       *)
@@ -360,7 +375,8 @@ stdenv.mkDerivation rec {
     jq
     gawk
     coreutils
-  ];
+    poppler_utils
+  ] ++ lib.optionals (marker-pdf != null) [ marker-pdf ];
 
   installPhase = ''
     mkdir -p $out/bin
@@ -376,7 +392,8 @@ stdenv.mkDerivation rec {
 
     # Wrap with PATH
     wrapProgram $out/bin/tomd \
-      --prefix PATH : ${lib.makeBinPath [ qpdf systemd jq gawk coreutils pythonEnv ]}
+      --prefix PATH : ${lib.makeBinPath ([ qpdf systemd jq gawk coreutils pythonEnv poppler_utils ]
+        ++ lib.optionals (marker-pdf != null) [ marker-pdf ])}
   '';
 
   meta = with lib; {
