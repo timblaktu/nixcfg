@@ -222,30 +222,39 @@ For details, see:
 3. **tomd** - Universal converter using marker-pdf (✅ FUNCTIONAL)
 
 **The Docling Problem**:
-- **Root Cause**: nlohmann_json 3.12.0 removed bool-to-json conversions
-- **Impact**: docling-parse 4.5.0 cannot compile with nixpkgs' nlohmann_json
+- **Symptom**: docling-parse 4.5.0 cannot compile with nixpkgs' nlohmann_json 3.12
+- **Suspected Root Cause**: nlohmann_json API breaking changes in bool handling
 - **Nixpkgs Status**: Issue #426428 closed without fix - package still broken
-- **Upstream**: Neither DS4SD/docling-parse nor nixpkgs have addressed this
 
-**Research Findings** (2025-12-07):
-- ✅ Confirmed nixpkgs build fails with exact same errors we documented
-- ✅ No one else has publicly solved this issue
-- ❌ parse("true")/parse("false") workaround causes internal nlohmann_json errors
-- ❌ Upstream docling-parse hasn't updated for nlohmann_json 3.12
-- ❌ Nixpkgs maintainers unaware of root cause
+**⚠️ CRITICAL INSIGHT (2025-12-07 18:15 AEDT)**:
+We've been fixing the WRONG thing! The issue is likely in nlohmann_json itself, not docling-parse.
 
-**Current Status** (2025-12-07 18:00 AEDT):
-- **Local Repository**: `/home/tim/src/docling-parse` (branch: fix/nlohmann-json-3.12-bool-conversion)
-- **Fixes Applied**: Comprehensive bool conversion changes to all 3 affected files (commit 4d6fb6c)
-- **Build Status**: ❌ FAILED - parse() approach causes compilation errors
-- **Blocker**: Need alternative bool-to-json conversion approach
-- **GitHub**: Cannot fork - authentication not configured in Claude Code session
+**Research Priority** (NEXT SESSION):
+1. **Investigate nlohmann_json directly**:
+   - Clone nlohmann/json repository
+   - Review changelog for bool-related API changes between 3.11 and 3.12
+   - Check their test suite for bool conversion examples
+   - Determine if this is a bug or intentional API change
+2. **Evaluate nlohmann_json nixpkg**:
+   - Check if nixpkgs has patches for nlohmann_json
+   - Test nlohmann_json's own test suite in Nix environment
+   - Identify if other packages are affected
+3. **Root Cause Analysis**:
+   - Is this a regression in nlohmann_json?
+   - Is this an intentional API change poorly documented?
+   - Should nlohmann_json be fixed rather than all dependent packages?
 
-**Next Actions Required**:
-1. **Find Working Fix**: Explore alternative bool conversion methods
-2. **Manual GitHub Setup**: User needs to configure GitHub auth (`gh auth login`) or manually fork
-3. **Test & Validate**: Once working fix found, thoroughly test
-4. **Submit PRs**: To both DS4SD/docling-parse and NixOS/nixpkgs
+**Work Done (Potentially Misdirected)**:
+- Created docling-parse fixes at `/home/tim/src/docling-parse`
+- Attempted parse("true")/parse("false") workarounds - FAILED
+- Multiple Nix package override attempts - ALL FAILED
+
+**Correct Approach**:
+1. **STOP working on docling-parse fixes**
+2. **START investigating nlohmann_json source and tests**
+3. **IDENTIFY the exact API change and its rationale**
+4. **DETERMINE if fix belongs in nlohmann_json or its dependents**
+5. **THEN decide correct fix location**
 
 **Documentation**:
 - `docs/docling-parse-bool-conversion-fix-2025-12-07.md` - Problem analysis
