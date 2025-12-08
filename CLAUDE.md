@@ -213,41 +213,35 @@ For details, see:
 
 ### Active Development
 
-#### **PDF-to-Markdown Conversion Tools** (2025-12-07) - ✅ RESOLVED
-**Status**: marker-pdf ✅ WORKING | docling ✅ BUILDS (nlohmann_json 3.11.3) | tomd 🔧 TESTING
+#### **PDF-to-Markdown Conversion Tools** (2025-12-08) - ⚠️ GPU ISSUE
+**Status**: marker-pdf 🔴 NOT USING GPU | docling ✅ BUILDS | tomd ✅ FIXED
 
-**Resolution Summary**:
-- **Root Cause**: nlohmann_json 3.12.0 has internal bug where SAX parser uses deleted bool constructor
-- **Solution Implemented**: Downgraded nlohmann_json to 3.11.3 in nixpkgs fork
-- **nixpkgs Branch**: `docling-parse-fix` (commit 259687eb0)
-- **Result**: docling-parse and docling build successfully
+**Critical Discovery** (from Opus 4.5 research):
+- **VRAM Requirements CORRECTED**: Only needs ~4GB (NOT 16GB+ as initially thought)
+- **Hardware IS Sufficient**: 8GB VRAM is MORE than enough
+- **Root Problem**: marker-pdf runs on CPU despite CUDA being available
+- **Performance Impact**: 100x slower (20s/block instead of <1s)
 
-**Current Testing Status** (2025-12-07 16:30):
-- ✅ **marker-pdf**: Confirmed working - processes PDFs with OCR (slower but functional)
-- 🔧 **docling**: Package builds but runtime testing pending due to build times
-- 🔧 **tomd**: Package defined but has bugs found in review (see review doc)
-- **Review Completed**: Found critical bugs and missing features - documented in `docs/tomd-review-findings-2025-12-07.md`
+**GPU/CUDA Status**:
+- ✅ CUDA available: `torch.cuda.is_available()` returns True
+- ✅ GPU detected: RTX 2000 Ada with 8GB VRAM
+- ❌ GPU not used: 0MB VRAM usage during execution
+- ❌ Library path issue: Requires manual `LD_LIBRARY_PATH` setting
 
-**Critical Issues Found**:
-- Missing `file` utility dependency in tomd package
-- Memory parsing bug (assumes G suffix)
-- Python argument parsing inconsistency
-- Incomplete chunking implementation in docling processor
-- See full review document for complete findings
+**Immediate Actions Needed**:
+1. Force GPU usage in marker-pdf (set `TORCH_DEVICE=cuda`)
+2. Fix library paths in wrapper (include gcc-lib)
+3. Use proper batch sizes for 8GB VRAM
 
-**Build Dependencies Taking Time**:
-- google-cloud-cpp, arrow-cpp, pyarrow (required for pandas dependencies)
-- onnxruntime, transformers (for ML models)
-
-**Lessons Learned**:
-1. **docling-parse PR #184** was attempting impossible workarounds - the bug is in nlohmann_json itself
-2. The correct fix would require patching nlohmann_json, not docling-parse
-3. Downgrading nlohmann_json is the pragmatic solution until upstream fixes their SAX parser
+**Alternative Solutions**:
+- **CPU-only**: Use `OCR_ENGINE=ocrmypdf` (Tesseract-based, faster)
+- **Digital PDFs**: Set `OCR_ENGINE=None` to skip OCR
+- **Consider Docling**: 5x faster on CPU (3.1 vs 16+ sec/page)
 
 **Documentation**:
-- Full investigation: `docs/nlohmann-json-3.12-incompatibility.md`
-- Shows all attempted fixes and why they fail
-- Explains the internal contradiction in nlohmann_json 3.12.0
+- Updated analysis: `docs/tomd-test-results-2025-12-07.md`
+- Includes Opus 4.5's corrections and recommendations
+- Shows actual VRAM requirements and GPU detection issues
 
 ## MANDATORY: Next Session Prompt Template
 After EVERY response, provide this format:

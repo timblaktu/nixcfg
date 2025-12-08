@@ -1,10 +1,10 @@
 # PDF-to-Markdown Tool Testing Results
-**Date**: 2025-12-07
-**Status**: tomd package builds successfully, marker-pdf has runtime limitations
+**Date**: 2025-12-07 (Updated: 2025-12-08)
+**Status**: tomd package builds successfully, marker-pdf not using GPU despite CUDA availability
 
 ## Executive Summary
 
-The `tomd` PDF-to-markdown conversion tool has been successfully fixed and builds properly. However, runtime testing reveals significant memory requirements for the marker-pdf engine that make it challenging to run in resource-constrained environments.
+The `tomd` PDF-to-markdown conversion tool has been successfully fixed and builds properly. Testing reveals that marker-pdf is NOT utilizing the GPU even though CUDA is available, causing extremely slow performance (20+ seconds per text block).
 
 ## Test Results
 
@@ -30,22 +30,27 @@ Options work as expected:
 
 ### 3. Marker-PDF Runtime Issues ⚠️
 
-#### Memory Requirements
-- **Model Loading**: Requires ~1.5GB just to load the layout model
-- **Total Memory**: Needs 4-8GB RAM minimum for small PDFs
-- **GPU Memory**: Originally designed for CUDA GPUs with 8GB+ VRAM
+#### CORRECTED VRAM Requirements (per Opus 4.5 research)
+- **Actual VRAM needed**: ~3-4.5GB (NOT 16GB+ as initially thought)
+- **Peak usage**: 4.2GB for nougat, 4.1GB for marker
+- **Available VRAM**: 8GB (RTX 2000 Ada) - MORE than sufficient
 
-#### CUDA Dependencies
-- Initial issue: PyTorch installed via pip includes CUDA dependencies
-- Solution: Installed CPU-only PyTorch (`torch+cpu`)
-- Result: Removed CUDA errors but increased CPU memory requirements
+#### GPU Not Being Used (Root Cause)
+- **CUDA IS available**: `torch.cuda.is_available()` returns True
+- **GPU detected**: nvidia-smi shows RTX 2000 Ada with 8GB VRAM
+- **BUT**: marker-pdf runs on CPU anyway (0MB GPU memory usage during execution)
+- **Performance impact**: 20+ seconds per text block instead of <1 second
 
-#### Current Limitations
-1. **Memory Allocation Failures**: Even with 27GB available RAM, model loading fails due to memory fragmentation or ulimit restrictions in WSL
-2. **Model Size**: The ML models (layout, detection, OCR) are very large:
-   - Layout model: ~1.4GB
-   - Additional models loaded on demand
-3. **Processing Speed**: Without GPU acceleration, processing is very slow (2+ minutes for 12-page PDF)
+#### Library Path Issues
+- PyTorch requires libstdc++.so.6 from gcc-lib
+- Must set: `LD_LIBRARY_PATH="/usr/lib/wsl/lib:/nix/store/.../gcc-14.3.0-lib/lib"`
+- Without this, PyTorch won't import at all
+
+#### Current Status
+1. **CUDA works**: PyTorch can access CUDA when libraries are properly linked
+2. **Models fit in VRAM**: Only need ~4GB of the available 8GB
+3. **Not using GPU**: Despite everything being available, marker defaults to CPU
+4. **Extremely slow**: 12-page PDF would take ~2 hours on CPU vs minutes on GPU
 
 ### 4. Bugs Fixed During Testing
 
@@ -61,31 +66,37 @@ Options work as expected:
 
 ## Recommendations
 
-### For Immediate Use
+### Immediate Fixes Needed
 
-1. **Simple PDF Conversion**: For PDFs with extractable text (not scanned), consider using simpler tools:
-   - `pdftotext` (poppler-utils) for plain text extraction
-   - `pandoc` with PDF reader for structured conversion
+1. **Force GPU Usage in marker-pdf**:
+   - Set device explicitly: `device = torch.device('cuda:0')`
+   - Ensure models are moved to GPU: `.to('cuda')`
+   - Add environment variables: `TORCH_DEVICE=cuda`, `CUDA_VISIBLE_DEVICES=0`
 
-2. **Marker-PDF Requirements**: If ML-based OCR is needed:
-   - Ensure at least 8GB free RAM
-   - Consider using a system with CUDA GPU support
-   - Run on native Linux (not WSL) for better memory management
+2. **Fix Library Path in Wrapper**:
+   - marker-pdf wrapper needs to properly set `LD_LIBRARY_PATH`
+   - Include gcc-lib path for libstdc++.so.6
 
-### For Future Development
+3. **Optimize for 8GB VRAM**:
+   - Set `INFERENCE_RAM=7` (leave 1GB for system)
+   - Use `--batch_multiplier 1` (uses ~3GB VRAM)
+   - Or specific batch sizes: `--layout_batch_size 1 --detection_batch_size 1`
 
-1. **Alternative Engines**:
-   - Add lighter-weight PDF conversion options
-   - Implement fallback to simpler tools when marker-pdf fails
+### Alternative Solutions (from Opus research)
 
-2. **Memory Optimization**:
-   - Investigate model quantization options
-   - Add option to download smaller models
-   - Implement better memory pre-checks before attempting conversion
+1. **For CPU-only scenarios**:
+   - Set `OCR_ENGINE=ocrmypdf` (uses Tesseract, faster on CPU)
+   - Or `OCR_ENGINE=None` for digital PDFs with embedded text
 
-3. **Docling Integration**:
-   - Wait for nlohmann_json 3.12 fix or maintain fork with 3.11.3
-   - Docling promises better memory efficiency than marker-pdf
+2. **Consider Docling**:
+   - 5x faster than marker on CPU (3.1 sec/page vs 16+ sec/page)
+   - MIT-licensed, better for CPU-bound environments
+   - Already has nlohmann_json 3.11.3 workaround
+
+3. **Proper Nix Packaging**:
+   - Package marker-pdf dependencies properly in nixpkgs
+   - Avoid pip virtual environments for better reproducibility
+   - Use fixed-output derivations for ML models
 
 ## Test Commands Used
 
@@ -105,4 +116,10 @@ nix run '.#marker-pdf' -- marker_single test.pdf /tmp/output --batch-multiplier 
 
 ## Conclusion
 
-The tomd tool infrastructure is working correctly, but the marker-pdf engine has significant resource requirements that limit its usability in development environments. The tool would benefit from additional lightweight conversion engines for simpler use cases where ML-based OCR is not required.
+The tomd tool infrastructure works correctly, and **marker-pdf has sufficient resources** (24GB RAM, 8GB VRAM). The critical issue is that marker-pdf is **not using the available GPU** despite CUDA being properly available. This causes extreme slowdown (100x slower) making it impractical.
+
+**Key Insights from Opus 4.5 Research**:
+- 8GB VRAM is MORE than sufficient (only needs ~4GB)
+- The tool should work fine on this hardware
+- The issue is configuration/implementation, not hardware limitations
+- Docling might be a better alternative for CPU-only scenarios
