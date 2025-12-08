@@ -328,15 +328,36 @@ process_chunked() {
   local merged_md="$output_dir/$(basename "$input_pdf" .pdf).md"
   : > "$merged_md"  # Create empty file
 
+  local files_merged=0
+  echo "Looking for output files in: $chunk_dir/output-*"
+
   for ((i=1; i<chunk_num; i++)); do
     local chunk_output="$chunk_dir/output-$i"
-    if [ -f "$chunk_output"/*.md ]; then
-      cat "$chunk_output"/*.md >> "$merged_md"
-      echo "" >> "$merged_md"  # Add blank line between chunks
-    fi
+    echo "Checking chunk output directory: $chunk_output"
+    # marker-pdf saves files WITHOUT .md extension!
+    # Find all files in the output directory (excluding subdirs)
+    for output_file in "$chunk_output"/*; do
+      if [ -f "$output_file" ]; then
+        # Check if this is likely a markdown file (marker saves without extension)
+        # Skip image files and other non-text files
+        case "$(basename "$output_file")" in
+          *.png|*.jpg|*.jpeg|*.pdf|*.json)
+            # Skip non-markdown files
+            ;;
+          *)
+            echo "  Merging: $(basename "$output_file")"
+            cat "$output_file" >> "$merged_md"
+            echo "" >> "$merged_md"  # Add blank line between chunks
+            files_merged=$((files_merged + 1))
+            ;;
+        esac
+      fi
+    done
   done
 
-  echo "Merged output: $merged_md"
+  echo ""
+  echo "Merged $files_merged files into: $merged_md"
+  echo "Final file size: $(wc -c < "$merged_md") bytes"
 
   # Copy any other output files
   find "$chunk_dir"/output-* -type f ! -name "*.md" -exec cp {} "$output_dir/" \;
