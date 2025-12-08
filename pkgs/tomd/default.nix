@@ -39,10 +39,10 @@ let
     set -euo pipefail
 
     # Constants
-    DEFAULT_CHUNK_SIZE=100
+    DEFAULT_CHUNK_SIZE=75
     DEFAULT_MEMORY_MAX="24G"
     DEFAULT_MEMORY_HIGH="20G"
-    DEFAULT_BATCH_MULTIPLIER="0.5"
+    DEFAULT_BATCH_MULTIPLIER="0.75"
     DEFAULT_ENGINE="marker"  # marker-pdf is the only working engine currently
 
     # Variables
@@ -79,7 +79,7 @@ let
       --no-chunks          Process as single file (may use lots of memory)
       --memory-max=SIZE    Maximum memory limit (default: $DEFAULT_MEMORY_MAX)
       --memory-high=SIZE   High memory watermark (default: $DEFAULT_MEMORY_HIGH)
-      --batch-multiplier=N GPU batch size multiplier (default: $DEFAULT_BATCH_MULTIPLIER)
+      --batch-multiplier=N GPU batch size multiplier (default: $DEFAULT_BATCH_MULTIPLIER, optimized for 8GB VRAM)
       --verbose            Show detailed processing information
       --help               Show this help message
 

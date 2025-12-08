@@ -22,10 +22,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Process documents with Marker (OCR)")
     parser.add_argument("input_file", help="Input document path")
     parser.add_argument("output_file", help="Output markdown file path")
-    parser.add_argument("--chunk-size", type=int, default=50,
-                        help="Maximum pages per chunk (default: 50 for 8GB GPU)")
-    parser.add_argument("--batch-multiplier", type=float, default=0.5,
-                        help="GPU batch size multiplier (0.5 = less memory)")
+    parser.add_argument("--chunk-size", type=int, default=75,
+                        help="Maximum pages per chunk (default: 75 for 8GB GPU)")
+    parser.add_argument("--batch-multiplier", type=float, default=0.75,
+                        help="GPU batch size multiplier (0.75 = optimized for 8GB VRAM)")
     parser.add_argument("--memory-max", type=str, default="24G",
                         help="Maximum memory limit")
     parser.add_argument("--memory-high", type=str, default="20G",
@@ -93,8 +93,8 @@ def check_ocr_needed(doc_path: Path) -> Tuple[bool, str]:
 
 
 def process_with_marker_pdf_env(doc_path: Path, output_path: Path,
-                                batch_multiplier: float = 0.5,
-                                chunk_size: int = 50,
+                                batch_multiplier: float = 0.75,
+                                chunk_size: int = 75,
                                 memory_max: str = "24G",
                                 memory_high: str = "20G",
                                 auto_chunk: bool = False,
