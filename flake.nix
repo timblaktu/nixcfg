@@ -4,7 +4,7 @@
   inputs = {
     # nixpkgs.url = "github:timblaktu/nixpkgs/writers-auto-detection";
     nixpkgs.url = "github:timblaktu/nixpkgs/docling-parse-fix"; # Includes docling-parse PR #184 fix
-    # nixpkgs.url = "git+file:///home/tim/src/nixpkgs?ref=docling-parse-fix";  # For local dev
+    # nixpkgs.url = "git+file:///home/tim/src/nixpkgs?ref=docling-parse-fix&shallow=true";  # For local dev
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-24.11";
     # nixpkgs-unstable for nixvim (has postgres-lsp and other recent packages)
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";

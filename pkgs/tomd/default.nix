@@ -8,6 +8,7 @@
 , jq
 , gawk
 , coreutils
+, file  # For MIME type detection
 , poppler_utils  # For pdftotext to check if OCR is needed
 , marker-pdf ? null  # Optional: marker-pdf package for OCR
 }:
@@ -251,8 +252,28 @@ let
 
       if is_wsl; then
         # WSL: Use ulimit for memory limiting
-        local memory_limit_kb=$(( ''${MEMORY_MAX%G} * 1024 * 1024 ))
-        [[ "$VERBOSE" == "true" ]] && echo "Using ulimit for WSL memory limiting: $MEMORY_MAX"
+        # Parse memory value with suffix (G/M/K)
+        local memory_value="''${MEMORY_MAX%[GMK]}"
+        local memory_suffix="''${MEMORY_MAX: -1}"
+        local memory_limit_kb
+
+        case "$memory_suffix" in
+          G|g)
+            memory_limit_kb=$(( memory_value * 1024 * 1024 ))
+            ;;
+          M|m)
+            memory_limit_kb=$(( memory_value * 1024 ))
+            ;;
+          K|k)
+            memory_limit_kb=$memory_value
+            ;;
+          *)
+            # Assume bytes if no suffix
+            memory_limit_kb=$(( MEMORY_MAX / 1024 ))
+            ;;
+        esac
+
+        [[ "$VERBOSE" == "true" ]] && echo "Using ulimit for WSL memory limiting: $MEMORY_MAX (''${memory_limit_kb}KB)"
         (
           ulimit -v "$memory_limit_kb"
           $cmd "$@"
@@ -298,21 +319,30 @@ let
     case "$ENGINE" in
       docling)
         [[ "$VERBOSE" == "true" ]] && echo "Processing with Docling engine..."
+
+        # Build flags for Python scripts
+        SMART_CHUNKS_FLAG=""
+        [[ "$SMART_CHUNKS" == "true" ]] && SMART_CHUNKS_FLAG="--smart-chunks"
+        NO_CHUNKS_FLAG=""
+        [[ "$NO_CHUNKS" == "true" ]] && NO_CHUNKS_FLAG="--no-chunks"
+        VERBOSE_FLAG=""
+        [[ "$VERBOSE" == "true" ]] && VERBOSE_FLAG="--verbose"
+
         # Try docling-serve first, fallback to regular docling
         if command -v docling-serve &> /dev/null; then
           apply_memory_limit ${pythonEnv}/bin/python ${./process_docling_serve.py} \
             "$INPUT_FILE" "$OUTPUT_FILE" \
             --chunk-size "$CHUNK_SIZE" \
-            --smart-chunks "$SMART_CHUNKS" \
-            --no-chunks "$NO_CHUNKS" \
-            --verbose "$VERBOSE"
+            $SMART_CHUNKS_FLAG \
+            $NO_CHUNKS_FLAG \
+            $VERBOSE_FLAG
         else
           apply_memory_limit ${pythonEnv}/bin/python ${./process_docling.py} \
             "$INPUT_FILE" "$OUTPUT_FILE" \
             --chunk-size "$CHUNK_SIZE" \
-            --smart-chunks "$SMART_CHUNKS" \
-            --no-chunks "$NO_CHUNKS" \
-            --verbose "$VERBOSE"
+            $SMART_CHUNKS_FLAG \
+            $NO_CHUNKS_FLAG \
+            $VERBOSE_FLAG
         fi
         ;;
       marker)
@@ -327,6 +357,10 @@ let
           AUTO_CHUNK_FLAG=""
         fi
 
+        # Build verbose flag if needed
+        VERBOSE_FLAG=""
+        [[ "$VERBOSE" == "true" ]] && VERBOSE_FLAG="--verbose"
+
         apply_memory_limit ${pythonEnv}/bin/python ${./process_marker.py} \
           "$INPUT_FILE" "$OUTPUT_FILE" \
           --chunk-size "$CHUNK_SIZE" \
@@ -334,7 +368,7 @@ let
           --memory-max "$MEMORY_MAX" \
           --memory-high "$MEMORY_HIGH" \
           $AUTO_CHUNK_FLAG \
-          --verbose "$VERBOSE"
+          $VERBOSE_FLAG
         ;;
       *)
         echo "Error: Unknown engine: $ENGINE" >&2
@@ -361,6 +395,7 @@ stdenv.mkDerivation rec {
     jq
     gawk
     coreutils
+    file
     poppler_utils
   ] ++ lib.optionals (marker-pdf != null) [ marker-pdf ];
 
@@ -378,7 +413,7 @@ stdenv.mkDerivation rec {
 
     # Wrap with PATH
     wrapProgram $out/bin/tomd \
-      --prefix PATH : ${lib.makeBinPath ([ qpdf systemd jq gawk coreutils pythonEnv poppler_utils ]
+      --prefix PATH : ${lib.makeBinPath ([ qpdf systemd jq gawk coreutils file pythonEnv poppler_utils ]
         ++ lib.optionals (marker-pdf != null) [ marker-pdf ])}
   '';
 

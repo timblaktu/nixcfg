@@ -32,8 +32,8 @@ def parse_arguments():
                         help="High memory watermark")
     parser.add_argument("--auto-chunk", action='store_true',
                         help="Enable automatic chunking for large PDFs")
-    parser.add_argument("--verbose", type=lambda x: x.lower() == 'true',
-                        default=False, help="Verbose output")
+    parser.add_argument("--verbose", action='store_true',
+                        help="Verbose output")
     return parser.parse_args()
 
 

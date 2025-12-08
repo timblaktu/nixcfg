@@ -30,12 +30,12 @@ def parse_arguments():
     parser.add_argument("output_file", help="Output markdown file path")
     parser.add_argument("--chunk-size", type=int, default=100,
                         help="Maximum pages per chunk")
-    parser.add_argument("--smart-chunks", type=lambda x: x.lower() == 'true',
+    parser.add_argument("--smart-chunks", action='store_true',
                         default=True, help="Use smart chunking based on structure")
-    parser.add_argument("--no-chunks", type=lambda x: x.lower() == 'true',
-                        default=False, help="Process without chunking")
-    parser.add_argument("--verbose", type=lambda x: x.lower() == 'true',
-                        default=False, help="Verbose output")
+    parser.add_argument("--no-chunks", action='store_true',
+                        help="Process without chunking")
+    parser.add_argument("--verbose", action='store_true',
+                        help="Verbose output")
     return parser.parse_args()
 
 
