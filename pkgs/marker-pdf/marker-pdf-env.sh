@@ -46,12 +46,37 @@ export CUDA_HOME="/usr/lib/wsl"  # WSL CUDA home
 export CUDA_PATH="/usr/lib/wsl"
 
 # Default settings optimized for 8GB GPU + memory efficiency
-BATCH_MULTIPLIER="${MARKER_BATCH_MULTIPLIER:-0.75}"  # Increased for better GPU utilization (was 0.5)
-CHUNK_SIZE="${MARKER_CHUNK_SIZE:-75}"  # Larger chunks to utilize more VRAM (was 50)
+BATCH_MULTIPLIER="${MARKER_BATCH_MULTIPLIER:-0.85}"  # Try higher for 8GB VRAM utilization
+CHUNK_SIZE="${MARKER_CHUNK_SIZE:-100}"  # Larger chunks to utilize more VRAM
 MEMORY_HIGH="${MARKER_MEMORY_HIGH:-20G}"  # Soft limit for warnings
 MEMORY_MAX="${MARKER_MEMORY_MAX:-24G}"  # Hard limit - needs headroom for model loading
 AUTO_CHUNK="${MARKER_AUTO_CHUNK:-false}"
+CACHE_CHUNKS="${MARKER_CACHE_CHUNKS:-true}"  # Cache chunk files to avoid re-chunking
 
+
+# Generate output directory name based on parameters
+generate_output_dir() {
+  local input_pdf="$1"
+  local base_name=$(basename "$input_pdf" .pdf)
+  local timestamp=$(date +%Y%m%d-%H%M%S)
+
+  # Build suffix based on parameters
+  local suffix=""
+
+  if [ "$AUTO_CHUNK" = true ]; then
+    suffix="${suffix}-chunked${CHUNK_SIZE}"
+  fi
+
+  # Add batch multiplier if not default
+  if [ "$BATCH_MULTIPLIER" != "0.85" ]; then
+    # Convert to percentage for readability (e.g., 0.75 -> 75)
+    local batch_pct=$(echo "$BATCH_MULTIPLIER * 100" | @bc@ | cut -d. -f1)
+    suffix="${suffix}-batch${batch_pct}"
+  fi
+
+  # Create output directory name
+  echo "${base_name}-marker${suffix}-${timestamp}"
+}
 
 # Extract TOC from PDF and generate chunk boundaries
 extract_toc_chunks() {
@@ -182,12 +207,12 @@ else:
   local batch_args=()
   if [ "$BATCH_MULTIPLIER" != "1.0" ]; then
     # Apply multiplier to common batch size options
-    # Increased base batch sizes for 8GB VRAM
-    # Layout model: base 4 (was 2), detection: base 4 (was 2), recognition: base 12 (was 8)
-    local layout_batch=$(@gawk@/bin/awk "BEGIN {v = int(4 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
-    local detection_batch=$(@gawk@/bin/awk "BEGIN {v = int(4 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
-    local recognition_batch=$(@gawk@/bin/awk "BEGIN {v = int(12 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
-    local ocr_error_batch=$(@gawk@/bin/awk "BEGIN {v = int(6 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+    # Aggressive batch sizes for 8GB VRAM to maximize utilization
+    # Trying to get closer to full 8GB usage
+    local layout_batch=$(@gawk@/bin/awk "BEGIN {v = int(6 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+    local detection_batch=$(@gawk@/bin/awk "BEGIN {v = int(6 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+    local recognition_batch=$(@gawk@/bin/awk "BEGIN {v = int(16 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+    local ocr_error_batch=$(@gawk@/bin/awk "BEGIN {v = int(8 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
 
     batch_args=(
       "--layout_batch_size" "$layout_batch"
@@ -245,13 +270,42 @@ process_chunked() {
   shift 2
   local extra_args=("$@")
 
-  # Create temporary directory for chunks
-  local chunk_dir
-  chunk_dir=$(mktemp -d -t marker-chunks-XXXXXX)
-  trap "rm -rf '$chunk_dir'" EXIT
+  # Ensure output directory exists
+  mkdir -p "$output_dir"
 
-  # Split PDF into chunks
-  chunk_pdf "$input_pdf" "$chunk_dir" "$CHUNK_SIZE"
+  # Determine chunk cache directory
+  local chunk_dir
+  local cleanup_chunks=false
+
+  if [ "$CACHE_CHUNKS" = true ]; then
+    # Use a subdirectory in output folder for caching chunks
+    chunk_dir="$output_dir/.chunks"
+    echo "Using cached chunks directory: $chunk_dir"
+
+    # Check if chunks already exist and are valid
+    if [ -d "$chunk_dir" ] && [ -f "$chunk_dir/chunks.list" ]; then
+      local expected_chunk_count=$(wc -l < "$chunk_dir/chunks.list")
+      local actual_chunk_count=$(find "$chunk_dir" -name "*.pdf" | wc -l)
+
+      if [ "$expected_chunk_count" -eq "$actual_chunk_count" ]; then
+        echo "✓ Using existing chunks from cache ($actual_chunk_count chunks found)"
+      else
+        echo "⚠ Chunk cache incomplete, regenerating..."
+        rm -rf "$chunk_dir"
+        mkdir -p "$chunk_dir"
+        chunk_pdf "$input_pdf" "$chunk_dir" "$CHUNK_SIZE"
+      fi
+    else
+      mkdir -p "$chunk_dir"
+      chunk_pdf "$input_pdf" "$chunk_dir" "$CHUNK_SIZE"
+    fi
+  else
+    # Use temporary directory (old behavior)
+    chunk_dir=$(mktemp -d -t marker-chunks-XXXXXX)
+    cleanup_chunks=true
+    trap "rm -rf '$chunk_dir'" EXIT
+    chunk_pdf "$input_pdf" "$chunk_dir" "$CHUNK_SIZE"
+  fi
 
   # Process each chunk
   local chunk_num=1
@@ -270,7 +324,6 @@ process_chunked() {
   # Merge markdown outputs
   echo ""
   echo "=== Merging chunk outputs ==="
-  mkdir -p "$output_dir"
 
   local merged_md="$output_dir/$(basename "$input_pdf" .pdf).md"
   : > "$merged_md"  # Create empty file
@@ -287,6 +340,13 @@ process_chunked() {
 
   # Copy any other output files
   find "$chunk_dir"/output-* -type f ! -name "*.md" -exec cp {} "$output_dir/" \;
+
+  # Clean up temporary chunks if needed
+  if [ "$cleanup_chunks" = true ]; then
+    rm -rf "$chunk_dir"
+  else
+    echo "📁 Chunks cached in: $chunk_dir"
+  fi
 
   echo "✓ Chunked processing complete!"
 }
@@ -378,8 +438,9 @@ if [ $# -gt 0 ]; then
 marker-pdf-env: Marker PDF to Markdown converter with GPU support
 
 Commands:
-  marker-pdf-env marker_single <input.pdf> <output_dir> [OPTIONS]
+  marker-pdf-env marker_single <input.pdf> [output_dir] [OPTIONS]
     Convert single PDF to Markdown
+    If output_dir is omitted, auto-generates: <basename>-marker-<params>-<timestamp>/
 
   marker-pdf-env marker <input_dir> <output_dir> [OPTIONS]
     Batch convert PDFs in directory
@@ -394,11 +455,11 @@ Commands:
     Run Python directly in marker-pdf environment
 
 Memory Optimization Options:
-  --batch-multiplier N      Batch size multiplier (default: 0.75, lower = less memory)
+  --batch-multiplier N      Batch size multiplier (default: 0.85, lower = less memory)
   --auto-chunk              Enable automatic chunking for large PDFs
-  --chunk-size N            Pages per chunk (default: 75)
-  --memory-high SIZE        Soft memory limit (default: 12G)
-  --memory-max SIZE         Hard memory limit (default: 16G)
+  --chunk-size N            Pages per chunk (default: 100)
+  --memory-high SIZE        Soft memory limit (default: 20G)
+  --memory-max SIZE         Hard memory limit (default: 24G)
 
 Active Config:
   Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
@@ -412,9 +473,12 @@ Active Config:
 Memory Usage Control:
   The --batch-multiplier parameter DIRECTLY controls memory usage:
     1.0 = maximum batch sizes (may use >8GB VRAM)
-    0.75 = optimized for 8GB GPU (default, uses ~6-7GB)
+    0.85 = optimized for 8GB GPU (default, uses ~6-7GB)
     0.5 = conservative (uses ~4-5GB VRAM)
     0.25 = minimal memory (uses ~2-3GB VRAM)
+
+  Chunk caching is enabled by default. Chunks are saved in output_dir/.chunks/
+  Set MARKER_CACHE_CHUNKS=false to disable chunk caching
 
 ⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
 ⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).
@@ -477,11 +541,17 @@ EOF
         esac
       done
 
-      if [ -z "$input_pdf" ] || [ -z "$output_dir" ]; then
-        echo "Error: marker_single requires <input.pdf> and <output_dir> (or --output_dir)"
-        echo "Usage: marker-pdf-env marker_single <input.pdf> <output_dir> [OPTIONS]"
-        echo "   or: marker-pdf-env marker_single <input.pdf> --output_dir <dir> [OPTIONS]"
+      # Check if we have input PDF
+      if [ -z "$input_pdf" ]; then
+        echo "Error: marker_single requires an input PDF file"
+        echo "Usage: marker-pdf-env marker_single <input.pdf> [output_dir] [OPTIONS]"
         exit 1
+      fi
+
+      # Auto-generate output directory if not specified
+      if [ -z "$output_dir" ]; then
+        output_dir=$(generate_output_dir "$input_pdf")
+        echo "📁 Auto-generated output directory: $output_dir"
       fi
 
       if [ "$AUTO_CHUNK" = true ]; then
@@ -535,8 +605,9 @@ else
 marker-pdf-env: Marker PDF to Markdown converter with GPU support
 
 Commands:
-  marker-pdf-env marker_single <input.pdf> <output_dir> [OPTIONS]
+  marker-pdf-env marker_single <input.pdf> [output_dir] [OPTIONS]
     Convert single PDF to Markdown
+    If output_dir is omitted, auto-generates: <basename>-marker-<params>-<timestamp>/
 
   marker-pdf-env marker <input_dir> <output_dir> [OPTIONS]
     Batch convert PDFs in directory
@@ -551,11 +622,11 @@ Commands:
     Run Python directly in marker-pdf environment
 
 Memory Optimization Options:
-  --batch-multiplier N      Batch size multiplier (default: 0.75, lower = less memory)
+  --batch-multiplier N      Batch size multiplier (default: 0.85, lower = less memory)
   --auto-chunk              Enable automatic chunking for large PDFs
-  --chunk-size N            Pages per chunk (default: 75)
-  --memory-high SIZE        Soft memory limit (default: 12G)
-  --memory-max SIZE         Hard memory limit (default: 16G)
+  --chunk-size N            Pages per chunk (default: 100)
+  --memory-high SIZE        Soft memory limit (default: 20G)
+  --memory-max SIZE         Hard memory limit (default: 24G)
 
 Active Config:
   Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
@@ -569,9 +640,12 @@ Active Config:
 Memory Usage Control:
   The --batch-multiplier parameter DIRECTLY controls memory usage:
     1.0 = maximum batch sizes (may use >8GB VRAM)
-    0.75 = optimized for 8GB GPU (default, uses ~6-7GB)
+    0.85 = optimized for 8GB GPU (default, uses ~6-7GB)
     0.5 = conservative (uses ~4-5GB VRAM)
     0.25 = minimal memory (uses ~2-3GB VRAM)
+
+  Chunk caching is enabled by default. Chunks are saved in output_dir/.chunks/
+  Set MARKER_CACHE_CHUNKS=false to disable chunk caching
 
 ⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
 ⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).

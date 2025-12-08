@@ -11,6 +11,7 @@
 , python3
 , writeShellScriptBin
 , runCommand
+, bc
 , qpdf        # PDF splitting and TOC extraction
 , systemd     # Memory limiting via systemd-run
 , jq          # JSON parsing for qpdf output
@@ -57,6 +58,7 @@ let
       --replace "@qpdf@" "${qpdf}" \
       --replace "@systemd@" "${systemd}" \
       --replace "@gawk@" "${gawk}" \
+      --replace "@bc@" "${bc}" \
       --replace "@pythonEnv@" "${pythonEnv}" \
       --replace "@pythonPath@" "${pythonEnv}/${python3.sitePackages}" \
       --replace "@stdenvLib@" "${stdenv.cc.cc.lib}/lib" \
