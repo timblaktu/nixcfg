@@ -48,8 +48,9 @@ export CUDA_PATH="/usr/lib/wsl"
 # Default settings optimized for 8GB GPU + memory efficiency
 BATCH_MULTIPLIER="${MARKER_BATCH_MULTIPLIER:-0.85}"  # Try higher for 8GB VRAM utilization
 CHUNK_SIZE="${MARKER_CHUNK_SIZE:-100}"  # Larger chunks to utilize more VRAM
-MEMORY_HIGH="${MARKER_MEMORY_HIGH:-20G}"  # Soft limit for warnings
-MEMORY_MAX="${MARKER_MEMORY_MAX:-24G}"  # Hard limit - needs headroom for model loading
+# WSL Note: Memory limiting is problematic in WSL - use 'unlimited' to avoid thread issues
+MEMORY_HIGH="${MARKER_MEMORY_HIGH:-20G}"  # Soft limit for warnings (Linux only)
+MEMORY_MAX="${MARKER_MEMORY_MAX:-unlimited}"  # Default to unlimited in WSL to avoid thread creation errors
 AUTO_CHUNK="${MARKER_AUTO_CHUNK:-false}"
 CACHE_CHUNKS="${MARKER_CACHE_CHUNKS:-true}"  # Cache chunk files to avoid re-chunking
 
@@ -186,20 +187,22 @@ else:
     is_wsl=true
   fi
 
-  # Convert memory limit to KB for ulimit
-  local memory_limit_kb
-  case "$MEMORY_MAX" in
-    *G)
-      memory_limit_kb=$(( ${MEMORY_MAX%G} * 1024 * 1024 ))
-      ;;
-    *M)
-      memory_limit_kb=$(( ${MEMORY_MAX%M} * 1024 ))
-      ;;
-    *)
-      echo "ERROR: Invalid memory limit format: $MEMORY_MAX (use format like 20G or 20480M)"
-      exit 1
-      ;;
-  esac
+  # Convert memory limit to KB for ulimit (if not unlimited)
+  local memory_limit_kb=0
+  if [ "$MEMORY_MAX" != "unlimited" ] && [ "$MEMORY_MAX" != "none" ]; then
+    case "$MEMORY_MAX" in
+      *G)
+        memory_limit_kb=$(( ${MEMORY_MAX%G} * 1024 * 1024 ))
+        ;;
+      *M)
+        memory_limit_kb=$(( ${MEMORY_MAX%M} * 1024 ))
+        ;;
+      *)
+        echo "ERROR: Invalid memory limit format: $MEMORY_MAX (use format like 20G, 20480M, or 'unlimited')"
+        exit 1
+        ;;
+    esac
+  fi
 
   # Calculate actual batch sizes based on multiplier
   # Default batch sizes in marker-pdf are model-dependent, but we can set them all
@@ -225,16 +228,27 @@ else:
   fi
 
   if [ "$is_wsl" = true ]; then
-    echo "WSL detected: Using ulimit for memory limiting (systemd-run doesn't enforce limits in WSL)"
-    echo "Memory limit: $MEMORY_MAX (${memory_limit_kb}KB virtual memory)"
-
-    # Use ulimit -v for virtual memory limiting in WSL
-    # Note: This is the only reliable method in WSL2 as cgroups v2 memory controller
-    # is not properly enforced by the WSL2 kernel
-    (
-      ulimit -v "$memory_limit_kb"
+    # WSL memory limiting is problematic - ulimit -v prevents thread creation
+    # and systemd-run doesn't enforce limits properly in WSL2
+    if [ "$MEMORY_MAX" = "unlimited" ] || [ "$MEMORY_MAX" = "none" ]; then
+      echo "WSL detected: Running without memory limits (recommended for WSL)"
       "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "${batch_args[@]}" "${extra_args[@]}"
-    )
+    else
+      echo "WSL detected: Attempting memory limiting (may cause thread creation issues)"
+      echo "Memory limit: $MEMORY_MAX (${memory_limit_kb}KB virtual memory)"
+      echo "⚠️  WARNING: If you see 'RuntimeError: can't start new thread', run with --memory-max unlimited"
+
+      # Increase limit to account for thread stacks (each thread needs ~8MB stack)
+      # Add 2GB overhead for thread stacks and Python runtime
+      local adjusted_limit_kb=$((memory_limit_kb + 2 * 1024 * 1024))
+      echo "  Adjusted limit: $((adjusted_limit_kb / 1024 / 1024))GB (includes 2GB for thread stacks)"
+
+      (
+        ulimit -v "$adjusted_limit_kb"
+        ulimit -s 8192  # Set stack size to 8MB per thread
+        "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "${batch_args[@]}" "${extra_args[@]}"
+      )
+    fi
   else
     echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
 
@@ -479,8 +493,9 @@ Memory Optimization Options:
   --batch-multiplier N      Batch size multiplier (default: 0.85, lower = less memory)
   --auto-chunk              Enable automatic chunking for large PDFs
   --chunk-size N            Pages per chunk (default: 100)
-  --memory-high SIZE        Soft memory limit (default: 20G)
-  --memory-max SIZE         Hard memory limit (default: 24G)
+  --memory-high SIZE        Soft memory limit (default: 20G, Linux only)
+  --memory-max SIZE         Hard memory limit (default: unlimited in WSL, 24G on Linux)
+                           Use 'unlimited' to disable (recommended for WSL)
 
 Active Config:
   Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
@@ -502,7 +517,8 @@ Memory Usage Control:
   Set MARKER_CACHE_CHUNKS=false to disable chunk caching
 
 ⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
-⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).
+⚠️  WSL Note: Memory limiting disabled by default (ulimit -v causes thread creation errors).
+    Use --memory-max unlimited if you encounter "can't start new thread" errors.
 
 Examples:
   # Maximum GPU utilization (for systems with >8GB VRAM)
@@ -588,26 +604,35 @@ EOF
 
       # Detect if running in WSL
       if uname -r | grep -qi microsoft; then
-        # WSL detected - use ulimit for memory limiting
-        # Convert memory limit to KB for ulimit
-        memory_limit_kb=""
-        case "$MEMORY_MAX" in
-          *G)
-            memory_limit_kb=$(( ${MEMORY_MAX%G} * 1024 * 1024 ))
-            ;;
-          *M)
-            memory_limit_kb=$(( ${MEMORY_MAX%M} * 1024 ))
-            ;;
-          *)
-            echo "ERROR: Invalid memory limit format: $MEMORY_MAX"
-            exit 1
-            ;;
-        esac
-
-        (
-          ulimit -v "$memory_limit_kb"
+        # WSL detected - check if memory limiting is requested
+        if [ "$MEMORY_MAX" = "unlimited" ] || [ "$MEMORY_MAX" = "none" ]; then
+          # Run without memory limits (recommended for WSL)
           "$VENV_DIR/bin/$cmd" "$@"
-        )
+        else
+          # WSL with memory limiting - convert memory limit to KB for ulimit
+          memory_limit_kb=""
+          case "$MEMORY_MAX" in
+            *G)
+              memory_limit_kb=$(( ${MEMORY_MAX%G} * 1024 * 1024 ))
+              ;;
+            *M)
+              memory_limit_kb=$(( ${MEMORY_MAX%M} * 1024 ))
+              ;;
+            *)
+              echo "ERROR: Invalid memory limit format: $MEMORY_MAX"
+              exit 1
+              ;;
+          esac
+
+          # Add overhead for thread stacks
+          local adjusted_limit_kb=$((memory_limit_kb + 2 * 1024 * 1024))
+
+          (
+            ulimit -v "$adjusted_limit_kb"
+            ulimit -s 8192  # Set stack size to 8MB per thread
+            "$VENV_DIR/bin/$cmd" "$@"
+          )
+        fi
       else
         # Native Linux - use systemd-run
         @systemd@/bin/systemd-run \
@@ -646,8 +671,9 @@ Memory Optimization Options:
   --batch-multiplier N      Batch size multiplier (default: 0.85, lower = less memory)
   --auto-chunk              Enable automatic chunking for large PDFs
   --chunk-size N            Pages per chunk (default: 100)
-  --memory-high SIZE        Soft memory limit (default: 20G)
-  --memory-max SIZE         Hard memory limit (default: 24G)
+  --memory-high SIZE        Soft memory limit (default: 20G, Linux only)
+  --memory-max SIZE         Hard memory limit (default: unlimited in WSL, 24G on Linux)
+                           Use 'unlimited' to disable (recommended for WSL)
 
 Active Config:
   Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
@@ -669,7 +695,8 @@ Memory Usage Control:
   Set MARKER_CACHE_CHUNKS=false to disable chunk caching
 
 ⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
-⚠️  WSL Note: Memory limits enforced via ulimit (systemd-run doesn't work in WSL2).
+⚠️  WSL Note: Memory limiting disabled by default (ulimit -v causes thread creation errors).
+    Use --memory-max unlimited if you encounter "can't start new thread" errors.
 
 Examples:
   # Maximum GPU utilization (for systems with >8GB VRAM)
