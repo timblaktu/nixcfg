@@ -222,11 +222,18 @@ For details, see:
 - **nixpkgs Branch**: `docling-parse-fix` (commit 259687eb0)
 - **Result**: docling-parse and docling build successfully
 
-**Current Testing Status** (2025-12-07 15:55):
+**Current Testing Status** (2025-12-07 16:30):
 - ✅ **marker-pdf**: Confirmed working - processes PDFs with OCR (slower but functional)
 - 🔧 **docling**: Package builds but runtime testing pending due to build times
-- 🔧 **tomd**: Package definition exists but full build takes time due to dependencies
-- **Test Files Created**: `test.html`, `test_input.pdf` for pipeline verification
+- 🔧 **tomd**: Package defined but has bugs found in review (see review doc)
+- **Review Completed**: Found critical bugs and missing features - documented in `docs/tomd-review-findings-2025-12-07.md`
+
+**Critical Issues Found**:
+- Missing `file` utility dependency in tomd package
+- Memory parsing bug (assumes G suffix)
+- Python argument parsing inconsistency
+- Incomplete chunking implementation in docling processor
+- See full review document for complete findings
 
 **Build Dependencies Taking Time**:
 - google-cloud-cpp, arrow-cpp, pyarrow (required for pandas dependencies)
