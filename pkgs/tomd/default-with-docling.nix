@@ -8,7 +8,7 @@
 , jq
 , gawk
 , coreutils
-, poppler_utils  # For pdftotext to check if OCR is needed
+, poppler-utils  # For pdftotext to check if OCR is needed
 , marker-pdf ? null  # Optional: marker-pdf package for OCR
 , gcc
 }:
@@ -278,7 +278,7 @@ let
       local pdf_file="$1"
 
       # Try to extract text from first few pages
-      local text_output=$(${poppler_utils}/bin/pdftotext -l 3 "$pdf_file" - 2>/dev/null | head -1000)
+      local text_output=$(${poppler-utils}/bin/pdftotext -l 3 "$pdf_file" - 2>/dev/null | head -1000)
 
       # If very little text extracted, likely needs OCR
       if [[ -z "$text_output" ]] || [[ $(echo "$text_output" | wc -w) -lt 50 ]]; then
@@ -457,7 +457,7 @@ stdenv.mkDerivation rec {
     jq
     gawk
     coreutils
-    poppler_utils
+    poppler-utils
     gcc # For building docling dependencies
   ] ++ lib.optionals (marker-pdf != null) [ marker-pdf ];
 
@@ -636,7 +636,7 @@ stdenv.mkDerivation rec {
         # Wrap with PATH
         wrapProgram $out/bin/tomd \
           --prefix PATH : ${lib.makeBinPath ([
-            qpdf systemd jq gawk coreutils pythonEnv poppler_utils gcc
+            qpdf systemd jq gawk coreutils pythonEnv poppler-utils gcc
             doclingVenvSetup
           ] ++ lib.optionals (marker-pdf != null) [ marker-pdf ])}
   '';

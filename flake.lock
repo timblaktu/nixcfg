@@ -173,6 +173,26 @@
         ]
       },
       "locked": {
+        "lastModified": 1765217760,
+        "narHash": "sha256-BVVyAodLcAD8KOtR3yCStBHSE0WAH/xQWH9f0qsxbmk=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "e5b1f87841810fc24772bf4389f9793702000c9b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "home-manager-wsl": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
         "lastModified": 1764108665,
         "narHash": "sha256-S3pdmuMGkW0ewtxCFRYTSDXcWmKuXR81UmCHojKDt84=",
         "ref": "wsl-windows-terminal",
@@ -268,6 +288,22 @@
       }
     },
     "nixpkgs": {
+      "locked": {
+        "lastModified": 1765186076,
+        "narHash": "sha256-hM20uyap1a0M9d344I692r+ik4gTMyj60cQWO+hAYP8=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "addf7cf5f383a3101ecfba091b98d0a1263dc9b8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs-docling": {
       "locked": {
         "lastModified": 1765149448,
         "narHash": "sha256-+imffrXGATisuFj6FitBrA8yqGIlqM4TF1/sHPP6+/E=",
@@ -444,9 +480,11 @@
         "flake-parts": "flake-parts",
         "flake-utils": "flake-utils",
         "home-manager": "home-manager",
+        "home-manager-wsl": "home-manager-wsl",
         "nix-writers": "nix-writers",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs",
+        "nixpkgs-docling": "nixpkgs-docling",
         "nixpkgs-esp-dev": "nixpkgs-esp-dev",
         "nixpkgs-stable": "nixpkgs-stable",
         "nixpkgs-unstable": "nixpkgs-unstable",

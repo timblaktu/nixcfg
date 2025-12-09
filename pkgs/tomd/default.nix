@@ -9,7 +9,7 @@
 , gawk
 , coreutils
 , file  # For MIME type detection
-, poppler_utils  # For pdftotext to check if OCR is needed
+, poppler-utils  # For pdftotext to check if OCR is needed
 , marker-pdf ? null  # Optional: marker-pdf package for OCR
 }:
 
@@ -396,7 +396,7 @@ stdenv.mkDerivation rec {
     gawk
     coreutils
     file
-    poppler_utils
+    poppler-utils
   ] ++ lib.optionals (marker-pdf != null) [ marker-pdf ];
 
   installPhase = ''
@@ -413,7 +413,7 @@ stdenv.mkDerivation rec {
 
     # Wrap with PATH
     wrapProgram $out/bin/tomd \
-      --prefix PATH : ${lib.makeBinPath ([ qpdf systemd jq gawk coreutils file pythonEnv poppler_utils ]
+      --prefix PATH : ${lib.makeBinPath ([ qpdf systemd jq gawk coreutils file pythonEnv poppler-utils ]
         ++ lib.optionals (marker-pdf != null) [ marker-pdf ])}
   '';
 
