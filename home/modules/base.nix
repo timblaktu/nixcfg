@@ -96,7 +96,7 @@ in
         sops
         nerd-fonts.caskaydia-mono
         cascadia-code
-        noto-fonts-emoji
+        noto-fonts-color-emoji
         twemoji-color-font
       ];
       description = "Base packages for all home environments";

@@ -105,7 +105,7 @@ function Get-FontConfig {
             }
             emoji = @{ 
                 name = "Noto Color Emoji"
-                nixPackage = "noto-fonts-emoji"
+                nixPackage = "noto-fonts-color-emoji"
                 downloadUrl = "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf"
                 files = @("NotoColorEmoji.ttf")
             }
