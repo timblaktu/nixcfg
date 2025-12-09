@@ -150,6 +150,18 @@ in
       };
     };
 
+    nix = {
+      enableAccessToken = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Configure nix access-tokens for authenticated GitHub fetches.
+          This prevents rate limiting errors when fetching from GitHub.
+          Token will be stored in ~/.config/nix/github-token (mode 600).
+        '';
+      };
+    };
+
     gitlab = {
       enable = mkOption {
         type = types.bool;
@@ -355,6 +367,53 @@ in
             $DRY_RUN_CMD echo "✅ Bitwarden unlocked - GitHub${optionalString cfg.gitlab.enable "/GitLab"} authentication ready"
           fi
         '');
+
+      # Setup GitHub token for nix access-tokens
+      home.activation.setupNixGithubToken = mkIf cfg.nix.enableAccessToken
+        (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          TOKEN_DIR="$HOME/.config/nix"
+          TOKEN_FILE="$TOKEN_DIR/github-token"
+
+          # Create directory if it doesn't exist
+          mkdir -p "$TOKEN_DIR"
+
+          # Try to fetch token from Bitwarden/SOPS and write to file
+          if [ "$DRY_RUN" != "1" ]; then
+            if [ "${cfg.mode}" = "bitwarden" ]; then
+              # Try to get token from Bitwarden
+              TOKEN="$(${mkRbwCommand cfg.bitwarden} 2>/dev/null || true)"
+              if [ -n "$TOKEN" ]; then
+                echo "$TOKEN" > "$TOKEN_FILE"
+                chmod 600 "$TOKEN_FILE"
+                $DRY_RUN_CMD echo "✅ GitHub token for nix stored in ~/.config/nix/github-token"
+              else
+                if [ -f "$TOKEN_FILE" ]; then
+                  $DRY_RUN_CMD echo "ℹ️  Using existing GitHub token file for nix"
+                else
+                  $DRY_RUN_CMD echo "⚠️  No GitHub token found. Create one at https://github.com/settings/tokens"
+                  $DRY_RUN_CMD echo "    Store it in ~/.config/nix/github-token with permissions 600"
+                  $DRY_RUN_CMD echo "    Required scopes: read:packages (or just 'repo' for private repos)"
+                fi
+              fi
+            elif [ "${cfg.mode}" = "sops" ]; then
+              # SOPS mode - token should be in the decrypted secret file
+              TOKEN_SRC="${config.sops.secrets."${cfg.sops.secretName}".path}"
+              if [ -f "$TOKEN_SRC" ]; then
+                cp "$TOKEN_SRC" "$TOKEN_FILE"
+                chmod 600 "$TOKEN_FILE"
+                $DRY_RUN_CMD echo "✅ GitHub token for nix copied from SOPS"
+              else
+                $DRY_RUN_CMD echo "⚠️  SOPS secret not available for GitHub token"
+              fi
+            fi
+          fi
+        '');
+
+      # Configure nix to use the token file via extra-access-tokens
+      # This reads the token at runtime instead of evaluation time
+      nix.settings = mkIf cfg.nix.enableAccessToken {
+        extra-access-tokens = "${config.home.homeDirectory}/.config/nix/github-token";
+      };
 
       # Assertions
       assertions = [
