@@ -37,19 +37,27 @@ let
   # SOPS-based wrappers (for when mode == "sops")
   # GitHub CLI wrapper with SOPS token injection
   gh-with-auth-sops = pkgs.writeShellScriptBin "gh" ''
-    TOKEN_FILE="${config.sops.secrets."${cfg.sops.secretName}".path}"
-    if [ -f "$TOKEN_FILE" ]; then
-      export GH_TOKEN="$(cat "$TOKEN_FILE")"
-    fi
+    ${if options ? sops then ''
+      TOKEN_FILE="${config.sops.secrets."${cfg.sops.secretName}".path}"
+      if [ -f "$TOKEN_FILE" ]; then
+        export GH_TOKEN="$(cat "$TOKEN_FILE")"
+      fi
+    '' else ''
+      echo "Warning: SOPS mode configured but SOPS module not available" >&2
+    ''}
     exec ${pkgs.gh}/bin/gh "$@"
   '';
 
   # GitLab CLI wrapper with SOPS token injection
   glab-with-auth-sops = pkgs.writeShellScriptBin "glab" ''
-    TOKEN_FILE="${config.sops.secrets."${cfg.gitlab.sops.secretName}".path}"
-    if [ -f "$TOKEN_FILE" ]; then
-      export GITLAB_TOKEN="$(cat "$TOKEN_FILE")"
-    fi
+    ${if options ? sops then ''
+      TOKEN_FILE="${config.sops.secrets."${cfg.gitlab.sops.secretName}".path}"
+      if [ -f "$TOKEN_FILE" ]; then
+        export GITLAB_TOKEN="$(cat "$TOKEN_FILE")"
+      fi
+    '' else ''
+      echo "Warning: SOPS mode configured but SOPS module not available" >&2
+    ''}
     exec ${pkgs.glab}/bin/glab "$@"
   '';
 
@@ -378,7 +386,7 @@ in
           mkdir -p "$TOKEN_DIR"
 
           # Try to fetch token from Bitwarden/SOPS and write to file
-          if [ "$DRY_RUN" != "1" ]; then
+          if [ "''${DRY_RUN:-0}" != "1" ]; then
             if [ "${cfg.mode}" = "bitwarden" ]; then
               # Try to get token from Bitwarden
               TOKEN="$(${mkRbwCommand cfg.bitwarden} 2>/dev/null || true)"
@@ -397,14 +405,20 @@ in
               fi
             elif [ "${cfg.mode}" = "sops" ]; then
               # SOPS mode - token should be in the decrypted secret file
-              TOKEN_SRC="${config.sops.secrets."${cfg.sops.secretName}".path}"
-              if [ -f "$TOKEN_SRC" ]; then
-                cp "$TOKEN_SRC" "$TOKEN_FILE"
-                chmod 600 "$TOKEN_FILE"
-                $DRY_RUN_CMD echo "✅ GitHub token for nix copied from SOPS"
-              else
-                $DRY_RUN_CMD echo "⚠️  SOPS secret not available for GitHub token"
-              fi
+              ${optionalString (options ? sops) ''
+                TOKEN_SRC="${config.sops.secrets."${cfg.sops.secretName}".path}"
+                if [ -f "$TOKEN_SRC" ]; then
+                  cp "$TOKEN_SRC" "$TOKEN_FILE"
+                  chmod 600 "$TOKEN_FILE"
+                  $DRY_RUN_CMD echo "✅ GitHub token for nix copied from SOPS"
+                else
+                  $DRY_RUN_CMD echo "⚠️  SOPS secret not available for GitHub token"
+                fi
+              ''}
+              ${optionalString (!(options ? sops)) ''
+                $DRY_RUN_CMD echo "⚠️  SOPS mode configured but SOPS module not available"
+                $DRY_RUN_CMD echo "    Please configure SOPS or switch to bitwarden mode"
+              ''}
             fi
           fi
         '');

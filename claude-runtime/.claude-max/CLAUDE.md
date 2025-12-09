@@ -35,6 +35,7 @@
 - ALWAYS prefer editing existing files to creating new ones
 - ALWAYS add documentation to existing markdown files instead of creating new files 
 - ALWAYS ASK where to add documentation if there is significant ambiguity or uncertainty
+- **ALWAYS ASK FOR HELP WITH AUTHENTICATION ISSUES** - If encountering ANY auth issues (GitHub, GitLab, Bitwarden, SOPS, SSH, etc.), IMMEDIATELY ask the user for help rather than trying to work around them
 - **When working with nix or NixOS, use mcp-nixos MCP server tools** to research and verify packages and their options BEFORE making any configuration changes. Why this is critical:
   1. NixOS and Home Manager options change between versions
   2. Options can be deprecated, renamed, or removed (e.g., `programs.zsh.initExtra` → `programs.zsh.initContent`)
