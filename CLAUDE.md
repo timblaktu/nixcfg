@@ -183,11 +183,21 @@ See /home/tim/src/git-worktree-superproject for details.
 
 ## 📋 **CURRENT TASKS** (2025-12-09)
 
-### ✅ Just Completed: Branch Integration & Flake Input Isolation
-**Branch**: `pa161878` (was `claude/review-pa161878-01BN7oP9qR4p8N6a9YZZufa8`)
-**Status**: Integrated 134 commits of PDF-to-markdown tooling + flake input refactoring
+### ✅ Just Completed: GitHub Authentication Setup
+**Branch**: `pa161878`
+**Status**: GitHub PAT configured for Nix operations
 
 **Accomplishments**:
+1. ✅ Retrieved GitHub PAT from Bitwarden (PAT-timtam2026)
+2. ✅ Configured token at `~/.config/nix/github-token` with secure permissions (600)
+3. ✅ Verified authentication works for both public and private repos
+4. ✅ Ready to proceed with flake operations without rate limiting
+
+### 🔄 In Progress: Flake Input Update & Validation
+**Branch**: `pa161878` (integrated 134 commits from PDF-to-markdown work)
+**Status**: Ready to update flake.lock with GitHub auth configured
+
+**Previous Accomplishments**:
 1. ✅ Refactored flake inputs to isolate custom sources:
    - `nixpkgs` → upstream `NixOS/nixpkgs/nixos-unstable` (for 99% of packages)
    - `nixpkgs-docling` → isolated for docling-parse fix only
@@ -197,10 +207,8 @@ See /home/tim/src/git-worktree-superproject for details.
 3. ✅ Fast-forward merged 134 commits into `pa161878` branch
 4. ✅ Verified hardware-config.nix has `/mnt/wslg/distro` device path fix
 
-**Next Steps** (USER ACTION REQUIRED):
-1. **Update flake.lock**: Run `nix flake update` when GitHub API rate limit resets
-   - Currently blocked by: `HTTP error 403 - API rate limit exceeded`
-   - Required for: New upstream nixpkgs input
+**Next Steps** (READY TO PROCEED):
+1. **Update flake.lock**: Run `nix flake update` (GitHub auth now configured)
 2. **Validate**: Run `nix flake check` after flake.lock update
 3. **Test home-manager**: Build `nix build '.#homeConfigurations."tim@pa161878-nixos".activationPackage'`
 4. **Manual testing**: Run `home-manager switch --flake .#tim@pa161878-nixos` and `sudo nixos-rebuild switch`
