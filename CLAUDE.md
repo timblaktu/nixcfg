@@ -181,10 +181,32 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 See /home/tim/src/git-worktree-superproject for details.
 
-## 📋 **CURRENT TASKS**
+## 📋 **CURRENT TASKS** (2025-12-09)
+
+### ✅ Just Completed: Branch Integration & Flake Input Isolation
+**Branch**: `pa161878` (was `claude/review-pa161878-01BN7oP9qR4p8N6a9YZZufa8`)
+**Status**: Integrated 134 commits of PDF-to-markdown tooling + flake input refactoring
+
+**Accomplishments**:
+1. ✅ Refactored flake inputs to isolate custom sources:
+   - `nixpkgs` → upstream `NixOS/nixpkgs/nixos-unstable` (for 99% of packages)
+   - `nixpkgs-docling` → isolated for docling-parse fix only
+   - `home-manager` → upstream for non-WSL hosts (mbp, potato, nixvim-minimal)
+   - `home-manager-wsl` → custom fork for WSL hosts (wsl-windows-terminal feature)
+2. ✅ Updated overlays to use `nixpkgs-docling` ONLY for docling package
+3. ✅ Fast-forward merged 134 commits into `pa161878` branch
+4. ✅ Verified hardware-config.nix has `/mnt/wslg/distro` device path fix
+
+**Next Steps** (USER ACTION REQUIRED):
+1. **Update flake.lock**: Run `nix flake update` when GitHub API rate limit resets
+   - Currently blocked by: `HTTP error 403 - API rate limit exceeded`
+   - Required for: New upstream nixpkgs input
+2. **Validate**: Run `nix flake check` after flake.lock update
+3. **Test home-manager**: Build `nix build '.#homeConfigurations."tim@pa161878-nixos".activationPackage'`
+4. **Manual testing**: Run `home-manager switch --flake .#tim@pa161878-nixos` and `sudo nixos-rebuild switch`
 
 **Future Development** (DEFERRED until git-worktree-superproject is validated)
-- [ ] Complete ongoing fork development work  
+- [ ] Complete ongoing fork development work
 - [ ] Coordinate upstream contributions post-migration
 ||||||| e233a2a
 ### Success Criteria:
