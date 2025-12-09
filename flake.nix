@@ -30,8 +30,7 @@
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
     # HOME-MANAGER CUSTOM - WSL-specific fork for windows-terminal feature (WIP)
-    # home-manager-wsl.url = "github:timblaktu/home-manager/wsl-windows-terminal";  # Use after pushing branch
-    home-manager-wsl.url = "git+file:///home/tim/src/home-manager?ref=wsl-windows-terminal"; # For local dev
+    home-manager-wsl.url = "github:timblaktu/home-manager/wsl-windows-terminal";
     home-manager-wsl.inputs.nixpkgs.follows = "nixpkgs";
 
     # NIXOS-WSL - custom fork for plugin-shim-integration (WIP)
@@ -47,11 +46,6 @@
 
     sops-nix.url = "github:Mic92/sops-nix";
     flake-utils.url = "github:numtide/flake-utils";
-
-    nvf = {
-      url = "github:notashelf/nvf";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
 
     nixpkgs-esp-dev = {
       url = "github:timblaktu/nixpkgs-esp-dev/c5";
