@@ -38,7 +38,7 @@
       );
 
       "tim@thinky-ubuntu" = withSystem "x86_64-linux" ({ pkgs, ... }:
-        inputs.home-manager.lib.homeManagerConfiguration {
+        inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
@@ -78,7 +78,7 @@
       );
 
       "tim@pa161878-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
-        inputs.home-manager.lib.homeManagerConfiguration {
+        inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
@@ -169,7 +169,7 @@
       );
 
       "tim@thinky-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
-        inputs.home-manager.lib.homeManagerConfiguration {
+        inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }

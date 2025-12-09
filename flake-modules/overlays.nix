@@ -9,7 +9,7 @@
   flake = {
     # Export overlays for other flakes to use
     overlays = {
-      default = import ../overlays;
+      default = import ../overlays { inherit inputs; };
     };
   };
 }
