@@ -25,12 +25,13 @@
     };
 
     # HOME-MANAGER - upstream for non-WSL hosts
-    home-manager.url = "github:nix-community/home-manager";
+    # Following master branch to match nixos-unstable (26.05-pre)
+    home-manager.url = "github:nix-community/home-manager/master";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
     # HOME-MANAGER CUSTOM - WSL-specific fork for windows-terminal feature (WIP)
     # home-manager-wsl.url = "github:timblaktu/home-manager/wsl-windows-terminal";  # Use after pushing branch
-    home-manager-wsl.url = "git+file:///home/tim/src/home-manager?ref=wsl-windows-terminal";  # For local dev
+    home-manager-wsl.url = "git+file:///home/tim/src/home-manager?ref=wsl-windows-terminal"; # For local dev
     home-manager-wsl.inputs.nixpkgs.follows = "nixpkgs";
 
     # NIXOS-WSL - custom fork for plugin-shim-integration (WIP)

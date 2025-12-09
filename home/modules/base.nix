@@ -301,6 +301,10 @@ in
       # Let Home Manager install and manage itself
       programs.home-manager.enable = true;
 
+      # Disable version mismatch check between Home Manager and Nixpkgs
+      # This is because we're using Home Manager master with nixos-unstable
+      home.enableNixpkgsReleaseCheck = false;
+
       # Disable input method entirely to avoid fcitx5 package issues
       i18n.inputMethod.enable = false;
       i18n.inputMethod.type = null;
