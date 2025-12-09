@@ -68,210 +68,65 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 4. `/home/tim/src/git-worktree-superproject` - working tree for MY PROJECT implementing fast worktree switching for multi-repo and nix flake projects. We will eventually USE this here in nixcfg to facilitate multiple concurrent nix- development efforts
 
 
-<<<<<<< HEAD
-## 🚧 **ACTIVE FORK DEVELOPMENT STATUS** (2025-10-31)
-||||||| e233a2a
-#### Phase 1: Upstream Sync & Assessment (IMMEDIATE PRIORITY)
-1. **Sync Fork with Upstream** - Merge upstream changes to get latest writers structure
-2. **Assess autoWriter Compatibility** - Compare our implementation with upstream's new `auto.nix`
-3. **Evaluate Integration Opportunities** - Determine how to leverage upstream's modular architecture
-4. **Preserve Custom Features** - Ensure our file type detection and library injection patterns survive the sync
-=======
-## 🚧 **ACTIVE FORK DEVELOPMENT** (2025-10-31)
->>>>>>> cleanup-temp-files
-
-<<<<<<< HEAD
-### **nixpkgs Fork Development**
-**Branch**: `writers-auto-detection` (ahead 1 commit)
-**Status**: Feature development in progress
-**Feature**: Automatic file type detection for nixpkgs writers
-- ✅ lib.fileTypes module for automatic detection
-- ✅ autoWriter function implementation  
-- ✅ autoWriterBin for executable binary creation
-- 🔧 Working debug harness (debug-autowriter.nix)
-- 📋 **Upstream Goal**: Submit as RFC/PR for nixpkgs inclusion
-||||||| e233a2a
-#### Phase 2: Enhanced Unified Module (Next Sprint)  
-1. **Leverage Upstream Writers** - Use new modular upstream structure as foundation
-2. **Implement mkValidatedFile** - Build on upstream's `autoWriter` for seamless file type detection
-3. **Library Injection System** - Preserve and enhance our `builtins.replaceStrings` library pattern
-4. **Dynamic Discovery** - Replace hardcoded `validatedScriptNames` with upstream-compatible detection
-5. **Testing Integration** - Combine our validation framework with upstream's enhanced writers
-6. **Backward Compatibility** - Ensure smooth migration from current validated-scripts module
-=======
-### Critical Dependencies
-- **nixpkgs**: `writers-auto-detection` branch - autoWriter/autoWriterBin for file type detection
-- **home-manager**: `auto-validate-feature` + fcitx5 fixes
-- **NixOS-WSL**: `plugin-shim-integration` - VSOCK communication + bare mount support
-- **⚠️ WARNING**: All forks have uncommitted work - coordinate upstream submissions before major upgrades
->>>>>>> cleanup-temp-files
-
-<<<<<<< HEAD
-### **home-manager Fork Development**  
-**Branches**: 
-- `auto-validate-feature` (current) - autoValidate feature
-- `feature-test-with-fcitx5-fix` - fcitx5 compatibility fix
-**Status**: Multiple features in development
-**Features**:
-1. **autoValidate Integration**: Automatic validation for home.file
-   - ✅ Source attribute conflict resolution (mkMerge)
-   - 🔧 Integration with file-type detection
-2. **fcitx5 Package Path Fix**: Compatibility with recent nixpkgs
-   - ✅ Updated package path (libsForQt5.fcitx5-with-addons → fcitx5-with-addons)
-- 📋 **Upstream Goal**: Submit both features for home-manager inclusion
-||||||| e233a2a
-### Key Architectural Decisions Documented:
-- **Universal File Schema**: `mkValidatedFile` supports any file type with validation, testing, and completion generation
-- **Type-Specific Validators**: Modular validation system for scripts, configs, data, assets, and static files  
-- **Elimination of Coordination Overhead**: No more hardcoded cross-module dependencies
-- **Extensible Design**: Easy addition of new file types through type registry
-- **Migration Strategy**: Staged rollout with compatibility layer to ensure zero disruption
-=======
-## 🔄 **MULTI-CONTEXT DEVELOPMENT STRATEGY** (2025-10-31)
->>>>>>> cleanup-temp-files
-
-<<<<<<< HEAD
-### **NixOS-WSL Fork Development**
-**Branches**:
-- `plugin-shim-integration` (current) - Plugin architecture development
-- `feature/bare-mount-support` - Enhanced mount automation
-**Status**: Advanced plugin architecture development  
-**Features**:
-1. **Plugin Shim Integration**: WSL plugin communication via VSOCK
-   - ✅ VSOCK-based communication
-   - ✅ Windows container builds integration
-   - ✅ Comprehensive documentation (331+ lines)
-   - ✅ Test infrastructure updates
-2. **Bare Mount Support**: Enhanced WSL mount automation
-   - ✅ Comprehensive automation support
-   - ✅ Idempotent Windows script generation
-- 📋 **Upstream Goal**: Major feature contribution to NixOS-WSL project
-
-### **⚠️ CRITICAL DEVELOPMENT DEPENDENCIES**
-1. **Cross-Fork Integration**: nixpkgs autoWriter used by home-manager autoValidate
-2. **Active Development**: All forks have significant uncommitted/unpushed work
-3. **Upstream Timing**: Features need coordination for proper upstream submission
-4. **Breaking Changes Risk**: Major upgrades could conflict with ongoing development
-
-### **🎯 FORK RESOLUTION STRATEGY**
-**Phase 1: Feature Completion**
-- Complete nixpkgs writers-auto-detection testing
-- Finalize home-manager autoValidate integration
-- Complete NixOS-WSL plugin shim documentation
-
-**Phase 2: Upstream Coordination**  
-- Prepare nixpkgs RFC for autoWriter feature
-- Submit home-manager PRs for autoValidate + fcitx5 fixes
-- Coordinate NixOS-WSL plugin architecture contribution
-
-**Phase 3: Synchronized Upgrades**
-- Only after upstream acceptance or feature stability
-- Maintain local forks until upstream integration complete
-
-## 🔄 **MULTI-CONTEXT DEVELOPMENT STRATEGY** (2025-10-31)
-
-### **🎯 Strategic Challenge**
-**Problem**: Fork development blocks other work due to manual flake.nix switching
-- Fork features need months for upstream contribution
-- Other nixcfg development shouldn't be delayed
-- Manual input switching is error-prone and friction-heavy
-- Need clear indication of development context
-
-### **🏗️ PROPOSED CONTEXT SWITCHING STRATEGY: git-worktree-superproject**
-
-See /home/tim/src/git-worktree-superproject for details.
-
 ## 📋 **CURRENT TASKS** (2025-12-09)
 
-### ✅ Just Completed: GitHub Authentication Setup
+### ✅ Recently Completed
+
+#### **GitHub Authentication & Flake Integration** (2025-12-09)
 **Branch**: `pa161878`
-**Status**: GitHub PAT configured for Nix operations
+**Status**: COMPLETE - Successfully integrated and validated
 
 **Accomplishments**:
-1. ✅ Retrieved GitHub PAT from Bitwarden (PAT-timtam2026)
-2. ✅ Configured token at `~/.config/nix/github-token` with secure permissions (600)
-3. ✅ Verified authentication works for both public and private repos
-4. ✅ Ready to proceed with flake operations without rate limiting
+1. ✅ GitHub PAT configured for Nix operations
+2. ✅ Refactored flake inputs to use upstream sources with minimal custom forks:
+   - `nixpkgs` → upstream `NixOS/nixpkgs/nixos-unstable`
+   - `home-manager` → upstream for non-WSL hosts
+   - `home-manager-wsl` → custom fork ONLY for WSL hosts (fcitx5 qt6 fix)
+3. ✅ Successfully ran `nix flake update` with all remote URLs
+4. ✅ Merged 134 commits from PDF-to-markdown development
+5. ✅ All flake validation passed
 
-### 🔄 In Progress: Flake Input Update & Validation
-**Branch**: `pa161878` (integrated 134 commits from PDF-to-markdown work)
-**Status**: Ready to update flake.lock with GitHub auth configured
+#### **PDF-to-Markdown Tools** (2025-12-08)
+- marker-pdf, docling, and tomd packages added and tested
+- GPU detection issues documented for future optimization
+- See `docs/tomd-test-results-2025-12-07.md` for performance analysis
 
-**Previous Accomplishments**:
-1. ✅ Refactored flake inputs to isolate custom sources:
-   - `nixpkgs` → upstream `NixOS/nixpkgs/nixos-unstable` (for 99% of packages)
-   - `nixpkgs-docling` → isolated for docling-parse fix only
-   - `home-manager` → upstream for non-WSL hosts (mbp, potato, nixvim-minimal)
-   - `home-manager-wsl` → custom fork for WSL hosts (wsl-windows-terminal feature)
-2. ✅ Updated overlays to use `nixpkgs-docling` ONLY for docling package
-3. ✅ Fast-forward merged 134 commits into `pa161878` branch
-4. ✅ Verified hardware-config.nix has `/mnt/wslg/distro` device path fix
+#### **tmux-session-picker** (2025-11-08)
+- Fixed file discovery, session switching, and auto-rename functionality
+- See `.archive/tmux-session-picker-fixes-2025-11-08.md`
 
-**Next Steps** (READY TO PROCEED):
-1. **Update flake.lock**: Run `nix flake update` (GitHub auth now configured)
-2. **Validate**: Run `nix flake check` after flake.lock update
-3. **Test home-manager**: Build `nix build '.#homeConfigurations."tim@pa161878-nixos".activationPackage'`
-4. **Manual testing**: Run `home-manager switch --flake .#tim@pa161878-nixos` and `sudo nixos-rebuild switch`
+### 🚧 **Incomplete/Deferred Tasks**
 
-**Future Development** (DEFERRED until git-worktree-superproject is validated)
-- [ ] Complete ongoing fork development work
-- [ ] Coordinate upstream contributions post-migration
-||||||| e233a2a
-### Success Criteria:
-- Functional equivalence with existing modules
-- Zero coordination overhead between modules
-- Extensibility for any file type
-- Improved developer experience with unified API
-=======
-### **🎯 Strategic Challenge**
-**Problem**: Fork development blocks other work due to manual flake.nix switching
-- Fork features need months for upstream contribution
-- Other nixcfg development shouldn't be delayed
-- Manual input switching is error-prone and friction-heavy
-- Need clear indication of development context
+#### **Fork Development Work** (DEFERRED)
+**Status**: On hold pending git-worktree-superproject implementation
 
-### **🏗️ PROPOSED CONTEXT SWITCHING STRATEGY: git-worktree-superproject**
+**Active Forks Requiring Upstream Coordination**:
+1. **nixpkgs** (`writers-auto-detection` branch):
+   - autoWriter/autoWriterBin implementation complete
+   - Needs RFC/PR preparation for upstream
 
-For details, see:
-- **LOCAL SESSIONS**: /home/tim/src/git-worktree-superproject 
-- **WEB SESSIONS**:   https://github.com/timblaktu/git-worktree-superproject
+2. **home-manager** (custom fork):
+   - autoValidate feature for home.file
+   - fcitx5 qt6Packages fix (merged to fork)
+   - Needs PR preparation for upstream
 
-## 📋 **CURRENT TASKS**
+3. **NixOS-WSL** (`plugin-shim-integration` branch):
+   - VSOCK communication implementation
+   - Bare mount support
+   - Needs major feature contribution coordination
 
-### Recently Completed
-- **tmux-session-picker fixes** (2025-11-08): Fixed file discovery, session switching, and added auto-rename for uniqueness. See `.archive/tmux-session-picker-fixes-2025-11-08.md`
+#### **PDF-to-Markdown GPU Optimization** (IDENTIFIED BUT NOT FIXED)
+**Problem**: marker-pdf runs on CPU despite CUDA availability
+**Impact**: 100x slower performance
+**Solution Identified**: Need to force `TORCH_DEVICE=cuda` and fix library paths
+**Status**: Documented but not implemented
 
-### Active Development
+### 📌 **Next Priority Actions**
 
-#### **PDF-to-Markdown Conversion Tools** (2025-12-08) - ⚠️ GPU ISSUE
-**Status**: marker-pdf 🔴 NOT USING GPU | docling ✅ BUILDS | tomd ✅ FIXED
-
-**Critical Discovery** (from Opus 4.5 research):
-- **VRAM Requirements CORRECTED**: Only needs ~4GB (NOT 16GB+ as initially thought)
-- **Hardware IS Sufficient**: 8GB VRAM is MORE than enough
-- **Root Problem**: marker-pdf runs on CPU despite CUDA being available
-- **Performance Impact**: 100x slower (20s/block instead of <1s)
-
-**GPU/CUDA Status**:
-- ✅ CUDA available: `torch.cuda.is_available()` returns True
-- ✅ GPU detected: RTX 2000 Ada with 8GB VRAM
-- ❌ GPU not used: 0MB VRAM usage during execution
-- ❌ Library path issue: Requires manual `LD_LIBRARY_PATH` setting
-
-**Immediate Actions Needed**:
-1. Force GPU usage in marker-pdf (set `TORCH_DEVICE=cuda`)
-2. Fix library paths in wrapper (include gcc-lib)
-3. Use proper batch sizes for 8GB VRAM
-
-**Alternative Solutions**:
-- **CPU-only**: Use `OCR_ENGINE=ocrmypdf` (Tesseract-based, faster)
-- **Digital PDFs**: Set `OCR_ENGINE=None` to skip OCR
-- **Consider Docling**: 5x faster on CPU (3.1 vs 16+ sec/page)
-
-**Documentation**:
-- Updated analysis: `docs/tomd-test-results-2025-12-07.md`
-- Includes Opus 4.5's corrections and recommendations
-- Shows actual VRAM requirements and GPU detection issues
+1. **Push Current Work**: Push the 142 commits to `origin/pa161878`
+2. **git-worktree-superproject**: Validate the worktree strategy for managing multiple development contexts
+3. **Fork Upstream Coordination**: Begin preparing PRs/RFCs for fork features
+4. **GPU Fix for marker-pdf**: Implement the identified CUDA fixes
 
 ## MANDATORY: Next Session Prompt Template
 After EVERY response, provide this format:
