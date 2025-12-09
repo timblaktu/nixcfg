@@ -193,11 +193,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1764108665,
-        "narHash": "sha256-S3pdmuMGkW0ewtxCFRYTSDXcWmKuXR81UmCHojKDt84=",
+        "lastModified": 1765307026,
+        "narHash": "sha256-AGRiHyJ8mFkKxVotdvBdUuR6cnx/M9SwpIga5tTWZog=",
         "ref": "wsl-windows-terminal",
-        "rev": "27029e8da3cbddcd5d94e7412220575de2b34411",
-        "revCount": 4850,
+        "rev": "d9c3d7485893728531aed78f4ef2638e81368fe9",
+        "revCount": 4851,
         "type": "git",
         "url": "file:///home/tim/src/home-manager"
       },
