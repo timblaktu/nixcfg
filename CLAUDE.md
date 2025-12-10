@@ -68,9 +68,32 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 4. `/home/tim/src/git-worktree-superproject` - working tree for MY PROJECT implementing fast worktree switching for multi-repo and nix flake projects. We will eventually USE this here in nixcfg to facilitate multiple concurrent nix- development efforts
 
 
-## 📋 **CURRENT TASKS** (2025-12-09)
+## 📋 **CURRENT TASKS** (2025-12-10)
 
 ### ✅ Recently Completed
+
+#### **Claude Code Module Rename** (2025-12-10)
+**Branch**: `dev`
+**Status**: COMPLETE - Ready for deployment
+
+**Problem**: Upstream home-manager added `programs.claude-code` module that conflicts with our custom implementation.
+
+**Solution**: Renamed our module to `programs.claude-code-enhanced`
+
+**Changes Made**:
+1. ✅ Renamed namespace: `programs.claude-code` → `programs.claude-code-enhanced`
+2. ✅ Updated all sub-modules (hooks, mcp-servers, statusline, sub-agents, slash-commands, memory-commands)
+3. ✅ Re-enabled module in base.nix with new namespace
+4. ✅ Fixed pre-existing .zshenv conflict (changed to programs.zsh.envExtra)
+5. ✅ Fixed missing disableBypassPermissionsMode option reference
+6. ✅ All validation passed (nix flake check, home-manager dry-run, nixos-rebuild dry-build)
+
+**Documentation**:
+- `docs/claude-code-home-manager-program-analysis.md` - Comprehensive analysis
+- `docs/claude-code-module-comparison.md` - Feature comparison
+- `home/modules/claude-code/UPSTREAM-CONTRIBUTION-PLAN.md` - Phased contribution strategy
+
+**Commit**: `4f5a67b feat: rename claude-code module to avoid upstream conflict`
 
 #### **GitHub Authentication & Flake Integration** (2025-12-09)
 **Branch**: `pa161878`
@@ -78,10 +101,7 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 **Accomplishments**:
 1. ✅ GitHub PAT configured for Nix operations
-2. ✅ Refactored flake inputs to use upstream sources with minimal custom forks:
-   - `nixpkgs` → upstream `NixOS/nixpkgs/nixos-unstable`
-   - `home-manager` → upstream for non-WSL hosts
-   - `home-manager-wsl` → custom fork ONLY for WSL hosts (fcitx5 qt6 fix)
+2. ✅ Refactored flake inputs to use upstream sources with minimal custom forks
 3. ✅ Successfully ran `nix flake update` with all remote URLs
 4. ✅ Merged 134 commits from PDF-to-markdown development
 5. ✅ All flake validation passed
@@ -89,11 +109,16 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 #### **PDF-to-Markdown Tools** (2025-12-08)
 - marker-pdf, docling, and tomd packages added and tested
 - GPU detection issues documented for future optimization
-- See `docs/tomd-test-results-2025-12-07.md` for performance analysis
 
-#### **tmux-session-picker** (2025-11-08)
-- Fixed file discovery, session switching, and auto-rename functionality
-- See `.archive/tmux-session-picker-fixes-2025-11-08.md`
+### 🚧 **Pending Deployment**
+
+#### **Claude Code Enhanced Module** (Ready to Deploy)
+**Branch**: `dev` (ahead of origin/main by 1 commit)
+**Next Steps**:
+1. Run `home-manager switch --flake '.#tim@thinky-nixos' -b backup`
+2. Run `sudo nixos-rebuild switch --flake '.#thinky-nixos'`
+3. Verify Claude Code functionality with new namespace
+4. Push dev branch or merge to main
 
 ### 🚧 **Incomplete/Deferred Tasks**
 
@@ -101,32 +126,25 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 **Status**: On hold pending git-worktree-superproject implementation
 
 **Active Forks Requiring Upstream Coordination**:
-1. **nixpkgs** (`writers-auto-detection` branch):
-   - autoWriter/autoWriterBin implementation complete
-   - Needs RFC/PR preparation for upstream
+1. **nixpkgs** (`writers-auto-detection` branch): autoWriter implementation
+2. **home-manager** (custom fork): autoValidate + fcitx5 fixes
+3. **NixOS-WSL** (`plugin-shim-integration` branch): VSOCK + bare mount
 
-2. **home-manager** (custom fork):
-   - autoValidate feature for home.file
-   - fcitx5 qt6Packages fix (merged to fork)
-   - Needs PR preparation for upstream
-
-3. **NixOS-WSL** (`plugin-shim-integration` branch):
-   - VSOCK communication implementation
-   - Bare mount support
-   - Needs major feature contribution coordination
+#### **Claude Code Upstream Contributions** (PLANNED)
+**See**: `home/modules/claude-code/UPSTREAM-CONTRIBUTION-PLAN.md`
+- Phase 2 (2-4 weeks): Statusline styles, MCP helpers PRs
+- Phase 3 (1-2 months): Categorized hooks PR
+- Phase 4 (quarter): Multi-account RFC
 
 #### **PDF-to-Markdown GPU Optimization** (IDENTIFIED BUT NOT FIXED)
 **Problem**: marker-pdf runs on CPU despite CUDA availability
-**Impact**: 100x slower performance
-**Solution Identified**: Need to force `TORCH_DEVICE=cuda` and fix library paths
 **Status**: Documented but not implemented
 
 ### 📌 **Next Priority Actions**
 
-1. **Push Current Work**: Push the 142 commits to `origin/pa161878`
-2. **git-worktree-superproject**: Validate the worktree strategy for managing multiple development contexts
-3. **Fork Upstream Coordination**: Begin preparing PRs/RFCs for fork features
-4. **GPU Fix for marker-pdf**: Implement the identified CUDA fixes
+1. **Deploy Claude Code Enhanced**: Run home-manager and nixos-rebuild switch
+2. **Push dev branch**: After successful deployment verification
+3. **Begin upstream contribution**: Start with statusline styles PR
 
 ## MANDATORY: Next Session Prompt Template
 After EVERY response, provide this format:
