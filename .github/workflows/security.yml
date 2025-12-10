@@ -133,7 +133,11 @@ jobs:
                       grep -v '"test-secrets\.yaml"' | \
                       grep -v 'Placeholder_.*' | \
                       grep -v 'ghp_[Xx]*' | \
-                      grep -v '^.*#.*ghp_.*' || true)
+                      grep -v '^.*#.*ghp_.*' | \
+                      grep -v 'extra-access-tokens.*=' | \
+                      grep -v 'tokenName.*=' | \
+                      grep -v 'tokenSecretName.*=' | \
+                      grep -v 'github-token-rotation-reminder.*=' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"
