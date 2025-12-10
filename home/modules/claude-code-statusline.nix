@@ -5,36 +5,36 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code.statusline;
+  cfg = config.programs.claude-code-enhanced.statusline;
   writers = pkgs.writers;
-  
+
   # CLI tool dependencies - leverage the rich nixcfg environment
   commonDeps = with pkgs; [
-    jq                 # JSON parsing (required for all statuslines)
-    coreutils          # Basic utilities (date, basename, etc.)
-    gnugrep            # Pattern matching and text processing
-    gnused             # Stream editing
-    gawk               # Text processing
+    jq # JSON parsing (required for all statuslines)
+    coreutils # Basic utilities (date, basename, etc.)
+    gnugrep # Pattern matching and text processing
+    gnused # Stream editing
+    gawk # Text processing
   ];
-  
+
   gitDeps = with pkgs; [
-    git                # Git operations
+    git # Git operations
   ] ++ commonDeps;
-  
+
   hashingDeps = with pkgs; [
-    coreutils          # Contains sha256sum, md5sum
+    coreutils # Contains sha256sum, md5sum
   ] ++ commonDeps;
-  
+
   advancedDeps = with pkgs; [
-    bc                 # Floating point calculations
-    python3            # Advanced hashing and calculations
-    findutils          # find command for caching
+    bc # Floating point calculations
+    python3 # Advanced hashing and calculations
+    findutils # find command for caching
   ] ++ gitDeps ++ hashingDeps;
-  
+
   # Create statusline scripts using pkgs.writers
   mkStatuslineScript = { name, style, deps ? commonDeps, optimized ? false }:
     let
-      scriptText = 
+      scriptText =
         if style == "powerline" then powerlineScriptText
         else if style == "minimal" then minimalScriptText
         else if style == "context" then contextAwareScriptText
@@ -48,7 +48,7 @@ let
       
       ${scriptText}
     '';
-  
+
   # 1. Powerline Style - Segment-based with powerline separators
   powerlineScriptText = /* bash */ ''
     # Read JSON input from Claude Code
@@ -172,7 +172,7 @@ let
     echo -en "''${BG_MODEL}''${FG_MODEL} 🤖 ''${MODEL_ABBR} ''${RESET}''${BG_COST}\033[38;5;234m''${SEP}''${RESET}"
     echo -e "''${BG_COST}''${FG_COST} \$''${COST_FMT} ''${RESET}\033[38;5;232m''${SEP}''${RESET}"
   '';
-  
+
   # 2. Minimal Style - Clean single-line with smart abbreviations (plain text for Claude Code compatibility)
   minimalScriptText = /* bash */ ''
     # Parse JSON input
@@ -256,7 +256,7 @@ let
     printf "● %s ❯ %s%s | %s | \$%.2f\n" \
       "$ACCOUNT" "$DIR_DISPLAY" "$GIT" "$MODEL_SHORT" "$COST"
   '';
-  
+
   # 3. Context-Aware Style - Information-dense with truecolor
   contextAwareScriptText = /* bash */ ''
     # Read and parse JSON
@@ -387,7 +387,7 @@ let
     echo -en "''${DIM}│''${RESET} ''${COLOR}\$''${RESET}$(printf "%.2f" "$COST")"
     echo -e "$SESSION_TIME"
   '';
-  
+
   # 4. Box Drawing Style - Multi-line with Unicode box characters
   boxDrawingScriptText = /* bash */ ''
     # Parse JSON
@@ -466,7 +466,7 @@ let
     echo -e "''${DIM}├─''${RESET} 🤖 $MODEL_DISPLAY"
     echo -e "''${DIM}╰─''${RESET} ''${COST_COLOR}\$$(printf "%.3f" "$COST")''${RESET}$LINES_INFO ''${DIM}──────────────╯''${RESET}"
   '';
-  
+
   # 5. Performance-Optimized Style - Fast with caching
   performanceOptimizedScriptText = /* bash */ ''
     # Cache directory for expensive operations
@@ -534,7 +534,7 @@ let
     # Single printf for output (fastest)
     printf "''${COLOR}%s''${RESET} › %s%s | %s | \$%.2f\n" "$ACCOUNT" "$DIR_DISPLAY" "$GIT_INFO" "$M" "$COST"
   '';
-  
+
   # Available statusline scripts
   statuslineScripts = {
     claude-statusline-powerline = mkStatuslineScript {
@@ -542,25 +542,25 @@ let
       style = "powerline";
       deps = gitDeps ++ hashingDeps;
     };
-    
+
     claude-statusline-minimal = mkStatuslineScript {
       name = "claude-statusline-minimal";
       style = "minimal";
       deps = gitDeps ++ hashingDeps;
     };
-    
+
     claude-statusline-context = mkStatuslineScript {
       name = "claude-statusline-context";
       style = "context";
       deps = gitDeps ++ hashingDeps;
     };
-    
+
     claude-statusline-box = mkStatuslineScript {
       name = "claude-statusline-box";
       style = "box";
       deps = advancedDeps;
     };
-    
+
     claude-statusline-fast = mkStatuslineScript {
       name = "claude-statusline-fast";
       style = "fast";
@@ -568,15 +568,16 @@ let
       optimized = true;
     };
   };
-  
-in {
-  options.programs.claude-code.statusline = {
+
+in
+{
+  options.programs.claude-code-enhanced.statusline = {
     enable = mkOption {
       type = types.bool;
       default = false;
       description = "Enable Claude Code statusline integration with multiple styles";
     };
-    
+
     style = mkOption {
       type = types.enum [ "powerline" "minimal" "context" "box" "fast" ];
       default = "minimal";
@@ -589,43 +590,43 @@ in {
         - fast: Performance-optimized with caching
       '';
     };
-    
+
     enableAllStyles = mkOption {
       type = types.bool;
       default = false;
       description = "Install all statusline styles for testing and switching";
     };
-    
+
     testMode = mkOption {
       type = types.bool;
       default = false;
       description = "Enable test mode with mock JSON data generation";
     };
   };
-  
+
   # Add statusline configuration to the internal settings system
-  options.programs.claude-code._internal.statuslineSettings = mkOption {
+  options.programs.claude-code-enhanced._internal.statuslineSettings = mkOption {
     type = types.attrs;
     internal = true;
-    default = {};
+    default = { };
   };
-  
+
   config = mkIf cfg.enable {
     # Configure Claude Code statusline through the internal settings system
     # Use stable command name instead of absolute paths to avoid breakage on rebuilds
-    programs.claude-code._internal.statuslineSettings = {
+    programs.claude-code-enhanced._internal.statuslineSettings = {
       statusLine = {
         type = "command";
         command = "claude-statusline-${cfg.style}";
         padding = 0;
       };
     };
-    
+
     # Install the selected statusline script and test scripts
-    home.packages = [ 
+    home.packages = [
       statuslineScripts."claude-statusline-${cfg.style}"
     ] ++ optionals cfg.enableAllStyles (attrValues statuslineScripts)
-      ++ optionals cfg.testMode [
+    ++ optionals cfg.testMode [
       (writers.writeBashBin "test-claude-statusline" ''
         #!/usr/bin/env bash
         # Test Claude Code statusline with mock data

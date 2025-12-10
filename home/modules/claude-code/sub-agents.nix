@@ -3,46 +3,47 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code;
+  cfg = config.programs.claude-code-enhanced;
 
-  mkSubAgent = {
-    name,
-    description,
-    capabilities,
-    instructions,
-    examples ? [],
-    constraints ? []
-  }: {
-    text = ''
-      ---
-      name: ${lib.toLower (lib.replaceStrings [" "] ["-"] name)}
-      description: ${description}
-      ---
+  mkSubAgent =
+    { name
+    , description
+    , capabilities
+    , instructions
+    , examples ? [ ]
+    , constraints ? [ ]
+    }: {
+      text = ''
+        ---
+        name: ${lib.toLower (lib.replaceStrings [" "] ["-"] name)}
+        description: ${description}
+        ---
       
-      # ${name}
+        # ${name}
       
-      ${description}
+        ${description}
       
-      ## Capabilities
-      ${concatStringsSep "\n" (map (cap: "- ${cap}") capabilities)}
+        ## Capabilities
+        ${concatStringsSep "\n" (map (cap: "- ${cap}") capabilities)}
       
-      ## Instructions
-      ${instructions}
+        ## Instructions
+        ${instructions}
       
-      ${optionalString (examples != []) ''
-        ## Examples
-        ${concatStringsSep "\n\n" examples}
-      ''}
+        ${optionalString (examples != []) ''
+          ## Examples
+          ${concatStringsSep "\n\n" examples}
+        ''}
       
-      ${optionalString (constraints != []) ''
-        ## Constraints
-        ${concatStringsSep "\n" (map (c: "- ${c}") constraints)}
-      ''}
-    '';
-  };
+        ${optionalString (constraints != []) ''
+          ## Constraints
+          ${concatStringsSep "\n" (map (c: "- ${c}") constraints)}
+        ''}
+      '';
+    };
 
-in {
-  options.programs.claude-code.subAgents = {
+in
+{
+  options.programs.claude-code-enhanced.subAgents = {
     codeSearcher = {
       enable = mkOption {
         type = types.bool;
@@ -67,7 +68,7 @@ in {
         description = "Example queries";
       };
     };
-    
+
     memoryBank = {
       enable = mkEnableOption "memory bank sub-agent";
       instructions = mkOption {
@@ -80,7 +81,7 @@ in {
         description = "Instructions for memory bank";
       };
     };
-    
+
     architect = {
       enable = mkEnableOption "architect sub-agent";
       instructions = mkOption {
@@ -93,7 +94,7 @@ in {
         description = "Instructions for architect";
       };
     };
-    
+
     custom = mkOption {
       type = types.attrsOf (types.submodule {
         options = {
@@ -111,22 +112,22 @@ in {
           };
           examples = mkOption {
             type = types.listOf types.str;
-            default = [];
+            default = [ ];
             description = "Example uses";
           };
           constraints = mkOption {
             type = types.listOf types.str;
-            default = [];
+            default = [ ];
             description = "Agent constraints";
           };
         };
       });
-      default = {};
+      default = { };
       description = "Custom sub-agent definitions";
     };
   };
 
-  config.programs.claude-code._internal.subAgentFiles = mkMerge [
+  config.programs.claude-code-enhanced._internal.subAgentFiles = mkMerge [
     (mkIf cfg.subAgents.codeSearcher.enable {
       ".claude/agents/code-searcher.md" = mkSubAgent {
         name = "Code Searcher";
@@ -141,7 +142,7 @@ in {
         examples = cfg.subAgents.codeSearcher.examples;
       };
     })
-    
+
     (mkIf cfg.subAgents.memoryBank.enable {
       ".claude/agents/memory-bank.md" = mkSubAgent {
         name = "Memory Bank Synchronizer";
@@ -155,7 +156,7 @@ in {
         instructions = cfg.subAgents.memoryBank.instructions;
       };
     })
-    
+
     (mkIf cfg.subAgents.architect.enable {
       ".claude/agents/architect.md" = mkSubAgent {
         name = "System Architect";
@@ -169,11 +170,13 @@ in {
         instructions = cfg.subAgents.architect.instructions;
       };
     })
-    
-    (listToAttrs (mapAttrsToList (name: agent: 
-      nameValuePair ".claude/agents/${name}.md" (mkSubAgent ({
-        inherit name;
-      } // agent))
-    ) cfg.subAgents.custom))
+
+    (listToAttrs (mapAttrsToList
+      (name: agent:
+        nameValuePair ".claude/agents/${name}.md" (mkSubAgent ({
+          inherit name;
+        } // agent))
+      )
+      cfg.subAgents.custom))
   ];
 }

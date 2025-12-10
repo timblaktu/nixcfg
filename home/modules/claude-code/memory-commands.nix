@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code;
+  cfg = config.programs.claude-code-enhanced;
 
   # Path to the user's global memory file in nixcfg  
   userGlobalMemoryPath = "${cfg.nixcfgPath}/claude-runtime/.claude-\${CLAUDE_ACCOUNT:-max}/CLAUDE.md";
@@ -130,7 +130,7 @@ let
 
 in
 {
-  options.programs.claude-code.memoryCommands = {
+  options.programs.claude-code-enhanced.memoryCommands = {
     enable = mkOption {
       type = types.bool;
       default = true;
@@ -146,7 +146,7 @@ in
 
   config = mkIf (cfg.enable && cfg.memoryCommands.enable) {
     # Add custom slash commands
-    programs.claude-code.slashCommands.custom = {
+    programs.claude-code-enhanced.slashCommands.custom = {
       nixmemory = {
         description = "Edit user-global memory file (Nix-aware)";
         usage = "/nixmemory";

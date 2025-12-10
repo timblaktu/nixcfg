@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code;
+  cfg = config.programs.claude-code-enhanced;
 
   mkHook =
     { matcher
@@ -28,7 +28,7 @@ let
 
 in
 {
-  options.programs.claude-code.hooks = {
+  options.programs.claude-code-enhanced.hooks = {
     formatting = {
       enable = mkOption {
         type = types.bool;
@@ -156,7 +156,7 @@ in
     };
   };
 
-  config.programs.claude-code._internal.hooks = mkMerge [
+  config.programs.claude-code-enhanced._internal.hooks = mkMerge [
     # Base hook structure
     {
       PreToolUse = [ ];

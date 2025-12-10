@@ -3,10 +3,11 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code;
+  cfg = config.programs.claude-code-enhanced;
 
-in {
-  options.programs.claude-code.slashCommands = {
+in
+{
+  options.programs.claude-code-enhanced.slashCommands = {
     documentation = {
       enable = mkOption {
         type = types.bool;
@@ -22,7 +23,7 @@ in {
         description = "Documentation command handlers";
       };
     };
-    
+
     security = {
       enable = mkOption {
         type = types.bool;
@@ -38,7 +39,7 @@ in {
         description = "Security command handlers";
       };
     };
-    
+
     refactoring = {
       enable = mkOption {
         type = types.bool;
@@ -54,7 +55,7 @@ in {
         description = "Refactoring command handlers";
       };
     };
-    
+
     context = {
       enable = mkOption {
         type = types.bool;
@@ -71,7 +72,7 @@ in {
         description = "Context command handlers";
       };
     };
-    
+
     custom = mkOption {
       type = types.attrsOf (types.submodule {
         options = {
@@ -89,22 +90,22 @@ in {
           };
           aliases = mkOption {
             type = types.listOf types.str;
-            default = [];
+            default = [ ];
             description = "Command aliases";
           };
           permissions = mkOption {
             type = types.listOf types.str;
-            default = [];
+            default = [ ];
             description = "Required permissions";
           };
         };
       });
-      default = {};
+      default = { };
       description = "Custom slash command definitions";
     };
   };
 
-  config.programs.claude-code._internal.slashCommandDefs = {
+  config.programs.claude-code-enhanced._internal.slashCommandDefs = {
     documentation = mkIf cfg.slashCommands.documentation.enable {
       "generate-readme" = {
         name = "generate-readme";
@@ -112,7 +113,7 @@ in {
         usage = "/documentation generate-readme [--format markdown|rst]";
         command = cfg.slashCommands.documentation.commands.generateReadme;
       };
-      
+
       "api-docs" = {
         name = "api-docs";
         description = "Generate API documentation";
@@ -128,7 +129,7 @@ in {
         usage = "/security audit [--severity high|medium|low]";
         command = cfg.slashCommands.security.commands.audit;
       };
-      
+
       "secrets-scan" = {
         name = "secrets-scan";
         description = "Scan for exposed secrets";
@@ -144,7 +145,7 @@ in {
         usage = "/refactor extract-function <start-line> <end-line>";
         command = cfg.slashCommands.refactoring.commands.extractFunction;
       };
-      
+
       "rename-symbol" = {
         name = "rename-symbol";
         description = "Rename a symbol across the codebase";
@@ -160,14 +161,14 @@ in {
         usage = "/context cleanup";
         command = cfg.slashCommands.context.commands.cleanup;
       };
-      
+
       "save" = {
         name = "save";
         description = "Save current context";
         usage = "/context save <name>";
         command = cfg.slashCommands.context.commands.save;
       };
-      
+
       "load" = {
         name = "load";
         description = "Load saved context";

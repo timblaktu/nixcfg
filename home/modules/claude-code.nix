@@ -13,8 +13,11 @@ with lib;
     ./claude-code-statusline.nix
   ];
 
-  options.programs.claude-code = {
-    enable = mkEnableOption "Claude Code with simplified mkOutOfStoreSymlink management";
+  # NOTE: Renamed from programs.claude-code to programs.claude-code-enhanced
+  # to avoid conflict with upstream home-manager's programs.claude-code module.
+  # See docs/claude-code-upstream-contribution-plan.md for migration strategy.
+  options.programs.claude-code-enhanced = {
+    enable = mkEnableOption "Claude Code Enhanced - feature-rich multi-account Claude Code management";
 
     debug = mkEnableOption "debug output for all components";
 
@@ -193,7 +196,7 @@ with lib;
 
   config =
     let
-      cfg = config.programs.claude-code;
+      cfg = config.programs.claude-code-enhanced;
 
       # Use the configurable nixcfg path
       nixcfgPath = cfg.nixcfgPath;
@@ -537,7 +540,6 @@ with lib;
             deny = cfg.permissions.deny;
             ask = cfg.permissions.ask;
             defaultMode = cfg.permissions.defaultMode;
-            disableBypassPermissionsMode = cfg.permissions.disableBypassPermissionsMode;
             additionalDirectories = cfg.permissions.additionalDirectories;
           }}')
           ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}

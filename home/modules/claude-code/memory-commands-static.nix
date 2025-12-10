@@ -4,8 +4,8 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code;
-  
+  cfg = config.programs.claude-code-enhanced;
+
   # Create the nixmemory command as a proper package
   claudeNixmemoryCmd = pkgs.writeShellApplication {
     name = "claude-nixmemory";
@@ -79,7 +79,7 @@ let
       fi
     '';
   };
-  
+
   # Create the nixremember command as a proper package
   claudeNixrememberCmd = pkgs.writeShellApplication {
     name = "claude-nixremember";
@@ -133,19 +133,20 @@ let
     '';
   };
 
-in {
-  options.programs.claude-code.staticCommands = {
+in
+{
+  options.programs.claude-code-enhanced.staticCommands = {
     enable = mkOption {
       type = types.bool;
-      default = false;  # Start with false to test alongside existing implementation
+      default = false; # Start with false to test alongside existing implementation
       description = "Use static slash command files that call commands on PATH (eliminates git churn)";
     };
   };
-  
+
   config = mkIf (cfg.enable && cfg.memoryCommands.enable && cfg.staticCommands.enable) {
     # Install the actual command implementations to PATH
     home.packages = [ claudeNixmemoryCmd claudeNixrememberCmd ];
-    
+
     # NOTE: The static wrapper files in claude-runtime/.claude-*/commands/ are 
     # manually maintained as real files in git. They are simple 3-line scripts
     # that exec the commands installed above. This eliminates git churn from

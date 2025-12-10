@@ -23,7 +23,7 @@ in
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
-    ./claude-code.nix # Claude Code MCP servers configuration
+    ./claude-code.nix # Claude Code Enhanced - renamed to avoid upstream conflict
     ./secrets-management.nix # RBW and SOPS configuration
     ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
     ./podman-tools.nix # Container tools configuration
@@ -77,7 +77,6 @@ in
         nixfmt-rfc-style
         openssl
         openssl.dev
-        parallel
         pkg-config
         poppler
         resvg
@@ -301,6 +300,12 @@ in
       # Let Home Manager install and manage itself
       programs.home-manager.enable = true;
 
+      # GNU Parallel with citation notice silenced
+      programs.parallel = {
+        enable = true;
+        will-cite = true; # Accept citation policy to avoid first-run prompt
+      };
+
       # Disable version mismatch check between Home Manager and Nixpkgs
       # This is because we're using Home Manager master with nixos-unstable
       home.enableNixpkgsReleaseCheck = false;
@@ -328,9 +333,11 @@ in
 
       # Validated scripts configuration removed - migrated to unified files
 
-      programs.claude-code = {
+      # Claude Code Enhanced - renamed to avoid conflict with upstream programs.claude-code
+      programs.claude-code-enhanced = {
         enable = cfg.enableClaudeCode;
         defaultModel = "opus";
+        defaultAccount = "max";
         accounts = {
           max = {
             enable = true;
