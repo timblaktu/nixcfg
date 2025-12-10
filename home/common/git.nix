@@ -5,10 +5,13 @@
   programs.git = {
     enable = true;
     lfs.enable = true;
-    userName = "Tim Black";
-    userEmail = "timblaktu@gmail.com";
 
-    extraConfig = {
+    # New unified settings structure (replaces userName, userEmail, extraConfig, aliases)
+    settings = {
+      user = {
+        name = "Tim Black";
+        email = "timblaktu@gmail.com";
+      };
       init.defaultBranch = "main";
       pull.rebase = false;
       push.autoSetupRemote = true;
@@ -22,12 +25,6 @@
         renameLimit = 999999;
         tool = "smart-nvimdiff";
       };
-      # # Add mergetool configuration with cmd workaround for 4-way layout
-      # mergetool = {
-      #   nvimdiff = {
-      #     # Using cmd instead of layout parameter due to Git 2.49.0 bug
-      #     cmd = ''nvim -d "$LOCAL" "$BASE" "$REMOTE" "$MERGED" -c "wincmd J"'';
-      #   };
       mergetool = {
         prompt = false;
         keepBackup = false;
@@ -35,11 +32,6 @@
           cmd = ''smart-nvimdiff "$BASE" "$LOCAL" "$REMOTE" "$MERGED"'';
           trustExitCode = true;
         };
-        # Cannot get this to show 4-way layout
-        #vimdiff = {
-        #  layout = "LOCAL,BASE,REMOTE / MERGED";
-        #  # layout = "LOCAL,BASE,REMOTE / MERGED + BASE,LOCAL + BASE,REMOTE + (LOCAL/BASE/REMOTE),MERGED";
-        #};
       };
       diff = {
         algorithm = "histogram";
@@ -59,29 +51,27 @@
         };
       };
       credential = {
-        helper = "cache --timeout=3600"; # Cache credentials for 1 hour to avoid frequent prompts
+        helper = "cache --timeout=3600";
         "https://glab.espressif.cn/customer/esp-idf-for-summit" = {
           helper = "store";
         };
       };
       safe = {
-        directory = [
-
-        ];
+        directory = [ ];
       };
       status = {
         submodulesummary = 1;
       };
-    };
-
-    aliases = {
-      st = "status";
-      ci = "commit";
-      co = "checkout";
-      br = "branch";
-      lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
-      unstage = "reset HEAD --";
-      last = "log -1 HEAD";
+      # Aliases (moved from programs.git.aliases)
+      alias = {
+        st = "status";
+        ci = "commit";
+        co = "checkout";
+        br = "branch";
+        lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
+        unstage = "reset HEAD --";
+        last = "log -1 HEAD";
+      };
     };
 
     ignores = [
@@ -131,14 +121,17 @@
       '';
     };
 
-    delta = {
-      enable = true;
-      options = {
-        navigate = true;
-        light = false;
-        side-by-side = true;
-        line-numbers = true;
-      };
+  };
+
+  # Delta (moved from programs.git.delta to programs.delta)
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      navigate = true;
+      light = false;
+      side-by-side = true;
+      line-numbers = true;
     };
   };
 

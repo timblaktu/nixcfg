@@ -271,7 +271,7 @@ in
 
       # Git credential configuration using wrapper scripts
       programs.git = {
-        extraConfig = mkMerge [
+        settings = mkMerge [
           (mkIf cfg.git.enableCredentialHelper {
             credential = {
               # Use the wrapped gh command for GitHub credential operations
