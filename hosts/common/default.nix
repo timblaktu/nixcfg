@@ -57,8 +57,20 @@
   users.users.tim = {
     isNormalUser = true;
     extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
-    openssh.authorizedKeys.keys = [];
+    openssh.authorizedKeys.keys = [ ];
+    linger = true; # Enable systemd user session persistence
   };
+
+  # Fix user runtime directory ownership for WSL
+  # WSL creates /run/user/UID with root:root ownership instead of user:group
+  # This prevents systemd --user from starting (pam_systemd ownership check fails)
+  system.activationScripts.fixUserRuntimeDir = lib.stringAfter [ "users" ] ''
+    echo "fixing /run/user/1000 ownership..."
+    if [ -d /run/user/1000 ]; then
+      chown tim:users /run/user/1000
+      chmod 0700 /run/user/1000
+    fi
+  '';
 
   # System-wide aliases
   environment.shellAliases = {

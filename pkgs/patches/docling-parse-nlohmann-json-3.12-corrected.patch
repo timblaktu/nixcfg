@@ -1,0 +1,51 @@
+diff --git c/src/v2/pdf_resources/page_cell.h w/src/v2/pdf_resources/page_cell.h
+index 360cb1e..a66a70a 100644
+--- c/src/v2/pdf_resources/page_cell.h
++++ w/src/v2/pdf_resources/page_cell.h
+@@ -185,23 +185,9 @@ namespace pdflib
+       cell.push_back(font_key); // 17
+       cell.push_back(font_name); // 18
+ 
+-      // Fix for nlohmann_json 3.12: use parse to convert bool
+-      {
+-        nlohmann::json tmp;
+-        if (widget)
+-          tmp = nlohmann::json::parse("true");
+-        else
+-          tmp = nlohmann::json::parse("false");
+-        cell.push_back(tmp); // 19
+-      }
+-      {
+-        nlohmann::json tmp;
+-        if (left_to_right)
+-          tmp = nlohmann::json::parse("true");
+-        else
+-          tmp = nlohmann::json::parse("false");
+-        cell.push_back(tmp); // 20
+-      }
++      // Fix for nlohmann_json 3.12: explicit construction from bool
++      cell.push_back(nlohmann::json(widget)); // 19
++      cell.push_back(nlohmann::json(left_to_right)); // 20
+     }
+     assert(cell.size()==header.size());
+ 
+diff --git c/src/v2/qpdf/to_json.h w/src/v2/qpdf/to_json.h
+index 8a311f6..a444a39 100644
+--- c/src/v2/qpdf/to_json.h
++++ w/src/v2/qpdf/to_json.h
+@@ -162,13 +162,8 @@ namespace pdflib
+         else if(obj.isBool())
+           {
+             bool val = obj.getBoolValue();
+-            // Fix for nlohmann_json 3.12: use parse to convert bool
+-            nlohmann::json tmp;
+-            if (val)
+-              tmp = nlohmann::json::parse("true");
+-            else
+-              tmp = nlohmann::json::parse("false");
+-            result = tmp;
++            // Fix for nlohmann_json 3.12: explicit construction from bool
++            result = nlohmann::json(val);
+           }
+         else
+           {

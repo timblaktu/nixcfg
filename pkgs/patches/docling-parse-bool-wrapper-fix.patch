@@ -1,0 +1,19 @@
+diff --git a/src/v2/qpdf/to_json.h b/src/v2/qpdf/to_json.h
+index abc123..def456 100644
+--- a/src/v2/qpdf/to_json.h
++++ b/src/v2/qpdf/to_json.h
+@@ -161,9 +161,12 @@ namespace docling::v2::qpdf
+           }
+         else if(obj.isBool())
+           {
+             bool val = obj.getBoolValue();
+-            result = val;
++            // Work around C++20 template resolution issue with bool
++            // Create JSON object directly with boolean value
++            nlohmann::json temp;
++            temp = nlohmann::json::boolean_t(val);
++            result = std::move(temp);
+           }
+         else
+           {
+             LOG_S(ERROR) << "object is of unhandled type\n" << obj.unparse();

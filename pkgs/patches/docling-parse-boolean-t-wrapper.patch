@@ -1,0 +1,31 @@
+From a652fd3fa090db52094ab824c78723214826a752 Mon Sep 17 00:00:00 2001
+From: Tim Black <timblaktu@gmail.com>
+Date: Sun, 7 Dec 2025 13:10:09 -0800
+Subject: [PATCH] fix: use nlohmann::json::boolean_t wrapper for bool
+ conversion
+
+Addresses template resolution issue where bool type doesn't have
+nested types expected by nlohmann_json templates. Using the boolean_t
+wrapper type ensures proper JSON conversion.
+---
+ src/v2/qpdf/to_json.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/v2/qpdf/to_json.h b/src/v2/qpdf/to_json.h
+index f21af58..993a4d7 100644
+--- a/src/v2/qpdf/to_json.h
++++ b/src/v2/qpdf/to_json.h
+@@ -162,7 +162,9 @@ namespace pdflib
+         else if(obj.isBool())
+           {
+             bool val = obj.getBoolValue();
+-            result = val;
++            // Work around C++20 template resolution issue with bool
++            // Use boolean_t wrapper type for proper JSON conversion
++            result = nlohmann::json::boolean_t(val);
+           }
+         else
+           {
+-- 
+2.51.0
+

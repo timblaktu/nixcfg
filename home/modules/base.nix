@@ -22,8 +22,10 @@ in
     ../common/system.nix
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
+    ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
     ./claude-code.nix # Claude Code MCP servers configuration
     ./secrets-management.nix # RBW and SOPS configuration
+    ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
     ./podman-tools.nix # Container tools configuration
     # Enhanced nix-writers based script management (migrated to unified files)
     # Import ESP-IDF development module
@@ -68,9 +70,15 @@ in
         imagemagick
         inotify-tools
         lbzip2
+        markitdown
+        marker-pdf
+        (pkgs.callPackage ../../pkgs/tomd { })
         nix-diff
         nixfmt-rfc-style
+        openssl
+        openssl.dev
         parallel
+        pkg-config
         poppler
         resvg
         ripgrep
@@ -88,7 +96,7 @@ in
         sops
         nerd-fonts.caskaydia-mono
         cascadia-code
-        noto-fonts-emoji
+        noto-fonts-color-emoji
         twemoji-color-font
       ];
       description = "Base packages for all home environments";
@@ -292,6 +300,10 @@ in
 
       # Let Home Manager install and manage itself
       programs.home-manager.enable = true;
+
+      # Disable version mismatch check between Home Manager and Nixpkgs
+      # This is because we're using Home Manager master with nixos-unstable
+      home.enableNixpkgsReleaseCheck = false;
 
       # Disable input method entirely to avoid fcitx5 package issues
       i18n.inputMethod.enable = false;

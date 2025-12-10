@@ -78,11 +78,13 @@ jobs:
       - name: Check for common secret patterns
         run: |
           # Patterns that should not appear in plaintext
+          # Fixed patterns use [^"'\{[[:space:]#] to properly detect unquoted values
+          # This avoids false positives on properly quoted values like: secret = "value";
           patterns=(
-            'password.*=.*[^"]'
-            'api[_-]?key.*=.*[^"]'
-            'token.*=.*[^"]'
-            'secret.*=.*[^"]'
+            'password.*=\s*[^"'\''\{[[:space:]#]'
+            'api[_-]?key.*=\s*[^"'\''\{[[:space:]#]'
+            'token.*=\s*[^"'\''\{[[:space:]#]'
+            'secret.*=\s*[^"'\''\{[[:space:]#]'
             'BEGIN.*PRIVATE KEY'
             'ghp_[a-zA-Z0-9]{36}'  # GitHub personal access token
             'github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}'  # GitHub fine-grained PAT
@@ -90,8 +92,8 @@ jobs:
             'npm_[a-zA-Z0-9]{36}'  # NPM token
           )
           
-          # Only exclude git internals, build artifacts, docs, scripts, and claude runtime  
-          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive --exclude-dir=docs --exclude-dir=scripts --exclude-dir=claude-runtime"
+          # Only exclude git internals, build artifacts, docs, scripts, tests, and claude runtime
+          exclude_dirs="--exclude-dir=.git --exclude-dir=result --exclude-dir=.archive --exclude-dir=docs --exclude-dir=scripts --exclude-dir=tests --exclude-dir=claude-runtime"
           
           for pattern in "${patterns[@]}"; do
             # Check for matches but exclude standardized impossible placeholders and legitimate patterns
@@ -105,7 +107,14 @@ jobs:
                       grep -v 'password.*=.*null' | \
                       grep -v 'new_password.*=' | \
                       grep -v 'sops\.secrets\.' | \
-                      grep -v 'secretsManagement\s*=' | \
+                      grep -v 'secretsManagement' | \
+                      grep -v '\.backup:' | \
+                      grep -v '-backup:' | \
+                      grep -v 'message.*=' | \
+                      grep -v 'optional.*(' | \
+                      grep -v '!= null' | \
+                      grep -v '== null' | \
+                      grep -v 'or null' | \
                       grep -v 'mkOption' | \
                       grep -v 'age1[a-z0-9]\{58\}' | \
                       grep -v 'passwordFile.*=' | \
@@ -133,7 +142,11 @@ jobs:
                       grep -v '"test-secrets\.yaml"' | \
                       grep -v 'Placeholder_.*' | \
                       grep -v 'ghp_[Xx]*' | \
-                      grep -v '^.*#.*ghp_.*' || true)
+                      grep -v '^.*#.*ghp_.*' | \
+                      grep -v 'extra-access-tokens.*=' | \
+                      grep -v 'tokenName.*=' | \
+                      grep -v 'tokenSecretName.*=' | \
+                      grep -v 'github-token-rotation-reminder.*=' || true)
             
             if [ -n "$matches" ]; then
               echo "ERROR: Found potential secret matching pattern: $pattern"

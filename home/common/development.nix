@@ -32,7 +32,14 @@ in
         pyserial
         cryptography
         pyparsing
+        pymupdf4llm
       ]))
+
+      # PDF to Markdown converter CLI using pymupdf4llm with parallel processing
+      (pkgs.writers.writePython3Bin "pdf2md"
+        { libraries = [ pkgs.python3Packages.pymupdf4llm ]; }
+        (builtins.readFile ../files/bin/pdf2md.py)
+      )
       flex
       bison
       gperf

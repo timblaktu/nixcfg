@@ -1,0 +1,16 @@
+diff --git a/src/v2/qpdf/to_json.h b/src/v2/qpdf/to_json.h
+index abc123..def456 100644
+--- a/src/v2/qpdf/to_json.h
++++ b/src/v2/qpdf/to_json.h
+@@ -161,9 +161,11 @@ namespace docling::v2::qpdf
+           }
+         else if(obj.isBool())
+           {
+             bool val = obj.getBoolValue();
+-            result = val;
++            // Explicit json construction for bool to avoid template resolution issues
++            result = val ? nlohmann::json(true) : nlohmann::json(false);
+           }
+         else
+           {
+             LOG_S(ERROR) << "object is of unhandled type\n" << obj.unparse();

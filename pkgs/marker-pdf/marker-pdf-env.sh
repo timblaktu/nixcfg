@@ -1,0 +1,714 @@
+#!/usr/bin/env bash
+# marker-pdf environment launcher
+# This creates/activates a venv with marker-pdf installed
+
+set -euo pipefail
+
+VENV_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/marker-pdf-venv"
+
+# ========================================
+# MEMORY OPTIMIZATION CONFIGURATION
+# ========================================
+
+# PyTorch memory optimization for 8GB GPU
+# Optimized for better GPU utilization while preventing OOM
+export PYTORCH_ALLOC_CONF="max_split_size_mb:512,garbage_collection_threshold:0.7,expandable_segments:True"
+
+# Limit PyTorch threads to reduce CPU memory overhead
+export OMP_NUM_THREADS=4
+export MKL_NUM_THREADS=4
+
+# GPU VRAM configuration for 8GB RTX 2000 Ada
+export CUDA_VISIBLE_DEVICES=0
+export INFERENCE_RAM=7  # Leave 1GB for system overhead
+
+# ========================================
+# FORCE GPU USAGE - CRITICAL FOR PERFORMANCE
+# ========================================
+# Force PyTorch to use CUDA device (GPU) instead of CPU
+export TORCH_DEVICE=cuda
+export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:512,garbage_collection_threshold:0.8"
+
+# Additional GPU optimization settings
+export CUDA_LAUNCH_BLOCKING=0  # Allow async GPU operations
+export TORCH_USE_CUDA_DSA=1   # Enable direct memory access
+export PYTORCH_ENABLE_MPS_FALLBACK=0  # Disable fallback to CPU
+
+# Ensure Nix Python packages are discoverable
+export PYTHONPATH="@pythonPath@:${PYTHONPATH:-}"
+
+# Add CUDA libs and stdenv C++ library for PyTorch
+# Include both WSL CUDA libs and Nix-provided libs if available
+export LD_LIBRARY_PATH="/usr/lib/wsl/lib:@stdenvLib@:${LD_LIBRARY_PATH:-}"
+
+# Additional CUDA environment variables for better detection
+export CUDA_HOME="/usr/lib/wsl"  # WSL CUDA home
+export CUDA_PATH="/usr/lib/wsl"
+
+# Default settings optimized for 8GB GPU + memory efficiency
+BATCH_MULTIPLIER="${MARKER_BATCH_MULTIPLIER:-0.85}"  # Try higher for 8GB VRAM utilization
+CHUNK_SIZE="${MARKER_CHUNK_SIZE:-100}"  # Larger chunks to utilize more VRAM
+# WSL Note: Memory limiting is problematic in WSL - use 'unlimited' to avoid thread issues
+MEMORY_HIGH="${MARKER_MEMORY_HIGH:-20G}"  # Soft limit for warnings (Linux only)
+MEMORY_MAX="${MARKER_MEMORY_MAX:-unlimited}"  # Default to unlimited in WSL to avoid thread creation errors
+AUTO_CHUNK="${MARKER_AUTO_CHUNK:-false}"
+CACHE_CHUNKS="${MARKER_CACHE_CHUNKS:-true}"  # Cache chunk files to avoid re-chunking
+
+
+# Generate output directory name based on parameters
+generate_output_dir() {
+  local input_pdf="$1"
+  local base_name=$(basename "$input_pdf" .pdf)
+  local timestamp=$(date +%Y%m%d-%H%M%S)
+
+  # Build suffix based on parameters
+  local suffix=""
+
+  if [ "$AUTO_CHUNK" = true ]; then
+    suffix="${suffix}-chunked${CHUNK_SIZE}"
+  fi
+
+  # Add batch multiplier if not default
+  if [ "$BATCH_MULTIPLIER" != "0.85" ]; then
+    # Convert to percentage for readability (e.g., 0.75 -> 75)
+    local batch_pct=$(echo "$BATCH_MULTIPLIER * 100" | @bc@ | cut -d. -f1)
+    suffix="${suffix}-batch${batch_pct}"
+  fi
+
+  # Create output directory name
+  echo "${base_name}-marker${suffix}-${timestamp}"
+}
+
+# Extract TOC from PDF and generate chunk boundaries
+extract_toc_chunks() {
+  local input_pdf="$1"
+  local chunk_size="$2"
+
+  # Try to extract TOC using qpdf
+  local toc_json
+  if toc_json=$(@qpdf@/bin/qpdf "$input_pdf" --json --json-key=outlines 2>/dev/null); then
+    # Parse TOC and create chapter-based chunks
+    # For now, fall back to page-based chunking (TOC parsing is complex)
+    # TODO: Implement full TOC parsing in future iteration
+    return 1
+  else
+    return 1
+  fi
+}
+
+# Split PDF into chunks
+chunk_pdf() {
+  local input_pdf="$1"
+  local chunk_dir="$2"
+  local chunk_size="$3"
+
+  echo "Chunking PDF: $input_pdf (chunk size: $chunk_size pages)"
+
+  # Get total page count
+  local total_pages
+  total_pages=$(@qpdf@/bin/qpdf --show-npages "$input_pdf")
+  echo "Total pages: $total_pages"
+
+  if [ "$total_pages" -le "$chunk_size" ]; then
+    echo "PDF has $total_pages pages, no chunking needed"
+    echo "$input_pdf" > "$chunk_dir/chunks.list"
+    return 0
+  fi
+
+  # Try TOC-based chunking first
+  if extract_toc_chunks "$input_pdf" "$chunk_size"; then
+    echo "Using TOC-based chunking"
+    # TOC chunks already created
+    return 0
+  fi
+
+  # Fallback: Fixed-size page chunking
+  echo "Using fixed-size page chunking ($chunk_size pages per chunk)"
+
+  local basename
+  basename=$(basename "$input_pdf" .pdf)
+  local chunk_num=1
+  local start_page=1
+
+  rm -f "$chunk_dir/chunks.list"
+
+  while [ "$start_page" -le "$total_pages" ]; do
+    local end_page=$((start_page + chunk_size - 1))
+    if [ "$end_page" -gt "$total_pages" ]; then
+      end_page=$total_pages
+    fi
+
+    local chunk_name=$(printf "%s-pages-%03d-%03d.pdf" "$basename" "$start_page" "$end_page")
+    local chunk_path="$chunk_dir/$chunk_name"
+
+    echo "Creating chunk: $chunk_name (pages $start_page-$end_page)"
+    @qpdf@/bin/qpdf "$input_pdf" --pages "$input_pdf" "$start_page-$end_page" -- "$chunk_path"
+
+    echo "$chunk_path" >> "$chunk_dir/chunks.list"
+
+    start_page=$((end_page + 1))
+    chunk_num=$((chunk_num + 1))
+  done
+
+  echo "Created $((chunk_num - 1)) chunks"
+}
+
+# Process a single PDF file with memory limiting
+process_with_limits() {
+  local input_pdf="$1"
+  local output_dir="$2"
+  shift 2
+  local extra_args=("$@")
+
+  echo "Processing: $input_pdf -> $output_dir"
+  echo "Memory optimization: batch_multiplier=$BATCH_MULTIPLIER (lower = less memory)"
+  echo "PyTorch config: $PYTORCH_ALLOC_CONF"
+  echo "GPU VRAM limit: $INFERENCE_RAM GB (of 8GB total)"
+
+  # Show GPU status
+  echo "GPU Configuration:"
+  echo "  TORCH_DEVICE: $TORCH_DEVICE"
+  echo "  CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
+  echo "  LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+
+  # Quick GPU check
+  "$VENV_DIR/bin/python" -c "
+import torch
+if torch.cuda.is_available():
+    print(f'  ✓ GPU ACTIVE: {torch.cuda.get_device_name(0)}')
+    print(f'  CUDA version: {torch.version.cuda}')
+else:
+    print('  ⚠️ WARNING: GPU NOT DETECTED - Running on CPU (100x slower!)')
+" || true
+
+  # Detect if running in WSL
+  local is_wsl=false
+  if uname -r | grep -qi microsoft; then
+    is_wsl=true
+  fi
+
+  # Convert memory limit to KB for ulimit (if not unlimited)
+  local memory_limit_kb=0
+  if [ "$MEMORY_MAX" != "unlimited" ] && [ "$MEMORY_MAX" != "none" ]; then
+    case "$MEMORY_MAX" in
+      *G)
+        memory_limit_kb=$(( ${MEMORY_MAX%G} * 1024 * 1024 ))
+        ;;
+      *M)
+        memory_limit_kb=$(( ${MEMORY_MAX%M} * 1024 ))
+        ;;
+      *)
+        echo "ERROR: Invalid memory limit format: $MEMORY_MAX (use format like 20G, 20480M, or 'unlimited')"
+        exit 1
+        ;;
+    esac
+  fi
+
+  # Calculate actual batch sizes based on multiplier
+  # Default batch sizes in marker-pdf are model-dependent, but we can set them all
+  # Increased base batch sizes for better GPU utilization
+  local batch_args=()
+  if [ "$BATCH_MULTIPLIER" != "1.0" ]; then
+    # Apply multiplier to common batch size options
+    # Aggressive batch sizes for 8GB VRAM to maximize utilization
+    # Trying to get closer to full 8GB usage
+    local layout_batch=$(@gawk@/bin/awk "BEGIN {v = int(6 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+    local detection_batch=$(@gawk@/bin/awk "BEGIN {v = int(6 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+    local recognition_batch=$(@gawk@/bin/awk "BEGIN {v = int(16 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+    local ocr_error_batch=$(@gawk@/bin/awk "BEGIN {v = int(8 * $BATCH_MULTIPLIER); print (v < 1) ? 1 : v}")
+
+    batch_args=(
+      "--layout_batch_size" "$layout_batch"
+      "--detection_batch_size" "$detection_batch"
+      "--recognition_batch_size" "$recognition_batch"
+      "--ocr_error_batch_size" "$ocr_error_batch"
+    )
+
+    echo "Batch sizes: layout=$layout_batch, detection=$detection_batch, recognition=$recognition_batch, ocr_error=$ocr_error_batch"
+  fi
+
+  if [ "$is_wsl" = true ]; then
+    # WSL memory limiting is problematic - ulimit -v prevents thread creation
+    # and systemd-run doesn't enforce limits properly in WSL2
+    if [ "$MEMORY_MAX" = "unlimited" ] || [ "$MEMORY_MAX" = "none" ]; then
+      echo "WSL detected: Running without memory limits (recommended for WSL)"
+      "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "${batch_args[@]}" "${extra_args[@]}"
+    else
+      echo "WSL detected: Attempting memory limiting (may cause thread creation issues)"
+      echo "Memory limit: $MEMORY_MAX (${memory_limit_kb}KB virtual memory)"
+      echo "⚠️  WARNING: If you see 'RuntimeError: can't start new thread', run with --memory-max unlimited"
+
+      # Increase limit to account for thread stacks (each thread needs ~8MB stack)
+      # Add 2GB overhead for thread stacks and Python runtime
+      local adjusted_limit_kb=$((memory_limit_kb + 2 * 1024 * 1024))
+      echo "  Adjusted limit: $((adjusted_limit_kb / 1024 / 1024))GB (includes 2GB for thread stacks)"
+
+      (
+        ulimit -v "$adjusted_limit_kb"
+        ulimit -s 8192  # Set stack size to 8MB per thread
+        "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "${batch_args[@]}" "${extra_args[@]}"
+      )
+    fi
+  else
+    echo "Memory limits: MemoryHigh=$MEMORY_HIGH, MemoryMax=$MEMORY_MAX"
+
+    # Check if systemd user session is available
+    if ! @systemd@/bin/systemctl --user status &>/dev/null; then
+      echo "ERROR: systemd user session not available"
+      echo ""
+      echo "Memory limiting requires systemd user session. To enable it:"
+      echo "  1. Ensure systemd is running"
+      echo "  2. Start user session: systemctl --user start"
+      echo "  3. Or enable lingering: loginctl enable-linger $USER"
+      echo ""
+      echo "Alternatively, if you don't need memory limits, you can:"
+      echo "  - Run marker_single directly: ~/.local/share/marker-pdf-venv/bin/marker_single"
+      exit 1
+    fi
+
+    # Use systemd-run for memory limiting on native Linux
+    @systemd@/bin/systemd-run \
+      --user \
+      --scope \
+      --quiet \
+      -p MemoryHigh="$MEMORY_HIGH" \
+      -p MemoryMax="$MEMORY_MAX" \
+      "$VENV_DIR/bin/marker_single" "$input_pdf" --output_dir "$output_dir" "${batch_args[@]}" "${extra_args[@]}"
+  fi
+}
+
+# Process PDF with auto-chunking
+process_chunked() {
+  local input_pdf="$1"
+  local output_dir="$2"
+  shift 2
+  local extra_args=("$@")
+
+  # Ensure output directory exists
+  mkdir -p "$output_dir"
+
+  # Determine chunk cache directory
+  local chunk_dir
+  local cleanup_chunks=false
+
+  if [ "$CACHE_CHUNKS" = true ]; then
+    # Use a subdirectory in output folder for caching chunks
+    chunk_dir="$output_dir/.chunks"
+    echo "Using cached chunks directory: $chunk_dir"
+
+    # Check if chunks already exist and are valid
+    if [ -d "$chunk_dir" ] && [ -f "$chunk_dir/chunks.list" ]; then
+      local expected_chunk_count=$(wc -l < "$chunk_dir/chunks.list")
+      local actual_chunk_count=$(find "$chunk_dir" -name "*.pdf" | wc -l)
+
+      if [ "$expected_chunk_count" -eq "$actual_chunk_count" ]; then
+        echo "✓ Using existing chunks from cache ($actual_chunk_count chunks found)"
+      else
+        echo "⚠ Chunk cache incomplete, regenerating..."
+        rm -rf "$chunk_dir"
+        mkdir -p "$chunk_dir"
+        chunk_pdf "$input_pdf" "$chunk_dir" "$CHUNK_SIZE"
+      fi
+    else
+      mkdir -p "$chunk_dir"
+      chunk_pdf "$input_pdf" "$chunk_dir" "$CHUNK_SIZE"
+    fi
+  else
+    # Use temporary directory (old behavior)
+    chunk_dir=$(mktemp -d -t marker-chunks-XXXXXX)
+    cleanup_chunks=true
+    trap "rm -rf '$chunk_dir'" EXIT
+    chunk_pdf "$input_pdf" "$chunk_dir" "$CHUNK_SIZE"
+  fi
+
+  # Process each chunk
+  local chunk_num=1
+  while IFS= read -r chunk_path; do
+    echo ""
+    echo "=== Processing chunk $chunk_num ==="
+
+    local chunk_output="$chunk_dir/output-$chunk_num"
+    mkdir -p "$chunk_output"
+
+    process_with_limits "$chunk_path" "$chunk_output" "${extra_args[@]}"
+
+    chunk_num=$((chunk_num + 1))
+  done < "$chunk_dir/chunks.list"
+
+  # Merge markdown outputs
+  echo ""
+  echo "=== Merging chunk outputs ==="
+
+  local merged_md="$output_dir/$(basename "$input_pdf" .pdf).md"
+  : > "$merged_md"  # Create empty file
+
+  local files_merged=0
+  echo "Looking for output files in: $chunk_dir/output-*"
+
+  for ((i=1; i<chunk_num; i++)); do
+    local chunk_output="$chunk_dir/output-$i"
+    echo "Checking chunk output directory: $chunk_output"
+    # marker-pdf saves files WITHOUT .md extension!
+    # Find all files in the output directory (excluding subdirs)
+    for output_file in "$chunk_output"/*; do
+      if [ -f "$output_file" ]; then
+        # Check if this is likely a markdown file (marker saves without extension)
+        # Skip image files and other non-text files
+        case "$(basename "$output_file")" in
+          *.png|*.jpg|*.jpeg|*.pdf|*.json)
+            # Skip non-markdown files
+            ;;
+          *)
+            echo "  Merging: $(basename "$output_file")"
+            cat "$output_file" >> "$merged_md"
+            echo "" >> "$merged_md"  # Add blank line between chunks
+            files_merged=$((files_merged + 1))
+            ;;
+        esac
+      fi
+    done
+  done
+
+  echo ""
+  echo "Merged $files_merged files into: $merged_md"
+  echo "Final file size: $(wc -c < "$merged_md") bytes"
+
+  # Copy any other output files
+  find "$chunk_dir"/output-* -type f ! -name "*.md" -exec cp {} "$output_dir/" \;
+
+  # Clean up temporary chunks if needed
+  if [ "$cleanup_chunks" = true ]; then
+    rm -rf "$chunk_dir"
+  else
+    echo "📁 Chunks cached in: $chunk_dir"
+  fi
+
+  echo "✓ Chunked processing complete!"
+}
+
+# Create venv if it doesn't exist
+if [ ! -d "$VENV_DIR" ]; then
+  echo "Creating marker-pdf virtual environment..."
+  @pythonEnv@/bin/python -m venv "$VENV_DIR" --system-site-packages
+
+  # Install marker-pdf and its dependencies
+  echo "Installing marker-pdf @version@..."
+  "$VENV_DIR/bin/pip" install --upgrade pip
+
+  # Install marker-pdf (lets pyproject.toml specify all dependencies)
+  "$VENV_DIR/bin/pip" install "marker-pdf==@version@"
+
+  # Validate installation at build time (fail fast if broken)
+  echo "Validating marker-pdf installation..."
+  if ! "$VENV_DIR/bin/python" -c "
+import marker, surya, torch
+import os
+print('✓ Imports successful')
+print(f'  PyTorch version: {torch.__version__}')
+print(f'  CUDA available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    print(f'  GPU device: {torch.cuda.get_device_name(0)}')
+    print(f'  CUDA version: {torch.version.cuda}')
+print(f'  TORCH_DEVICE env: {os.environ.get(\"TORCH_DEVICE\", \"not set\")}')
+print(f'  Using device: {\"cuda\" if torch.cuda.is_available() else \"cpu\"}')
+"; then
+    echo "ERROR: marker-pdf dependencies failed validation"
+    rm -rf "$VENV_DIR"
+    exit 1
+  fi
+
+  echo "✓ Installation complete and validated!"
+fi
+
+# If arguments provided, run marker commands
+if [ $# -gt 0 ]; then
+  # Parse wrapper flags FIRST to set variables
+  # We need to parse in the current shell, not a subshell
+  wrapper_args=()
+  remaining_args=()
+
+  # Parse flags inline to avoid subshell issues
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --batch-multiplier|--batch_multiplier)
+        BATCH_MULTIPLIER="$2"
+        shift 2
+        ;;
+      --auto-chunk)
+        AUTO_CHUNK=true
+        shift
+        ;;
+      --chunk-size)
+        CHUNK_SIZE="$2"
+        shift 2
+        ;;
+      --memory-high)
+        MEMORY_HIGH="$2"
+        shift 2
+        ;;
+      --memory-max)
+        MEMORY_MAX="$2"
+        shift 2
+        ;;
+      *)
+        # Not a wrapper flag, keep it
+        remaining_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  # Reset args to non-wrapper arguments
+  set -- "${remaining_args[@]}"
+
+  # Show help if no commands remain after flag parsing
+  if [ $# -eq 0 ]; then
+    set -- help
+  fi
+
+  case "$1" in
+    help|--help|-h)
+      # Show help text
+      cat <<'EOF'
+marker-pdf-env: Marker PDF to Markdown converter with GPU support
+
+Commands:
+  marker-pdf-env marker_single <input.pdf> [output_dir] [OPTIONS]
+    Convert single PDF to Markdown
+    If output_dir is omitted, auto-generates: <basename>-marker-<params>-<timestamp>/
+
+  marker-pdf-env marker <input_dir> <output_dir> [OPTIONS]
+    Batch convert PDFs in directory
+
+  marker-pdf-env shell
+    Enter Python shell with marker-pdf available
+
+  marker-pdf-env update
+    Update marker-pdf to latest version
+
+  marker-pdf-env python ...
+    Run Python directly in marker-pdf environment
+
+Memory Optimization Options:
+  --batch-multiplier N      Batch size multiplier (default: 0.85, lower = less memory)
+  --auto-chunk              Enable automatic chunking for large PDFs
+  --chunk-size N            Pages per chunk (default: 100)
+  --memory-high SIZE        Soft memory limit (default: 20G, Linux only)
+  --memory-max SIZE         Hard memory limit (default: unlimited in WSL, 24G on Linux)
+                           Use 'unlimited' to disable (recommended for WSL)
+
+Active Config:
+  Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
+  Chunk size: $CHUNK_SIZE pages
+  Memory limits: $MEMORY_HIGH soft / $MEMORY_MAX hard
+  GPU VRAM: $INFERENCE_RAM GB allocated (8GB total)
+  PyTorch: GC at 60%, max_split 256MB
+  VENV: $VENV_DIR
+  CUDA: @cudaSupport@
+
+Memory Usage Control:
+  The --batch-multiplier parameter DIRECTLY controls memory usage:
+    1.0 = maximum batch sizes (may use >8GB VRAM)
+    0.85 = optimized for 8GB GPU (default, uses ~6-7GB)
+    0.5 = conservative (uses ~4-5GB VRAM)
+    0.25 = minimal memory (uses ~2-3GB VRAM)
+
+  Chunk caching is enabled by default. Chunks are saved in output_dir/.chunks/
+  Set MARKER_CACHE_CHUNKS=false to disable chunk caching
+
+⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
+⚠️  WSL Note: Memory limiting disabled by default (ulimit -v causes thread creation errors).
+    Use --memory-max unlimited if you encounter "can't start new thread" errors.
+
+Examples:
+  # Maximum GPU utilization (for systems with >8GB VRAM)
+  marker-pdf-env marker_single document.pdf output/ --batch-multiplier 1.0
+
+  # Default - optimized for 8GB VRAM (uses ~6-7GB)
+  marker-pdf-env marker_single document.pdf output/
+
+  # Conservative memory usage for large/complex PDFs
+  marker-pdf-env marker_single large.pdf output/ --batch-multiplier 0.5 --auto-chunk
+
+For GPU acceleration, ensure your NixOS config has:
+  wslCuda.enable = true;
+EOF
+      ;;
+    shell)
+      echo "Entering marker-pdf environment..."
+      exec "$VENV_DIR/bin/python" -c "import marker; print(f'marker-pdf ready. Python: {marker.__file__}')" && \
+      exec @shell@
+      ;;
+    update)
+      echo "Updating marker-pdf..."
+      "$VENV_DIR/bin/pip" install --upgrade "marker-pdf"
+      ;;
+    marker_single)
+      # Parse remaining args for input/output
+      shift  # Remove 'marker_single'
+
+      # If --help requested, pass through to actual marker_single
+      if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+        "$VENV_DIR/bin/marker_single" --help
+        exit 0
+      fi
+
+      input_pdf=""
+      output_dir=""
+      extra_args=()
+
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --output_dir)
+            output_dir="$2"
+            shift 2
+            ;;
+          *)
+            if [ -z "$input_pdf" ]; then
+              input_pdf="$1"
+              shift
+            elif [ -z "$output_dir" ]; then
+              output_dir="$1"
+              shift
+            else
+              extra_args+=("$1")
+              shift
+            fi
+            ;;
+        esac
+      done
+
+      # Check if we have input PDF
+      if [ -z "$input_pdf" ]; then
+        echo "Error: marker_single requires an input PDF file"
+        echo "Usage: marker-pdf-env marker_single <input.pdf> [output_dir] [OPTIONS]"
+        exit 1
+      fi
+
+      # Auto-generate output directory if not specified
+      if [ -z "$output_dir" ]; then
+        output_dir=$(generate_output_dir "$input_pdf")
+        echo "📁 Auto-generated output directory: $output_dir"
+      fi
+
+      if [ "$AUTO_CHUNK" = true ]; then
+        process_chunked "$input_pdf" "$output_dir" "${extra_args[@]}"
+      else
+        process_with_limits "$input_pdf" "$output_dir" "${extra_args[@]}"
+      fi
+      ;;
+    *)
+      # Pass through to marker CLI with memory limits
+      cmd="$1"
+      shift
+
+      # Detect if running in WSL
+      if uname -r | grep -qi microsoft; then
+        # WSL detected - check if memory limiting is requested
+        if [ "$MEMORY_MAX" = "unlimited" ] || [ "$MEMORY_MAX" = "none" ]; then
+          # Run without memory limits (recommended for WSL)
+          "$VENV_DIR/bin/$cmd" "$@"
+        else
+          # WSL with memory limiting - convert memory limit to KB for ulimit
+          memory_limit_kb=""
+          case "$MEMORY_MAX" in
+            *G)
+              memory_limit_kb=$(( ${MEMORY_MAX%G} * 1024 * 1024 ))
+              ;;
+            *M)
+              memory_limit_kb=$(( ${MEMORY_MAX%M} * 1024 ))
+              ;;
+            *)
+              echo "ERROR: Invalid memory limit format: $MEMORY_MAX"
+              exit 1
+              ;;
+          esac
+
+          # Add overhead for thread stacks
+          local adjusted_limit_kb=$((memory_limit_kb + 2 * 1024 * 1024))
+
+          (
+            ulimit -v "$adjusted_limit_kb"
+            ulimit -s 8192  # Set stack size to 8MB per thread
+            "$VENV_DIR/bin/$cmd" "$@"
+          )
+        fi
+      else
+        # Native Linux - use systemd-run
+        @systemd@/bin/systemd-run \
+          --user \
+          --scope \
+          --quiet \
+          -p MemoryHigh="$MEMORY_HIGH" \
+          -p MemoryMax="$MEMORY_MAX" \
+          "$VENV_DIR/bin/$cmd" "$@"
+      fi
+      ;;
+  esac
+else
+  # Show help
+  cat <<'EOF'
+marker-pdf-env: Marker PDF to Markdown converter with GPU support
+
+Commands:
+  marker-pdf-env marker_single <input.pdf> [output_dir] [OPTIONS]
+    Convert single PDF to Markdown
+    If output_dir is omitted, auto-generates: <basename>-marker-<params>-<timestamp>/
+
+  marker-pdf-env marker <input_dir> <output_dir> [OPTIONS]
+    Batch convert PDFs in directory
+
+  marker-pdf-env shell
+    Enter Python shell with marker-pdf available
+
+  marker-pdf-env update
+    Update marker-pdf to latest version
+
+  marker-pdf-env python ...
+    Run Python directly in marker-pdf environment
+
+Memory Optimization Options:
+  --batch-multiplier N      Batch size multiplier (default: 0.85, lower = less memory)
+  --auto-chunk              Enable automatic chunking for large PDFs
+  --chunk-size N            Pages per chunk (default: 100)
+  --memory-high SIZE        Soft memory limit (default: 20G, Linux only)
+  --memory-max SIZE         Hard memory limit (default: unlimited in WSL, 24G on Linux)
+                           Use 'unlimited' to disable (recommended for WSL)
+
+Active Config:
+  Batch multiplier: $BATCH_MULTIPLIER (controls actual memory usage)
+  Chunk size: $CHUNK_SIZE pages
+  Memory limits: $MEMORY_HIGH soft / $MEMORY_MAX hard
+  GPU VRAM: $INFERENCE_RAM GB allocated (8GB total)
+  PyTorch: GC at 60%, max_split 256MB
+  VENV: $VENV_DIR
+  CUDA: @cudaSupport@
+
+Memory Usage Control:
+  The --batch-multiplier parameter DIRECTLY controls memory usage:
+    1.0 = maximum batch sizes (may use >8GB VRAM)
+    0.85 = optimized for 8GB GPU (default, uses ~6-7GB)
+    0.5 = conservative (uses ~4-5GB VRAM)
+    0.25 = minimal memory (uses ~2-3GB VRAM)
+
+  Chunk caching is enabled by default. Chunks are saved in output_dir/.chunks/
+  Set MARKER_CACHE_CHUNKS=false to disable chunk caching
+
+⚠️  Your GPU has 8GB VRAM. Settings optimized for RTX 2000 Ada.
+⚠️  WSL Note: Memory limiting disabled by default (ulimit -v causes thread creation errors).
+    Use --memory-max unlimited if you encounter "can't start new thread" errors.
+
+Examples:
+  # Maximum GPU utilization (for systems with >8GB VRAM)
+  marker-pdf-env marker_single document.pdf output/ --batch-multiplier 1.0
+
+  # Default - optimized for 8GB VRAM (uses ~6-7GB)
+  marker-pdf-env marker_single document.pdf output/
+
+  # Conservative memory usage for large/complex PDFs
+  marker-pdf-env marker_single large.pdf output/ --batch-multiplier 0.5 --auto-chunk
+
+For GPU acceleration, ensure your NixOS config has:
+  wslCuda.enable = true;
+EOF
+fi
