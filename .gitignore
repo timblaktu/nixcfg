@@ -53,10 +53,16 @@ build-profiles/
 # === Claude Code Configuration ===
 # Ignore all runtime state
 claude-runtime/*/*
-.claude/*         
+.claude/*
 # ..but include settings/configuration
 !claude-runtime/*/settings.json
-!.claude/settings.json 
+!.claude/settings.json
+
+# Home Manager managed claude command symlinks (deployed to nix store)
+claude-runtime/.claude-*/commands/nixmemory.*
+claude-runtime/.claude-*/commands/usermemory.*
+claude-runtime/.claude-*/commands/globalmemory.*
+claude-runtime/.claude-*/commands/*remember.* 
 
 # Personal migration instructions (contains sensitive information)
 SECRETS-USER-INSTRUCTIONS.md

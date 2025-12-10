@@ -139,11 +139,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1765307026,
-        "narHash": "sha256-AGRiHyJ8mFkKxVotdvBdUuR6cnx/M9SwpIga5tTWZog=",
+        "lastModified": 1765330269,
+        "narHash": "sha256-2dfVRaMSAcjTKpMyD2UnDdSKeEYTQLwpuaICXuprgSg=",
         "owner": "timblaktu",
         "repo": "home-manager",
-        "rev": "d9c3d7485893728531aed78f4ef2638e81368fe9",
+        "rev": "d85fbc9e127173f55ec6d06ccec847e7277cc372",
         "type": "github"
       },
       "original": {
