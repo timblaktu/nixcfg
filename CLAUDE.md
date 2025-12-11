@@ -172,9 +172,6 @@ git branch -a -vv                        # Verify sync
 - Validation: `nix flake check` passed
 - **Preserved**: uv-mcp-servers.nix (WIP, user requested retention)
 
-**Remaining Cleanup Phases**:
-- **Phase 4**: Consolidate large design documents into docs/redesigns/
-
 #### **Repository Cleanup - Phase 3** (2025-12-11)
 **Branch**: `dev`
 **Status**: COMPLETE - Auth documentation consolidated
@@ -198,6 +195,33 @@ git branch -a -vv                        # Verify sync
    - `docs/redesigns/gitlab-auth-fix-2025-12-04.md` (195 lines) - Completed fix documentation
 
 **Result**: Single comprehensive 496-line guide replaces 8 fragmented documents totaling ~3,000 lines
+
+#### **Repository Cleanup - Phase 4** (2025-12-11)
+**Branch**: `dev`
+**Status**: COMPLETE - Session prompts and redundant docs removed
+**Commit**: `efe72d7`
+
+**Removed Files** (3 docs, ~323 lines):
+1. **TESTING-MIGRATION.md** (96 lines): Redundant with TESTING_JOURNAL.md content
+2. **WSL-MOUNT-VALIDATION-PROMPT.md** (180 lines): Obsolete session prompt from Sep 2025
+3. **prompts/docling-parse-fix-iterative-prompt.md** (47 lines): Superseded by nixpkgs-docling flake input
+
+**Removed Directories** (2 empty):
+1. **docs/prompts/** - Now empty after removing last session prompt
+2. **docs/redesigns/** - Already empty after Phase 3 auth doc consolidation
+
+**Impact**:
+- Cleaner documentation structure
+- Easier to find current/active documentation
+- Reduced maintenance burden
+- TESTING_JOURNAL.md remains as historical archive
+
+**Cleanup Summary (All Phases)**:
+- Phase 1: ~750KB (40 files/directories) - backups, abandoned packages, test files, scripts
+- Phase 2: 464 lines (3 modules) - redundant Nix modules
+- Phase 3: ~2,900 lines (7 docs + 1 enhanced) - auth documentation consolidation
+- Phase 4: ~323 lines (3 docs + 2 empty dirs) - session prompts and redundant docs
+- **Total**: ~4,437 lines and ~750KB removed, repository significantly cleaner
 
 ### 🚧 **Pending Deployment**
 
