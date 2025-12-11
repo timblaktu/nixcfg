@@ -173,8 +173,31 @@ git branch -a -vv                        # Verify sync
 - **Preserved**: uv-mcp-servers.nix (WIP, user requested retention)
 
 **Remaining Cleanup Phases**:
-- **Phase 3**: Evaluate and consolidate auth documentation
 - **Phase 4**: Consolidate large design documents into docs/redesigns/
+
+#### **Repository Cleanup - Phase 3** (2025-12-11)
+**Branch**: `dev`
+**Status**: COMPLETE - Auth documentation consolidated
+**Files Modified**: 1 enhanced, 7 removed
+
+**Consolidation Summary**:
+1. **Enhanced** `docs/GITHUB-AUTH-SETUP.md` (302→496 lines):
+   - Added Quick Start Guide section (5-minute setup)
+   - Added Architecture section (wrapper-based design documentation)
+   - Added History & References section (design evolution timeline)
+   - Added Table of Contents for better navigation
+   - Now serves as single source of truth for GitHub/GitLab auth
+
+2. **Removed Files** (7 docs, ~2,500 lines):
+   - `QUICK-GITHUB-AUTH-SETUP.md` (165 lines) - Content extracted to main doc
+   - `docs/auth-refactoring-session-2025-12-05.md` (306 lines) - Historical session prompt
+   - `docs/git-auth-integration-research-2025-12-05.md` (449 lines) - Historical research
+   - `docs/git-auth-next-steps-2025-12-06.md` (248 lines) - Historical deployment guide
+   - `docs/redesigns/github-auth-redesign-2025-11-20.md` (705 lines) - Superseded design
+   - `docs/redesigns/github-auth-tasks-2025-11-20.md` (1068 lines) - Superseded tasks
+   - `docs/redesigns/gitlab-auth-fix-2025-12-04.md` (195 lines) - Completed fix documentation
+
+**Result**: Single comprehensive 496-line guide replaces 8 fragmented documents totaling ~3,000 lines
 
 ### 🚧 **Pending Deployment**
 
