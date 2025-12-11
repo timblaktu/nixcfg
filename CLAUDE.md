@@ -145,6 +145,23 @@ git branch -a -vv                        # Verify sync
 - marker-pdf, docling, and tomd packages added and tested
 - GPU detection issues documented for future optimization
 
+#### **Repository Cleanup - Phase 1** (2025-12-11)
+**Branch**: `dev`
+**Status**: COMPLETE - ~750KB removed, ready for commit
+
+**Removed Items** (40 files/directories):
+1. **Backup files** (7): `.archive/backups/*.backup`, `claude-runtime/*/.claude.json.backup`, stray `~` directory, `null` file
+2. **Abandoned docling-parse variants** (11): All `pkgs/docling-parse-*-fix/` directories superseded by nixpkgs-docling flake input
+3. **Ad-hoc test files** (9): `test*.cpp`, `test*.py`, `test*.md`, `test_input.pdf` (679KB)
+4. **Obsolete scripts** (4): `debug_workspace.sh`, `simple_debug.sh`, `fix-*-tests.*`
+5. **Editor/cache artifacts** (2): `Session.vim`, `home/files/bin/__pycache__/`
+6. **Obsolete session docs** (9): `SESSION-HANDOFF-SUMMARY.md`, `WHAT_CLAUDE_LEARNED.md`, `CLAUDE-CODE-2-MIGRATION.md`, various tomd/docling session prompts
+
+**Remaining Cleanup Phases**:
+- **Phase 2**: Identify and remove duplicate/unused modules (claude-code-simplified.nix, memory-commands redundancy)
+- **Phase 3**: Evaluate and consolidate auth documentation
+- **Phase 4**: Consolidate large design documents into docs/redesigns/
+
 ### 🚧 **Pending Deployment**
 
 #### **Claude Code Enhanced Module** (Ready to Deploy)
