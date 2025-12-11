@@ -27,7 +27,6 @@
               };
             }
             # ../home/migration/darwin-home-files.nix # macOS-specific unified files configuration - DISABLED after module-based migration
-            ../home/modules/mcp-servers.nix
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -67,7 +66,6 @@
             }
             ../hosts/thinky-ubuntu
             # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration
-            ../home/modules/mcp-servers.nix
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -158,7 +156,6 @@
                 ];
               };
             }
-            ../home/modules/mcp-servers.nix
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -209,7 +206,6 @@
               };
             }
             # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration
-            ../home/modules/mcp-servers.nix
             # ../home/modules/autovalidate-demo.nix  # Disabled - requires home-manager autoValidate integration
           ];
           extraSpecialArgs = {
