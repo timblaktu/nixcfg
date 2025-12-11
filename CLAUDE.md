@@ -72,6 +72,41 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 ### ✅ Recently Completed
 
+#### **Git Branch Synchronization** (2025-12-10)
+**Branch**: `dev`
+**Status**: READY FOR MANUAL PUSH - Merge aborted, waiting for force push
+
+**Problem**: Local and remote dev branches diverged significantly:
+- Local `dev`: 9 commits ahead (18c24a6) - Contains claude-code-enhanced work
+- Remote `origin/dev`: 176 commits on different path (413d3ea) - Old unified files module work
+- Attempted `git pull --all` resulted in 7 merge conflicts
+
+**Analysis**:
+- Local branches (dev + main) contain validated, current work (claude-code-enhanced migration)
+- Remote dev contains superseded work from unified files module era
+- Common ancestor: e233a2a "Improvements to tmux-session-picker..."
+- Remote dev's 176 commits preserved in backup tag: `backup/origin-dev-20251210`
+
+**Resolution Strategy**:
+- Aborted merge (7 conflicted files: .gitignore, CLAUDE.md, settings.json files, tmux.nix, claude-code.nix)
+- Treating local branches as source of truth
+- Force push will overwrite remote with current validated work
+
+**Manual Commands to Complete** (Claude hit auth issues):
+```bash
+git push --force-with-lease origin dev  # Overwrites origin/dev with local
+git checkout main
+git push origin main                     # Fast-forward push
+git checkout dev
+git branch -a -vv                        # Verify sync
+```
+
+**After Sync**:
+- origin/main will be at 17f6281 (git options fix)
+- origin/dev will be at 18c24a6 (claude command symlinks ignore)
+- Both remotes will match local state
+- Old remote dev work preserved in backup tag
+
 #### **Claude Code Module Rename** (2025-12-10)
 **Branch**: `dev`
 **Status**: COMPLETE - Ready for deployment
@@ -142,9 +177,11 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 ### 📌 **Next Priority Actions**
 
-1. **Deploy Claude Code Enhanced**: Run home-manager and nixos-rebuild switch
-2. **Push dev branch**: After successful deployment verification
-3. **Begin upstream contribution**: Start with statusline styles PR
+1. **Complete Git Synchronization**: Run manual push commands (see Git Branch Synchronization section above)
+2. **Deploy Claude Code Enhanced**: Run home-manager and nixos-rebuild switch
+3. **Verify Deployment**: Test Claude Code with new `programs.claude-code-enhanced` namespace
+4. **Consider Branch Strategy**: Decide whether to merge dev → main or continue dev branch work
+5. **Begin upstream contribution**: Start with statusline styles PR
 
 ## MANDATORY: Next Session Prompt Template
 After EVERY response, provide this format:
