@@ -157,8 +157,22 @@ git branch -a -vv                        # Verify sync
 5. **Editor/cache artifacts** (2): `Session.vim`, `home/files/bin/__pycache__/`
 6. **Obsolete session docs** (9): `SESSION-HANDOFF-SUMMARY.md`, `WHAT_CLAUDE_LEARNED.md`, `CLAUDE-CODE-2-MIGRATION.md`, various tomd/docling session prompts
 
+#### **Repository Cleanup - Phase 2** (2025-12-11)
+**Branch**: `dev`
+**Status**: COMPLETE - 464 lines removed
+**Commit**: `482953b`
+
+**Removed Files** (3 modules):
+1. **claude-code-simplified.nix** (404 lines): Old version using deprecated `programs.claude-code` namespace, superseded by `claude-code.nix`
+2. **mcp-servers.nix** (10 lines): Empty placeholder, functionality moved to `claude-code/mcp-servers.nix` submodule
+3. **autovalidate-demo.nix** (46 lines): Demo module for home-manager autoValidate integration, never activated
+
+**Updates**:
+- Removed 4 imports of mcp-servers.nix from home-configurations.nix (mbp, thinky-ubuntu, pa161878-nixos, thinky-nixos)
+- Validation: `nix flake check` passed
+- **Preserved**: uv-mcp-servers.nix (WIP, user requested retention)
+
 **Remaining Cleanup Phases**:
-- **Phase 2**: Identify and remove duplicate/unused modules (claude-code-simplified.nix, memory-commands redundancy)
 - **Phase 3**: Evaluate and consolidate auth documentation
 - **Phase 4**: Consolidate large design documents into docs/redesigns/
 
