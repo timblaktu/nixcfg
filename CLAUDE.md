@@ -225,13 +225,39 @@ git branch -a -vv                        # Verify sync
 
 ### 🚧 **Pending Deployment**
 
-#### **Claude Code Enhanced Module** (Ready to Deploy)
-**Branch**: `dev` (ahead of origin/main by 1 commit)
-**Next Steps**:
-1. Run `home-manager switch --flake '.#tim@thinky-nixos' -b backup`
-2. Run `sudo nixos-rebuild switch --flake '.#thinky-nixos'`
-3. Verify Claude Code functionality with new namespace
-4. Push dev branch or merge to main
+#### **Claude Code Enhanced Module Deployment** (Ready - Option A)
+**Branch**: `dev` (6 commits ahead of origin/dev at b786830)
+**Status**: All cleanup phases complete, ready for deployment validation
+
+**Deployment Plan - Option A** (Test → Deploy → Push):
+1. **Pre-deployment Validation** (~2 min)
+   - `nix flake check` - ensure configuration is valid
+   - `home-manager switch --flake '.#tim@thinky-nixos' --dry-run` - preview changes
+   - Review dry-run output for unexpected changes
+
+2. **Home Manager Deployment** (~5 min)
+   - `home-manager switch --flake '.#tim@thinky-nixos' -b backup`
+   - Verify Claude Code runs with `programs.claude-code-enhanced` namespace
+   - Test: settings.json, MCP servers, hooks functionality
+   - Check: `~/.config/claude-code/` directory structure
+
+3. **NixOS System Deployment** (~5 min)
+   - `sudo nixos-rebuild switch --flake '.#thinky-nixos'`
+   - Verify system stability
+   - Check for any service failures
+
+4. **Git Synchronization** (after successful deployment)
+   - `git push origin dev` - push 6 cleanup commits
+   - Consider merging dev → main if all tests pass
+   - Update CLAUDE.md with deployment results
+
+**Why Option A**:
+- Validates enhanced module locally before publishing cleanup commits
+- Atomic state: cleanup commits + verified deployment together
+- Easier rollback if issues arise
+- Follows best practice: Test → Deploy → Push
+
+**Estimated Time**: 15-20 minutes total
 
 ### 🚧 **Incomplete/Deferred Tasks**
 
@@ -255,11 +281,16 @@ git branch -a -vv                        # Verify sync
 
 ### 📌 **Next Priority Actions**
 
-1. **Complete Git Synchronization**: Run manual push commands (see Git Branch Synchronization section above)
-2. **Deploy Claude Code Enhanced**: Run home-manager and nixos-rebuild switch
-3. **Verify Deployment**: Test Claude Code with new `programs.claude-code-enhanced` namespace
-4. **Consider Branch Strategy**: Decide whether to merge dev → main or continue dev branch work
-5. **Begin upstream contribution**: Start with statusline styles PR
+**IMMEDIATE**: Execute Claude Code Enhanced Deployment (Option A)
+1. **Pre-deployment validation**: Run `nix flake check` and dry-run preview
+2. **Deploy Home Manager**: Run switch with backup flag, verify Claude Code functionality
+3. **Deploy NixOS**: Run nixos-rebuild switch, verify system stability
+4. **Push to remote**: After successful deployment, push dev branch (6 commits)
+5. **Consider branch strategy**: Merge dev → main or keep separate
+
+**DEFERRED**:
+- Begin upstream contribution (statusline styles PR)
+- Git branch synchronization (force-push strategy documented but not needed if Option A succeeds)
 
 ## MANDATORY: Next Session Prompt Template
 After EVERY response, provide this format:
