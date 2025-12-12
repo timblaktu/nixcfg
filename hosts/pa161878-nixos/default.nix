@@ -46,13 +46,16 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
     ];
     enableWindowsTools = true;
-
-    # DNS Tunneling - prevents DNS failures during nixos-rebuild
-    # Uses WSL2's built-in DNS tunneling instead of unreliable /mnt/wsl/resolv.conf
-    # After rebuild, run 'wsl-enable-dns-tunneling' and restart WSL
-    enableDnsTunneling = true;
-    windowsUsername = "tblack";
   };
+
+  # DNS Resilience: Using WSL2 DNS tunneling to prevent failures during nixos-rebuild
+  # Manual setup required:
+  #   1. Create/edit C:\Users\tblack\.wslconfig on Windows
+  #   2. Add: [wsl2]
+  #           dnsTunneling=true
+  #   3. Run: wsl --shutdown (from PowerShell)
+  #   4. Restart WSL
+  # This prevents /mnt/wsl/resolv.conf from disappearing during rebuilds
 
   # WSL-specific configuration
   wsl.enable = true;
