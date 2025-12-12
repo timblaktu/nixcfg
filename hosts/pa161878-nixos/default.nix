@@ -48,6 +48,15 @@
     enableWindowsTools = true;
   };
 
+  # Network resilience - fallback DNS servers
+  # These supplement WSL's auto-generated DNS from Windows
+  # Prevents DNS failure if /mnt/wsl/resolv.conf temporarily disappears during nixos-rebuild
+  networking.nameservers = [
+    "8.8.8.8" # Google DNS primary
+    "8.8.4.4" # Google DNS secondary
+    "1.1.1.1" # Cloudflare DNS
+  ];
+
   # WSL-specific configuration
   wsl.enable = true;
   # wsl.defaultUser = "tim";
