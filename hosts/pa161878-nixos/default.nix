@@ -46,16 +46,13 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
     ];
     enableWindowsTools = true;
-  };
 
-  # Network resilience - fallback DNS servers
-  # These supplement WSL's auto-generated DNS from Windows
-  # Prevents DNS failure if /mnt/wsl/resolv.conf temporarily disappears during nixos-rebuild
-  networking.nameservers = [
-    "8.8.8.8" # Google DNS primary
-    "8.8.4.4" # Google DNS secondary
-    "1.1.1.1" # Cloudflare DNS
-  ];
+    # DNS Tunneling - prevents DNS failures during nixos-rebuild
+    # Uses WSL2's built-in DNS tunneling instead of unreliable /mnt/wsl/resolv.conf
+    # After rebuild, run 'wsl-enable-dns-tunneling' and restart WSL
+    enableDnsTunneling = true;
+    windowsUsername = "tblack";
+  };
 
   # WSL-specific configuration
   wsl.enable = true;
