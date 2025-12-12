@@ -48,15 +48,6 @@
     enableWindowsTools = true;
   };
 
-  # DNS Resilience: Using WSL2 DNS tunneling to prevent failures during nixos-rebuild
-  # Manual setup required:
-  #   1. Create/edit C:\Users\tblack\.wslconfig on Windows
-  #   2. Add: [wsl2]
-  #           dnsTunneling=true
-  #   3. Run: wsl --shutdown (from PowerShell)
-  #   4. Restart WSL
-  # This prevents /mnt/wsl/resolv.conf from disappearing during rebuilds
-
   # WSL-specific configuration
   wsl.enable = true;
   # wsl.defaultUser = "tim";
