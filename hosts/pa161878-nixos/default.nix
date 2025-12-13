@@ -1,6 +1,9 @@
 # WSL NixOS configuration
 { config, lib, pkgs, inputs, ... }:
 
+let
+  sshKeys = import ../common/ssh-keys.nix;
+in
 {
   imports = [
     ./hardware-config.nix
@@ -42,9 +45,7 @@
     defaultUser = "tim";
     sshPort = 2223; # Must bind to unique port since sharing winHost with another WSL guest
     userGroups = [ "wheel" "dialout" ];
-    authorizedKeys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
-    ];
+    authorizedKeys = [ sshKeys.timblaktu ];
     enableWindowsTools = true;
   };
 
