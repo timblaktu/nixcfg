@@ -66,6 +66,7 @@
         ./flake-modules/nixos-configurations.nix
         ./flake-modules/darwin-configurations.nix
         ./flake-modules/home-configurations.nix
+        ./flake-modules/shared-modules.nix # Exports for sharing with colleagues
         ./flake-modules/tests.nix # All checks and tests consolidated here
         ./flake-modules/github-actions.nix # Configurable GitHub Actions validation
       ];
