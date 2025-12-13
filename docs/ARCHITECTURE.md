@@ -981,7 +981,7 @@ outputs = { ... }: {
 
   homeManagerModules = {
     base = import ./home/modules/base.nix;
-    wsl-base = import ./home/common/wsl-base.nix; # After creating in step 2
+    wsl-home-base = import ./home/common/wsl-home-base.nix; # After creating in step 2
     git = import ./home/common/git.nix;
     zsh = import ./home/common/zsh.nix;
     tmux = import ./home/common/tmux.nix;

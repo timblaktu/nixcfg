@@ -148,7 +148,7 @@ The refactoring is **safe to merge** because:
 
 1. **Immediate**: Merge to dev, then to main
 2. **Phase 2** (documented in CONSOLIDATION-PLAN.md):
-   - Add flake outputs for `nixosModules.wsl-base` and `homeManagerModules.wsl-base`
+   - Add flake outputs for `nixosModules.wsl-base` and `homeManagerModules.wsl-home-base`
    - Generalize `modules/base.nix` (remove hardcoded "tim")
    - Create module documentation for colleague sharing
    - Create WSL and Darwin templates

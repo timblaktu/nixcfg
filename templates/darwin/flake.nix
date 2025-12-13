@@ -47,7 +47,7 @@
           };
 
           # System packages
-          environment.systemPackages = with nixpkgs.legacyPackages.x86_64-darwin; [
+          environment.systemPackages = with nixpkgs.legacyPackages.${system}; [
             vim
             git
             wget

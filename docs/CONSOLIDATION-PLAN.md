@@ -90,7 +90,7 @@ When sharing with colleagues:
     homeConfigurations."colleague@ubuntu-wsl" = home-manager.lib.homeManagerConfiguration {
       pkgs = import nixpkgs { system = "x86_64-linux"; };
       modules = [
-        nixcfg.homeManagerModules.wsl-base  # ✅ Works on vanilla Ubuntu WSL!
+        nixcfg.homeManagerModules.wsl-home-base  # ✅ Works on vanilla Ubuntu WSL!
         {
           homeBase = {
             username = "colleague";
