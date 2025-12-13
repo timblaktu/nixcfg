@@ -81,37 +81,21 @@
           modules = [
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
+            ../home/common/wsl-home-base.nix # Common WSL user configuration
             {
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
-                enableDevelopment = true;
-                enableEspIdf = true;
-                enableOneDriveUtils = true;
-                enableShellUtils = true;
-                enableTerminal = true;
-                environmentVariables = {
-                  WSL_DISTRO = "nixos";
-                  EDITOR = "nvim";
-                };
-                shellAliases = {
-                  explorer = "explorer.exe .";
-                  code = "code.exe";
-                  code-insiders = "code-insiders.exe";
-                  esp32c5 = "esp-idf-shell";
-                };
+                # All other settings come from wsl-home-base.nix
               };
-              home.packages = with pkgs; [
-                wslu
-              ];
 
-              # Secrets management
+              # Secrets management (HOST-SPECIFIC)
               secretsManagement = {
                 enable = true;
                 rbw.email = "timblaktu@gmail.com";
               };
 
-              # GitHub and GitLab authentication
+              # GitHub and GitLab authentication (HOST-SPECIFIC)
               githubAuth = {
                 enable = true;
                 mode = "bitwarden";
@@ -121,7 +105,7 @@
                 };
                 gitlab = {
                   enable = true;
-                  host = "git.panasonic.aero"; # Set the GitLab host
+                  host = "git.panasonic.aero";
                   bitwarden = {
                     item = "GitLab git.panasonic.aero";
                     field = "lord (access token)";
@@ -130,17 +114,7 @@
                 };
               };
 
-              targets.wsl = {
-                enable = true;
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
-                };
-              };
-
-              # Windows Terminal settings management
+              # Windows Terminal settings management (HOST-SPECIFIC)
               windowsTerminal = {
                 enable = true;
                 font = {
