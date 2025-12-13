@@ -20,6 +20,7 @@ The repository already has excellent modularity. Main opportunities:
 1. **Extracting platform-agnostic components** for sharing
 2. **Consolidating WSL-specific patterns** to reduce duplication
 3. **Creating reusable base layer** for WSL2 and Darwin colleagues
+4. **Enabling image matrix building** to deploy same config across multiple formats (WSL, AMI, ISO, VM, Docker)
 
 ---
 
@@ -29,8 +30,9 @@ The repository already has excellent modularity. Main opportunities:
 2. [Architecture Patterns](#architecture-patterns)
 3. [Modularity Assessment](#modularity-assessment)
 4. [Base Layer Strategy](#base-layer-strategy)
-5. [Improvement Opportunities](#improvement-opportunities)
-6. [Action Plan](#action-plan)
+5. [Image Matrix Building Pattern](#image-matrix-building-pattern)
+6. [Improvement Opportunities](#improvement-opportunities)
+7. [Action Plan](#action-plan)
 
 ---
 
@@ -421,6 +423,390 @@ outputs = { ... }: {
 
 ---
 
+## Image Matrix Building Pattern
+
+### Overview: Multi-Format Deployment Architecture
+
+**Core Principle**: Separate machine configuration from image format to enable building the same system for multiple deployment targets (AMI, ISO, QCOW2, raw disk images, etc.).
+
+This pattern enables "matrix building" where a single machine configuration can be deployed across:
+- AWS EC2 (AMI format)
+- Local VMs (QCOW2, VirtualBox, VMware)
+- Bare metal installation (ISO)
+- Cloud-init images (various cloud providers)
+- Container images
+- WSL tarballs
+
+### Layered Module Composition
+
+The key is structuring configurations in composable layers:
+
+```
+┌─────────────────────────────────────┐
+│     Image Format Layer              │  ← AMI, ISO, QCOW2, raw, WSL tarball, etc.
+├─────────────────────────────────────┤
+│     Hardware/Platform Layer         │  ← bare-metal drivers, VM guest tools, WSL shims
+├─────────────────────────────────────┤
+│     Machine Role Layer              │  ← your actual config (services, users, packages)
+└─────────────────────────────────────┘
+```
+
+**Example of the pattern**:
+```nix
+# roles/workstation.nix - Machine role (reusable)
+{ config, pkgs, ... }: {
+  services.openssh.enable = true;
+  environment.systemPackages = with pkgs; [ git vim tmux ];
+  users.users.tim = { ... };
+}
+
+# formats/ami-tweaks.nix - AWS-specific adjustments
+{ config, lib, ... }: {
+  # Only included when building AMI
+  services.amazon-ssm-agent.enable = lib.mkDefault true;
+  ec2.hvm = true;
+}
+
+# Final composition in flake.nix
+nixosConfigurations.workstation-bare-metal = {
+  modules = [ ./roles/workstation.nix ./hardware/thinkpad.nix ];
+};
+
+packages.x86_64-linux.workstation-ami = nixos-generators.nixosGenerate {
+  modules = [ ./roles/workstation.nix ./formats/ami-tweaks.nix ];
+  format = "amazon";
+};
+```
+
+### Method 1: Using nixos-generators (Recommended)
+
+**nixos-generators** is the canonical community tool for this exact use case.
+
+**Integration Example**:
+```nix
+# flake.nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixos-generators = {
+      url = "github:nix-community/nixos-generators";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { self, nixpkgs, nixos-generators, ... }: {
+    # Reusable machine module (the core configuration)
+    nixosModules.workstation = ./roles/workstation.nix;
+
+    # Bare metal configuration
+    nixosConfigurations.laptop = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        self.nixosModules.workstation
+        ./hardware/my-laptop.nix  # Hardware-specific only
+      ];
+    };
+
+    # Generate various image formats from the SAME base config
+    packages.x86_64-linux = {
+      workstation-ami = nixos-generators.nixosGenerate {
+        system = "x86_64-linux";
+        format = "amazon";
+        modules = [ self.nixosModules.workstation ];
+      };
+
+      workstation-vm = nixos-generators.nixosGenerate {
+        system = "x86_64-linux";
+        format = "qcow";
+        modules = [ self.nixosModules.workstation ];
+      };
+
+      workstation-iso = nixos-generators.nixosGenerate {
+        system = "x86_64-linux";
+        format = "iso";
+        modules = [ self.nixosModules.workstation ];
+      };
+
+      workstation-raw = nixos-generators.nixosGenerate {
+        system = "x86_64-linux";
+        format = "raw-efi";
+        modules = [ self.nixosModules.workstation ];
+      };
+
+      workstation-wsl = nixos-generators.nixosGenerate {
+        system = "x86_64-linux";
+        format = "wsl";
+        modules = [ self.nixosModules.workstation ];
+      };
+    };
+  };
+}
+```
+
+**Supported Formats** (nixos-generators):
+- `amazon` - AWS AMI
+- `qcow` - QEMU/KVM
+- `virtualbox` - VirtualBox OVA
+- `vmware` - VMware VMDK
+- `iso` - Installation ISO
+- `raw-efi` - Raw disk image with EFI
+- `wsl` - WSL tarball
+- `docker` - Docker image
+- `lxc` - LXC container
+- `install-iso` - Installer ISO
+- And many more...
+
+### Method 2: Using config.system.build Directly
+
+For more control or custom formats, use NixOS's built-in module system:
+
+```nix
+{
+  nixosConfigurations.base-machine = nixpkgs.lib.nixosSystem {
+    modules = [
+      ./roles/workstation.nix
+      ({ config, pkgs, modulesPath, ... }: {
+        imports = [
+          # Import format-specific modules as needed
+          "${modulesPath}/virtualisation/amazon-image.nix"
+          # OR "${modulesPath}/virtualisation/qemu-vm.nix"
+          # OR "${modulesPath}/installer/cd-dvd/iso-image.nix"
+        ];
+      })
+    ];
+  };
+}
+
+# Access format-specific outputs:
+# - config.system.build.toplevel      → root filesystem closure
+# - config.system.build.amazonImage   → AMI-specific output
+# - config.system.build.qcow          → QCOW2 image
+# - config.system.build.isoImage      → ISO image
+```
+
+### Recommended Module Structure for Matrix Building
+
+Reorganize modules to maximize reusability across formats:
+
+```
+modules/
+├── roles/                    # What the machine DOES (100% reusable)
+│   ├── workstation.nix      # Desktop/dev workstation role
+│   ├── server.nix           # Server role
+│   ├── build-machine.nix    # CI/CD builder
+│   └── dev-machine.nix      # Development environment
+├── profiles/                 # Common feature sets (90% reusable)
+│   ├── desktop.nix          # GUI applications
+│   ├── headless.nix         # No GUI
+│   ├── hardened.nix         # Security-focused
+│   └── minimal.nix          # Minimal footprint
+├── hardware/                 # Physical hardware (NOT reusable across formats)
+│   ├── thinkpad-x1.nix
+│   ├── dell-precision.nix
+│   └── raspberry-pi.nix
+└── formats/                  # Image format customizations (format-specific)
+    ├── ami-tweaks.nix       # AWS-specific (EC2 metadata, SSM agent)
+    ├── vm-test.nix          # Test VM settings (memory, disk size)
+    ├── bare-metal.nix       # Real hardware settings
+    ├── wsl-tweaks.nix       # WSL-specific (interop, systemd shims)
+    └── iso-installer.nix    # ISO-specific (installer UI, partitioning)
+```
+
+### Best Practices for Matrix-Compatible Modules
+
+#### 1. Keep Hardware-Specific Config Isolated
+
+**DO**:
+```nix
+# roles/workstation.nix (reusable)
+{ config, lib, pkgs, ... }: {
+  services.openssh.enable = true;
+  environment.systemPackages = with pkgs; [ git vim ];
+}
+
+# hardware/my-laptop.nix (hardware-specific only)
+{ config, lib, pkgs, ... }: {
+  imports = [ ./hardware-configuration.nix ];
+  boot.loader.systemd-boot.enable = true;
+}
+```
+
+**DON'T**:
+```nix
+# roles/workstation.nix (BAD - mixed concerns)
+{ config, lib, pkgs, ... }: {
+  services.openssh.enable = true;
+  boot.loader.systemd-boot.enable = true;  # ← Hardware-specific!
+  fileSystems."/" = { device = "/dev/sda1"; fsType = "ext4"; };  # ← Hardware-specific!
+}
+```
+
+#### 2. Use lib.mkDefault for Overridable Defaults
+
+Allows image formats to override filesystem layout, boot config, etc.:
+
+```nix
+{ config, lib, ... }: {
+  # Can be overridden by format-specific modules
+  fileSystems."/" = lib.mkDefault {
+    device = "/dev/sda1";
+    fsType = "ext4";
+  };
+
+  boot.loader.grub.enable = lib.mkDefault true;
+  services.openssh.passwordAuthentication = lib.mkDefault false;
+}
+```
+
+#### 3. Conditionally Include Platform-Specific Features
+
+Use feature flags or capability detection:
+
+```nix
+{ config, lib, pkgs, ... }: {
+  # Only enable on AWS
+  services.amazon-ssm-agent.enable = lib.mkDefault (config.ec2.hvm or false);
+
+  # Only enable on WSL
+  wsl.enable = lib.mkDefault (config.wsl.enable or false);
+
+  # Conditional packages based on desktop profile
+  environment.systemPackages = with pkgs;
+    (lib.optionals config.services.xserver.enable [ firefox chromium ]);
+}
+```
+
+#### 4. Use specialArgs or _module.args for Context
+
+Pass deployment context when needed:
+
+```nix
+nixos-generators.nixosGenerate {
+  format = "amazon";
+  modules = [ ./roles/workstation.nix ];
+  specialArgs = {
+    deploymentType = "cloud";
+    provider = "aws";
+  };
+}
+
+# In module:
+{ deploymentType, provider, ... }: {
+  services.cloud-init.enable = lib.mkDefault (deploymentType == "cloud");
+}
+```
+
+### Testing with NixOS VM Tests
+
+VM tests can import the same modules to ensure consistency:
+
+```nix
+checks.x86_64-linux.workstation-test = nixpkgs.lib.nixos.runTest {
+  name = "workstation-integration";
+  nodes.machine = { config, pkgs, ... }: {
+    imports = [ self.nixosModules.workstation ];
+
+    # Test-specific overrides
+    virtualisation.memorySize = 2048;
+    virtualisation.cores = 2;
+  };
+
+  testScript = ''
+    machine.wait_for_unit("default.target")
+    machine.succeed("git --version")
+    machine.succeed("ssh -V")
+  '';
+};
+```
+
+### Current Repository Application
+
+**Applicable to this repository**:
+
+1. **WSL configurations** could be generated as tarballs:
+   ```nix
+   packages.x86_64-linux.thinky-wsl-tarball = nixos-generators.nixosGenerate {
+     format = "wsl";
+     modules = [ ./hosts/thinky-nixos ];
+   };
+   ```
+
+2. **Extract common workstation role** from existing hosts:
+   ```nix
+   # New: modules/roles/dev-workstation.nix
+   # Extracted from thinky-nixos and pa161878-nixos
+
+   # Then reuse across formats:
+   - Bare metal laptop
+   - WSL instances
+   - Cloud dev environments (EC2, GCP)
+   - Local VMs for testing
+   ```
+
+3. **Create test ISOs** for bare metal validation:
+   ```nix
+   packages.x86_64-linux.thinky-iso = nixos-generators.nixosGenerate {
+     format = "install-iso";
+     modules = [
+       ./hosts/thinky-nixos
+       ./formats/iso-installer.nix
+     ];
+   };
+   ```
+
+### Advantages for This Repository
+
+1. **Colleague Sharing**: Share workstation role, colleagues choose their deployment format
+2. **Testing**: Build ISOs or VMs to test config changes before deploying to WSL
+3. **Portability**: Move from WSL → bare metal → cloud without rewriting config
+4. **CI/CD**: Build and test multiple formats in parallel
+5. **Disaster Recovery**: Generate recovery ISOs from current configuration
+
+### Example: Multi-Format Matrix Build
+
+```nix
+# Single role definition
+nixosModules.devWorkstation = ./modules/roles/dev-workstation.nix;
+
+# Matrix of outputs (all from same base config)
+packages.x86_64-linux = {
+  # For colleagues on WSL
+  dev-wsl = nixosGenerate { format = "wsl"; modules = [ self.nixosModules.devWorkstation ]; };
+
+  # For cloud development
+  dev-ami = nixosGenerate { format = "amazon"; modules = [ self.nixosModules.devWorkstation ]; };
+
+  # For local testing
+  dev-vm = nixosGenerate { format = "qcow"; modules = [ self.nixosModules.devWorkstation ]; };
+
+  # For bare metal installation
+  dev-iso = nixosGenerate { format = "iso"; modules = [ self.nixosModules.devWorkstation ]; };
+
+  # For containers
+  dev-docker = nixosGenerate { format = "docker"; modules = [ self.nixosModules.devWorkstation ]; };
+};
+```
+
+**Build command**:
+```bash
+# Build all formats in parallel
+nix build \
+  .#dev-wsl \
+  .#dev-ami \
+  .#dev-vm \
+  .#dev-iso \
+  .#dev-docker \
+  --print-build-logs
+```
+
+### References
+
+- **nixos-generators**: https://github.com/nix-community/nixos-generators
+- **NixOS manual - Building Images**: https://nixos.org/manual/nixos/stable/index.html#sec-building-image
+- **Modules guide**: https://nixos.org/manual/nixos/stable/index.html#sec-writing-modules
+
+---
+
 ## Improvement Opportunities
 
 ### High-Priority (Quick Wins)
@@ -656,6 +1042,40 @@ templates/darwin-host/
 └── README.md
 ```
 
+#### 8. Enable Image Matrix Building
+
+**Impact**: High (multi-platform deployment) | **Effort**: Medium
+
+Add nixos-generators integration and refactor for multi-format support:
+
+**Steps**:
+1. Add nixos-generators to flake inputs
+2. Extract common roles from existing hosts (e.g., dev-workstation.nix from thinky-nixos)
+3. Reorganize modules/ to separate roles/, profiles/, hardware/, and formats/
+4. Add matrix build outputs to flake.nix
+
+**Example outputs**:
+```nix
+packages.x86_64-linux = {
+  thinky-wsl = nixosGenerate { format = "wsl"; modules = [ ./roles/dev-workstation.nix ]; };
+  thinky-iso = nixosGenerate { format = "iso"; modules = [ ./roles/dev-workstation.nix ]; };
+  thinky-vm = nixosGenerate { format = "qcow"; modules = [ ./roles/dev-workstation.nix ]; };
+  thinky-ami = nixosGenerate { format = "amazon"; modules = [ ./roles/dev-workstation.nix ]; };
+};
+```
+
+**Benefits**:
+- Test configs in VMs before deploying to WSL
+- Generate recovery ISOs from current configuration
+- Deploy to cloud environments (AWS, GCP, Azure)
+- Share config with colleagues who use different platforms
+
+**Files to modify**:
+- Add to `flake.nix`: nixos-generators input
+- Create: `modules/roles/dev-workstation.nix` (extract from hosts/thinky-nixos)
+- Create: `modules/formats/` directory with format-specific tweaks
+- Update: `flake-modules/packages.nix` to add matrix build outputs
+
 ---
 
 ## Action Plan
@@ -865,6 +1285,7 @@ templates/darwin-host/
 
 ---
 
-**Document Version**: 1.0
+**Document Version**: 1.1
 **Last Updated**: 2025-12-12
+**Changes in 1.1**: Added comprehensive "Image Matrix Building Pattern" section covering multi-format deployment architecture
 **Maintenance**: Update this document when making significant architectural changes
