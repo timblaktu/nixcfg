@@ -74,8 +74,8 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 **Branch**: `refactor/consolidate-wsl-config`
 **Goal**: Implement ARCHITECTURE.md improvement opportunities to reduce duplication and prepare for colleague sharing
 
-**Current Status**: Planning phase
-**Next**: Execute batch-by-batch consolidation plan
+**Current Status**: Batch 3a complete (commit fdef81f)
+**Next**: Execute Batch 3b - migrate thinky-nixos to use wsl-home-base.nix
 
 For completed work history, see git log on `dev` and `main` branches.
 
