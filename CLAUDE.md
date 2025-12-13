@@ -70,12 +70,41 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 ## 📋 **ACTIVE WORK**
 
-### 🔨 **In Progress: WSL Configuration Consolidation** (2025-12-12)
+### 🔨 **In Progress: WSL Configuration Consolidation** (2025-12-13)
 **Branch**: `refactor/consolidate-wsl-config`
 **Goal**: Implement ARCHITECTURE.md improvement opportunities to reduce duplication and prepare for colleague sharing
 
 **Current Status**: Batch 3a complete (commit fdef81f)
-**Next**: Execute Batch 3b - migrate thinky-nixos to use wsl-home-base.nix
+**Next**: Update documentation to clarify NixOS vs Home Manager separation, then execute Batch 3b
+
+#### 🎯 **CRITICAL ARCHITECTURAL INSIGHT** (2025-12-13)
+
+**Key Finding**: TWO distinct WSL scenarios with different module requirements:
+
+1. **NixOS-WSL** (`hosts/common/wsl-base.nix`) - NixOS system module
+   - Requires: Full NixOS-WSL distribution
+   - Provides: System-level WSL integration (wsl.conf, users, services, SSH daemon)
+   - **Cannot work on vanilla Ubuntu/Debian/Alpine WSL**
+
+2. **Home Manager on ANY WSL** (`home/common/wsl-home-base.nix`) - Home Manager module
+   - Requires: ANY WSL distro + Nix + home-manager
+   - Provides: User-level tweaks (shell wrappers, Windows Terminal settings, `targets.wsl`)
+   - **Works on NixOS-WSL AND vanilla Ubuntu/Debian/Alpine WSL** ✅
+
+**Architecture Grade**: A- (fundamentally correct, needs better documentation)
+
+**Issues Identified**:
+1. ⚠️ **Naming confusion**: Both files named "*-wsl-*-base.nix" but serve fundamentally different audiences
+2. ⚠️ **Documentation gaps**: CONSOLIDATION-PLAN.md doesn't explain portability differences
+3. ⚠️ **Potential duplication**: `wslu` installed in both system and user packages (intentional?)
+
+**Documentation Tasks** (before continuing Batch 3b):
+- [ ] Add "Platform Requirements" section to CONSOLIDATION-PLAN.md
+- [ ] Add clear header comments to both wsl-base.nix files explaining NixOS vs portable
+- [ ] Add example: colleague on vanilla Ubuntu WSL using wsl-home-base.nix
+- [ ] Document wslu duplication rationale
+
+**Critical for Sharing**: Colleagues on vanilla WSL can use `homeManagerModules.wsl-base` but NOT `nixosModules.wsl-base`
 
 For completed work history, see git log on `dev` and `main` branches.
 
