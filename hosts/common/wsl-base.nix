@@ -1,5 +1,25 @@
-# Common WSL host configuration base
-# Usage: Import this in WSL host configs to get standard WSL setup
+# Common WSL host configuration base (NixOS System Module)
+#
+# PLATFORM REQUIREMENTS: NixOS-WSL distribution ONLY
+# This is a NixOS system configuration module that requires a full NixOS-WSL distribution.
+# It CANNOT be used on vanilla Ubuntu/Debian/Alpine WSL installations.
+#
+# PROVIDES:
+# - System-level WSL integration (wsl.conf, systemd services)
+# - User and group management via NixOS
+# - SSH daemon configuration with WSL-specific settings
+# - SOPS-nix secrets management
+# - NixOS-WSL module imports
+#
+# USE CASES:
+# - thinky-nixos (NixOS-WSL host)
+# - pa161878-nixos (NixOS-WSL host)
+#
+# FOR PORTABLE WSL CONFIG (works on ANY WSL distro):
+# See home/common/wsl-home-base.nix instead - that's a Home Manager module
+# that works on any WSL distribution with Nix + home-manager installed.
+#
+# USAGE: Import this in NixOS-WSL host configs to get standard WSL system setup
 { config, lib, pkgs, inputs, ... }:
 
 {

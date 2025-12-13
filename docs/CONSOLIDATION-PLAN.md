@@ -17,6 +17,94 @@ This plan implements the high-priority consolidation improvements from ARCHITECT
 - Easier to share with colleagues
 - Single source of truth for WSL defaults
 
+## Platform Requirements
+
+**CRITICAL**: This consolidation creates TWO distinct WSL module types with different platform requirements:
+
+### 1. NixOS System Module: `hosts/common/wsl-base.nix`
+**Platform**: NixOS-WSL distribution ONLY
+**Module Type**: NixOS system configuration module
+**Requirements**:
+- Full NixOS-WSL distribution installed
+- NixOS system configuration enabled
+- Cannot be used on vanilla Ubuntu/Debian/Alpine WSL
+
+**Provides**:
+- System-level WSL integration (wsl.conf, systemd services)
+- User and group management
+- SSH daemon configuration with WSL-specific settings
+- SOPS-nix secrets management
+- NixOS-WSL module imports
+
+**Use Cases**:
+- thinky-nixos (NixOS-WSL host)
+- pa161878-nixos (NixOS-WSL host)
+
+### 2. Home Manager Module: `home/common/wsl-home-base.nix`
+**Platform**: ANY WSL distribution + Nix + home-manager ✅
+**Module Type**: Home Manager user configuration module
+**Requirements**:
+- ANY WSL distribution (NixOS-WSL, Ubuntu, Debian, Alpine, etc.)
+- Nix package manager installed
+- home-manager installed
+
+**Provides**:
+- User-level WSL tweaks (shell wrappers, environment variables)
+- Windows Terminal settings management
+- WSL utilities (wslu)
+- Home Manager `targets.wsl` configuration
+
+**Use Cases**:
+- thinky-nixos (NixOS-WSL host) - home-manager config
+- pa161878-nixos (NixOS-WSL host) - home-manager config
+- **Colleague on vanilla Ubuntu WSL** - portable config! ✅
+- Any other WSL distribution with Nix installed
+
+### Package Duplication: wslu
+The `wslu` package appears in BOTH modules intentionally:
+- **System level** (`hosts/common/wsl-base.nix`): Provides system-wide access on NixOS-WSL
+- **User level** (`home/common/wsl-home-base.nix`): Ensures availability on ANY WSL distro
+
+This duplication is harmless on NixOS-WSL (Nix deduplicates automatically) and essential for portability to vanilla WSL distributions.
+
+### Sharing Strategy
+When sharing with colleagues:
+- **If they use NixOS-WSL**: They can use both modules
+- **If they use vanilla WSL** (Ubuntu, Debian, etc.): They can ONLY use `home/common/wsl-home-base.nix`
+- Provide clear documentation about platform requirements
+
+### Example: Colleague on Vanilla Ubuntu WSL
+```nix
+# ~/.config/home-manager/flake.nix (on Ubuntu WSL)
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nixcfg.url = "github:timblaktu/nixcfg";  # Your shared config repo
+  };
+
+  outputs = { nixpkgs, home-manager, nixcfg, ... }: {
+    homeConfigurations."colleague@ubuntu-wsl" = home-manager.lib.homeManagerConfiguration {
+      pkgs = import nixpkgs { system = "x86_64-linux"; };
+      modules = [
+        nixcfg.homeManagerModules.wsl-base  # ✅ Works on vanilla Ubuntu WSL!
+        {
+          homeBase = {
+            username = "colleague";
+            homeDirectory = "/home/colleague";
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+**Note**: The NixOS system module (`nixcfg.nixosModules.wsl-base`) would fail on vanilla Ubuntu WSL because it requires NixOS-WSL-specific features.
+
 ## Implementation Strategy
 
 **Philosophy**: Small, testable, committable batches
