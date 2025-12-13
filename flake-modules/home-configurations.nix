@@ -171,39 +171,13 @@
           modules = [
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
+            ../home/common/wsl-home-base.nix
             {
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
-                enableDevelopment = true;
-                enableEspIdf = true;
-                enableOneDriveUtils = true;
-                enableShellUtils = true;
-                enableTerminal = true;
-                environmentVariables = {
-                  WSL_DISTRO = "nixos";
-                  EDITOR = "nvim";
-                };
-                shellAliases = {
-                  explorer = "explorer.exe .";
-                  code = "code.exe";
-                  code-insiders = "code-insiders.exe";
-                  esp32c5 = "esp-idf-shell";
-                };
               };
-              home.packages = with pkgs; [
-                wslu
-              ];
               secretsManagement.rbw.email = "timblaktu@gmail.com";
-              targets.wsl = {
-                enable = true;
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
-                };
-              };
             }
             # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration
             # ../home/modules/autovalidate-demo.nix  # Disabled - requires home-manager autoValidate integration
