@@ -32,8 +32,8 @@ in
     # User configuration options
     userName = mkOption {
       type = types.str;
-      default = "tim";
-      description = "Primary user name";
+      description = "Primary user name (required - must be explicitly set)";
+      example = "myuser";
     };
 
     userGroups = mkOption {

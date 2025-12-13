@@ -14,6 +14,7 @@
 
   # Base module configuration
   base = {
+    userName = "tim";
     userGroups = lib.mkDefault [ "wheel" "networkmanager" "gpio" ];
   };
 
@@ -58,7 +59,7 @@
   # User configuration
   users.users.tim = {
     isNormalUser = lib.mkDefault true;
-    extraGroups = lib.mkDefault ["wheel" "networkmanager" "gpio"];
+    extraGroups = lib.mkDefault [ "wheel" "networkmanager" "gpio" ];
     openssh.authorizedKeys.keys = lib.mkDefault [
       # Add your SSH keys here
     ];

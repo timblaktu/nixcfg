@@ -38,14 +38,14 @@ in
     # User information
     username = mkOption {
       type = types.str;
-      default = "tim";
-      description = "Username for Home Manager";
+      description = "Username for Home Manager (required - must be explicitly set)";
+      example = "myuser";
     };
 
     homeDirectory = mkOption {
       type = types.str;
-      default = "/home/tim";
-      description = "Home directory path";
+      description = "Home directory path (required - must be explicitly set)";
+      example = "/home/myuser";
     };
 
     # Basic utilities common to all environments
@@ -237,6 +237,24 @@ in
   config = mkMerge [
     # Always apply these configs
     {
+      # Assertions for required options
+      assertions = [
+        {
+          assertion = cfg.username != "";
+          message = ''
+            homeBase.username must be explicitly set.
+            Example: homeBase.username = "myuser";
+          '';
+        }
+        {
+          assertion = cfg.homeDirectory != "";
+          message = ''
+            homeBase.homeDirectory must be explicitly set.
+            Example: homeBase.homeDirectory = "/home/myuser";
+          '';
+        }
+      ];
+
       # Home Manager needs information about you and the paths it should manage
       home = {
         username = cfg.username;

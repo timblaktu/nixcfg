@@ -36,8 +36,10 @@
   nixpkgs.config.allowUnfree = lib.mkDefault true;
 
   # Standard base module configuration for WSL
+  # NOTE: userName is intentionally NOT set here to require explicit configuration
+  # When using this module, you MUST set base.userName in your host configuration
   base = {
-    userName = lib.mkDefault "tim";
+    # userName must be explicitly set in host configuration (no default)
     userGroups = lib.mkDefault [ "wheel" "dialout" ];
     enableClaudeCodeEnterprise = lib.mkDefault false;
     nixMaxJobs = lib.mkDefault 8;
