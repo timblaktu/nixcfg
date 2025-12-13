@@ -34,6 +34,9 @@
     };
   };
 
+  # Enable WSL common configuration
+  wslCommon.enable = lib.mkDefault true;
+
   # WSL-specific configuration
   wsl = {
     enable = true;
