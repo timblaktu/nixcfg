@@ -70,6 +70,13 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 ## 📋 **ACTIVE WORK**
 
+### 🔨 **In Progress: WSL Configuration Consolidation** (2025-12-12)
+**Branch**: `refactor/consolidate-wsl-config`
+**Goal**: Implement ARCHITECTURE.md improvement opportunities to reduce duplication and prepare for colleague sharing
+
+**Current Status**: Planning phase
+**Next**: Execute batch-by-batch consolidation plan
+
 For completed work history, see git log on `dev` and `main` branches.
 
 ### 🚧 **Deferred Tasks**
