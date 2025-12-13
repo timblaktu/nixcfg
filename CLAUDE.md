@@ -74,32 +74,49 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 **Branch**: `refactor/consolidate-wsl-config`
 **Goal**: Implement ARCHITECTURE.md improvement opportunities to reduce duplication and prepare for colleague sharing
 
-**Current Status**: Documentation updates complete (commit 2afb3b4)
-**Next**: Execute Batch 3b - Migrate thinky-nixos home config to wsl-base
+**Current Status**: Phase 2 complete + Review complete (2025-12-13)
+- Templates committed (22aae74)
+- Base modules generalized (6d81a00)
+- `nix flake check` passes
+- Review identified documentation fixes needed
 
-#### 🎯 **CRITICAL ARCHITECTURAL INSIGHT** (2025-12-13)
+**Next**: Apply documentation fixes, then merge to main
+
+#### 📋 **REVIEW FINDINGS** (2025-12-13)
+
+**Overall Grade**: Good - code works, documentation has naming inconsistencies
+
+##### 🔴 CRITICAL: Naming Inconsistency in Documentation
+The Home Manager module is exported as `homeManagerModules.wsl-home-base` but several docs incorrectly reference `homeManagerModules.wsl-base`:
+
+| File | Line | Status |
+|------|------|--------|
+| `docs/CONSOLIDATION-PLAN.md` | 93 | ❌ Uses `wsl-base` |
+| `docs/ARCHITECTURE.md` | 984, 1088 | ❌ Uses `wsl-base` |
+| `docs/CONSOLIDATION-VALIDATION-REPORT.md` | 151 | ❌ Uses `wsl-base` |
+
+##### 🟡 BUG: Darwin template hardcodes x86_64
+`templates/darwin/flake.nix:50` hardcodes `x86_64-darwin` in systemPackages despite supporting Apple Silicon.
+
+##### 🟡 OPPORTUNITY: tim@thinky-ubuntu doesn't use wsl-home-base
+Could benefit from shared module instead of manual WSL config duplication.
+
+##### 🟢 HARMLESS WARNING
+`warning: unknown flake output 'homeManagerModules'` - flake-parts doesn't recognize this output but module works correctly.
+
+#### 🎯 **ARCHITECTURAL INSIGHT**
 
 **Key Finding**: TWO distinct WSL scenarios with different module requirements:
 
 1. **NixOS-WSL** (`hosts/common/wsl-base.nix`) - NixOS system module
    - Requires: Full NixOS-WSL distribution
-   - Provides: System-level WSL integration (wsl.conf, users, services, SSH daemon)
    - **Cannot work on vanilla Ubuntu/Debian/Alpine WSL**
 
 2. **Home Manager on ANY WSL** (`home/common/wsl-home-base.nix`) - Home Manager module
    - Requires: ANY WSL distro + Nix + home-manager
-   - Provides: User-level tweaks (shell wrappers, Windows Terminal settings, `targets.wsl`)
    - **Works on NixOS-WSL AND vanilla Ubuntu/Debian/Alpine WSL** ✅
 
-**Architecture Grade**: A (documentation complete)
-
-**Documentation Tasks** (COMPLETE - commit 2afb3b4):
-- [x] Add "Platform Requirements" section to CONSOLIDATION-PLAN.md
-- [x] Add clear header comments to both wsl-base.nix files explaining NixOS vs portable
-- [x] Add example: colleague on vanilla Ubuntu WSL using wsl-home-base.nix
-- [x] Document wslu duplication rationale (intentional for portability)
-
-**Critical for Sharing**: Colleagues on vanilla WSL can use `homeManagerModules.wsl-base` but NOT `nixosModules.wsl-base`
+**Critical for Sharing**: Colleagues on vanilla WSL can use `homeManagerModules.wsl-home-base` but NOT `nixosModules.wsl-base`
 
 For completed work history, see git log on `dev` and `main` branches.
 
