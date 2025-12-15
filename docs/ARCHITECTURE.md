@@ -28,11 +28,12 @@ The repository already has excellent modularity. Main opportunities:
 
 1. [Repository Structure](#repository-structure)
 2. [Architecture Patterns](#architecture-patterns)
-3. [Modularity Assessment](#modularity-assessment)
-4. [Base Layer Strategy](#base-layer-strategy)
-5. [Image Matrix Building Pattern](#image-matrix-building-pattern)
-6. [Improvement Opportunities](#improvement-opportunities)
-7. [Action Plan](#action-plan)
+3. [Platform Support Matrix](#platform-support-matrix)
+4. [Modularity Assessment](#modularity-assessment)
+5. [Base Layer Strategy](#base-layer-strategy)
+6. [Image Matrix Building Pattern](#image-matrix-building-pattern)
+7. [Improvement Opportunities](#improvement-opportunities)
+8. [Action Plan](#action-plan)
 
 ---
 
@@ -196,6 +197,83 @@ config = {
 - Minimal surface area for minimal configs
 - Easy to enable/disable features
 - Clear dependencies
+
+---
+
+## Platform Support Matrix
+
+This section documents cross-platform support for nixcfg, enabling sharing configurations with colleagues across different operating systems and deployment modes.
+
+**Related**: See `CROSS-PLATFORM-STRATEGY.md` for detailed platform strategy and implementation plan.
+
+### Supported Platforms
+
+| Host Platform | CPU Arch | Native nix develop | NixOS VM | Primary Use Case | Current Status |
+|--------------|----------|-------------------|-----------|------------------|----------------|
+| **Bare-metal Linux** | x86_64 | ✅ Excellent | ✅ KVM/QEMU native | Server, workstation | ✅ Fully working |
+| **Bare-metal Linux** | aarch64 | ✅ Excellent | ✅ KVM/QEMU native | ARM servers, SBCs | ✅ Fully working |
+| **Windows 11 + WSL2** | x86_64 | ✅ Via WSL | ✅ QEMU in WSL | Developer workstations | ✅ Consolidated (2025-12-13) |
+| **macOS Darwin** | aarch64 (M3-4) | ⚠️ Lagging | ✅ QEMU + Hypervisor.framework | Apple Silicon Macs | 🟡 Template exists |
+| **macOS Darwin** | x86_64 (Intel) | ⚠️ Lagging | ✅ QEMU + Hypervisor.framework | Intel Macs | 🔜 Planned |
+
+### Deployment Modes
+
+**nix develop shells** - Best for:
+- Fast iteration on projects
+- CI/CD pipelines (GitHub Actions, GitLab CI)
+- Lightweight tooling needs
+- Developer workstations with working Nix
+
+**NixOS VMs** - Best for:
+- Full system isolation and testing
+- Darwin workarounds (when nix-darwin broken)
+- Consistent test environments across platforms
+- Reproducible builds at OS level
+
+### WSL-Specific Modules
+
+**Two distinct scenarios** with different module requirements:
+
+1. **NixOS-WSL** (`nixosModules.wsl-base`)
+   - Requires: Full NixOS-WSL distribution
+   - Cannot work on vanilla Ubuntu/Debian/Alpine WSL
+   - Provides: System-level WSL integration
+
+2. **Home Manager on ANY WSL** (`homeManagerModules.wsl-home-base`)
+   - Requires: ANY WSL distro + Nix + home-manager
+   - Works on NixOS-WSL AND vanilla Ubuntu/Debian/Alpine WSL
+   - Provides: User-level WSL configuration
+   - **Critical for colleague sharing** - vanilla WSL is most common scenario
+
+### Templates
+
+Available templates for bootstrapping new configurations:
+
+| Template | Target Platform | Module Type | Use Case |
+|----------|----------------|-------------|----------|
+| `wsl-nixos` | NixOS-WSL | nixosConfiguration | Full NixOS-WSL installation |
+| `wsl-home` | Any WSL distro | homeConfiguration | home-manager on vanilla WSL |
+| `darwin` | macOS | darwinConfiguration | nix-darwin + home-manager |
+
+Usage:
+```bash
+nix flake init -t github:timblaktu/nixcfg#wsl-home
+```
+
+### Image Building Strategy (Planned)
+
+**Hybrid approach** combining pre-built images for bootstrapping with live building for iteration:
+
+**Pre-built Images** (for colleague onboarding):
+- WSL tarball (`.tar.gz`) - CRITICAL priority for Windows onboarding
+- QEMU image (`.qcow2`) - For VM testing/development
+- ISO installer - For bare-metal installation
+
+**Live Building** (for development):
+- Build VMs directly from flake: `nix build .#nixosConfigurations.vm.config.system.build.vm`
+- Use nixos-generators for custom formats: `nix run github:nix-community/nixos-generators`
+
+See `CROSS-PLATFORM-STRATEGY.md` for detailed implementation plan.
 
 ---
 
@@ -1085,7 +1163,7 @@ packages.x86_64-linux = {
 **Goal**: Eliminate duplication in personal config
 
 - [ ] Create `hosts/common/wsl-base.nix` (Step 1)
-- [ ] Create `home/common/wsl-base.nix` (Step 2)
+- [ ] Create `home/common/wsl-home-base.nix` (Step 2)
 - [ ] Simplify `thinky-nixos` and `pa161878-nixos` hosts
 - [ ] Simplify home configurations
 - [ ] Test with `nix flake check` and manual switch

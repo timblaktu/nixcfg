@@ -20,11 +20,10 @@
 
   outputs = { self, nixpkgs, darwin, home-manager, ... }:
     let
-      system = "x86_64-darwin"; # or "aarch64-darwin" for Apple Silicon
-      pkgs = import nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-      };
+      # Change this to match your hardware:
+      # - "aarch64-darwin" for Apple Silicon (M1/M2/M3/M4)
+      # - "x86_64-darwin" for Intel Macs
+      system = "aarch64-darwin";
     in
     {
       darwinConfigurations.my-mac = darwin.lib.darwinSystem {
@@ -55,7 +54,7 @@
             };
 
             # System packages
-            environment.systemPackages = with pkgs; [
+            environment.systemPackages = with import nixpkgs { inherit system; config.allowUnfree = true; }; [
               vim
               git
               wget
