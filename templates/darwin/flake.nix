@@ -18,97 +18,105 @@
     # nixcfg.url = "github:timblaktu/nixcfg";
   };
 
-  outputs = { self, nixpkgs, darwin, home-manager, ... }: {
-    darwinConfigurations.my-mac = darwin.lib.darwinSystem {
+  outputs = { self, nixpkgs, darwin, home-manager, ... }:
+    let
       system = "x86_64-darwin"; # or "aarch64-darwin" for Apple Silicon
-      modules = [
-        {
-          # System configuration
-          system.stateVersion = 4;
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      };
+    in
+    {
+      darwinConfigurations.my-mac = darwin.lib.darwinSystem {
+        inherit system;
+        modules = [
+          {
+            # System configuration
+            system.stateVersion = 4;
 
-          # User configuration
-          users.users.myuser = {
-            name = "myuser"; # Change this to your username
-            home = "/Users/myuser"; # Change this to match your username
-          };
-
-          # Allow unfree packages
-          nixpkgs.config.allowUnfree = true;
-
-          # Enable Nix daemon
-          services.nix-daemon.enable = true;
-
-          # Nix settings
-          nix = {
-            settings = {
-              experimental-features = "nix-command flakes";
-              max-jobs = 8;
-            };
-          };
-
-          # System packages
-          environment.systemPackages = with nixpkgs.legacyPackages.${system}; [
-            vim
-            git
-            wget
-            curl
-          ];
-
-          # macOS system defaults
-          system.defaults = {
-            dock = {
-              autohide = true;
-              orientation = "bottom";
-              show-recents = false;
+            # User configuration
+            users.users.myuser = {
+              name = "myuser"; # Change this to your username
+              home = "/Users/myuser"; # Change this to match your username
             };
 
-            finder = {
-              AppleShowAllExtensions = true;
-              FXEnableExtensionChangeWarning = false;
-              ShowPathbar = true;
+            # Allow unfree packages
+            nixpkgs.config.allowUnfree = true;
+
+            # Enable Nix daemon
+            services.nix-daemon.enable = true;
+
+            # Nix settings
+            nix = {
+              settings = {
+                experimental-features = "nix-command flakes";
+                max-jobs = 8;
+              };
             };
 
-            NSGlobalDomain = {
-              AppleShowAllExtensions = true;
-              InitialKeyRepeat = 15;
-              KeyRepeat = 2;
-            };
-          };
-        }
-
-        # Home Manager integration
-        home-manager.darwinModules.home-manager
-        {
-          home-manager.useGlobalPkgs = true;
-          home-manager.useUserPackages = true;
-          home-manager.users.myuser = { pkgs, ... }: {
-            home.stateVersion = "24.11";
-
-            # User packages
-            home.packages = with pkgs; [
-              ripgrep
-              fd
-              fzf
-              htop
-              jq
+            # System packages
+            environment.systemPackages = with pkgs; [
+              vim
+              git
+              wget
+              curl
             ];
 
-            # Git configuration
-            programs.git = {
-              enable = true;
-              userName = "Your Name";
-              userEmail = "your-email@example.com";
-            };
+            # macOS system defaults
+            system.defaults = {
+              dock = {
+                autohide = true;
+                orientation = "bottom";
+                show-recents = false;
+              };
 
-            # Zsh configuration
-            programs.zsh = {
-              enable = true;
-              enableCompletion = true;
-              syntaxHighlighting.enable = true;
+              finder = {
+                AppleShowAllExtensions = true;
+                FXEnableExtensionChangeWarning = false;
+                ShowPathbar = true;
+              };
+
+              NSGlobalDomain = {
+                AppleShowAllExtensions = true;
+                InitialKeyRepeat = 15;
+                KeyRepeat = 2;
+              };
             };
-          };
-        }
-      ];
+          }
+
+          # Home Manager integration
+          home-manager.darwinModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+            home-manager.users.myuser = { pkgs, ... }: {
+              home.stateVersion = "24.11";
+
+              # User packages
+              home.packages = with pkgs; [
+                ripgrep
+                fd
+                fzf
+                htop
+                jq
+              ];
+
+              # Git configuration
+              programs.git = {
+                enable = true;
+                userName = "Your Name";
+                userEmail = "your-email@example.com";
+              };
+
+              # Zsh configuration
+              programs.zsh = {
+                enable = true;
+                enableCompletion = true;
+                syntaxHighlighting.enable = true;
+              };
+            };
+          }
+        ];
+      };
     };
-  };
 }
