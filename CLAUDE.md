@@ -101,29 +101,21 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 ### 🔜 **Next: Phase 3 - Image Building Implementation**
 **Goal**: Enable automated building of deployment images for colleague onboarding
 
-**⚠️ PREREQUISITE - MUST FIX FIRST**:
-**marker-pdf derivation failure blocking `nix flake check`**
-- Error: `path '/nix/store/v64r1zarvybkcfyiajq4gfz5kc68kb97-marker-pdf-script.drv' is not valid`
-- Status: Pre-existing issue, NOT caused by Phase 2 work
-- History: Added in commit 88b2f73 (major flake refactor with PDF tools), was working at that time
-- Recent work: Had significant development effort in that commit
-- Investigation findings:
-  - Derivation file EXISTS on disk at the expected path
-  - Package metadata evaluates successfully (description, meta fields work)
-  - `nix build --dry-run` starts the build process
-  - `nix flake check` fails when validating this specific derivation
-  - Appears to be a Nix store state/validity issue, not a code issue
-  - Package is correctly exposed in flake-modules/packages.nix
-- **CRITICAL CONSTRAINTS**:
-  - ❌ DO NOT implement workarounds
-  - ❌ DO NOT disable this package
-  - ✅ MUST understand what broke between commit 88b2f73 and current state
-  - ✅ MUST diagnose root cause and discuss with user before any fixes
-  - Package has recent development effort invested - needs proper investigation
-- **Hypothesis**: Something in the WSL consolidation merge (commits between 88b2f73 and 2c4d333) may have affected Nix store state or derivation references
-- **Next action**: Investigate commit-by-commit what changed, compare derivation hashes, check if garbage collection or store corruption occurred
+**✅ RESOLUTION: marker-pdf "issue" was based on stale/incorrect information**
 
-**Phase 3 Planned Work** (after marker-pdf diagnosis and fix):
+**Investigation Findings (2025-12-15 20:52 UTC)**:
+- **Current state**: marker-pdf works perfectly - both `nix flake check` and `nix build '.#marker-pdf'` succeed
+- **Root cause of confusion**: Error message in CLAUDE.md referenced obsolete derivation path
+  - Old derivation: `/nix/store/v64r1zarvybkcfyiajq4gfz5kc68kb97-marker-pdf-script.drv` (still exists on disk, from earlier build)
+  - Current derivation: `/nix/store/g43k3drfa3rgqwcadhxdwpidmm025dn7-marker-pdf-env.drv` (active and working)
+- **Verification results**:
+  - `nix flake check` exits with code 0 (success)
+  - All 24 flake checks pass
+  - marker-pdf package builds successfully
+  - No Nix store corruption or validity issues
+- **Conclusion**: No actual bug existed. The documentation in commit 0b4648c was based on incorrect assumption about a failure that wasn't happening.
+
+**Phase 3 Work** (ready to begin - no blockers):
 1. Integrate nixos-generators into flake
 2. Create base NixOS configurations suitable for image building
 3. Implement WSL tarball building (CRITICAL for Windows colleague onboarding)
