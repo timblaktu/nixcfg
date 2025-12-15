@@ -70,17 +70,43 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 ## 📋 **ACTIVE WORK**
 
-### 🔨 **In Progress: WSL Configuration Consolidation** (2025-12-13)
-**Branch**: `refactor/consolidate-wsl-config`
-**Goal**: Implement ARCHITECTURE.md improvement opportunities to reduce duplication and prepare for colleague sharing
+### 🔨 **In Progress: Cross-Platform Architecture Planning** (2025-12-15)
+**Branch**: `refactor/consolidate-wsl-config` (pending doc fixes before merge)
+**Goal**: Design comprehensive platform support strategy for colleague sharing
 
-**Current Status**: Phase 2 complete + Review complete (2025-12-13)
+**Context**: Recent WSL consolidation work (templates, base modules) is just ONE slice of a larger cross-platform vision. Need to ensure nixcfg provides solid foundation for extracting shareable components to separate flake repo(s).
+
+**Platform Support Matrix**:
+| Host Platform | Native nix develop | NixOS VM | Current Status |
+|--------------|-------------------|-----------|----------------|
+| Bare-metal Linux (x86_64, aarch64) | ✅ Excellent | ✅ Native KVM/QEMU | ✅ Working |
+| Windows 11 + WSL2 (x86_64) | ✅ Via WSL | ✅ QEMU in WSL | ✅ Consolidated (recent work) |
+| macOS Darwin (M3-4 aarch64) | ⚠️ Lagging/broken | ✅ Fallback option | 🟡 Template exists, needs VM config |
+
+**Deployment Mode Decision Tree**:
+- **Use nix develop when**: Fast iteration needed, CI/CD pipelines, lightweight tooling, host integration desired
+- **Use NixOS VM when**: Full system isolation needed, Darwin workarounds required, consistent test environments, reproducible builds at OS level
+
+**Architecture Phases**:
+1. ✅ **WSL Consolidation** - Templates + base modules for WSL scenarios (DONE, pending doc fixes)
+2. 📍 **Cross-Platform Documentation** - Platform matrix, decision tree, VM architecture (CURRENT)
+3. 🔜 **NixOS VM Configurations** - Generic VMs for all platforms (headless + GUI variants, x86_64 + aarch64)
+4. 🔜 **Extraction Planning** - Identify shareable vs personal components, design shared flake structure
+5. 🔜 **Shared Flake Creation** - New repo with extracted components, colleague testing
+
+**Key Architectural Insights**:
+- **Layered Modularity**: Platform-agnostic base → Platform adapters → Personal configs → Colleague configs
+- **Two Distinct WSL Scenarios**: NixOS-WSL (full distro) vs Home Manager on vanilla WSL (portable)
+- **VM Strategy**: Live building from flake (Option B) preferred over pre-built images for Nix-native approach
+- **CI/CD Consideration**: Dev shells must work headless on GitHub Actions (Linux x86_64, macOS Intel/Apple Silicon)
+
+**Previous WSL Work** (2025-12-13):
 - Templates committed (22aae74)
 - Base modules generalized (6d81a00)
 - `nix flake check` passes
-- Review identified documentation fixes needed
+- Review identified documentation fixes needed (see review findings below)
 
-**Next**: Apply documentation fixes, then merge to main
+**Next**: Apply documentation fixes, update ARCHITECTURE.md with platform matrix, then merge to main
 
 #### 📋 **REVIEW FINDINGS** (2025-12-13)
 
