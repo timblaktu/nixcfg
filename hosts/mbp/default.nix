@@ -11,8 +11,9 @@
   # Allow unfree packages
   nixpkgs.config.allowUnfree = lib.mkDefault true;
 
-  # Base module configuration  
+  # Base module configuration
   base = {
+    userName = "tim";
     sshPasswordAuth = lib.mkDefault true;
     requireWheelPassword = lib.mkDefault false;
     userGroups = lib.mkDefault [ "wheel" "networkmanager" "audio" "video" ];
@@ -64,7 +65,7 @@
 
   # Console configuration
   console = {
-    packages = [pkgs.kbd pkgs.terminus_font pkgs.powerline-fonts];
+    packages = [ pkgs.kbd pkgs.terminus_font pkgs.powerline-fonts ];
     font = "${pkgs.powerline-fonts}/share/consolefonts/ter-powerline-v20b.psf.gz";
     keyMap = "us";
     colors = [
@@ -90,7 +91,7 @@
   # User configuration (overrides common)
   users.users.tim = {
     isNormalUser = lib.mkDefault true;
-    extraGroups = lib.mkDefault ["wheel" "users" "audio" "video"];
+    extraGroups = lib.mkDefault [ "wheel" "users" "audio" "video" ];
     packages = lib.mkDefault (with pkgs; [
       inputs.home-manager.packages.${pkgs.system}.default
     ]);
@@ -155,7 +156,7 @@
     ports = lib.mkDefault [ 22 ];
     settings = {
       PermitRootLogin = lib.mkDefault "no";
-      PasswordAuthentication = lib.mkForce true;  # mkForce is intentional here
+      PasswordAuthentication = lib.mkForce true; # mkForce is intentional here
     };
   };
 

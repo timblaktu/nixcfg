@@ -8,6 +8,92 @@ This guide explains how to set up automatic GitHub authentication on NixOS machi
 
 Both methods ensure you can immediately authenticate to GitHub CLI and push/pull from private repos on newly provisioned machines.
 
+> **Quick Start**: If you want to get up and running in 5 minutes, jump to the [Quick Start Guide](#quick-start-guide) section below.
+
+## Table of Contents
+- [Quick Start Guide](#quick-start-guide)
+- [Method 1: Bitwarden Integration](#method-1-bitwarden-integration-recommended)
+- [Method 2: SOPS-NiX](#method-2-sops-nix-alternative)
+- [Architecture](#architecture)
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+- [History & References](#history--references)
+
+---
+
+## Quick Start Guide
+
+Get GitHub authentication working in 5 minutes!
+
+### Prerequisites
+- ✅ NixOS system with this nixcfg flake
+- ✅ Bitwarden account (free tier works)
+- ✅ `rbw` configured (already set up in nixcfg)
+
+### Step 1: Create GitHub Token (2 minutes)
+
+1. Go to GitHub → Settings → Developer Settings → Personal Access Tokens → Tokens (classic)
+2. Click **"Generate new token (classic)"**
+3. Settings:
+   - **Note**: `NixOS Authentication`
+   - **Expiration**: `90 days` (or custom)
+   - **Scopes**: Check these boxes:
+     - ✅ `repo` (Full control of private repositories)
+     - ✅ `workflow` (Update GitHub Action workflows)
+     - ✅ `read:org` (Read org and team membership)
+4. Click **"Generate token"**
+5. **COPY THE TOKEN NOW** (you won't see it again!)
+
+### Step 2: Store Token in Bitwarden (1 minute)
+
+```bash
+# Make sure Bitwarden is unlocked
+rbw unlock
+
+# Store your GitHub token
+rbw add github-token --folder "Infrastructure/Tokens"
+# When prompted, paste your token from Step 1
+
+# Verify it's stored
+rbw get github-token  # Should show your token
+```
+
+### Step 3: Enable in Your Home-Manager Config (1 minute)
+
+The module is already enabled in `home/modules/base.nix` for all users. No additional configuration needed!
+
+### Step 4: Apply Configuration (1 minute)
+
+```bash
+# Apply home-manager configuration
+home-manager switch --flake '.#tim@thinky-nixos'
+
+# Test it works
+gh auth status
+# Should show: ✓ Logged in to github.com as YOUR-USERNAME
+
+# Test CLI
+gh repo list
+gh pr list
+
+# Test git operations (no password needed!)
+git clone https://github.com/timblaktu/private-repo
+```
+
+### After Each Reboot
+
+Since we're using the secure non-persistent mode:
+```bash
+# Unlock Bitwarden if needed
+rbw unlock
+
+# Authentication is automatic - just start using gh/git!
+```
+
+That's it! For detailed configuration options and advanced usage, continue reading below.
+
+---
+
 ## Method 1: Bitwarden Integration (Recommended)
 
 This method stores GitHub tokens in Bitwarden and retrieves them on-demand, following the same pattern as SSH key management.
@@ -272,12 +358,78 @@ git config user.email "work@company.com"
 rbw get github-token-work | gh auth login --with-token
 ```
 
+## Architecture
+
+### Wrapper-Based Design (Current Implementation)
+
+The authentication system uses a **wrapper script architecture** that eliminates configuration redundancy and provides a single source of truth for credentials.
+
+#### Key Components
+
+1. **Wrapper Scripts**:
+   - `gh-with-auth`: Wraps the `gh` CLI, injecting `GH_TOKEN` from Bitwarden at runtime
+   - `glab-with-auth`: Wraps the `glab` CLI, injecting `GITLAB_TOKEN` from Bitwarden at runtime
+
+2. **Dual-Purpose Design**:
+   ```
+   CLI Operations:  gh → gh-with-auth → fetches token → exec real gh
+   Git Operations:  git → gh auth git-credential (via wrapper) → fetches token → provides to git
+   ```
+
+3. **Single Configuration Point**:
+   - Bitwarden item/field specified ONCE in wrapper definition
+   - Same wrapper used for both CLI and git credential operations
+   - No duplication, no staleness
+
+#### How It Works
+
+**CLI Example (gh repo list)**:
+```bash
+$ gh repo list
+→ gh-with-auth wrapper executes
+→ Fetches token from Bitwarden: $(rbw get github-token)
+→ Exports: GH_TOKEN="ghp_xxxx..."
+→ Execs: /nix/store/.../gh/bin/gh repo list
+→ gh CLI sees GH_TOKEN and uses it
+```
+
+**Git Example (git clone)**:
+```bash
+$ git clone https://github.com/user/repo
+→ git needs credentials for github.com
+→ Calls credential helper: !gh auth git-credential
+→ gh-with-auth wrapper executes (same wrapper!)
+→ Fetches token from Bitwarden: $(rbw get github-token)
+→ Exports: GH_TOKEN="ghp_xxxx..."
+→ Execs: /nix/store/.../gh/bin/gh auth git-credential
+→ gh provides token to git in credential helper protocol
+→ git uses token for authentication
+```
+
+#### Benefits
+
+- ✅ **Single Source of Truth**: Token location defined once per service
+- ✅ **No Duplication**: Same wrapper for CLI and git operations
+- ✅ **Always Fresh**: Tokens fetched from Bitwarden on every operation
+- ✅ **No Storage**: Tokens never written to disk
+- ✅ **Simplified Code**: ~150 lines removed vs. custom credential helpers
+- ✅ **Leverages Official Integration**: Uses `gh/glab auth git-credential` built-in commands
+
+#### Previous Architectures
+
+**Version 1 (Removed)**: NixOS system modules with activation scripts - wrong scope, over-engineered
+**Version 2 (Removed)**: Custom credential helpers with shell aliases - redundant configuration
+**Version 3 (Current)**: Wrapper-based unified approach - optimal design
+
+For historical context, see the [History & References](#history--references) section below.
+
 ## Integration with Existing Modules
 
 This authentication system integrates with:
-- **home/common/git.nix** - Git configuration
-- **modules/nixos/bitwarden-ssh-keys.nix** - SSH key management pattern
-- **modules/nixos/sops-nix.nix** - SOPS secrets management
+- **home/modules/github-auth.nix** - Main authentication module with wrapper generation
+- **home/common/git.nix** - Git configuration (credential helper setup)
+- **home/modules/secrets-management.nix** - Bitwarden/rbw configuration pattern
+- **modules/nixos/sops-nix.nix** - SOPS secrets management (alternative mode)
 
 ## Migration from Manual Setup
 
@@ -285,18 +437,61 @@ If you currently:
 - **Store tokens in `.env` files**: Move to Bitwarden/SOPS
 - **Use SSH keys only**: Add HTTPS token auth for better CLI integration
 - **Have tokens in shell config**: Remove and use this module
+- **Use old NixOS system modules**: Switch to home-manager module (see git history)
+
+## History & References
+
+This authentication system has evolved through several design iterations:
+
+### Design Evolution
+1. **2025-11-20**: Initial NixOS system module design (deprecated)
+   - See: `docs/redesigns/github-auth-redesign-2025-11-20.md` (removed)
+   - Issue: Wrong scope (system vs user)
+
+2. **2025-12-04**: GitLab CLI authentication fix
+   - See: `docs/redesigns/gitlab-auth-fix-2025-12-04.md` (removed)
+   - Moved to env var injection pattern
+
+3. **2025-12-05**: Research on gh/glab credential helper integration
+   - See: `docs/git-auth-integration-research-2025-12-05.md` (removed)
+   - Discovered official credential helper commands
+
+4. **2025-12-06**: Wrapper-based architecture implementation
+   - See: `docs/auth-refactoring-session-2025-12-05.md` (removed)
+   - Current design: Single wrapper for CLI + git operations
+
+### Key Design Decisions
+
+**Why Wrappers Instead of Custom Credential Helpers?**
+- Eliminates duplication (Bitwarden config in one place)
+- Leverages official `gh/glab auth git-credential` commands
+- Simpler codebase (~150 lines removed)
+- Single authentication flow for CLI and git
+
+**Why Not Export GH_TOKEN as Session Variable?**
+- Would be evaluated once at shell startup (stale tokens)
+- Token in process environment for entire session (security concern)
+- Doesn't help non-shell contexts (systemd, cron)
+
+**Why Home-Manager Module vs NixOS Module?**
+- Authentication is user-specific, not system-wide
+- Works automatically on all hosts where user exists
+- Proper separation of concerns
+
+For the complete history of design iterations and architectural decisions, see the git commit history for `home/modules/github-auth.nix`.
 
 ## Next Steps
 
-1. Choose your method (Bitwarden recommended)
-2. Set up your GitHub token
-3. Enable the module in your host configuration
-4. Test with `github-auth-init`
-5. Enjoy seamless GitHub authentication on all machines!
+1. Follow the [Quick Start Guide](#quick-start-guide) to get started quickly
+2. Review [Best Practices](#best-practices) for secure token management
+3. Configure for your environment (Bitwarden or SOPS)
+4. Test thoroughly with both CLI and git operations
+5. Enjoy seamless GitHub/GitLab authentication across all machines!
 
 ## Security Notes
 
 - Tokens are more convenient but less secure than SSH keys
-- Use both: SSH keys for git operations, tokens for GitHub CLI
+- **Recommended**: Use both - SSH keys for git operations, tokens for GitHub CLI
 - Consider using GitHub's new fine-grained personal access tokens
 - Enable GitHub's security features: 2FA, signed commits, vigilant mode
+- Regularly rotate tokens (set calendar reminder for expiration)

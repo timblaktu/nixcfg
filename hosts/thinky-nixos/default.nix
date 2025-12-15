@@ -1,95 +1,26 @@
 # WSL NixOS configuration
 { config, lib, pkgs, inputs, ... }:
 
+let
+  sshKeys = import ../common/ssh-keys.nix;
+in
 {
   imports = [
     ./hardware-config.nix
-    ../../modules/base.nix
-    ../../modules/wsl-common.nix
-    ../../modules/wsl-tarball-checks.nix
-    ../../modules/nixos/sops-nix.nix
-    inputs.sops-nix.nixosModules.sops
-    inputs.nixos-wsl.nixosModules.default
+    ../common/wsl-base.nix # Common WSL base configuration
   ];
 
-  # Allow unfree packages
-  nixpkgs.config.allowUnfree = true;
-
-  # Base module configuration
-  base = {
-    userName = "tim";
-    userGroups = [ "wheel" "dialout" ];
-    enableClaudeCodeEnterprise = false;
-    nixMaxJobs = 8;
-    nixCores = 0;
-    enableBinaryCache = true;
-    cacheTimeout = 10;
-    sshPasswordAuth = true;
-    requireWheelPassword = false;
-    additionalShellAliases = {
-      esp32c5 = "esp-idf-shell";
-      explorer = "explorer.exe .";
-      code = "code.exe";
-      code-insiders = "code-insiders.exe";
-    };
-  };
-
-  # WSL common configuration
+  # Host-specific WSL common configuration
   wslCommon = {
-    enable = true;
     hostname = "thinky-nixos";
     defaultUser = "tim";
-    sshPort = 2223; # Must bind to unique port since sharing winHost with another WSL guest
+    sshPort = 2223;
     userGroups = [ "wheel" "dialout" ];
-    authorizedKeys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
-    ];
-    enableWindowsTools = true;
+    authorizedKeys = [ sshKeys.timblaktu ];
   };
-
-  # WSL-specific configuration
-  wsl.enable = true;
-  # wsl.defaultUser = "tim";
-  wsl.interop.register = true;
-  wsl.usbip.enable = true;
-  wsl.usbip.autoAttach = [ "3-1" "3-2" ]; # .. the last on new sabrent hub is 8-4
-  wsl.usbip.snippetIpAddress = "localhost"; # Fix for auto-attach
-
-  # # For disk id and UUIDs, use: `lsblk -o NAME,SIZE,TYPE,FSTYPE,RO,MOUNTPOINTS,UUID`
-  # wsl.bareMounts = {
-  #   enable = true;
-  #   mounts = [
-  #     {
-  #       diskUuid = "e030a5d0-fd70-4823-8f51-e6ea8c145fe6";
-  #       mountPoint = "/mnt/wsl/internal-4tb-nvme";
-  #       fsType = "ext4";
-  #       options = [ "defaults" "noatime" ];
-  #     }
-  #   ];
-  # };
-
-  # Bind mount the Nix store from the bare-mounted disk
-  # NOTE: Before enabling this, copy existing store with:
-  # sudo rsync -avHAX /nix/ /mnt/wsl/internal-4tb-nvme/nix-thinky-nixos/
-  # fileSystems."/nix" = {
-  #   device = "/mnt/wsl/internal-4tb-nvme/nix-thinky-nixos";
-  #   fsType = "none";
-  #   options = [
-  #     "bind"
-  #     "x-systemd.automount"           # Mount on first access
-  #     "x-systemd.idle-timeout=60"     # Unmount after idle
-  #     "x-systemd.requires=mnt-wsl-internal\\x2d4tb\\x2dnvme.mount"
-  #     "x-systemd.after=mnt-wsl-internal\\x2d4tb\\x2dnvme.mount"
-  #     "_netdev"                        # Network device (for ordering)
-  #     "nofail"                         # Don't fail boot if unavailable
-  #   ];
-  # };
 
   # SSH service configuration
-  services.openssh = {
-    enable = true;
-    ports = [ 2223 ]; # Must bind to unique port since sharing winHost with another WSL guest
-  };
+  services.openssh.ports = [ 2223 ];
 
   # USB device management for ESP32 development
   services.udev.packages = [
@@ -117,25 +48,4 @@
 
   # User environment managed by standalone Home Manager
   # Deploy with: home-manager switch --flake '.#tim@thinky-nixos'
-
-  # SOPS-NiX configuration for secrets management
-  sopsNix = {
-    enable = true;
-    hostKeyPath = "/etc/sops/age.key";
-    # defaultSopsFile will be set when we have production secrets
-  };
-
-  # Production secrets will be defined here as needed
-  # Example:
-  # sops.secrets = {
-  #   "github_token" = {
-  #     owner = "tim";
-  #     group = "users";
-  #     mode = "0400";
-  #     sopsFile = ../../secrets/common/services.yaml;
-  #   };
-  # };
-
-  # System state version
-  system.stateVersion = "24.11";
 }

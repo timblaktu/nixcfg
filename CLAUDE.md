@@ -68,59 +68,86 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 4. `/home/tim/src/git-worktree-superproject` - working tree for MY PROJECT implementing fast worktree switching for multi-repo and nix flake projects. We will eventually USE this here in nixcfg to facilitate multiple concurrent nix- development efforts
 
 
-## 📋 **CURRENT TASKS** (2025-12-10)
+## 📋 **ACTIVE WORK**
 
-### ✅ Recently Completed
+### 🔨 **In Progress: Cross-Platform Architecture Planning** (2025-12-15)
+**Branch**: `refactor/consolidate-wsl-config` (pending doc fixes before merge)
+**Goal**: Design comprehensive platform support strategy for colleague sharing
 
-#### **Claude Code Module Rename** (2025-12-10)
-**Branch**: `dev`
-**Status**: COMPLETE - Ready for deployment
+**Context**: Recent WSL consolidation work (templates, base modules) is just ONE slice of a larger cross-platform vision. Need to ensure nixcfg provides solid foundation for extracting shareable components to separate flake repo(s).
 
-**Problem**: Upstream home-manager added `programs.claude-code` module that conflicts with our custom implementation.
+**Platform Support Matrix**:
+| Host Platform | Native nix develop | NixOS VM | Current Status |
+|--------------|-------------------|-----------|----------------|
+| Bare-metal Linux (x86_64, aarch64) | ✅ Excellent | ✅ Native KVM/QEMU | ✅ Working |
+| Windows 11 + WSL2 (x86_64) | ✅ Via WSL | ✅ QEMU in WSL | ✅ Consolidated (recent work) |
+| macOS Darwin (M3-4 aarch64) | ⚠️ Lagging/broken | ✅ Fallback option | 🟡 Template exists, needs VM config |
 
-**Solution**: Renamed our module to `programs.claude-code-enhanced`
+**Deployment Mode Decision Tree**:
+- **Use nix develop when**: Fast iteration needed, CI/CD pipelines, lightweight tooling, host integration desired
+- **Use NixOS VM when**: Full system isolation needed, Darwin workarounds required, consistent test environments, reproducible builds at OS level
 
-**Changes Made**:
-1. ✅ Renamed namespace: `programs.claude-code` → `programs.claude-code-enhanced`
-2. ✅ Updated all sub-modules (hooks, mcp-servers, statusline, sub-agents, slash-commands, memory-commands)
-3. ✅ Re-enabled module in base.nix with new namespace
-4. ✅ Fixed pre-existing .zshenv conflict (changed to programs.zsh.envExtra)
-5. ✅ Fixed missing disableBypassPermissionsMode option reference
-6. ✅ All validation passed (nix flake check, home-manager dry-run, nixos-rebuild dry-build)
+**Architecture Phases**:
+1. ✅ **WSL Consolidation** - Templates + base modules for WSL scenarios (DONE, pending doc fixes)
+2. 📍 **Cross-Platform Documentation** - Platform matrix, decision tree, VM architecture (CURRENT)
+3. 🔜 **NixOS VM Configurations** - Generic VMs for all platforms (headless + GUI variants, x86_64 + aarch64)
+4. 🔜 **Extraction Planning** - Identify shareable vs personal components, design shared flake structure
+5. 🔜 **Shared Flake Creation** - New repo with extracted components, colleague testing
 
-**Documentation**:
-- `docs/claude-code-home-manager-program-analysis.md` - Comprehensive analysis
-- `docs/claude-code-module-comparison.md` - Feature comparison
-- `home/modules/claude-code/UPSTREAM-CONTRIBUTION-PLAN.md` - Phased contribution strategy
+**Key Architectural Insights**:
+- **Layered Modularity**: Platform-agnostic base → Platform adapters → Personal configs → Colleague configs
+- **Two Distinct WSL Scenarios**: NixOS-WSL (full distro) vs Home Manager on vanilla WSL (portable)
+- **Hybrid Image Strategy**: Pre-built images for bootstrapping (WSL tarball CRITICAL) + live building for iteration
+- **Image Matrix Building**: One config → multiple formats (WSL tarball, qcow2, ISO, Docker) via nixos-generators
+- **CI/CD Consideration**: Dev shells must work headless on GitHub Actions (Linux x86_64, macOS Intel/Apple Silicon)
 
-**Commit**: `4f5a67b feat: rename claude-code module to avoid upstream conflict`
+**Previous WSL Work** (2025-12-13):
+- Templates committed (22aae74)
+- Base modules generalized (6d81a00)
+- `nix flake check` passes
+- Review identified documentation fixes needed (see review findings below)
 
-#### **GitHub Authentication & Flake Integration** (2025-12-09)
-**Branch**: `pa161878`
-**Status**: COMPLETE - Successfully integrated and validated
+**Next**: Apply documentation fixes, update ARCHITECTURE.md with platform matrix, then merge to main
 
-**Accomplishments**:
-1. ✅ GitHub PAT configured for Nix operations
-2. ✅ Refactored flake inputs to use upstream sources with minimal custom forks
-3. ✅ Successfully ran `nix flake update` with all remote URLs
-4. ✅ Merged 134 commits from PDF-to-markdown development
-5. ✅ All flake validation passed
+#### 📋 **REVIEW FINDINGS** (2025-12-13)
 
-#### **PDF-to-Markdown Tools** (2025-12-08)
-- marker-pdf, docling, and tomd packages added and tested
-- GPU detection issues documented for future optimization
+**Overall Grade**: Good - code works, documentation has naming inconsistencies
 
-### 🚧 **Pending Deployment**
+##### 🔴 CRITICAL: Naming Inconsistency in Documentation
+The Home Manager module is exported as `homeManagerModules.wsl-home-base` but several docs incorrectly reference `homeManagerModules.wsl-base`:
 
-#### **Claude Code Enhanced Module** (Ready to Deploy)
-**Branch**: `dev` (ahead of origin/main by 1 commit)
-**Next Steps**:
-1. Run `home-manager switch --flake '.#tim@thinky-nixos' -b backup`
-2. Run `sudo nixos-rebuild switch --flake '.#thinky-nixos'`
-3. Verify Claude Code functionality with new namespace
-4. Push dev branch or merge to main
+| File | Line | Status |
+|------|------|--------|
+| `docs/CONSOLIDATION-PLAN.md` | 93 | ❌ Uses `wsl-base` |
+| `docs/ARCHITECTURE.md` | 984, 1088 | ❌ Uses `wsl-base` |
+| `docs/CONSOLIDATION-VALIDATION-REPORT.md` | 151 | ❌ Uses `wsl-base` |
 
-### 🚧 **Incomplete/Deferred Tasks**
+##### 🟡 BUG: Darwin template hardcodes x86_64
+`templates/darwin/flake.nix:50` hardcodes `x86_64-darwin` in systemPackages despite supporting Apple Silicon.
+
+##### 🟡 OPPORTUNITY: tim@thinky-ubuntu doesn't use wsl-home-base
+Could benefit from shared module instead of manual WSL config duplication.
+
+##### 🟢 HARMLESS WARNING
+`warning: unknown flake output 'homeManagerModules'` - flake-parts doesn't recognize this output but module works correctly.
+
+#### 🎯 **ARCHITECTURAL INSIGHT**
+
+**Key Finding**: TWO distinct WSL scenarios with different module requirements:
+
+1. **NixOS-WSL** (`hosts/common/wsl-base.nix`) - NixOS system module
+   - Requires: Full NixOS-WSL distribution
+   - **Cannot work on vanilla Ubuntu/Debian/Alpine WSL**
+
+2. **Home Manager on ANY WSL** (`home/common/wsl-home-base.nix`) - Home Manager module
+   - Requires: ANY WSL distro + Nix + home-manager
+   - **Works on NixOS-WSL AND vanilla Ubuntu/Debian/Alpine WSL** ✅
+
+**Critical for Sharing**: Colleagues on vanilla WSL can use `homeManagerModules.wsl-home-base` but NOT `nixosModules.wsl-base`
+
+For completed work history, see git log on `dev` and `main` branches.
+
+### 🚧 **Deferred Tasks**
 
 #### **Fork Development Work** (DEFERRED)
 **Status**: On hold pending git-worktree-superproject implementation
@@ -136,15 +163,9 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 - Phase 3 (1-2 months): Categorized hooks PR
 - Phase 4 (quarter): Multi-account RFC
 
-#### **PDF-to-Markdown GPU Optimization** (IDENTIFIED BUT NOT FIXED)
+#### **PDF-to-Markdown GPU Optimization** (IDENTIFIED)
 **Problem**: marker-pdf runs on CPU despite CUDA availability
 **Status**: Documented but not implemented
-
-### 📌 **Next Priority Actions**
-
-1. **Deploy Claude Code Enhanced**: Run home-manager and nixos-rebuild switch
-2. **Push dev branch**: After successful deployment verification
-3. **Begin upstream contribution**: Start with statusline styles PR
 
 ## MANDATORY: Next Session Prompt Template
 After EVERY response, provide this format:

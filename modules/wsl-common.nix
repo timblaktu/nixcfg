@@ -18,8 +18,8 @@ in
 
     defaultUser = mkOption {
       type = types.str;
-      default = "tim";
-      description = "Default WSL user";
+      description = "Default WSL user (required - must be explicitly set)";
+      example = "myuser";
     };
 
     interopRegister = mkOption {
@@ -66,7 +66,7 @@ in
 
     authorizedKeys = mkOption {
       type = types.listOf types.str;
-      default = [];
+      default = [ ];
       description = "SSH authorized keys for the default user";
     };
   };
@@ -95,6 +95,11 @@ in
         message = "wslCommon.userGroups should include 'wheel' for sudo access";
       }
     ];
+
+    # Connect wslCommon.defaultUser to base.userName
+    # This ensures the base module has the correct username when wslCommon is enabled
+    base.userName = cfg.defaultUser;
+
     # WSL configuration
     wsl = {
       enable = true;
