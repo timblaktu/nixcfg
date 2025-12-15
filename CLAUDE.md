@@ -70,29 +70,17 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 ## 📋 **ACTIVE WORK**
 
-### 🔨 **In Progress: Cross-Platform Architecture Planning** (2025-12-15)
-**Branch**: `refactor/consolidate-wsl-config` (pending doc fixes before merge)
-**Goal**: Design comprehensive platform support strategy for colleague sharing
+### ✅ **Completed: Phase 2 - Cross-Platform Documentation** (2025-12-15)
+**Branch**: `main` (merged from `refactor/consolidate-wsl-config`)
+**Tag**: `phase-2-complete`
+**Goal**: Comprehensive platform support strategy documentation
 
-**Context**: Recent WSL consolidation work (templates, base modules) is just ONE slice of a larger cross-platform vision. Need to ensure nixcfg provides solid foundation for extracting shareable components to separate flake repo(s).
-
-**Platform Support Matrix**:
-| Host Platform | Native nix develop | NixOS VM | Current Status |
-|--------------|-------------------|-----------|----------------|
-| Bare-metal Linux (x86_64, aarch64) | ✅ Excellent | ✅ Native KVM/QEMU | ✅ Working |
-| Windows 11 + WSL2 (x86_64) | ✅ Via WSL | ✅ QEMU in WSL | ✅ Consolidated (recent work) |
-| macOS Darwin (M3-4 aarch64) | ⚠️ Lagging/broken | ✅ Fallback option | 🟡 Template exists, needs VM config |
-
-**Deployment Mode Decision Tree**:
-- **Use nix develop when**: Fast iteration needed, CI/CD pipelines, lightweight tooling, host integration desired
-- **Use NixOS VM when**: Full system isolation needed, Darwin workarounds required, consistent test environments, reproducible builds at OS level
-
-**Architecture Phases**:
-1. ✅ **WSL Consolidation** - Templates + base modules for WSL scenarios (DONE, pending doc fixes)
-2. 📍 **Cross-Platform Documentation** - Platform matrix, decision tree, VM architecture (CURRENT)
-3. 🔜 **NixOS VM Configurations** - Generic VMs for all platforms (headless + GUI variants, x86_64 + aarch64)
-4. 🔜 **Extraction Planning** - Identify shareable vs personal components, design shared flake structure
-5. 🔜 **Shared Flake Creation** - New repo with extracted components, colleague testing
+**Completed Deliverables**:
+1. ✅ **WSL Consolidation** - Templates + base modules for WSL scenarios
+2. ✅ **Cross-Platform Documentation** - docs/CROSS-PLATFORM-STRATEGY.md created
+3. ✅ **Platform Support Matrix** - Added to ARCHITECTURE.md
+4. ✅ **Documentation Fixes** - Fixed naming inconsistencies (wsl-base → wsl-home-base)
+5. ✅ **Darwin Template Fix** - Corrected architecture hardcoding (x86_64 → aarch64 default)
 
 **Key Architectural Insights**:
 - **Layered Modularity**: Platform-agnostic base → Platform adapters → Personal configs → Colleague configs
@@ -101,51 +89,28 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 - **Image Matrix Building**: One config → multiple formats (WSL tarball, qcow2, ISO, Docker) via nixos-generators
 - **CI/CD Consideration**: Dev shells must work headless on GitHub Actions (Linux x86_64, macOS Intel/Apple Silicon)
 
-**Previous WSL Work** (2025-12-13):
-- Templates committed (22aae74)
-- Base modules generalized (6d81a00)
-- `nix flake check` passes
-- Review identified documentation fixes needed (see review findings below)
+**Platform Support Matrix**:
+| Host Platform | Native nix develop | NixOS VM | Current Status |
+|--------------|-------------------|-----------|----------------|
+| Bare-metal Linux (x86_64, aarch64) | ✅ Excellent | ✅ Native KVM/QEMU | ✅ Working |
+| Windows 11 + WSL2 (x86_64) | ✅ Via WSL | ✅ QEMU in WSL | ✅ Consolidated |
+| macOS Darwin (M3-4 aarch64) | ⚠️ Lagging/broken | ✅ Fallback option | 🟡 Template exists |
 
-**Next**: Apply documentation fixes, update ARCHITECTURE.md with platform matrix, then merge to main
+**Merge Commit**: 2c4d333 (2025-12-15)
 
-#### 📋 **REVIEW FINDINGS** (2025-12-13)
+### 🔜 **Next: Phase 3 - Image Building Implementation**
+**Goal**: Enable automated building of deployment images for colleague onboarding
 
-**Overall Grade**: Good - code works, documentation has naming inconsistencies
+**Planned Work**:
+1. Integrate nixos-generators into flake
+2. Create base NixOS configurations suitable for image building
+3. Implement WSL tarball building (CRITICAL for Windows colleague onboarding)
+4. Add qcow2 VM image building (High priority for VM testing)
+5. Set up CI/CD workflow for automated image builds on releases
 
-##### 🔴 CRITICAL: Naming Inconsistency in Documentation
-The Home Manager module is exported as `homeManagerModules.wsl-home-base` but several docs incorrectly reference `homeManagerModules.wsl-base`:
+**Priority**: WSL tarball is CRITICAL - required for Windows colleague onboarding (no alternative)
 
-| File | Line | Status |
-|------|------|--------|
-| `docs/CONSOLIDATION-PLAN.md` | 93 | ❌ Uses `wsl-base` |
-| `docs/ARCHITECTURE.md` | 984, 1088 | ❌ Uses `wsl-base` |
-| `docs/CONSOLIDATION-VALIDATION-REPORT.md` | 151 | ❌ Uses `wsl-base` |
-
-##### 🟡 BUG: Darwin template hardcodes x86_64
-`templates/darwin/flake.nix:50` hardcodes `x86_64-darwin` in systemPackages despite supporting Apple Silicon.
-
-##### 🟡 OPPORTUNITY: tim@thinky-ubuntu doesn't use wsl-home-base
-Could benefit from shared module instead of manual WSL config duplication.
-
-##### 🟢 HARMLESS WARNING
-`warning: unknown flake output 'homeManagerModules'` - flake-parts doesn't recognize this output but module works correctly.
-
-#### 🎯 **ARCHITECTURAL INSIGHT**
-
-**Key Finding**: TWO distinct WSL scenarios with different module requirements:
-
-1. **NixOS-WSL** (`hosts/common/wsl-base.nix`) - NixOS system module
-   - Requires: Full NixOS-WSL distribution
-   - **Cannot work on vanilla Ubuntu/Debian/Alpine WSL**
-
-2. **Home Manager on ANY WSL** (`home/common/wsl-home-base.nix`) - Home Manager module
-   - Requires: ANY WSL distro + Nix + home-manager
-   - **Works on NixOS-WSL AND vanilla Ubuntu/Debian/Alpine WSL** ✅
-
-**Critical for Sharing**: Colleagues on vanilla WSL can use `homeManagerModules.wsl-home-base` but NOT `nixosModules.wsl-base`
-
-For completed work history, see git log on `dev` and `main` branches.
+For completed work history, see git log on `main` branch.
 
 ### 🚧 **Deferred Tasks**
 
