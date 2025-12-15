@@ -101,7 +101,29 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 ### 🔜 **Next: Phase 3 - Image Building Implementation**
 **Goal**: Enable automated building of deployment images for colleague onboarding
 
-**Planned Work**:
+**⚠️ PREREQUISITE - MUST FIX FIRST**:
+**marker-pdf derivation failure blocking `nix flake check`**
+- Error: `path '/nix/store/v64r1zarvybkcfyiajq4gfz5kc68kb97-marker-pdf-script.drv' is not valid`
+- Status: Pre-existing issue, NOT caused by Phase 2 work
+- History: Added in commit 88b2f73 (major flake refactor with PDF tools), was working at that time
+- Recent work: Had significant development effort in that commit
+- Investigation findings:
+  - Derivation file EXISTS on disk at the expected path
+  - Package metadata evaluates successfully (description, meta fields work)
+  - `nix build --dry-run` starts the build process
+  - `nix flake check` fails when validating this specific derivation
+  - Appears to be a Nix store state/validity issue, not a code issue
+  - Package is correctly exposed in flake-modules/packages.nix
+- **CRITICAL CONSTRAINTS**:
+  - ❌ DO NOT implement workarounds
+  - ❌ DO NOT disable this package
+  - ✅ MUST understand what broke between commit 88b2f73 and current state
+  - ✅ MUST diagnose root cause and discuss with user before any fixes
+  - Package has recent development effort invested - needs proper investigation
+- **Hypothesis**: Something in the WSL consolidation merge (commits between 88b2f73 and 2c4d333) may have affected Nix store state or derivation references
+- **Next action**: Investigate commit-by-commit what changed, compare derivation hashes, check if garbage collection or store corruption occurred
+
+**Phase 3 Planned Work** (after marker-pdf diagnosis and fix):
 1. Integrate nixos-generators into flake
 2. Create base NixOS configurations suitable for image building
 3. Implement WSL tarball building (CRITICAL for Windows colleague onboarding)
