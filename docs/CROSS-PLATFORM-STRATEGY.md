@@ -184,68 +184,237 @@ This document outlines the comprehensive cross-platform support strategy for nix
 
 **Onboarding Pattern**:
 ```bash
-# Colleague initializes from template
+# Option 1: Bootstrap with pre-built image (RECOMMENDED for WSL)
+wsl --import CompanyNixOS C:\WSL\CompanyNixOS company-nixos-wsl-2024.12.tar.gz
+wsl -d CompanyNixOS
+
+# Option 2: Initialize from template (for existing Nix installations)
 nix flake init -t github:timblaktu/shared-config#wsl-home
 # or
 nix flake init -t github:timblaktu/shared-config#darwin
 ```
 
-## NixOS VM Strategy
+## Image Strategy (Hybrid Approach)
 
-### Build Approach: Live Building from Flake (Option B)
+### Overview: Pre-built Images + Live Building
 
-**Chosen Approach**: Provide flake definitions that colleagues can build directly
+**Strategy**: Provide BOTH pre-built images for bootstrapping AND flake definitions for iteration
 
-**Rationale**:
-- ✅ Always up-to-date (no stale pre-built images)
-- ✅ Nix-native approach (reproducible from source)
-- ✅ Easy to customize (colleagues can override settings)
-- ✅ Binary cache can speed up builds
-- ❌ Slower first build (acceptable trade-off)
+**Rationale**: Two distinct use cases require different approaches:
+1. **Bootstrapping** (new colleague onboarding) → Pre-built images
+2. **Iteration** (ongoing development) → Live building from flake
 
-**Alternative Rejected**: Pre-built VM images (`.qcow2`, `.vdi`)
-- ❌ Requires rebuild/redistribution for updates
-- ❌ Large binary artifacts to distribute
-- ❌ Less flexible for customization
+### Use Case A: Bootstrapping (Pre-built Images)
 
-### VM Variants to Provide
+**When**: New colleague joining team, fresh machine setup
 
-| VM Configuration | Architecture | Use Case | Display | Status |
-|-----------------|--------------|----------|---------|--------|
-| `generic-vm-headless-x86_64` | x86_64 | Servers, CI testing | None (SSH only) | 🔜 TODO |
-| `generic-vm-headless-aarch64` | aarch64 | ARM servers, M-series Macs | None (SSH only) | 🔜 TODO |
-| `generic-vm-gui-x86_64` | x86_64 | Desktop testing, development | X11/Wayland | 🔜 TODO |
-| `generic-vm-gui-aarch64` | aarch64 | M-series Mac development | X11/Wayland | 🔜 TODO |
+**Critical for WSL**: The `wsl --import` command REQUIRES a pre-built rootfs tarball - there's no way to bootstrap NixOS-WSL without an image.
 
-### VM Building Commands
+**Image Formats to Provide**:
+- **WSL tarball** (`.tar.gz`) - HIGHEST PRIORITY for Windows colleague onboarding
+- QEMU image (`.qcow2`) - For VM testing/development
+- ISO installer (`.iso`) - For bare-metal installation
+- VirtualBox image (`.vdi`) - If team uses VirtualBox
+- Docker image - For containerized workflows
 
+**Distribution Strategy**:
+- GitHub Releases (public) or company artifact storage (private)
+- Monthly/quarterly release cycle
+- Semantic versioning: `company-nixos-wsl-2024.12.tar.gz`
+- Automated CI/CD builds on release tags
+
+**Colleague Onboarding Flow (WSL Example)**:
 ```bash
-# Build VM from shared flake
-nix build github:timblaktu/shared-config#nixosConfigurations.generic-vm-headless-x86_64.config.system.build.vm
+# Day 1: New colleague with fresh Windows 11 laptop
+# 1. Enable WSL2
+wsl --install --no-distribution
 
-# Run the built VM
-./result/bin/run-*-vm
+# 2. Download pre-built company image
+# From GitHub Releases or company storage
 
-# For local development/testing
-nix build .#nixosConfigurations.generic-vm-headless-x86_64.config.system.build.vm
+# 3. Import as WSL distribution
+wsl --import CompanyNixOS C:\WSL\CompanyNixOS company-nixos-wsl-2024.12.tar.gz
+
+# 4. Enter WSL
+wsl -d CompanyNixOS
+
+# 5. Clone company config
+git clone github:company/nixcfg ~/.config/nixcfg
+
+# 6. Apply latest configuration (updates beyond base image)
+sudo nixos-rebuild switch --flake ~/.config/nixcfg#work-laptop
+
+# Done! Running latest config from pre-built base
 ```
 
-### Platform-Specific VM Runtime
+**Benefits**:
+- ✅ Fast onboarding (download vs full system build)
+- ✅ No chicken-and-egg problem (don't need Nix to get Nix)
+- ✅ Works on locked-down corporate networks (if cached internally)
+- ✅ Consistent base for all team members
+- ✅ Can include company binary cache certificates pre-configured
+
+**Trade-offs**:
+- ⚠️ Images become stale (but colleagues update via `nixos-rebuild`)
+- ⚠️ Large artifacts to distribute (500MB-2GB compressed)
+- ⚠️ Need CI/CD infrastructure to build images
+
+### Use Case B: Iteration (Live Building)
+
+**When**: Already have Nix installed, testing/developing configurations
+
+**Approach**: Build VMs/images directly from flake definitions
+
+**Commands**:
+```bash
+# Build a VM for testing
+nix build .#nixosConfigurations.test-vm.config.system.build.vm
+./result/bin/run-*-vm
+
+# Build specific image format on-demand
+nix run github:nix-community/nixos-generators -- \
+  --format qcow \
+  --flake .#work-base
+```
+
+**Benefits**:
+- ✅ Always up-to-date (built from latest flake)
+- ✅ Nix-native reproducibility
+- ✅ Easy to customize (override settings in flake)
+- ✅ Binary cache speeds up builds
+- ✅ No pre-built artifact distribution needed
+
+**Trade-offs**:
+- ⚠️ Slower first build (10-30 minutes depending on config)
+- ⚠️ Requires Nix already installed (not suitable for bootstrapping)
+
+### Image Matrix Building Pattern
+
+**Goal**: Build the SAME configuration in MULTIPLE image formats from ONE definition
+
+**Implementation**: Use `nixos-generators` or custom builders integrated into flake
+
+**Flake Structure**:
+```nix
+{
+  inputs.nixos-generators.url = "github:nix-community/nixos-generators";
+
+  outputs = { self, nixpkgs, nixos-generators, ... }: {
+    # The base configuration (single source of truth)
+    nixosConfigurations.work-base = nixpkgs.lib.nixosSystem {
+      # ... configuration ...
+    };
+
+    # Pre-built image outputs (for bootstrapping)
+    packages.x86_64-linux = {
+      # WSL tarball (CRITICAL for colleague onboarding)
+      work-base-wsl = nixos-generators.nixosGenerate {
+        format = "wsl-tarball";
+        system = "x86_64-linux";
+        modules = [ self.nixosConfigurations.work-base ];
+      };
+
+      # QEMU image for VM testing
+      work-base-qcow2 = nixos-generators.nixosGenerate {
+        format = "qcow";
+        system = "x86_64-linux";
+        modules = [ self.nixosConfigurations.work-base ];
+      };
+
+      # ISO for bare-metal installation
+      work-base-iso = nixos-generators.nixosGenerate {
+        format = "iso";
+        system = "x86_64-linux";
+        modules = [ self.nixosConfigurations.work-base ];
+      };
+
+      # Docker image for containers
+      work-base-docker = nixos-generators.nixosGenerate {
+        format = "docker";
+        system = "x86_64-linux";
+        modules = [ self.nixosConfigurations.work-base ];
+      };
+    };
+
+    # Helper app to build all formats
+    apps.x86_64-linux.build-all-images = {
+      type = "app";
+      program = toString (pkgs.writeShellScript "build-all" ''
+        echo "Building all image formats..."
+        nix build .#work-base-wsl
+        nix build .#work-base-qcow2
+        nix build .#work-base-iso
+        nix build .#work-base-docker
+        echo "All images built successfully!"
+      '');
+    };
+  };
+}
+```
+
+**CI/CD Integration**:
+```yaml
+# .github/workflows/release-images.yml
+name: Build Release Images
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v24
+
+      - name: Build all image formats
+        run: nix run .#build-all-images
+
+      - name: Upload to release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./result/*.tar.gz
+          asset_name: company-nixos-wsl-${{ github.event.release.tag_name }}.tar.gz
+```
+
+### Image/VM Variants to Provide
+
+| Configuration | Architecture | Format | Primary Use Case | Priority |
+|--------------|--------------|--------|------------------|----------|
+| `work-base-wsl` | x86_64 | `.tar.gz` | **WSL colleague onboarding** | 🔴 CRITICAL |
+| `work-base-qcow2` | x86_64 | `.qcow2` | VM testing on Linux/WSL | 🟡 High |
+| `work-base-qcow2-aarch64` | aarch64 | `.qcow2` | VM testing on M-series Macs | 🟡 High |
+| `work-base-iso` | x86_64 | `.iso` | Bare-metal installation | 🟢 Medium |
+| `work-base-docker` | x86_64 | Docker | Container workflows | 🟢 Medium |
+
+**Priority Explanation**:
+- 🔴 **CRITICAL**: WSL tarball is required for Windows colleague onboarding - no alternative bootstrapping method
+- 🟡 **High**: VM images enable testing/development workflows across platforms
+- 🟢 **Medium**: ISO/Docker useful but not essential for initial colleague onboarding
+
+### Platform-Specific Runtime Environments
 
 **Linux (bare-metal)**:
-- Runner: QEMU with KVM acceleration
-- Best performance
+- **Native execution**: Best for production deployments
+- **VMs**: QEMU with KVM acceleration (excellent performance)
+- **Containers**: Docker, Podman native
 
 **Windows 11 + WSL2**:
-- Runner: QEMU within WSL2
-- Display: WSLg for GUI VMs
-- Nested virtualization required (Hyper-V enabled)
+- **Native execution**: Via imported WSL tarball (preferred method)
+- **VMs**: QEMU within WSL2 (nested virtualization)
+  - Requires Hyper-V enabled
+  - WSLg provides display for GUI VMs
+- **Containers**: Docker Desktop with WSL2 backend
 
 **macOS Darwin**:
-- Runner: QEMU with Hypervisor.framework
-- Alternative: UTM (GUI wrapper around QEMU)
-- Native aarch64 VMs on Apple Silicon (fast)
-- Emulated x86_64 VMs on Apple Silicon (slow)
+- **Native execution**: nix-darwin (when working) or home-manager only
+- **VMs**: QEMU with Hypervisor.framework
+  - Native aarch64 VMs on M-series (fast)
+  - Emulated x86_64 VMs on M-series (slow but compatible)
+  - UTM provides nice GUI wrapper
+- **Containers**: Docker Desktop for Mac
 
 ## CI/CD Integration
 

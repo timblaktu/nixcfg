@@ -97,7 +97,8 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 **Key Architectural Insights**:
 - **Layered Modularity**: Platform-agnostic base → Platform adapters → Personal configs → Colleague configs
 - **Two Distinct WSL Scenarios**: NixOS-WSL (full distro) vs Home Manager on vanilla WSL (portable)
-- **VM Strategy**: Live building from flake (Option B) preferred over pre-built images for Nix-native approach
+- **Hybrid Image Strategy**: Pre-built images for bootstrapping (WSL tarball CRITICAL) + live building for iteration
+- **Image Matrix Building**: One config → multiple formats (WSL tarball, qcow2, ISO, Docker) via nixos-generators
 - **CI/CD Consideration**: Dev shells must work headless on GitHub Actions (Linux x86_64, macOS Intel/Apple Silicon)
 
 **Previous WSL Work** (2025-12-13):
