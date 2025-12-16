@@ -98,33 +98,33 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 **Merge Commit**: 2c4d333 (2025-12-15)
 
-### 🔜 **Next: Phase 3 - Image Building Implementation**
+### 🚧 **In Progress: Phase 3 - Image Building Implementation**
+**Branch**: `phase-3/image-building`
 **Goal**: Enable automated building of deployment images for colleague onboarding
 
-**✅ RESOLUTION: marker-pdf "issue" was based on stale/incorrect information**
+**✅ Completed (2025-12-15)**:
+1. ✅ Integrated nixos-generators into flake (commit 871fb33)
+2. ✅ Created flake-modules/images.nix for image building infrastructure
+3. ✅ Implemented WSL tarball building via NixOS-WSL's tarballBuilder
+4. ✅ Added qcow2 VM image building via nixos-generators
+5. ✅ Exposed images as packages: `.#packages.x86_64-linux.{wsl-image,vm-image}`
 
-**Investigation Findings (2025-12-15 20:52 UTC)**:
-- **Current state**: marker-pdf works perfectly - both `nix flake check` and `nix build '.#marker-pdf'` succeed
-- **Root cause of confusion**: Error message in CLAUDE.md referenced obsolete derivation path
-  - Old derivation: `/nix/store/v64r1zarvybkcfyiajq4gfz5kc68kb97-marker-pdf-script.drv` (still exists on disk, from earlier build)
-  - Current derivation: `/nix/store/g43k3drfa3rgqwcadhxdwpidmm025dn7-marker-pdf-env.drv` (active and working)
-- **Verification results**:
-  - `nix flake check` exits with code 0 (success)
-  - All 24 flake checks pass
-  - marker-pdf package builds successfully
-  - No Nix store corruption or validity issues
-- **Conclusion**: No actual bug existed. The documentation in commit 0b4648c was based on incorrect assumption about a failure that wasn't happening.
+**Technical Implementation**:
+- WSL tarballs: Uses `nixosConfigurations.nixos-wsl-minimal.config.system.build.tarballBuilder`
+- VM images: Uses `nixos-generators.nixosGenerate` with `format = "qcow"`
+- Both reuse existing nixos-wsl-minimal configuration for consistency
+- All flake checks passing
 
-**Phase 3 Work** (ready to begin - no blockers):
-1. Integrate nixos-generators into flake
-2. Create base NixOS configurations suitable for image building
-3. Implement WSL tarball building (CRITICAL for Windows colleague onboarding)
-4. Add qcow2 VM image building (High priority for VM testing)
-5. Set up CI/CD workflow for automated image builds on releases
+**🔜 Next Steps**:
+1. Test building the WSL image: `nix build '.#packages.x86_64-linux.wsl-image'`
+2. Test building the VM image: `nix build '.#packages.x86_64-linux.vm-image'`
+3. Document image building process in docs/
+4. Set up CI/CD workflow for automated image builds on releases
+5. Create installation/usage documentation for colleagues
 
 **Priority**: WSL tarball is CRITICAL - required for Windows colleague onboarding (no alternative)
 
-For completed work history, see git log on `main` branch.
+For completed work history, see git log on `phase-3/image-building` and `main` branches.
 
 ### 🚧 **Deferred Tasks**
 
