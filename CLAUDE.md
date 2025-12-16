@@ -108,19 +108,24 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 3. ✅ Implemented WSL tarball building via NixOS-WSL's tarballBuilder
 4. ✅ Added qcow2 VM image building via nixos-generators
 5. ✅ Exposed images as packages: `.#packages.x86_64-linux.{wsl-image,vm-image}`
+6. ✅ **Tested image builds - both successful** (2025-12-15 18:06 PST)
 
 **Technical Implementation**:
 - WSL tarballs: Uses `nixosConfigurations.nixos-wsl-minimal.config.system.build.tarballBuilder`
+  - Produces executable script (two-step process)
+  - Step 1: `nix build '.#packages.x86_64-linux.wsl-image'` builds the script
+  - Step 2: `sudo result/bin/nixos-wsl-tarball-builder [name]` creates `.wsl` tarball
 - VM images: Uses `nixos-generators.nixosGenerate` with `format = "qcow"`
+  - Single-step build produces ready-to-use qcow2 (~4.5GB)
+  - Output: `result/nixos.qcow2`
 - Both reuse existing nixos-wsl-minimal configuration for consistency
 - All flake checks passing
 
 **🔜 Next Steps**:
-1. Test building the WSL image: `nix build '.#packages.x86_64-linux.wsl-image'`
-2. Test building the VM image: `nix build '.#packages.x86_64-linux.vm-image'`
-3. Document image building process in docs/
-4. Set up CI/CD workflow for automated image builds on releases
-5. Create installation/usage documentation for colleagues
+1. Document image building process in docs/ (including WSL two-step procedure)
+2. Set up CI/CD workflow for automated image builds on releases
+3. Create installation/usage documentation for colleagues
+4. Test actual WSL import and VM boot (end-to-end validation)
 
 **Priority**: WSL tarball is CRITICAL - required for Windows colleague onboarding (no alternative)
 
