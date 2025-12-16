@@ -53,6 +53,12 @@
     };
 
     nix-writers.url = "github:timblaktu/nix-writers";
+
+    # nixos-generators for multi-format image building
+    nixos-generators = {
+      url = "github:nix-community/nixos-generators";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs@{ flake-parts, ... }:
@@ -70,6 +76,7 @@
         ./flake-modules/templates.nix # Flake templates for easy onboarding
         ./flake-modules/tests.nix # All checks and tests consolidated here
         ./flake-modules/github-actions.nix # Configurable GitHub Actions validation
+        ./flake-modules/images.nix # Image building for deployment
       ];
 
       # Support these systems across all modules
