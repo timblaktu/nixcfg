@@ -122,18 +122,27 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 - Both reuse existing nixos-wsl-minimal configuration for consistency
 - All flake checks passing
 
-**Documentation** (docs/IMAGE-BUILDING.md):
-- Complete build instructions for both WSL and VM images
-- Prerequisites, system requirements, and disk space requirements
-- Detailed explanations of two-step vs single-step processes
-- Usage examples for WSL import and QEMU/libvirt VM boot
-- Comprehensive troubleshooting section
-- Implementation details explaining architectural choices
+**Documentation**:
+- **docs/IMAGE-BUILDING.md** (commit 46b7fa7): Developer-focused build instructions
+  - Complete build instructions for both WSL and VM images
+  - Prerequisites, system requirements, and disk space requirements
+  - Detailed explanations of two-step vs single-step processes
+  - Usage examples for WSL import and QEMU/libvirt VM boot
+  - Comprehensive troubleshooting section
+  - Implementation details explaining architectural choices
+
+- **docs/TEAM-IMAGE-DEPLOYMENT.md** (2025-12-15): Team-focused comprehensive guide
+  - Architecture overview: packages, derivations, and build system
+  - Detailed explanation of NixOS configurations and image formats
+  - Deployment workflows for both WSL and VM images
+  - Customization guides for creating specialized images
+  - Complete command reference and troubleshooting
+  - End-user installation and usage documentation
 
 **🔜 Next Steps**:
-1. ✅ ~~Document image building process~~ (DONE: commit 46b7fa7)
-2. Set up CI/CD workflow for automated image builds on releases
-3. Create installation/usage documentation for colleagues
+1. ✅ ~~Document image building process~~ (DONE: docs/IMAGE-BUILDING.md)
+2. ✅ ~~Create team-focused deployment guide~~ (DONE: docs/TEAM-IMAGE-DEPLOYMENT.md)
+3. Set up CI/CD workflow for automated image builds on releases (DEFERRED per user)
 4. Test actual WSL import and VM boot (end-to-end validation)
 
 **Priority**: WSL tarball is CRITICAL - required for Windows colleague onboarding (no alternative)
