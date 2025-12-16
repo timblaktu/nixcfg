@@ -109,6 +109,7 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 4. ✅ Added qcow2 VM image building via nixos-generators
 5. ✅ Exposed images as packages: `.#packages.x86_64-linux.{wsl-image,vm-image}`
 6. ✅ **Tested image builds - both successful** (2025-12-15 18:06 PST)
+7. ✅ **Comprehensive documentation created** (commit 46b7fa7) - docs/IMAGE-BUILDING.md
 
 **Technical Implementation**:
 - WSL tarballs: Uses `nixosConfigurations.nixos-wsl-minimal.config.system.build.tarballBuilder`
@@ -121,8 +122,16 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 - Both reuse existing nixos-wsl-minimal configuration for consistency
 - All flake checks passing
 
+**Documentation** (docs/IMAGE-BUILDING.md):
+- Complete build instructions for both WSL and VM images
+- Prerequisites, system requirements, and disk space requirements
+- Detailed explanations of two-step vs single-step processes
+- Usage examples for WSL import and QEMU/libvirt VM boot
+- Comprehensive troubleshooting section
+- Implementation details explaining architectural choices
+
 **🔜 Next Steps**:
-1. Document image building process in docs/ (including WSL two-step procedure)
+1. ✅ ~~Document image building process~~ (DONE: commit 46b7fa7)
 2. Set up CI/CD workflow for automated image builds on releases
 3. Create installation/usage documentation for colleagues
 4. Test actual WSL import and VM boot (end-to-end validation)
