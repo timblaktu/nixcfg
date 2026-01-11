@@ -479,6 +479,23 @@ If no pending tasks remain, state "All tasks complete!"
 - Each task logged to `task_YYYYMMDD_HHMMSS.log`
 - Both stdout and file via `tee`
 
+#### Recent Improvements (2026-01-11)
+
+**Exit Messaging Enhancement**:
+- Added `format_runtime()` helper - displays human-readable times ("2h 15m", "5m 32s")
+- Added `print_exit_summary()` function - consistent exit block for ALL exit paths showing:
+  - Reason for stopping
+  - Tasks completed vs pending
+  - Total runtime
+  - Log directory location
+- Updated all 7 exit paths: success, iteration limit, runtime limit, rate limit circuit breaker, retry limit, Claude confirms complete, user interrupt (Ctrl+C)
+
+**Rate Limit False Positive Fix**:
+- **Bug**: Script searched ALL output for "rate limit" text, triggering false positives when Claude's output mentioned rate limits in documentation (e.g., "rate limit circuit breaker")
+- **Fix**: Now checks exit code FIRST - if exit code is 0 (success), skip rate limit detection entirely
+- **Fix**: More specific patterns that require error context: `(error|failed|rejected|denied|exceeded|http|status).*rate.?limit` etc.
+- Only checks for rate limit patterns when Claude returns non-zero exit code
+
 #### Nix Module Adaptation Notes
 
 **For task-automation.nix**:
@@ -506,6 +523,8 @@ If no pending tasks remain, state "All tasks complete!"
    - taskAutomation.safetyLimits.delayBetweenTasks (default: 10)
    - taskAutomation.logDirectory (default: ".claude-task-logs")
    - taskAutomation.stateFile (default: ".claude-task-state")
+
+5. **Source File**: `~/bin/run-tasks.sh` - this is the canonical source that should be adapted for Nix generation
 
 
 ---
