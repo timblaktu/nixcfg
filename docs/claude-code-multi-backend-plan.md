@@ -17,6 +17,8 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | 5 | Store secrets in Bitwarden | Pending | |
 | 6 | Test on Nix-managed host | Pending | |
 | 7 | Test Termux installation | Pending | |
+| 8 | Add task automation to Nix module | Pending | |
+| 9 | Add skills support to Nix module | Pending | |
 
 ---
 
@@ -405,25 +407,187 @@ claudework --version  # After storing token
 
 ---
 
+### Task 8: Add task automation to Nix module
+
+**Context**: Unattended task automation (`run-tasks.sh`, `/next-task`) is a general Claude Code workflow feature that should be available on ALL platforms via the Nix module.
+
+**New file**: `home/modules/claude-code/task-automation.nix`
+
+**Features to add**:
+
+1. **`run-tasks` script** - Unattended task runner (generated via `home.packages`)
+   - Safety limits: 100 iterations max, 8h runtime, rate limit circuit breaker
+   - Modes: single task (`-n 1`), count (`-n N`), all pending (`-a`), continuous (`-c`)
+   - Features: state persistence, logging, dry-run mode
+
+2. **`/next-task` slash command** - Interactive version for within Claude sessions
+   - Deploy to each account's `commands/` directory
+   - Auto-detects plan file from project CLAUDE.md
+   - Finds first "Pending" task and executes it
+
+**Implementation**:
+
+```nix
+# home/modules/claude-code/task-automation.nix
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.programs.claude-code-enhanced;
+
+  runTasksScript = pkgs.writeShellScriptBin "run-tasks" ''
+    #!/usr/bin/env bash
+    # [Portable run-tasks.sh content - no hardcoded paths]
+    # Uses: rg (ripgrep), claude CLI
+  '';
+
+  nextTaskMd = ''
+    Read the plan file specified below (or auto-detect from CLAUDE.md),
+    find the first "Pending" task, execute it, mark "Complete" with date,
+    commit changes when done.
+
+    Plan file: $ARGUMENTS
+  '';
+in {
+  options.programs.claude-code-enhanced.taskAutomation = {
+    enable = mkEnableOption "task automation scripts";
+  };
+
+  config = mkIf (cfg.enable && cfg.taskAutomation.enable) {
+    home.packages = [ runTasksScript ];
+    # Deploy /next-task command to all account commands/ directories
+  };
+}
+```
+
+**Source**: Adapt from existing `~/bin/run-tasks.sh` and `~/.claude/commands/next-task.md`
+
+---
+
+### Task 9: Add skills support to Nix module
+
+**Context**: Skills (like `adr-writer`) are a general Claude Code feature that should be Nix-managed and deployed to ALL platforms.
+
+**New file**: `home/modules/claude-code/skills.nix`
+
+**Features to add**:
+
+1. **Skills option** - Define skills declaratively in Nix
+2. **Deployment** - Copy skill files to each account's `skills/` directory
+3. **Built-in skills** - Include useful skills like `adr-writer`
+
+**Implementation**:
+
+```nix
+# home/modules/claude-code/skills.nix
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.programs.claude-code-enhanced;
+
+  builtinSkills = {
+    adr-writer = {
+      description = "Guide writing Architecture Decision Records (ADRs)";
+      files = {
+        "SKILL.md" = ./skills/adr-writer/SKILL.md;
+        "REFERENCE.md" = ./skills/adr-writer/REFERENCE.md;
+      };
+    };
+  };
+in {
+  options.programs.claude-code-enhanced.skills = {
+    enable = mkEnableOption "Claude Code skills";
+
+    builtins = {
+      adr-writer = mkEnableOption "ADR writing skill";
+    };
+
+    custom = mkOption {
+      type = types.attrsOf (types.submodule { ... });
+      default = {};
+      description = "Custom skill definitions";
+    };
+  };
+
+  config = mkIf (cfg.enable && cfg.skills.enable) {
+    # Deploy skills to each account's skills/ directory
+  };
+}
+```
+
+**Source**: Adapt from existing `~/.claude/skills/adr-writer/`
+
+---
+
+## Features Analysis (2026-01-11)
+
+Analysis of existing Termux Claude Code setup revealed features to add to the **general Nix module** (all platforms):
+
+### General Features to Add to Nix Module
+
+| Feature | Source | Target Module |
+|---------|--------|---------------|
+| Task automation (`run-tasks.sh`) | `~/bin/run-tasks.sh` | `task-automation.nix` (Task 8) |
+| `/next-task` slash command | `~/.claude/commands/next-task.md` | `task-automation.nix` (Task 8) |
+| Skills support (`adr-writer`) | `~/.claude/skills/adr-writer/` | `skills.nix` (Task 9) |
+| `clc_get_commit_message` | `home/files/lib/claude-utils.bash` | Consider for shell integration |
+
+### Already Implemented in Nix Module
+
+| Module | Features |
+|--------|----------|
+| `claude-code-statusline.nix` | 5 statusline styles (powerline, minimal, context, box, fast) |
+| `hooks.nix` | formatting, linting, security, git, testing, logging hooks |
+| `memory-commands.nix` | `/nixmemory`, `/nixremember` with tmux integration |
+| `mcp-servers.nix` | NixOS, sequential-thinking, context7, serena, brave, puppeteer, github, gitlab |
+| `slash-commands.nix` | documentation, security, refactoring, context commands |
+
+### Truly Termux-Specific (for Task 4 package only)
+
+| Item | Reason |
+|------|--------|
+| Screenshot path | `/data/data/com.termux/files/home/storage/dcim/Screenshots/` |
+| Shell shebang | `/data/data/com.termux/files/usr/bin/bash` |
+| Secrets path | `~/.secrets/` (no rbw/Bitwarden on Termux) |
+
+---
+
 ## Architecture Summary
 
 ```
 nixcfg/
 ├── home/modules/
-│   └── claude-code.nix          # Account schema with API options
-├── home/modules/base.nix        # Account definitions (max, pro, work)
+│   ├── claude-code.nix            # Main module with account schema + API options
+│   ├── claude-code-statusline.nix # 5 statusline styles
+│   └── claude-code/
+│       ├── hooks.nix              # Development, security, logging hooks
+│       ├── mcp-servers.nix        # MCP server configurations
+│       ├── memory-commands.nix    # /nixmemory, /nixremember
+│       ├── slash-commands.nix     # Custom slash commands
+│       ├── task-automation.nix    # NEW: run-tasks script, /next-task command
+│       └── skills.nix             # NEW: Skills management (adr-writer, etc.)
+├── home/modules/base.nix          # Account definitions (max, pro, work)
+├── home/files/
+│   ├── bin/                       # Helper scripts (claudevloop, restart_claude)
+│   └── lib/claude-utils.bash      # Shell library functions
 ├── home/migration/
-│   ├── wsl-home-files.nix       # Platform wrappers (use shared mkClaudeWrapperScript)
+│   ├── wsl-home-files.nix         # Platform wrappers
 │   ├── linux-home-files.nix
 │   └── darwin-home-files.nix
 ├── flake-modules/
-│   └── termux-outputs.nix       # Termux package generation
+│   └── termux-outputs.nix         # Termux package generation
 └── docs/
-    └── claude-code-multi-backend-plan.md  # This file
+    └── claude-code-multi-backend-plan.md
 
 Outputs:
-├── homeConfigurations."tim@*"   # Nix-managed hosts get wrappers via home.packages
-└── packages.aarch64-linux.termux-claude-scripts  # Termux gets portable scripts
+├── homeConfigurations."tim@*"                    # Nix-managed hosts (all features)
+└── packages.aarch64-linux.termux-claude-scripts  # Termux portable package
+    ├── bin/
+    │   ├── claudemax, claudepro, claudework     # Account wrappers
+    │   ├── claude-account                        # Account switcher
+    │   ├── run-tasks                             # Task automation (same as Nix hosts)
+    │   └── install-termux-claude                 # Installer
+    └── share/
+        └── claude-commands/next-task.md         # Slash command (same as Nix hosts)
 ```
 
 ---
@@ -442,8 +606,12 @@ Outputs:
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Plan complete, ready to start Task 1.
-Next step: Extend account submodule in home/modules/claude-code.nix with API options.
+Current status: Plan reviewed and expanded with 2 general Nix module tasks.
+Next step: Start Task 1 - Extend account submodule in home/modules/claude-code.nix with API options.
 Key context: Add api.baseUrl, api.authMethod, api.disableApiKey, api.modelMappings, secrets.bearerToken, extraEnvVars.
 Check: Lines 143-163 for current account submodule structure.
+Total tasks: 9
+  - Tasks 1-7: Original multi-backend + Termux integration
+  - Task 8: Add task automation to Nix module (run-tasks, /next-task) - ALL platforms
+  - Task 9: Add skills support to Nix module (adr-writer, etc.) - ALL platforms
 ```
