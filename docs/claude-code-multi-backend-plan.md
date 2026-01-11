@@ -12,26 +12,26 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 | Task | Name | Status | Date |
 |------|------|--------|------|
-| R1 | Document current account submodule structure | Pending | |
-| R2 | Document wrapper script generation across platforms | Pending | |
-| R3 | Document run-tasks.sh for Nix module adaptation | Pending | |
-| R4 | Document skills structure for Nix module adaptation | Pending | |
-| R5 | Draft complete API options Nix code | Pending | |
-| R6 | Draft complete wrapper script Nix code | Pending | |
+| R1 | Document current account submodule structure | TASK:PENDING | |
+| R2 | Document wrapper script generation across platforms | TASK:PENDING | |
+| R3 | Document run-tasks.sh for Nix module adaptation | TASK:PENDING | |
+| R4 | Document skills structure for Nix module adaptation | TASK:PENDING | |
+| R5 | Draft complete API options Nix code | TASK:PENDING | |
+| R6 | Draft complete wrapper script Nix code | TASK:PENDING | |
 
 ### Phase 2: Implementation (Requires Nix Host)
 
 | Task | Name | Status | Date |
 |------|------|--------|------|
-| I1 | Implement API options in account submodule | Pending | |
-| I2 | Implement wrapper script generation | Pending | |
-| I3 | Add work account configuration | Pending | |
-| I4 | Create Termux package output | Pending | |
-| I5 | Store secrets in Bitwarden | Pending | |
-| I6 | Test on Nix-managed host | Pending | |
-| I7 | Test Termux installation | Pending | |
-| I8 | Add task automation to Nix module | Pending | |
-| I9 | Add skills support to Nix module | Pending | |
+| I1 | Implement API options in account submodule | TASK:PENDING | |
+| I2 | Implement wrapper script generation | TASK:PENDING | |
+| I3 | Add work account configuration | TASK:PENDING | |
+| I4 | Create Termux package output | TASK:PENDING | |
+| I5 | Store secrets in Bitwarden | TASK:PENDING | |
+| I6 | Test on Nix-managed host | TASK:PENDING | |
+| I7 | Test Termux installation | TASK:PENDING | |
+| I8 | Add task automation to Nix module | TASK:PENDING | |
+| I9 | Add skills support to Nix module | TASK:PENDING | |
 
 ---
 
@@ -49,7 +49,11 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 **Output**: Document current state in "R1 Findings" section below.
 
-**Verification**: R1 Findings section exists and is non-empty.
+**Definition of Done** (ALL must be true):
+- [ ] R1 Findings section contains "Current Options" subsection listing each existing option with its type
+- [ ] R1 Findings section contains "Current Usage" subsection showing how accounts are defined in base.nix
+- [ ] R1 Findings section contains "Gaps Analysis" subsection listing what's missing for Code-Companion
+- [ ] R1 Findings placeholder text `*(Task R1 will populate this section)*` is replaced
 
 ---
 
@@ -66,7 +70,12 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 **Output**: Document findings in "R2 Findings" section below.
 
-**Verification**: R2 Findings section exists with wrapper pattern documented.
+**Definition of Done** (ALL must be true):
+- [ ] R2 Findings contains "Platform Files" subsection listing each platform file and line numbers where wrappers are defined
+- [ ] R2 Findings contains "Common Pattern" subsection with the actual Nix code pattern used (or noting differences)
+- [ ] R2 Findings contains "Environment Variables Set" subsection listing all env vars currently set by wrappers
+- [ ] R2 Findings contains "Refactoring Recommendation" subsection identifying duplication and where to extract shared code
+- [ ] R2 Findings placeholder text `*(Task R2 will populate this section)*` is replaced
 
 ---
 
@@ -83,7 +92,13 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 **Output**: Document in "R3 Findings" section below.
 
-**Verification**: R3 Findings section contains script feature list and dependencies.
+**Definition of Done** (ALL must be true):
+- [ ] R3 Findings contains "CLI Options" subsection listing all command-line options with descriptions
+- [ ] R3 Findings contains "Dependencies" subsection listing required tools (rg, claude, etc.)
+- [ ] R3 Findings contains "Hardcoded Values" subsection listing any paths/values that need parameterization
+- [ ] R3 Findings contains "Slash Command Format" subsection with the content of next-task.md
+- [ ] R3 Findings contains "Safety Limits" subsection documenting MAX_ITERATIONS, rate limit handling, etc.
+- [ ] R3 Findings placeholder text `*(Task R3 will populate this section)*` is replaced
 
 ---
 
@@ -100,13 +115,20 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 **Output**: Document in "R4 Findings" section below.
 
-**Verification**: R4 Findings section documents skills structure.
+**Definition of Done** (ALL must be true):
+- [ ] R4 Findings contains "Directory Structure" subsection showing the file tree of ~/.claude/skills/
+- [ ] R4 Findings contains "SKILL.md Format" subsection with an example or template of the format
+- [ ] R4 Findings contains "Supporting Files" subsection listing other files (REFERENCE.md, etc.) and their purpose
+- [ ] R4 Findings contains "Built-in Skills" subsection listing which skills should ship with the Nix module
+- [ ] R4 Findings placeholder text `*(Task R4 will populate this section)*` is replaced
 
 ---
 
 ### Task R5: Draft complete API options Nix code
 
 **Goal**: Write the complete, copy-paste ready Nix code for the API options extension.
+
+**Prerequisite**: R1 must be TASK:COMPLETE before starting this task.
 
 **Actions**:
 1. Using R1 findings, draft the complete new options block
@@ -117,13 +139,23 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 **Output**: Complete Nix code block in "R5 Draft Code" section below.
 
-**Verification**: R5 Draft Code section contains complete options block.
+**Definition of Done** (ALL must be true):
+- [ ] R5 Draft Code contains a complete `accounts = mkOption { ... }` block in valid Nix syntax
+- [ ] R5 Draft Code includes `api.baseUrl` option with type `types.nullOr types.str`
+- [ ] R5 Draft Code includes `api.authMethod` option with type `types.enum [ "api-key" "bearer" "bedrock" ]`
+- [ ] R5 Draft Code includes `api.disableApiKey` option with type `types.bool`
+- [ ] R5 Draft Code includes `api.modelMappings` option with type `types.attrsOf types.str`
+- [ ] R5 Draft Code includes `secrets.bearerToken.bitwarden` submodule with `item` and `field` options
+- [ ] R5 Draft Code includes `extraEnvVars` option with type `types.attrsOf types.str`
+- [ ] R5 Draft Code placeholder text `*(Task R5 will populate this section)*` is replaced
 
 ---
 
 ### Task R6: Draft complete wrapper script Nix code
 
 **Goal**: Write the complete, copy-paste ready Nix code for wrapper script generation.
+
+**Prerequisite**: R2 must be TASK:COMPLETE before starting this task.
 
 **Actions**:
 1. Using R2 findings, draft the updated mkClaudeWrapperScript function
@@ -135,7 +167,15 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 **Output**: Complete Nix code block in "R6 Draft Code" section below.
 
-**Verification**: R6 Draft Code section contains complete wrapper function.
+**Definition of Done** (ALL must be true):
+- [ ] R6 Draft Code contains a complete `mkClaudeWrapperScript` function in valid Nix syntax
+- [ ] R6 Draft Code handles `api.baseUrl` by conditionally setting ANTHROPIC_BASE_URL
+- [ ] R6 Draft Code handles `api.authMethod == "bearer"` by retrieving token via rbw
+- [ ] R6 Draft Code handles `api.disableApiKey` by conditionally setting ANTHROPIC_API_KEY=""
+- [ ] R6 Draft Code handles `api.modelMappings` by setting ANTHROPIC_DEFAULT_*_MODEL env vars
+- [ ] R6 Draft Code handles `extraEnvVars` by iterating and exporting each
+- [ ] R6 Draft Code includes comment indicating where to place this shared function
+- [ ] R6 Draft Code placeholder text `*(Task R6 will populate this section)*` is replaced
 
 ---
 
@@ -749,24 +789,34 @@ Outputs:
 
 ## Execution Rules
 
+### Status Tokens (CRITICAL)
+
+Use these EXACT tokens in the Progress Tracking table:
+- `TASK:PENDING` - Task not yet started
+- `TASK:COMPLETE` - Task finished and verified
+
+Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
+
 ### Phase 1 (Research - Termux Compatible)
 
 1. Execute R-tasks in order (R1, R2, R3, ...)
 2. Complete ONE task per session
-3. Update Progress Tracking: mark status "Complete", add date
-4. Write findings/draft code to the appropriate section in this file
-5. **Verification**: Each task has a verification criterion - check it before marking complete
+3. **Before marking complete**: Verify ALL items in "Definition of Done" checklist are satisfied
+4. Update Progress Tracking: change `TASK:PENDING` to `TASK:COMPLETE`, add date
+5. Write findings/draft code to the appropriate section in this file
 6. Commit changes when task complete
 7. **No Nix required** - these tasks only read files and write documentation
+8. If no `TASK:PENDING` tasks remain, output `ALL_TASKS_DONE`
 
 ### Phase 2 (Implementation - Requires Nix Host)
 
 1. Execute I-tasks in order (I1, I2, I3, ...)
 2. Complete ONE task per session
-3. Update Progress Tracking: mark status "Complete", add date
+3. Update Progress Tracking: change `TASK:PENDING` to `TASK:COMPLETE`, add date
 4. **MUST** run `nix flake check` after each code change
 5. Commit changes when task passes validation
 6. **Requires Nix** - run on a Nix-managed host, not Termux
+7. If no `TASK:PENDING` tasks remain, output `ALL_TASKS_DONE`
 
 ---
 
