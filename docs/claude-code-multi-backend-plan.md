@@ -13,7 +13,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | Task | Name | Status | Date |
 |------|------|--------|------|
 | R1 | Document current account submodule structure | TASK:COMPLETE | 2026-01-11 |
-| R2 | Document wrapper script generation across platforms | TASK:PENDING | |
+| R2 | Document wrapper script generation across platforms | TASK:COMPLETE | 2026-01-11 |
 | R3 | Document run-tasks.sh for Nix module adaptation | TASK:PENDING | |
 | R4 | Document skills structure for Nix module adaptation | TASK:PENDING | |
 | R5 | Draft complete API options Nix code | TASK:PENDING | |
@@ -71,11 +71,11 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 **Output**: Document findings in "R2 Findings" section below.
 
 **Definition of Done** (ALL must be true):
-- [ ] R2 Findings contains "Platform Files" subsection listing each platform file and line numbers where wrappers are defined
-- [ ] R2 Findings contains "Common Pattern" subsection with the actual Nix code pattern used (or noting differences)
-- [ ] R2 Findings contains "Environment Variables Set" subsection listing all env vars currently set by wrappers
-- [ ] R2 Findings contains "Refactoring Recommendation" subsection identifying duplication and where to extract shared code
-- [ ] R2 Findings placeholder text `*(Task R2 will populate this section)*` is replaced
+- [x] R2 Findings contains "Platform Files" subsection listing each platform file and line numbers where wrappers are defined
+- [x] R2 Findings contains "Common Pattern" subsection with the actual Nix code pattern used (or noting differences)
+- [x] R2 Findings contains "Environment Variables Set" subsection listing all env vars currently set by wrappers
+- [x] R2 Findings contains "Refactoring Recommendation" subsection identifying duplication and where to extract shared code
+- [x] R2 Findings placeholder text `*(Task R2 will populate this section)*` is replaced
 
 ---
 
@@ -235,7 +235,122 @@ The Code-Companion requirements (from the plan) need:
 
 ### R2 Findings
 
-*(Task R2 will populate this section)*
+#### Platform Files
+
+| Platform | File | Wrapper Lines | Accounts Defined |
+|----------|------|--------------|------------------|
+| WSL | `home/migration/wsl-home-files.nix` | 379-420 (max), 446-487 (pro) | max, pro |
+| Linux | `home/migration/linux-home-files.nix` | 316-357 (max), 383-424 (pro) | max, pro |
+| Darwin | `home/migration/darwin-home-files.nix` | 320-361 (max), 387-428 (pro) | max, pro |
+
+WSL also has a unified dispatcher at lines 274-335 (`claude-code-wrapper`), but it simply delegates to `claudemax`/`claudepro`.
+
+#### Common Pattern
+
+The `mkClaudeWrapperScript` function is **identically duplicated** in all three platform files. Signature:
+
+```nix
+mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
+  account="${account}"
+  config_dir="${configDir}"
+  pidfile="/tmp/claude-''${account}.pid"
+
+  # Headless mode bypass for -p/--print
+  if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || ... ]]; then
+    export CLAUDE_CONFIG_DIR="$config_dir"
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+    exec "${pkgs.claude-code}/bin/claude" "$@"
+  fi
+
+  # Instance detection via pgrep
+  if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
+    exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+  fi
+
+  # PID-based single instance management
+  if [[ -f "$pidfile" ]]; then
+    pid=$(cat "$pidfile")
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "Claude (${displayName}) is already running (PID: $pid)"
+      exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+    else
+      rm -f "$pidfile"
+    fi
+  fi
+
+  # Launch new instance
+  export CLAUDE_CONFIG_DIR="$config_dir"
+  ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
+  mkdir -p "$config_dir"
+  echo $$ > "$pidfile"
+  exec "${pkgs.claude-code}/bin/claude" --config-dir="$config_dir" "$@"
+'';
+```
+
+Each platform then invokes it twice (once for `claudemax`, once for `claudepro`) with identical parameters.
+
+#### Environment Variables Set
+
+| Variable | Source | Purpose |
+|----------|--------|---------|
+| `CLAUDE_CONFIG_DIR` | `configDir` parameter | Account-specific config directory |
+| `DISABLE_TELEMETRY` | `extraEnvVars` | Disable telemetry |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `extraEnvVars` | Disable non-essential network traffic |
+| `DISABLE_ERROR_REPORTING` | `extraEnvVars` | Disable error reporting |
+
+**Not yet supported** (needed for Code-Companion):
+- `ANTHROPIC_BASE_URL` - Custom API endpoint
+- `ANTHROPIC_AUTH_TOKEN` - Bearer token authentication
+- `ANTHROPIC_API_KEY` - Must be set to empty string for some proxies
+- `ANTHROPIC_DEFAULT_*_MODEL` - Model name mappings
+
+#### Refactoring Recommendation
+
+**Current Problem**: The `mkClaudeWrapperScript` function is defined 6 times total (2 accounts x 3 platforms) with identical code. Only the invocation parameters differ.
+
+**Recommended Refactoring**:
+
+1. **Extract shared function** to `home/modules/claude-code/lib.nix`:
+   ```nix
+   # home/modules/claude-code/lib.nix
+   { lib, pkgs }:
+   {
+     mkClaudeWrapperScript = { account, displayName, configDir, api ? {}, secrets ? {}, extraEnvVars ? {} }: ''
+       # ... unified implementation with API support
+     '';
+   }
+   ```
+
+2. **Import in platform files**:
+   ```nix
+   let
+     claudeLib = import ../modules/claude-code/lib.nix { inherit lib pkgs; };
+   in
+   # ...
+   content = claudeLib.mkClaudeWrapperScript { ... };
+   ```
+
+3. **Generate wrappers dynamically** from `cfg.accounts`:
+   ```nix
+   # Instead of hardcoded claudemax/claudepro
+   scripts = lib.mapAttrs (name: account:
+     mkUnifiedFile {
+       name = "claude${name}";
+       content = claudeLib.mkClaudeWrapperScript {
+         inherit (account) displayName;
+         account = name;
+         configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-${name}";
+         inherit (account) api secrets extraEnvVars;
+       };
+     }
+   ) (lib.filterAttrs (n: a: a.enable) cfg.accounts);
+   ```
+
+**Benefits**:
+- Single source of truth for wrapper logic
+- Automatic wrapper generation from account options
+- API proxy support without per-platform changes
+- Easy to add new accounts (just add to `accounts` attrset)
 
 ---
 
@@ -870,10 +985,10 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Task R1 complete - documented account submodule structure and gaps.
-Next step: Start Task R2 - Document wrapper script generation across platforms.
-Key context: Read wsl-home-files.nix, linux-home-files.nix, darwin-home-files.nix for mkClaudeWrapperScript.
-Verification: R2 Findings section is populated with wrapper generation documentation.
+Current status: Task R2 complete - documented wrapper script generation patterns and refactoring recommendations.
+Next step: Start Task R3 - Document run-tasks.sh for Nix module adaptation.
+Key context: Read ~/bin/run-tasks.sh and ~/.claude/commands/next-task.md for task automation scripts.
+Verification: R3 Findings section is populated with CLI options, dependencies, and safety limits.
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux
   - Phase 2 (I1-I9): Implementation tasks - require Nix host
