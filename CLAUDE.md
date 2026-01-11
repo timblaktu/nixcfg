@@ -72,6 +72,14 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 For completed work history, see git log on `dev` and `main` branches.
 
+### 🔧 **Claude Code Multi-Backend Integration** (IN PROGRESS)
+
+**Plan File**: `docs/claude-code-multi-backend-plan.md`
+
+**Goal**: Add work's Code-Companion proxy as new account alongside personal accounts (max, pro), with unified Termux support via Nix-generated scripts.
+
+**Key Design**: Generate Termux configuration as Nix package outputs - no nix-on-droid required.
+
 ### 🚧 **Deferred Tasks**
 
 #### **Fork Development Work** (DEFERRED)
