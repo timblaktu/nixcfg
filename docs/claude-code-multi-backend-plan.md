@@ -8,17 +8,172 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 ## Progress Tracking
 
+### Phase 1: Research & Design (Autonomous - No Nix Required)
+
 | Task | Name | Status | Date |
 |------|------|--------|------|
-| 1 | Extend account submodule with API options | Pending | |
-| 2 | Update wrapper script generation | Pending | |
-| 3 | Add work account configuration | Pending | |
-| 4 | Create Termux package output | Pending | |
-| 5 | Store secrets in Bitwarden | Pending | |
-| 6 | Test on Nix-managed host | Pending | |
-| 7 | Test Termux installation | Pending | |
-| 8 | Add task automation to Nix module | Pending | |
-| 9 | Add skills support to Nix module | Pending | |
+| R1 | Document current account submodule structure | Pending | |
+| R2 | Document wrapper script generation across platforms | Pending | |
+| R3 | Document run-tasks.sh for Nix module adaptation | Pending | |
+| R4 | Document skills structure for Nix module adaptation | Pending | |
+| R5 | Draft complete API options Nix code | Pending | |
+| R6 | Draft complete wrapper script Nix code | Pending | |
+
+### Phase 2: Implementation (Requires Nix Host)
+
+| Task | Name | Status | Date |
+|------|------|--------|------|
+| I1 | Implement API options in account submodule | Pending | |
+| I2 | Implement wrapper script generation | Pending | |
+| I3 | Add work account configuration | Pending | |
+| I4 | Create Termux package output | Pending | |
+| I5 | Store secrets in Bitwarden | Pending | |
+| I6 | Test on Nix-managed host | Pending | |
+| I7 | Test Termux installation | Pending | |
+| I8 | Add task automation to Nix module | Pending | |
+| I9 | Add skills support to Nix module | Pending | |
+
+---
+
+## Phase 1: Research Task Definitions
+
+### Task R1: Document current account submodule structure
+
+**Goal**: Read and document the current account submodule in `home/modules/claude-code.nix` to understand what exists and what needs to be added.
+
+**Actions**:
+1. Read `home/modules/claude-code.nix` lines 140-200 (account submodule definition)
+2. Read `home/modules/base.nix` to find current account usage (search for "accounts")
+3. Document the current structure in findings section below
+4. Identify gaps vs. requirements in Code-Companion Requirements section
+
+**Output**: Document current state in "R1 Findings" section below.
+
+**Verification**: R1 Findings section exists and is non-empty.
+
+---
+
+### Task R2: Document wrapper script generation across platforms
+
+**Goal**: Read all platform-specific wrapper script generation code and document the pattern.
+
+**Actions**:
+1. Read `home/migration/wsl-home-files.nix` - search for "mkClaudeWrapperScript" or wrapper generation
+2. Read `home/migration/linux-home-files.nix` - same search
+3. Read `home/migration/darwin-home-files.nix` - same search
+4. Document how wrappers are generated, what they set, common patterns
+5. Note where the wrapper function should be refactored to avoid duplication
+
+**Output**: Document findings in "R2 Findings" section below.
+
+**Verification**: R2 Findings section exists with wrapper pattern documented.
+
+---
+
+### Task R3: Document run-tasks.sh for Nix module adaptation
+
+**Goal**: Document the run-tasks.sh script in enough detail to generate it from Nix.
+
+**Actions**:
+1. Read `~/bin/run-tasks.sh` completely
+2. Document all features, options, and dependencies (rg, claude, etc.)
+3. Identify any hardcoded paths that need parameterization
+4. Read `~/.claude/commands/next-task.md` for slash command format
+5. Document what files need to be generated and their content
+
+**Output**: Document in "R3 Findings" section below.
+
+**Verification**: R3 Findings section contains script feature list and dependencies.
+
+---
+
+### Task R4: Document skills structure for Nix module adaptation
+
+**Goal**: Document the skills directory structure for Nix module generation.
+
+**Actions**:
+1. List `~/.claude/skills/` directory structure
+2. Read SKILL.md file(s) to understand format
+3. Read any REFERENCE.md or supporting files
+4. Document the expected directory structure and file formats
+5. Identify which skills should be "built-in" vs user-defined
+
+**Output**: Document in "R4 Findings" section below.
+
+**Verification**: R4 Findings section documents skills structure.
+
+---
+
+### Task R5: Draft complete API options Nix code
+
+**Goal**: Write the complete, copy-paste ready Nix code for the API options extension.
+
+**Actions**:
+1. Using R1 findings, draft the complete new options block
+2. Include all options from the plan: api.baseUrl, api.authMethod, api.disableApiKey, api.modelMappings
+3. Include secrets.bearerToken with Bitwarden reference structure
+4. Include extraEnvVars option
+5. Format as valid Nix code ready to insert
+
+**Output**: Complete Nix code block in "R5 Draft Code" section below.
+
+**Verification**: R5 Draft Code section contains complete options block.
+
+---
+
+### Task R6: Draft complete wrapper script Nix code
+
+**Goal**: Write the complete, copy-paste ready Nix code for wrapper script generation.
+
+**Actions**:
+1. Using R2 findings, draft the updated mkClaudeWrapperScript function
+2. Handle all API options (baseUrl, authMethod, modelMappings)
+3. Handle secrets retrieval via rbw
+4. Handle extraEnvVars
+5. Design as a shared function to be used across all platform files
+6. Format as valid Nix code
+
+**Output**: Complete Nix code block in "R6 Draft Code" section below.
+
+**Verification**: R6 Draft Code section contains complete wrapper function.
+
+---
+
+## Phase 1 Findings
+
+### R1 Findings
+
+*(Task R1 will populate this section)*
+
+---
+
+### R2 Findings
+
+*(Task R2 will populate this section)*
+
+---
+
+### R3 Findings
+
+*(Task R3 will populate this section)*
+
+---
+
+### R4 Findings
+
+*(Task R4 will populate this section)*
+
+---
+
+### R5 Draft Code
+
+*(Task R5 will populate this section)*
+
+---
+
+### R6 Draft Code
+
+*(Task R6 will populate this section)*
 
 ---
 
@@ -39,9 +194,9 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL="qwen-a3b"
 
 ---
 
-## Task Definitions
+## Phase 2: Implementation Task Definitions
 
-### Task 1: Extend account submodule with API options
+### Task I1: Implement API options in account submodule
 
 **File**: `home/modules/claude-code.nix`
 
@@ -116,7 +271,7 @@ accounts = mkOption {
 
 ---
 
-### Task 2: Update wrapper script generation
+### Task I2: Update wrapper script generation
 
 **Files**:
 - `home/migration/wsl-home-files.nix` (lines 373-431)
@@ -162,7 +317,7 @@ mkClaudeWrapperScript = { account, displayName, configDir, api ? {}, secrets ? {
 
 ---
 
-### Task 3: Add work account configuration
+### Task I3: Add work account configuration
 
 **File**: `home/modules/base.nix` (around line 341)
 
@@ -213,7 +368,7 @@ accounts = {
 
 ---
 
-### Task 4: Create Termux package output
+### Task I4: Create Termux package output
 
 **New File**: `flake-modules/termux-outputs.nix`
 
@@ -345,7 +500,7 @@ adb push result/bin/* /data/data/com.termux/files/home/bin/
 
 ---
 
-### Task 5: Store secrets in Bitwarden
+### Task I5: Store secrets in Bitwarden
 
 **On Nix-managed hosts** (rbw available):
 
@@ -365,7 +520,7 @@ chmod 600 ~/.secrets/claude-work-token
 
 ---
 
-### Task 6: Test on Nix-managed host
+### Task I6: Test on Nix-managed host
 
 ```bash
 # Rebuild home-manager
@@ -383,7 +538,7 @@ rbw get "Code-Companion" "bearer_token"
 
 ---
 
-### Task 7: Test Termux installation
+### Task I7: Test Termux installation
 
 ```bash
 # Build on Nix host
@@ -407,7 +562,7 @@ claudework --version  # After storing token
 
 ---
 
-### Task 8: Add task automation to Nix module
+### Task I8: Add task automation to Nix module
 
 **Context**: Unattended task automation (`run-tasks.sh`, `/next-task`) is a general Claude Code workflow feature that should be available on ALL platforms via the Nix module.
 
@@ -463,7 +618,7 @@ in {
 
 ---
 
-### Task 9: Add skills support to Nix module
+### Task I9: Add skills support to Nix module
 
 **Context**: Skills (like `adr-writer`) are a general Claude Code feature that should be Nix-managed and deployed to ALL platforms.
 
@@ -594,11 +749,24 @@ Outputs:
 
 ## Execution Rules
 
-1. Execute tasks in order shown in Progress Tracking table
-2. Complete ONE task per session (for context-cleared workflow)
+### Phase 1 (Research - Termux Compatible)
+
+1. Execute R-tasks in order (R1, R2, R3, ...)
+2. Complete ONE task per session
 3. Update Progress Tracking: mark status "Complete", add date
-4. Run `nix flake check` after each code change
+4. Write findings/draft code to the appropriate section in this file
+5. **Verification**: Each task has a verification criterion - check it before marking complete
+6. Commit changes when task complete
+7. **No Nix required** - these tasks only read files and write documentation
+
+### Phase 2 (Implementation - Requires Nix Host)
+
+1. Execute I-tasks in order (I1, I2, I3, ...)
+2. Complete ONE task per session
+3. Update Progress Tracking: mark status "Complete", add date
+4. **MUST** run `nix flake check` after each code change
 5. Commit changes when task passes validation
+6. **Requires Nix** - run on a Nix-managed host, not Termux
 
 ---
 
@@ -606,12 +774,11 @@ Outputs:
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Plan reviewed and expanded with 2 general Nix module tasks.
-Next step: Start Task 1 - Extend account submodule in home/modules/claude-code.nix with API options.
-Key context: Add api.baseUrl, api.authMethod, api.disableApiKey, api.modelMappings, secrets.bearerToken, extraEnvVars.
-Check: Lines 143-163 for current account submodule structure.
-Total tasks: 9
-  - Tasks 1-7: Original multi-backend + Termux integration
-  - Task 8: Add task automation to Nix module (run-tasks, /next-task) - ALL platforms
-  - Task 9: Add skills support to Nix module (adr-writer, etc.) - ALL platforms
+Current status: Plan restructured into Phase 1 (research, no Nix) and Phase 2 (implementation, requires Nix).
+Next step: Start Task R1 - Document current account submodule structure.
+Key context: Read home/modules/claude-code.nix lines 140-200, document in R1 Findings section.
+Verification: R1 Findings section is populated with current structure documentation.
+Total tasks: 15 (6 research + 9 implementation)
+  - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux
+  - Phase 2 (I1-I9): Implementation tasks - require Nix host
 ```
