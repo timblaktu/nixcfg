@@ -14,7 +14,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 |------|------|--------|------|
 | R1 | Document current account submodule structure | TASK:COMPLETE | 2026-01-11 |
 | R2 | Document wrapper script generation across platforms | TASK:COMPLETE | 2026-01-11 |
-| R3 | Document run-tasks.sh for Nix module adaptation | TASK:PENDING | |
+| R3 | Document run-tasks.sh for Nix module adaptation | TASK:COMPLETE | 2026-01-11 |
 | R4 | Document skills structure for Nix module adaptation | TASK:PENDING | |
 | R5 | Draft complete API options Nix code | TASK:PENDING | |
 | R6 | Draft complete wrapper script Nix code | TASK:PENDING | |
@@ -93,12 +93,12 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 **Output**: Document in "R3 Findings" section below.
 
 **Definition of Done** (ALL must be true):
-- [ ] R3 Findings contains "CLI Options" subsection listing all command-line options with descriptions
-- [ ] R3 Findings contains "Dependencies" subsection listing required tools (rg, claude, etc.)
-- [ ] R3 Findings contains "Hardcoded Values" subsection listing any paths/values that need parameterization
-- [ ] R3 Findings contains "Slash Command Format" subsection with the content of next-task.md
-- [ ] R3 Findings contains "Safety Limits" subsection documenting MAX_ITERATIONS, rate limit handling, etc.
-- [ ] R3 Findings placeholder text `*(Task R3 will populate this section)*` is replaced
+- [x] R3 Findings contains "CLI Options" subsection listing all command-line options with descriptions
+- [x] R3 Findings contains "Dependencies" subsection listing required tools (rg, claude, etc.)
+- [x] R3 Findings contains "Hardcoded Values" subsection listing any paths/values that need parameterization
+- [x] R3 Findings contains "Slash Command Format" subsection with the content of next-task.md
+- [x] R3 Findings contains "Safety Limits" subsection documenting MAX_ITERATIONS, rate limit handling, etc.
+- [x] R3 Findings placeholder text `*(Task R3 will populate this section)*` is replaced
 
 ---
 
@@ -356,7 +356,157 @@ Each platform then invokes it twice (once for `claudemax`, once for `claudepro`)
 
 ### R3 Findings
 
-*(Task R3 will populate this section)*
+
+#### CLI Options
+
+| Option | Arguments | Default | Description |
+|--------|-----------|---------|-------------|
+| `<plan-file>` | path | (required) | Markdown file with Progress Tracking table |
+| `-n` | N | 1 | Run N tasks |
+| `-a`, `--all` | - | - | Run all pending tasks |
+| `-c`, `--continuous` | - | - | Run continuously (survives rate limits) |
+| `-d`, `--delay` | N | 10 | Seconds between tasks |
+| `--dry-run` | - | - | Show prompt without executing |
+| `-h`, `--help` | - | - | Show help |
+
+**Modes** (mutually exclusive):
+- `single` (default): Run 1 task
+- `count`: Run N tasks (`-n N`)
+- `all`: Run all pending (`-a`)
+- `continuous`: Run until complete or circuit breaker (`-c`)
+
+#### Dependencies
+
+| Tool | Purpose | Availability |
+|------|---------|--------------|
+| `bash` | Shell interpreter | Universal |
+| `rg` (ripgrep) | Pattern matching for status tokens | Needs installation |
+| `claude` | Claude Code CLI | Main dependency |
+| `date` | Timestamps and runtime calculation | Universal |
+| `realpath` | Resolve absolute paths | Universal (GNU coreutils) |
+| `tee` | Duplicate output to log file | Universal |
+
+#### Hardcoded Values
+
+| Value | Current | Parameterization Needed |
+|-------|---------|------------------------|
+| `LOG_DIR` | `.claude-task-logs` | Could be configurable |
+| `STATE_FILE` | `.claude-task-state` | Could be configurable |
+| `DELAY_BETWEEN_TASKS` | 10 seconds | Already CLI arg (`-d`) |
+| `RATE_LIMIT_WAIT` | 300 seconds (5 min) | Consider making configurable |
+| `MAX_RETRIES` | 3 | Consider making configurable |
+| `MAX_ITERATIONS` | 100 | Consider making configurable |
+| `MAX_RUNTIME_HOURS` | 8 | Consider making configurable |
+| `MAX_CONSECUTIVE_RATE_LIMITS` | 5 | Consider making configurable |
+
+**Status Tokens** (critical for matching):
+- `TASK:PENDING` - Marks pending tasks in table
+- `TASK:COMPLETE` - Marks completed tasks
+- `ALL_TASKS_DONE` - Claude's completion signal
+
+#### Slash Command Format
+
+Content of `~/.claude/commands/next-task.md`:
+
+Read the plan file specified below (or auto-detect from CLAUDE.md if not specified),
+find the first "Pending" task in the Progress Tracking table, execute it following
+the task definition in that file, document findings in the corresponding section,
+mark it "Complete" with today's date, and report what you completed and what's next.
+Commit your changes when done.
+
+Plan file: \$ARGUMENTS
+
+If no plan file argument is provided:
+1. Check the project's CLAUDE.md for a "Primary File" or "Plan File" reference
+2. Look for files matching `*-research.md`, `*-plan.md`, or `*-tasks.md` in docs/
+3. Ask the user which file to use
+
+After completing the task, provide a summary:
+
+## Task Completed
+- **Task ID**: [task number/name]
+- **Status**: Complete
+- **Summary**: [1-2 sentence summary]
+
+## Next Pending Task
+- **Task ID**: [next task number/name]
+- **Description**: [brief description]
+
+If no pending tasks remain, state "All tasks complete!"
+
+**Key Differences from run-tasks.sh**:
+- Interactive (within Claude session) vs unattended (CLI invocation)
+- Supports `\$ARGUMENTS` for plan file path
+- Auto-detection of plan file from CLAUDE.md
+- Structured summary output format
+- Uses simpler "Pending"/"Complete" tokens (should be updated to TASK: prefix for consistency)
+
+#### Safety Limits
+
+| Limit | Value | Purpose |
+|-------|-------|---------|
+| `MAX_ITERATIONS` | 100 | Prevent runaway loops |
+| `MAX_RUNTIME_HOURS` | 8 | Prevent endless execution |
+| `MAX_CONSECUTIVE_RATE_LIMITS` | 5 | Circuit breaker for API issues |
+| `MAX_RETRIES` | 3 | Per-task retry limit for rate limits |
+
+**Runtime Calculations**:
+- START_TIME=\$(date +%s)
+- runtime=\$((date +%s - START_TIME))
+- max_runtime_seconds=\$((MAX_RUNTIME_HOURS * 3600))
+
+**Pre-flight Validation**:
+1. Checks for `TASK:PENDING` tasks before starting (exits early if none)
+2. Warns if plan file lacks proper Progress Tracking table
+3. Warns if using old-style "Pending" instead of "TASK:PENDING" tokens
+
+**Return Codes from run_task()**:
+- `0`: Success - task completed
+- `1`: Failure - task failed
+- `2`: Rate limited - should retry after wait
+- `3`: All complete - Claude reports `ALL_TASKS_DONE`
+
+**State Persistence** (`.claude-task-state`):
+- LAST_RUN=2026-01-11T10:30:00+00:00
+- TASKS_RUN=5
+- STATUS=complete|rate_limited|failed|interrupted|all_complete
+- PENDING_NOW=3
+- RUNTIME_SECONDS=1234
+- PLAN_FILE=/absolute/path/to/plan.md
+
+**Logging**:
+- Creates `.claude-task-logs/` directory
+- Each task logged to `task_YYYYMMDD_HHMMSS.log`
+- Both stdout and file via `tee`
+
+#### Nix Module Adaptation Notes
+
+**For task-automation.nix**:
+
+1. **Wrapper Script Generation**:
+   - Extract configurable constants to Nix options
+   - Inject tool paths (rg, claude) from pkgs
+   - Consider making safety limits configurable per-account
+
+2. **Slash Command Deployment**:
+   - Deploy next-task.md to each account's commands/ directory
+   - Update to use TASK:PENDING/TASK:COMPLETE tokens consistently
+   - Template with account-specific defaults
+
+3. **Cross-Platform Considerations**:
+   - Termux: Use /data/data/com.termux/files/usr/bin/bash
+   - All platforms: Ensure rg is in PATH or provide fallback to grep -E
+
+4. **Suggested Nix Options**:
+   - taskAutomation.enable
+   - taskAutomation.safetyLimits.maxIterations (default: 100)
+   - taskAutomation.safetyLimits.maxRuntimeHours (default: 8)
+   - taskAutomation.safetyLimits.maxConsecutiveRateLimits (default: 5)
+   - taskAutomation.safetyLimits.rateLimitWaitSeconds (default: 300)
+   - taskAutomation.safetyLimits.delayBetweenTasks (default: 10)
+   - taskAutomation.logDirectory (default: ".claude-task-logs")
+   - taskAutomation.stateFile (default: ".claude-task-state")
+
 
 ---
 
@@ -985,10 +1135,10 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Task R2 complete - documented wrapper script generation patterns and refactoring recommendations.
-Next step: Start Task R3 - Document run-tasks.sh for Nix module adaptation.
-Key context: Read ~/bin/run-tasks.sh and ~/.claude/commands/next-task.md for task automation scripts.
-Verification: R3 Findings section is populated with CLI options, dependencies, and safety limits.
+Current status: Task R3 complete - documented run-tasks.sh script with CLI options, dependencies, safety limits, and Nix adaptation notes.
+Next step: Start Task R4 - Document skills structure for Nix module adaptation.
+Key context: Read ~/.claude/skills/ directory and SKILL.md format for skills documentation.
+Verification: R4 Findings section is populated with directory structure, SKILL.md format, and built-in skills.
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux
   - Phase 2 (I1-I9): Implementation tasks - require Nix host
