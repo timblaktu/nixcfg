@@ -12,7 +12,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 | Task | Name | Status | Date |
 |------|------|--------|------|
-| R1 | Document current account submodule structure | TASK:PENDING | |
+| R1 | Document current account submodule structure | TASK:COMPLETE | 2026-01-11 |
 | R2 | Document wrapper script generation across platforms | TASK:PENDING | |
 | R3 | Document run-tasks.sh for Nix module adaptation | TASK:PENDING | |
 | R4 | Document skills structure for Nix module adaptation | TASK:PENDING | |
@@ -50,10 +50,10 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 **Output**: Document current state in "R1 Findings" section below.
 
 **Definition of Done** (ALL must be true):
-- [ ] R1 Findings section contains "Current Options" subsection listing each existing option with its type
-- [ ] R1 Findings section contains "Current Usage" subsection showing how accounts are defined in base.nix
-- [ ] R1 Findings section contains "Gaps Analysis" subsection listing what's missing for Code-Companion
-- [ ] R1 Findings placeholder text `*(Task R1 will populate this section)*` is replaced
+- [x] R1 Findings section contains "Current Options" subsection listing each existing option with its type
+- [x] R1 Findings section contains "Current Usage" subsection showing how accounts are defined in base.nix
+- [x] R1 Findings section contains "Gaps Analysis" subsection listing what's missing for Code-Companion
+- [x] R1 Findings placeholder text `*(Task R1 will populate this section)*` is replaced
 
 ---
 
@@ -183,7 +183,53 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 ### R1 Findings
 
-*(Task R1 will populate this section)*
+#### Current Options
+
+The account submodule is defined at `home/modules/claude-code.nix:143-163`:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enable` | `bool` (mkEnableOption) | `false` | Enable this Claude Code account profile |
+| `displayName` | `types.str` | (required) | Display name for this account profile |
+| `model` | `types.nullOr (types.enum [ "sonnet" "opus" "haiku" ])` | `null` | Default model for this account (null = use global default) |
+
+The parent module also defines:
+- `defaultAccount` (`types.nullOr types.str`, default: `null`) - Default account when running 'claude' without profile
+
+#### Current Usage
+
+In `home/modules/base.nix:341-351`, accounts are defined as:
+
+```nix
+accounts = {
+  max = {
+    enable = true;
+    displayName = "Claude Max Account";
+  };
+  pro = {
+    enable = true;
+    displayName = "Claude Pro Account";
+    model = "sonnet";
+  };
+};
+```
+
+Both accounts use standard Anthropic API authentication (API key from environment).
+
+#### Gaps Analysis
+
+The Code-Companion requirements (from the plan) need:
+
+| Required Feature | Current Support | Gap |
+|------------------|-----------------|-----|
+| Custom API base URL | ❌ Not supported | Need `api.baseUrl` option |
+| Bearer token auth | ❌ Not supported | Need `api.authMethod` option with `bearer` value |
+| Empty API key | ❌ Not supported | Need `api.disableApiKey` option |
+| Model name mapping | ❌ Not supported | Need `api.modelMappings` option |
+| Secret management | ❌ Not supported | Need `secrets.bearerToken.bitwarden` submodule |
+| Extra env vars | ❌ Not supported | Need `extraEnvVars` option |
+
+**Summary**: The current submodule only supports basic Anthropic API authentication. All API proxy features need to be added for Code-Companion integration.
 
 ---
 
@@ -824,10 +870,10 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Plan restructured into Phase 1 (research, no Nix) and Phase 2 (implementation, requires Nix).
-Next step: Start Task R1 - Document current account submodule structure.
-Key context: Read home/modules/claude-code.nix lines 140-200, document in R1 Findings section.
-Verification: R1 Findings section is populated with current structure documentation.
+Current status: Task R1 complete - documented account submodule structure and gaps.
+Next step: Start Task R2 - Document wrapper script generation across platforms.
+Key context: Read wsl-home-files.nix, linux-home-files.nix, darwin-home-files.nix for mkClaudeWrapperScript.
+Verification: R2 Findings section is populated with wrapper generation documentation.
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux
   - Phase 2 (I1-I9): Implementation tasks - require Nix host
