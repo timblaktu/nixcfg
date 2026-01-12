@@ -85,14 +85,16 @@ let
     MODE="single"
     COUNT=1
     DRY_RUN=false
+    ACCOUNT=""  # Required: which account wrapper to use (max, pro, work)
 
     usage() {
         cat << 'EOF'
     run-tasks - Claude Code unattended task runner
 
-    Usage: run-tasks <plan-file> [options]
+    Usage: run-tasks -A <account> <plan-file> [options]
 
     Arguments:
+      -A <account>      REQUIRED: Account to use (max, pro, work)
       <plan-file>       Path to markdown file with Progress Tracking table
 
     Options:
@@ -102,6 +104,10 @@ let
       -d, --delay N     Seconds between tasks (default: ${toString taskCfg.safetyLimits.delayBetweenTasks})
       --dry-run         Show prompt without executing
       -h, --help        Show this help
+
+    Account Selection:
+      You MUST specify which account to use. This determines which Claude wrapper
+      (claudemax, claudepro, claudework) is invoked with the correct configuration.
 
     Plan File Format:
       The plan file must contain a Progress Tracking table with unique status tokens:
@@ -119,11 +125,11 @@ let
       Rate limit wait: ${toString taskCfg.safetyLimits.rateLimitWaitSeconds} seconds
 
     Examples:
-      run-tasks docs/research-plan.md           # Run 1 task
-      run-tasks docs/research-plan.md -n 5      # Run 5 tasks
-      run-tasks docs/research-plan.md -a        # Run all pending
-      run-tasks docs/research-plan.md -c        # Run continuously
-      run-tasks docs/research-plan.md --dry-run # Show prompt only
+      run-tasks -A max docs/research-plan.md           # Run 1 task with max account
+      run-tasks -A pro docs/research-plan.md -n 5      # Run 5 tasks with pro account
+      run-tasks -A work docs/research-plan.md -a       # Run all pending with work account
+      run-tasks -A max docs/research-plan.md -c        # Run continuously
+      run-tasks -A max docs/research-plan.md --dry-run # Show prompt only
     EOF
         exit 0
     }
@@ -131,6 +137,7 @@ let
     # Parse positional and optional args
     while [[ $# -gt 0 ]]; do
         case $1 in
+            -A|--account) ACCOUNT="$2"; shift 2 ;;
             -n) COUNT="$2"; MODE="count"; shift 2 ;;
             -a|--all) MODE="all"; shift ;;
             -c|--continuous) MODE="continuous"; shift ;;
@@ -153,6 +160,38 @@ let
                 ;;
         esac
     done
+
+    # Validate account selection (REQUIRED)
+    if [[ -z "$ACCOUNT" ]]; then
+        echo -e "''${RED}Error: Account selection required (-A max|pro|work)''${NC}"
+        echo ""
+        echo "You must specify which account to use:"
+        echo "  -A max   - Use Claude Max account (claudemax)"
+        echo "  -A pro   - Use Claude Pro account (claudepro)"
+        echo "  -A work  - Use Work Code-Companion account (claudework)"
+        echo ""
+        echo "Use -h for full help"
+        exit 1
+    fi
+
+    # Map account name to wrapper command
+    case "$ACCOUNT" in
+        max)  CLAUDE_CMD="claudemax" ;;
+        pro)  CLAUDE_CMD="claudepro" ;;
+        work) CLAUDE_CMD="claudework" ;;
+        *)
+            echo -e "''${RED}Error: Unknown account '$ACCOUNT'${NC}"
+            echo "Valid accounts: max, pro, work"
+            exit 1
+            ;;
+    esac
+
+    # Verify the claude wrapper exists
+    if ! command -v "$CLAUDE_CMD" &>/dev/null; then
+        echo -e "''${RED}Error: Claude wrapper '$CLAUDE_CMD' not found in PATH''${NC}"
+        echo "Make sure home-manager has been activated with the account configured."
+        exit 1
+    fi
 
     # Validate plan file
     if [[ -z "$PLAN_FILE" ]]; then
@@ -228,11 +267,52 @@ let
         echo -e "''${CYAN}===============================================''${NC}"
     }
 
+    # Parse JSON output from Claude CLI
+    # Returns: sets global variables json_type, json_subtype, json_is_error, json_result
+    parse_claude_json() {
+        local json_output="$1"
+
+        # Extract key fields using jq
+        json_type=$(echo "$json_output" | ${pkgs.jq}/bin/jq -r '.type // "unknown"' 2>/dev/null) || json_type="parse_error"
+        json_subtype=$(echo "$json_output" | ${pkgs.jq}/bin/jq -r '.subtype // "unknown"' 2>/dev/null) || json_subtype="unknown"
+        json_is_error=$(echo "$json_output" | ${pkgs.jq}/bin/jq -r '.is_error // false' 2>/dev/null) || json_is_error="true"
+        json_result=$(echo "$json_output" | ${pkgs.jq}/bin/jq -r '.result // ""' 2>/dev/null) || json_result=""
+    }
+
+    # Detect rate limiting from JSON output or error text
+    # Uses structured JSON fields when available, falls back to text patterns with word boundaries
+    is_rate_limited() {
+        local json_output="$1"
+        local raw_stderr="$2"
+
+        # Check JSON subtype first (most reliable)
+        local subtype
+        subtype=$(echo "$json_output" | ${pkgs.jq}/bin/jq -r '.subtype // ""' 2>/dev/null) || subtype=""
+        if [[ "$subtype" == "rate_limited" || "$subtype" == "rate_limit" ]]; then
+            return 0
+        fi
+
+        # Check for rate limit in result message
+        local result
+        result=$(echo "$json_output" | ${pkgs.jq}/bin/jq -r '.result // ""' 2>/dev/null) || result=""
+        if echo "$result" | ${pkgs.ripgrep}/bin/rg -qi '\brate.?limit|too many requests|\b429\b|hit your.*limit'; then
+            return 0
+        fi
+
+        # Check raw stderr for API errors (word boundaries to avoid false positives like line numbers)
+        if echo "$raw_stderr" | ${pkgs.ripgrep}/bin/rg -qi '\b429\b|rate.?limit.*error|error.*rate.?limit|too many requests'; then
+            return 0
+        fi
+
+        return 1
+    }
+
     run_task() {
         local task_num=$1
         local rate_limit_count=''${2:-0}
         local timestamp=$(date +"%Y%m%d_%H%M%S")
         local log_file="''${LOG_DIR}/task_''${timestamp}.log"
+        local json_log_file="''${LOG_DIR}/task_''${timestamp}.json"
         local pending_before=$(pending_count)
 
         echo -e "\n''${CYAN}----------------------------------------------''${NC}"
@@ -242,67 +322,124 @@ let
 
         if [[ "$DRY_RUN" == true ]]; then
             echo -e "''${YELLOW}[DRY RUN] Would execute:''${NC}"
-            echo "claude -p \"$PROMPT\""
+            echo "$CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions \"$PROMPT\""
             echo -e "''${YELLOW}Log would be: ''${log_file}''${NC}"
             return 0
         fi
 
-        local output
+        local json_output
+        local raw_stderr
         local exit_code=0
 
-        output=$(claude -p --permission-mode bypassPermissions "$PROMPT" 2>&1 | tee "$log_file") || exit_code=$?
+        # Capture JSON output to stdout, stderr separately for error analysis
+        # Using --output-format json for structured response parsing
+        {
+            json_output=$($CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions "$PROMPT" 2>"''${log_file}.stderr")
+            exit_code=$?
+        } || exit_code=$?
 
-        # CHECK OUTPUT SIGNALS FIRST (regardless of exit code)
-        # These signals are in Claude's output text, not dependent on exit code
+        raw_stderr=$(cat "''${log_file}.stderr" 2>/dev/null || echo "")
+
+        # Save both JSON and human-readable logs
+        echo "$json_output" > "$json_log_file"
+
+        # Create human-readable log with result text
+        {
+            echo "=== Task #''${task_num} - $(date '+%Y-%m-%d %H:%M:%S') ==="
+            echo "Exit code: $exit_code"
+            echo ""
+            if [[ -n "$json_output" ]]; then
+                echo "=== Claude Response ==="
+                echo "$json_output" | ${pkgs.jq}/bin/jq -r '.result // "No result field"' 2>/dev/null || echo "$json_output"
+            fi
+            if [[ -n "$raw_stderr" ]]; then
+                echo ""
+                echo "=== Stderr ==="
+                echo "$raw_stderr"
+            fi
+        } > "$log_file"
+
+        # Parse JSON response
+        parse_claude_json "$json_output"
+
+        # PRIORITY 1: Check for startup/configuration errors (non-zero exit before JSON)
+        # These indicate Claude couldn't even start properly
+        if [[ $exit_code -ne 0 && "$json_type" == "parse_error" ]]; then
+            echo -e "\n''${RED}Claude failed to start (exit: $exit_code)''${NC}"
+            if [[ -n "$raw_stderr" ]]; then
+                echo -e "''${RED}Error: $(echo "$raw_stderr" | head -3)''${NC}"
+            fi
+
+            # Check if it's a rate limit at the API level
+            if is_rate_limited "$json_output" "$raw_stderr"; then
+                local next_attempt=$((rate_limit_count + 1))
+                echo -e "\n''${YELLOW}Rate limit detected (attempt ''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}). Waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
+                save_state "$task_num" "rate_limited" "$pending_before"
+                sleep $RATE_LIMIT_WAIT
+                return 2
+            fi
+
+            save_state "$task_num" "startup_error" "$pending_before"
+            return 1
+        fi
+
+        # PRIORITY 2: Check JSON is_error field (most reliable for API errors)
+        if [[ "$json_is_error" == "true" ]]; then
+            echo -e "\n''${RED}Claude reported error: $json_subtype''${NC}"
+
+            # Check for rate limiting via structured fields
+            if is_rate_limited "$json_output" "$raw_stderr"; then
+                local next_attempt=$((rate_limit_count + 1))
+                echo -e "\n''${YELLOW}Rate limit detected (attempt ''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}). Waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
+                save_state "$task_num" "rate_limited" "$pending_before"
+                sleep $RATE_LIMIT_WAIT
+                return 2
+            fi
+
+            save_state "$task_num" "api_error_$json_subtype" "$pending_before"
+            return 1
+        fi
+
+        # PRIORITY 3: Check protocol sentinels in result text (defined in our prompt)
+        # These are reliable because we control the exact tokens
 
         # Environment not capable - skip this task, leave PENDING for another host
-        # Check this FIRST because Claude returns exit code 0 even when saying ENVIRONMENT_NOT_CAPABLE
-        if echo "$output" | ${pkgs.ripgrep}/bin/rg -qi "ENVIRONMENT_NOT_CAPABLE|cannot.*run.*on.*this.*host|requires.*nix|not.*available.*termux|environment.*not.*capable|skip.*this.*task.*host"; then
+        if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q "ENVIRONMENT_NOT_CAPABLE"; then
             echo -e "\n''${YELLOW}Task cannot run on this host - leaving PENDING for another host''${NC}"
             save_state "$task_num" "environment_not_capable" "$pending_before"
             return 5
         fi
 
-        # SUCCESS PATH: exit code 0
-        if [[ $exit_code -eq 0 ]]; then
-            if echo "$output" | ${pkgs.ripgrep}/bin/rg -q "ALL_TASKS_DONE|no TASK:PENDING found"; then
-                local pending_after=$(pending_count)
-                if [[ "$pending_after" == "0" ]]; then
-                    echo -e "\n''${GREEN}Claude confirms all tasks complete''${NC}"
-                    save_state "$task_num" "all_complete" "$pending_after"
-                    return 3
-                fi
+        # All tasks done
+        if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q "ALL_TASKS_DONE"; then
+            local pending_after=$(pending_count)
+            if [[ "$pending_after" == "0" ]]; then
+                echo -e "\n''${GREEN}Claude confirms all tasks complete''${NC}"
+                save_state "$task_num" "all_complete" "$pending_after"
+                return 3
             fi
+        fi
 
+        # PRIORITY 4: Success path - exit code 0 and type is "result" with subtype "success"
+        if [[ $exit_code -eq 0 && "$json_type" == "result" && "$json_subtype" == "success" ]]; then
             local pending_after=$(pending_count)
             echo -e "\n''${GREEN}Task #''${task_num} complete (pending: ''${pending_before} -> ''${pending_after})''${NC}"
             save_state "$task_num" "complete" "$pending_after"
             return 0
         fi
 
-        # FAILURE PATH: check for rate limit
-        if echo "$output" | ${pkgs.ripgrep}/bin/rg -qi "(error|failed|rejected|denied|exceeded|http|status).*rate.?limit|rate.?limit.*(error|exceeded|reached)|too many requests|429|hit your.*limit"; then
-            local next_attempt=$((rate_limit_count + 1))
-            echo -e "\n''${YELLOW}Rate limit detected (attempt ''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}). Waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
-            save_state "$task_num" "rate_limited" "$pending_before"
-            sleep $RATE_LIMIT_WAIT
-            return 2
+        # PRIORITY 5: Non-zero exit code with valid JSON (task execution failed)
+        if [[ $exit_code -ne 0 ]]; then
+            echo -e "\n''${RED}Task #''${task_num} failed (exit: $exit_code, type: $json_type, subtype: $json_subtype)''${NC}"
+            save_state "$task_num" "failed" "$pending_before"
+            return 1
         fi
 
-        # Permission issue - Claude is asking for write permission
-        if echo "$output" | ${pkgs.ripgrep}/bin/rg -qi "need.*permission|waiting.*permission|grant.*permission|approve.*permission"; then
-            echo -e "\n''${YELLOW}Permission required - user interaction needed, skipping''${NC}"
-            save_state "$task_num" "permission_required" "$pending_before"
-            return 4
-        fi
-
-        # Note: ENVIRONMENT_NOT_CAPABLE is now checked BEFORE success/failure path split
-        # (see lines 258-264) because Claude returns exit code 0 even when saying this
-
-        # Other failure
-        echo -e "\n''${RED}Task #''${task_num} failed (exit: $exit_code)''${NC}"
-        save_state "$task_num" "failed" "$pending_before"
-        return 1
+        # FALLBACK: Unexpected state - treat as success if we got here with exit 0
+        local pending_after=$(pending_count)
+        echo -e "\n''${YELLOW}Task #''${task_num} completed with unexpected response format''${NC}"
+        save_state "$task_num" "complete_unexpected" "$pending_after"
+        return 0
     }
 
     # Header
@@ -316,6 +453,7 @@ let
     echo -e "''${NC}"
 
     echo "Plan file: $PLAN_FILE_ABS"
+    echo "Account: $ACCOUNT ($CLAUDE_CMD)"
     echo "Mode: $MODE $([ "$MODE" = "count" ] && echo "($COUNT)")"
     INITIAL_PENDING=$(pending_count)
     echo "Pending tasks: $INITIAL_PENDING"

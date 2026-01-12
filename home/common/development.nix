@@ -83,25 +83,8 @@ in
       })
 
       # Claude Code account wrapper scripts - using shared library
-      (pkgs.writeShellApplication {
-        name = "claude";
-        text = claudeLib.mkClaudeWrapperScript {
-          account = "default";
-          displayName = "Claude Default Account";
-          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-default";
-          extraEnvVars = {
-            DISABLE_TELEMETRY = "1";
-            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-            DISABLE_ERROR_REPORTING = "1";
-          };
-        };
-        runtimeInputs = with pkgs; [ procps coreutils claude-code jq ];
-        passthru.tests = {
-          syntax = pkgs.runCommand "test-claude-syntax" { } ''
-            echo "Syntax validation passed at build time" > $out
-          '';
-        };
-      })
+      # NOTE: There is intentionally NO bare "claude" wrapper - explicit account selection is required
+      # Use: claudemax, claudepro, or claudework
 
       (pkgs.writeShellApplication {
         name = "claudemax";
@@ -124,6 +107,21 @@ in
           account = "pro";
           displayName = "Claude Pro Account";
           configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-pro";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
+          };
+        };
+        runtimeInputs = with pkgs; [ procps coreutils claude-code jq ];
+      })
+
+      (pkgs.writeShellApplication {
+        name = "claudework";
+        text = claudeLib.mkClaudeWrapperScript {
+          account = "work";
+          displayName = "Work Code-Companion";
+          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-work";
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";
             CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
