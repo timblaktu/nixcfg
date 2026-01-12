@@ -66,6 +66,7 @@
         ./flake-modules/nixos-configurations.nix
         ./flake-modules/darwin-configurations.nix
         ./flake-modules/home-configurations.nix
+        ./flake-modules/termux-outputs.nix # Termux Claude Code wrapper scripts
         ./flake-modules/tests.nix # All checks and tests consolidated here
         ./flake-modules/github-actions.nix # Configurable GitHub Actions validation
       ];
@@ -73,6 +74,7 @@
       # Support these systems across all modules
       systems = [
         "x86_64-linux"
+        "aarch64-linux"  # For Termux on Android
       ];
 
       # Per-system configuration

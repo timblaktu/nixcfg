@@ -26,7 +26,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | I1 | Implement API options in account submodule | TASK:COMPLETE | 2026-01-11 |
 | I2 | Implement wrapper script generation | TASK:COMPLETE | 2026-01-11 |
 | I3 | Add work account configuration | TASK:COMPLETE | 2026-01-11 |
-| I4 | Create Termux package output | TASK:PENDING | |
+| I4 | Create Termux package output | TASK:COMPLETE | 2026-01-11 |
 | I5 | Store secrets in Bitwarden | TASK:PENDING | |
 | I6 | Test on Nix-managed host | TASK:PENDING | |
 | I7 | Test Termux installation | TASK:PENDING | |
@@ -1680,6 +1680,40 @@ adb push result/bin/* /data/data/com.termux/files/home/bin/
 ./result/bin/install-termux-claude ~/bin
 ```
 
+#### I4 Implementation Summary (2026-01-11)
+
+**Files created/modified**:
+
+1. **Created**: `flake-modules/termux-outputs.nix` - Termux package output module
+   - Uses `claudeLib.mkTermuxWrapperScript` from shared library
+   - Generates wrapper scripts for max, pro, work accounts
+   - Includes `install-termux-claude` installer script
+   - Self-contained account definitions (duplicated from base.nix for standalone builds)
+
+2. **Modified**: `flake.nix`
+   - Added import for `./flake-modules/termux-outputs.nix`
+   - Added `aarch64-linux` to systems list for Termux support
+
+**Package output**:
+- `packages.aarch64-linux.termux-claude-scripts` - Portable scripts package
+
+**Contents**:
+- `bin/claudemax` - Max account wrapper (standard Anthropic API)
+- `bin/claudepro` - Pro account wrapper (standard Anthropic API)
+- `bin/claudework` - Work account wrapper (Code-Companion proxy with bearer auth)
+- `bin/install-termux-claude` - One-command installer for Termux
+
+**Key design decisions**:
+1. Account definitions are duplicated in the module (not extracted from home-manager) to enable standalone package builds without complex flake evaluation
+2. Uses `mkTermuxWrapperScript` from lib.nix for consistent wrapper generation
+3. Termux-specific shebang: `#!/data/data/com.termux/files/usr/bin/bash`
+4. Bearer tokens read from `~/.secrets/claude-<account>-token` (no rbw on Termux)
+
+**Validation**: Requires `nix flake check` on a Nix-managed host. The package can be built with:
+```bash
+nix build .#packages.aarch64-linux.termux-claude-scripts
+```
+
 ---
 
 ### Task I5: Store secrets in Bitwarden
@@ -1966,19 +2000,20 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Tasks I1, I2, and I3 COMPLETE. Implemented:
+Current status: Tasks I1-I4 COMPLETE. Implemented:
   - I1: API options in account submodule (claude-code.nix)
   - I2: Shared wrapper library (home/modules/claude-code/lib.nix) + refactored development.nix
   - I3: Work account configuration in base.nix (max, pro, work with Code-Companion API)
-CRITICAL: Run `nix flake check` to validate I2 and I3 changes (done on Termux, needs Nix validation).
-Next step: Task I4 - Create Termux package output (REQUIRES NIX HOST).
+  - I4: Termux package output (flake-modules/termux-outputs.nix)
+CRITICAL: Run `nix flake check` to validate all changes (done on Termux, needs Nix validation).
+Next step: Task I5 - Store secrets in Bitwarden (manual step, can be done in parallel with I6).
 Key context:
-  - New shared library at home/modules/claude-code/lib.nix
-  - development.nix now uses claudeLib.mkClaudeWrapperScript
-  - Work account configured with Code-Companion proxy (baseUrl, bearer auth, model mappings)
+  - Termux package at packages.aarch64-linux.termux-claude-scripts
+  - aarch64-linux added to systems list in flake.nix
+  - Account definitions duplicated in termux-outputs.nix for standalone builds
   - Migration files (wsl/linux/darwin-home-files.nix) are DISABLED, not used
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): COMPLETE
-  - Phase 2 (I1-I3): COMPLETE (needs Nix validation)
-  - Phase 2 (I4-I9): 6 remaining
+  - Phase 2 (I1-I4): COMPLETE (needs Nix validation)
+  - Phase 2 (I5-I9): 5 remaining
 ```
