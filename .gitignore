@@ -62,7 +62,12 @@ claude-runtime/*/*
 claude-runtime/.claude-*/commands/nixmemory.*
 claude-runtime/.claude-*/commands/usermemory.*
 claude-runtime/.claude-*/commands/globalmemory.*
-claude-runtime/.claude-*/commands/*remember.* 
+claude-runtime/.claude-*/commands/*remember.*
+claude-runtime/.claude-*/commands/next-task.*
+
+# Task automation runtime state
+.claude-task-logs/
+.claude-task-state
 
 # Personal migration instructions (contains sensitive information)
 SECRETS-USER-INSTRUCTIONS.md

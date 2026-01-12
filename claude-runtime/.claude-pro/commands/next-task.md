@@ -1,1 +1,0 @@
-/nix/store/v65qj1k0ayr8bl1r2fh0pgjzw1986fwg-home-manager-files/src/nixcfg/claude-runtime/.claude-pro/commands/next-task.md
