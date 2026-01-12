@@ -29,8 +29,8 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | I4 | Create Termux package output | TASK:COMPLETE | 2026-01-11 |
 | I5 | Store secrets in Bitwarden | TASK:COMPLETE | 2026-01-11 |
 | I6 | Test on Nix-managed host | TASK:BLOCKED | Requires Nix host |
-| I7 | Test Termux installation | TASK:PENDING | |
-| I8 | Add task automation to Nix module | TASK:PENDING | |
+| I7 | Test Termux installation | TASK:BLOCKED | Requires I6 (Nix build) |
+| I8 | Add task automation to Nix module | TASK:COMPLETE | 2026-01-11 |
 | I9 | Add skills support to Nix module | TASK:PENDING | |
 
 ---
@@ -1955,6 +1955,53 @@ in {
 
 **Source**: Adapt from existing `~/bin/run-tasks.sh` and `~/.claude/commands/next-task.md`
 
+#### I8 Implementation Summary (2026-01-11)
+
+**Files created/modified**:
+
+1. **Created**: `home/modules/claude-code/task-automation.nix` - Complete Nix module with:
+   - `taskAutomation.enable` option to enable the feature
+   - `taskAutomation.safetyLimits.*` options:
+     - `maxIterations` (default: 100) - prevents runaway loops
+     - `maxRuntimeHours` (default: 8) - maximum total runtime
+     - `maxConsecutiveRateLimits` (default: 5) - circuit breaker
+     - `rateLimitWaitSeconds` (default: 300) - wait time after rate limit
+     - `maxRetries` (default: 3) - per-task retry limit
+     - `delayBetweenTasks` (default: 10) - seconds between tasks
+   - `taskAutomation.logDirectory` (default: ".claude-task-logs")
+   - `taskAutomation.stateFile` (default: ".claude-task-state")
+   - Generated `run-tasks` script with:
+     - CLI options: -n N, -a/--all, -c/--continuous, -d/--delay, --dry-run
+     - Rate limit detection with circuit breaker
+     - State persistence and logging
+     - TASK:PENDING/TASK:COMPLETE token matching
+     - Uses ripgrep from Nix pkgs (no external dependency)
+   - `/next-task` slash command deployed to each account's commands/ directory
+
+2. **Modified**: `home/modules/claude-code.nix` - Added import for task-automation.nix
+
+**Key design decisions**:
+1. All safety limits are configurable via Nix options (can be customized per-host)
+2. Script uses `${pkgs.ripgrep}/bin/rg` for deterministic tool path
+3. /next-task command uses updated TASK:PENDING/TASK:COMPLETE tokens for consistency
+4. Slash command auto-deploys to all enabled accounts
+
+**Usage** (after enabling in Nix config):
+```nix
+programs.claude-code-enhanced = {
+  enable = true;
+  taskAutomation = {
+    enable = true;
+    safetyLimits = {
+      maxIterations = 50;  # Custom limit
+      maxRuntimeHours = 4; # Custom limit
+    };
+  };
+};
+```
+
+**Validation**: Requires `nix flake check` on a Nix-managed host. Cannot validate on Termux.
+
 ---
 
 ### Task I9: Add skills support to Nix module
@@ -2124,17 +2171,21 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
 
-BLOCKER: Task I6 requires Nix host - cannot run on Termux.
-         Must switch to thinky-nixos, wsl-nixos, or similar to continue.
+BLOCKER: Tasks I6/I7 require Nix host - cannot run on Termux.
+         Must switch to thinky-nixos, wsl-nixos, or similar to continue I6/I7.
 
-Current status: Tasks I1-I5 COMPLETE (code written, needs validation)
+Current status: Tasks I1-I5, I8 COMPLETE (code written, needs validation)
   - I1: API options in account submodule (claude-code.nix)
   - I2: Shared wrapper library (home/modules/claude-code/lib.nix) + refactored development.nix
   - I3: Work account configuration in base.nix (max, pro, work with Code-Companion API)
   - I4: Termux package output (flake-modules/termux-outputs.nix)
   - I5: Secret storage documentation (manual user step)
+  - I8: Task automation Nix module (task-automation.nix) with run-tasks + /next-task
 
-Next step: Task I6 - Test on Nix-managed host
+Next step: Task I9 - Add skills support to Nix module (can be done on Termux)
+  OR: Task I6 - Test on Nix-managed host (requires Nix host)
+
+For I6 (Nix host required):
   Run: nix flake check && home-manager switch --flake .#tim@thinky-nixos
   Test: claudemax --version, claudepro --version, claudework --version
 
@@ -2150,10 +2201,11 @@ Key context:
   - aarch64-linux added to systems list in flake.nix
   - Account definitions duplicated in termux-outputs.nix for standalone builds
   - Migration files (wsl/linux/darwin-home-files.nix) are DISABLED
+  - Task automation module added at home/modules/claude-code/task-automation.nix
 
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): COMPLETE
-  - Phase 2 (I1-I5): COMPLETE (code written, unvalidated)
-  - Phase 2 (I6): BLOCKED - needs Nix host
-  - Phase 2 (I7-I9): 3 remaining after I6
+  - Phase 2 (I1-I5, I8): COMPLETE (code written, unvalidated)
+  - Phase 2 (I6, I7): BLOCKED - needs Nix host
+  - Phase 2 (I9): 1 remaining - can be done on Termux
 ```
