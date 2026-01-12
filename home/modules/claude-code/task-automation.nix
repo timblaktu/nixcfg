@@ -197,6 +197,27 @@ let
           ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
       }
 
+      # Extract task ID/name from the first TASK:PENDING row in the plan file
+      # Looks for patterns like "| R1 |" or "| I7 |" in the row with TASK:PENDING
+      get_next_task_name() {
+          local line
+          line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null) || { echo "unknown"; return; }
+          # Extract task ID from first or second column (handles both "| Task | Name |" and "| R1 | Name |" formats)
+          local task_id
+          task_id=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([A-Za-z0-9_-]\+\)[[:space:]]*|.*/\1/p')
+          if [[ -n "$task_id" && "$task_id" != "Task" ]]; then
+              echo "$task_id"
+          else
+              # Try second column
+              task_id=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
+              if [[ -n "$task_id" ]]; then
+                  echo "$task_id"
+              else
+                  echo "unknown"
+              fi
+          fi
+      }
+
       save_state() {
           local tasks_run=$1
           local status=$2
@@ -285,22 +306,20 @@ let
       }
 
       run_task() {
-          local task_num=$1
+          local iteration=$1
           local rate_limit_count=''${2:-0}
-          local timestamp=$(date +"%Y%m%d_%H%M%S")
-          local log_file="''${LOG_DIR}/task_''${timestamp}.log"
-          local json_log_file="''${LOG_DIR}/task_''${timestamp}.json"
           local pending_before=$(pending_count)
+          local task_name=$(get_next_task_name)
+          local timestamp=$(date +"%Y%m%d_%H%M%S")
+          # Log file naming: LOG_DIR/YYYYMMDD_HHMMSS_TASKNAME.{log,json}
+          # User can tail LOG_DIR/*.log for live output
+          local log_base="''${LOG_DIR}/''${timestamp}_''${task_name}"
 
-          echo -e "\n''${CYAN}----------------------------------------------''${NC}"
-          echo -e "''${GREEN}Task #''${task_num} | $(date '+%Y-%m-%d %H:%M:%S')''${NC}"
-          echo -e "''${YELLOW}Pending: ''${pending_before} | Log: ''${log_file}''${NC}"
-          echo -e "''${CYAN}----------------------------------------------''${NC}\n"
+          # Single-line compact header: [N/total] TASK @ TIME (logs: basename)
+          echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${pending_before} pending)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC}"
 
           if [[ "$DRY_RUN" == true ]]; then
-              echo -e "''${YELLOW}[DRY RUN] Would execute:''${NC}"
-              echo "$CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions \"$PROMPT\""
-              echo -e "''${YELLOW}Log would be: ''${log_file}''${NC}"
+              echo -e "  ''${YELLOW}[DRY RUN] Would execute: $CLAUDE_CMD -p ...''${NC}"
               return 0
           fi
 
@@ -311,18 +330,18 @@ let
           # Capture JSON output to stdout, stderr separately for error analysis
           # Using --output-format json for structured response parsing
           {
-              json_output=$($CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions "$PROMPT" 2>"''${log_file}.stderr")
+              json_output=$($CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions "$PROMPT" 2>"''${log_base}.stderr")
               exit_code=$?
           } || exit_code=$?
 
-          raw_stderr=$(cat "''${log_file}.stderr" 2>/dev/null || echo "")
+          raw_stderr=$(cat "''${log_base}.stderr" 2>/dev/null || echo "")
 
-          # Save both JSON and human-readable logs
-          echo "$json_output" > "$json_log_file"
+          # Save JSON output
+          echo "$json_output" > "''${log_base}.json"
 
           # Create human-readable log with result text
           {
-              echo "=== Task #''${task_num} - $(date '+%Y-%m-%d %H:%M:%S') ==="
+              echo "=== ''${task_name} - $(date '+%Y-%m-%d %H:%M:%S') ==="
               echo "Exit code: $exit_code"
               echo ""
               if [[ -n "$json_output" ]]; then
@@ -334,7 +353,7 @@ let
                   echo "=== Stderr ==="
                   echo "$raw_stderr"
               fi
-          } > "$log_file"
+          } > "''${log_base}.log"
 
           # Parse JSON response
           parse_claude_json "$json_output"
@@ -342,38 +361,38 @@ let
           # PRIORITY 1: Check for startup/configuration errors (non-zero exit before JSON)
           # These indicate Claude couldn't even start properly
           if [[ $exit_code -ne 0 && "$json_type" == "parse_error" ]]; then
-              echo -e "\n''${RED}Claude failed to start (exit: $exit_code)''${NC}"
+              echo -e "  ''${RED}✗ ''${task_name}: Claude failed to start (exit: $exit_code)''${NC}"
               if [[ -n "$raw_stderr" ]]; then
-                  echo -e "''${RED}Error: $(echo "$raw_stderr" | head -3)''${NC}"
+                  echo -e "    ''${RED}$(echo "$raw_stderr" | head -1)''${NC}"
               fi
 
               # Check if it's a rate limit at the API level
               if is_rate_limited "$json_output" "$raw_stderr"; then
                   local next_attempt=$((rate_limit_count + 1))
-                  echo -e "\n''${YELLOW}Rate limit detected (attempt ''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}). Waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
-                  save_state "$task_num" "rate_limited" "$pending_before"
+                  echo -e "  ''${YELLOW}⏳ Rate limited (''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}), waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
+                  save_state "$iteration" "rate_limited" "$pending_before"
                   sleep $RATE_LIMIT_WAIT
                   return 2
               fi
 
-              save_state "$task_num" "startup_error" "$pending_before"
+              save_state "$iteration" "startup_error" "$pending_before"
               return 1
           fi
 
           # PRIORITY 2: Check JSON is_error field (most reliable for API errors)
           if [[ "$json_is_error" == "true" ]]; then
-              echo -e "\n''${RED}Claude reported error: $json_subtype''${NC}"
+              echo -e "  ''${RED}✗ ''${task_name}: API error ($json_subtype)''${NC}"
 
               # Check for rate limiting via structured fields
               if is_rate_limited "$json_output" "$raw_stderr"; then
                   local next_attempt=$((rate_limit_count + 1))
-                  echo -e "\n''${YELLOW}Rate limit detected (attempt ''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}). Waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
-                  save_state "$task_num" "rate_limited" "$pending_before"
+                  echo -e "  ''${YELLOW}⏳ Rate limited (''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}), waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
+                  save_state "$iteration" "rate_limited" "$pending_before"
                   sleep $RATE_LIMIT_WAIT
                   return 2
               fi
 
-              save_state "$task_num" "api_error_$json_subtype" "$pending_before"
+              save_state "$iteration" "api_error_$json_subtype" "$pending_before"
               return 1
           fi
 
@@ -382,8 +401,8 @@ let
 
           # Environment not capable - skip this task, leave PENDING for another host
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q "ENVIRONMENT_NOT_CAPABLE"; then
-              echo -e "\n''${YELLOW}Task cannot run on this host - leaving PENDING for another host''${NC}"
-              save_state "$task_num" "environment_not_capable" "$pending_before"
+              echo -e "  ''${YELLOW}⊘ ''${task_name}: requires different host''${NC}"
+              save_state "$iteration" "environment_not_capable" "$pending_before"
               return 5
           fi
 
@@ -391,8 +410,8 @@ let
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q "ALL_TASKS_DONE"; then
               local pending_after=$(pending_count)
               if [[ "$pending_after" == "0" ]]; then
-                  echo -e "\n''${GREEN}Claude confirms all tasks complete''${NC}"
-                  save_state "$task_num" "all_complete" "$pending_after"
+                  echo -e "  ''${GREEN}✓ All tasks complete''${NC}"
+                  save_state "$iteration" "all_complete" "$pending_after"
                   return 3
               fi
           fi
@@ -400,22 +419,22 @@ let
           # PRIORITY 4: Success path - exit code 0 and type is "result" with subtype "success"
           if [[ $exit_code -eq 0 && "$json_type" == "result" && "$json_subtype" == "success" ]]; then
               local pending_after=$(pending_count)
-              echo -e "\n''${GREEN}Task #''${task_num} complete (pending: ''${pending_before} -> ''${pending_after})''${NC}"
-              save_state "$task_num" "complete" "$pending_after"
+              echo -e "  ''${GREEN}✓ ''${task_name} complete''${NC} (''${pending_before} → ''${pending_after} pending)"
+              save_state "$iteration" "complete" "$pending_after"
               return 0
           fi
 
           # PRIORITY 5: Non-zero exit code with valid JSON (task execution failed)
           if [[ $exit_code -ne 0 ]]; then
-              echo -e "\n''${RED}Task #''${task_num} failed (exit: $exit_code, type: $json_type, subtype: $json_subtype)''${NC}"
-              save_state "$task_num" "failed" "$pending_before"
+              echo -e "  ''${RED}✗ ''${task_name} failed''${NC} (exit: $exit_code)"
+              save_state "$iteration" "failed" "$pending_before"
               return 1
           fi
 
           # FALLBACK: Unexpected state - treat as success if we got here with exit 0
           local pending_after=$(pending_count)
-          echo -e "\n''${YELLOW}Task #''${task_num} completed with unexpected response format''${NC}"
-          save_state "$task_num" "complete_unexpected" "$pending_after"
+          echo -e "  ''${YELLOW}? ''${task_name} completed (unexpected format)''${NC}"
+          save_state "$iteration" "complete_unexpected" "$pending_after"
           return 0
       }
 
