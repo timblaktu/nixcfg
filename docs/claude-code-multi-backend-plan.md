@@ -17,7 +17,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | R3 | Document run-tasks.sh for Nix module adaptation | TASK:COMPLETE | 2026-01-11 |
 | R4 | Document skills structure for Nix module adaptation | TASK:COMPLETE | 2026-01-11 |
 | R5 | Draft complete API options Nix code | TASK:COMPLETE | 2026-01-11 |
-| R6 | Draft complete wrapper script Nix code | TASK:PENDING | |
+| R6 | Draft complete wrapper script Nix code | TASK:COMPLETE | 2026-01-11 |
 
 ### Phase 2: Implementation (Requires Nix Host)
 
@@ -168,14 +168,14 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 **Output**: Complete Nix code block in "R6 Draft Code" section below.
 
 **Definition of Done** (ALL must be true):
-- [ ] R6 Draft Code contains a complete `mkClaudeWrapperScript` function in valid Nix syntax
-- [ ] R6 Draft Code handles `api.baseUrl` by conditionally setting ANTHROPIC_BASE_URL
-- [ ] R6 Draft Code handles `api.authMethod == "bearer"` by retrieving token via rbw
-- [ ] R6 Draft Code handles `api.disableApiKey` by conditionally setting ANTHROPIC_API_KEY=""
-- [ ] R6 Draft Code handles `api.modelMappings` by setting ANTHROPIC_DEFAULT_*_MODEL env vars
-- [ ] R6 Draft Code handles `extraEnvVars` by iterating and exporting each
-- [ ] R6 Draft Code includes comment indicating where to place this shared function
-- [ ] R6 Draft Code placeholder text `*(Task R6 will populate this section)*` is replaced
+- [x] R6 Draft Code contains a complete `mkClaudeWrapperScript` function in valid Nix syntax
+- [x] R6 Draft Code handles `api.baseUrl` by conditionally setting ANTHROPIC_BASE_URL
+- [x] R6 Draft Code handles `api.authMethod == "bearer"` by retrieving token via rbw
+- [x] R6 Draft Code handles `api.disableApiKey` by conditionally setting ANTHROPIC_API_KEY=""
+- [x] R6 Draft Code handles `api.modelMappings` by setting ANTHROPIC_DEFAULT_*_MODEL env vars
+- [x] R6 Draft Code handles `extraEnvVars` by iterating and exporting each
+- [x] R6 Draft Code includes comment indicating where to place this shared function
+- [x] R6 Draft Code placeholder text `*(Task R6 will populate this section)*` is replaced
 
 ---
 
@@ -916,7 +916,379 @@ The Nix code above:
 
 ### R6 Draft Code
 
-*(Task R6 will populate this section)*
+#### Shared Wrapper Library
+
+This code should be placed in a new shared library file to avoid duplication across platform files.
+
+```nix
+# Location: home/modules/claude-code/lib.nix
+# Purpose: Shared library functions for Claude Code wrapper generation
+# Usage: Import in platform files: let claudeLib = import ../modules/claude-code/lib.nix { inherit lib pkgs; };
+
+{ lib, pkgs }:
+
+{
+  # Generate a Claude Code wrapper script for an account
+  # Handles API proxy configuration, authentication, and environment setup
+  mkClaudeWrapperScript = {
+    # Required parameters
+    account,           # Account name (e.g., "max", "pro", "work")
+    displayName,       # Human-readable name for messages
+    configDir,         # Path to account config directory
+    claudeBin,         # Path to claude binary (allows overriding for Termux)
+
+    # Optional API configuration (from account.api options)
+    api ? {},
+
+    # Optional secrets configuration (from account.secrets options)
+    secrets ? {},
+
+    # Optional extra environment variables (from account.extraEnvVars)
+    extraEnvVars ? {}
+  }:
+  let
+    # Extract API options with defaults
+    baseUrl = api.baseUrl or null;
+    authMethod = api.authMethod or "api-key";
+    disableApiKey = api.disableApiKey or false;
+    modelMappings = api.modelMappings or {};
+
+    # Extract secrets options
+    bearerToken = secrets.bearerToken or null;
+
+    # Generate API environment variable exports
+    apiEnvVars = lib.concatStringsSep "\n" (lib.filter (s: s != "") [
+      # ANTHROPIC_BASE_URL - set if custom baseUrl specified
+      (lib.optionalString (baseUrl != null) ''
+        export ANTHROPIC_BASE_URL="${baseUrl}"'')
+
+      # ANTHROPIC_API_KEY - set to empty string if disableApiKey is true
+      (lib.optionalString disableApiKey ''
+        export ANTHROPIC_API_KEY=""'')
+
+      # ANTHROPIC_AUTH_TOKEN - retrieve via rbw if bearer auth + bitwarden configured
+      (lib.optionalString (authMethod == "bearer" && bearerToken != null && bearerToken.bitwarden or null != null) ''
+        # Retrieve bearer token from Bitwarden via rbw
+        if command -v rbw >/dev/null 2>&1; then
+          ANTHROPIC_AUTH_TOKEN="$(rbw get "${bearerToken.bitwarden.item}" "${bearerToken.bitwarden.field}" 2>/dev/null)" || {
+            echo "⚠️  Warning: Failed to retrieve bearer token from Bitwarden" >&2
+            echo "   Item: ${bearerToken.bitwarden.item}, Field: ${bearerToken.bitwarden.field}" >&2
+          }
+          export ANTHROPIC_AUTH_TOKEN
+        else
+          # Fallback for systems without rbw (e.g., Termux)
+          if [[ -f "$HOME/.secrets/claude-${account}-token" ]]; then
+            export ANTHROPIC_AUTH_TOKEN="$(cat "$HOME/.secrets/claude-${account}-token")"
+          else
+            echo "⚠️  Warning: Bearer token not found" >&2
+            echo "   Expected: ~/.secrets/claude-${account}-token (or rbw configured)" >&2
+          fi
+        fi'')
+    ]);
+
+    # Generate model mapping environment variables
+    # Maps: sonnet -> ANTHROPIC_DEFAULT_SONNET_MODEL, etc.
+    modelEnvVars = lib.concatStringsSep "\n" (lib.mapAttrsToList (model: mapping: ''
+      export ANTHROPIC_DEFAULT_${lib.toUpper model}_MODEL="${mapping}"'') modelMappings);
+
+    # Generate extra environment variable exports
+    extraEnvExports = lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: ''
+      export ${k}="${v}"'') extraEnvVars);
+
+    # Combined environment setup block
+    envSetupBlock = lib.concatStringsSep "\n" (lib.filter (s: s != "") [
+      apiEnvVars
+      modelEnvVars
+      extraEnvExports
+    ]);
+
+  in ''
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    account="${account}"
+    config_dir="${configDir}"
+    pidfile="/tmp/claude-''${account}.pid"
+
+    # ─── Environment Setup ───────────────────────────────────────────
+    setup_environment() {
+      export CLAUDE_CONFIG_DIR="$config_dir"
+      ${envSetupBlock}
+    }
+
+    # ─── Headless Mode Detection ─────────────────────────────────────
+    # Bypass PID check for stateless operations (-p/--print)
+    if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
+      setup_environment
+      exec "${claudeBin}" "$@"
+    fi
+
+    # ─── Existing Instance Detection ─────────────────────────────────
+    # Check if Claude is already running with this config directory
+    if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
+      exec "${claudeBin}" --config-dir="$config_dir" "$@"
+    fi
+
+    # ─── PID-Based Single Instance Management ────────────────────────
+    if [[ -f "$pidfile" ]]; then
+      pid=$(cat "$pidfile")
+      if kill -0 "$pid" 2>/dev/null; then
+        echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
+        echo "   Using existing instance..."
+        exec "${claudeBin}" --config-dir="$config_dir" "$@"
+      else
+        echo "🧹 Cleaning up stale PID file..."
+        rm -f "$pidfile"
+      fi
+    fi
+
+    # ─── Launch New Instance ─────────────────────────────────────────
+    echo "🚀 Launching Claude (${displayName})..."
+    setup_environment
+
+    # Create config directory if it doesn't exist
+    mkdir -p "$config_dir"
+
+    # Store PID and execute
+    echo $$ > "$pidfile"
+    exec "${claudeBin}" --config-dir="$config_dir" "$@"
+  '';
+
+  # Generate a Termux-specific wrapper (simpler, no rbw dependency)
+  mkTermuxWrapperScript = {
+    account,
+    displayName,
+    api ? {},
+    extraEnvVars ? {}
+  }:
+  let
+    baseUrl = api.baseUrl or null;
+    authMethod = api.authMethod or "api-key";
+    disableApiKey = api.disableApiKey or false;
+    modelMappings = api.modelMappings or {};
+  in ''
+    #!/data/data/com.termux/files/usr/bin/bash
+    set -euo pipefail
+
+    # ─── API Configuration ───────────────────────────────────────────
+    ${lib.optionalString (baseUrl != null) ''
+    export ANTHROPIC_BASE_URL="${baseUrl}"
+    ''}
+    ${lib.optionalString disableApiKey ''
+    export ANTHROPIC_API_KEY=""
+    ''}
+    ${lib.optionalString (authMethod == "bearer") ''
+    # Bearer token - read from local secrets file on Termux
+    TOKEN_FILE="$HOME/.secrets/claude-${account}-token"
+    if [[ -f "$TOKEN_FILE" ]]; then
+      export ANTHROPIC_AUTH_TOKEN="$(cat "$TOKEN_FILE")"
+    else
+      echo "⚠️  Warning: Bearer token not found at $TOKEN_FILE" >&2
+      echo "   Create it with: mkdir -p ~/.secrets && echo 'your-token' > $TOKEN_FILE" >&2
+    fi
+    ''}
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (model: mapping: ''
+    export ANTHROPIC_DEFAULT_${lib.toUpper model}_MODEL="${mapping}"
+    '') modelMappings)}
+
+    # ─── Extra Environment Variables ─────────────────────────────────
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: ''
+    export ${k}="${v}"
+    '') extraEnvVars)}
+
+    # ─── Config Directory ────────────────────────────────────────────
+    export CLAUDE_CONFIG_DIR="$HOME/.claude-${account}"
+    mkdir -p "$CLAUDE_CONFIG_DIR"
+
+    # ─── Launch Claude ───────────────────────────────────────────────
+    exec claude "$@"
+  '';
+}
+```
+
+#### Usage in Platform Files
+
+Replace the duplicated `mkClaudeWrapperScript` definitions in each platform file with imports from the shared library:
+
+```nix
+# Location: home/migration/wsl-home-files.nix (and linux-home-files.nix, darwin-home-files.nix)
+# Replace the inline mkClaudeWrapperScript definitions with:
+
+{ config, lib, pkgs, ... }:
+
+let
+  # Import shared Claude Code library
+  claudeLib = import ../modules/claude-code/lib.nix { inherit lib pkgs; };
+
+  # Reference to claude-code config
+  cfg = config.programs.claude-code-enhanced;
+
+  # Generate wrapper for an account
+  mkAccountWrapper = name: account: mkUnifiedFile {
+    name = "claude${name}";
+    executable = true;
+    content = claudeLib.mkClaudeWrapperScript {
+      account = name;
+      displayName = account.displayName;
+      configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-${name}";
+      claudeBin = "${pkgs.claude-code}/bin/claude";
+      api = account.api or {};
+      secrets = account.secrets or {};
+      extraEnvVars = account.extraEnvVars or {};
+    };
+    tests = {
+      help = pkgs.writeShellScript "test-claude${name}-help" ''
+        claude${name} --help >/dev/null 2>&1 || true
+        echo "✅ claude${name}: Syntax validation passed"
+      '';
+    };
+  };
+
+in {
+  # ... other config ...
+
+  home.file = {
+    # Dynamic wrapper generation from account options
+    # (This replaces the hardcoded claudemax/claudepro definitions)
+  } // (lib.mapAttrs' (name: account:
+    lib.nameValuePair "bin/claude${name}" (mkAccountWrapper name account)
+  ) (lib.filterAttrs (n: a: a.enable) cfg.accounts));
+}
+```
+
+#### Termux Package Generation
+
+```nix
+# Location: flake-modules/termux-outputs.nix
+# Generate Termux wrappers from account configuration
+
+{ inputs, self, lib, withSystem, ... }: {
+  flake = {
+    packages.aarch64-linux.termux-claude-scripts = withSystem "aarch64-linux" ({ pkgs, ... }:
+      let
+        # Import shared library
+        claudeLib = import ../home/modules/claude-code/lib.nix { inherit lib pkgs; };
+
+        # Reference home config for account definitions
+        # Note: We extract account config without requiring full home-manager evaluation
+        accounts = {
+          max = {
+            enable = true;
+            displayName = "Claude Max Account";
+            api = {};
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
+          };
+          pro = {
+            enable = true;
+            displayName = "Claude Pro Account";
+            api = {};
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
+          };
+          work = {
+            enable = true;
+            displayName = "Work Code-Companion";
+            api = {
+              baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+              authMethod = "bearer";
+              disableApiKey = true;
+              modelMappings = {
+                sonnet = "devstral";
+                opus = "devstral";
+                haiku = "qwen-a3b";
+              };
+            };
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
+          };
+        };
+
+        # Generate Termux wrapper for each enabled account
+        mkTermuxWrapper = name: account: pkgs.writeShellScriptBin "claude${name}"
+          (claudeLib.mkTermuxWrapperScript {
+            inherit (account) displayName;
+            account = name;
+            api = account.api or {};
+            extraEnvVars = account.extraEnvVars or {};
+          });
+
+        wrapperScripts = lib.mapAttrs mkTermuxWrapper
+          (lib.filterAttrs (n: a: a.enable) accounts);
+
+        # Install script for Termux
+        installScript = pkgs.writeShellScriptBin "install-termux-claude" ''
+          #!/data/data/com.termux/files/usr/bin/bash
+          set -euo pipefail
+
+          INSTALL_DIR="''${1:-$HOME/bin}"
+          mkdir -p "$INSTALL_DIR"
+
+          echo "Installing Claude Code account wrappers to $INSTALL_DIR..."
+
+          ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: script: ''
+          cp "${script}/bin/claude${name}" "$INSTALL_DIR/"
+          chmod +x "$INSTALL_DIR/claude${name}"
+          echo "  ✅ Installed: claude${name}"
+          '') wrapperScripts)}
+
+          echo ""
+          echo "Installation complete!"
+          echo ""
+          echo "Usage:"
+          ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: account: ''
+          echo "  claude${name} - ${account.displayName}"
+          '') (lib.filterAttrs (n: a: a.enable) accounts))}
+          echo ""
+          echo "For accounts using bearer auth, store token at:"
+          echo "  ~/.secrets/claude-<account>-token"
+        '';
+
+      in pkgs.symlinkJoin {
+        name = "termux-claude-scripts";
+        paths = (lib.attrValues wrapperScripts) ++ [ installScript ];
+      }
+    );
+  };
+}
+```
+
+#### Environment Variables Generated
+
+The wrapper script generates these environment variables based on account options:
+
+| Account Option | Environment Variable | Condition |
+|----------------|---------------------|-----------|
+| `api.baseUrl` | `ANTHROPIC_BASE_URL` | When `baseUrl != null` |
+| `api.disableApiKey` | `ANTHROPIC_API_KEY=""` | When `disableApiKey == true` |
+| `api.authMethod == "bearer"` | `ANTHROPIC_AUTH_TOKEN` | Retrieved via rbw (Nix) or file (Termux) |
+| `api.modelMappings.sonnet` | `ANTHROPIC_DEFAULT_SONNET_MODEL` | For each mapping entry |
+| `api.modelMappings.opus` | `ANTHROPIC_DEFAULT_OPUS_MODEL` | For each mapping entry |
+| `api.modelMappings.haiku` | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | For each mapping entry |
+| `extraEnvVars.<name>` | `<NAME>` | For each extra env var |
+
+#### Key Design Decisions
+
+1. **Shared Library**: Extracted `mkClaudeWrapperScript` to `home/modules/claude-code/lib.nix` to eliminate duplication across 3 platform files.
+
+2. **Graceful Fallbacks**: Bearer token retrieval tries rbw first, falls back to file-based secrets for systems without Bitwarden.
+
+3. **Two Functions**:
+   - `mkClaudeWrapperScript`: Full-featured for Nix-managed hosts (PID management, instance detection)
+   - `mkTermuxWrapperScript`: Simplified for Termux (no rbw, simpler shell)
+
+4. **Dynamic Generation**: Wrappers generated from `cfg.accounts` rather than hardcoded, making it easy to add new accounts.
+
+5. **Validation-Friendly**: Code structure allows `nix flake check` to catch errors before deployment.
 
 ---
 
@@ -1527,11 +1899,13 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Task R5 complete - drafted complete API options Nix code including accounts submodule with api.baseUrl, api.authMethod, api.disableApiKey, api.modelMappings, secrets.bearerToken.bitwarden, and extraEnvVars options.
-Next step: Start Task R6 - Draft complete wrapper script Nix code.
-Key context: Use R2 findings to draft mkClaudeWrapperScript function that handles API options, bearer auth via rbw, model mappings, and extraEnvVars.
-Verification: R6 Draft Code section contains valid Nix function handling all API options.
+Current status: PHASE 1 COMPLETE - All research tasks (R1-R6) finished. Drafted complete Nix code for:
+  - API options (R5): accounts submodule with api.baseUrl, api.authMethod, api.disableApiKey, api.modelMappings, secrets.bearerToken.bitwarden
+  - Wrapper scripts (R6): mkClaudeWrapperScript + mkTermuxWrapperScript functions in shared lib.nix
+Next step: Start Task I1 - Implement API options in account submodule (REQUIRES NIX HOST).
+Key context: R5/R6 Draft Code sections contain copy-paste ready Nix code. Implementation phase must run on Nix-managed host (not Termux).
+Verification: Run `nix flake check` after each implementation task.
 Total tasks: 15 (6 research + 9 implementation)
-  - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux (5 complete, 1 remaining)
-  - Phase 2 (I1-I9): Implementation tasks - require Nix host
+  - Phase 1 (R1-R6): Research tasks - COMPLETE
+  - Phase 2 (I1-I9): Implementation tasks - 9 remaining, require Nix host
 ```
