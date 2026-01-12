@@ -28,7 +28,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | I3 | Add work account configuration | TASK:COMPLETE | 2026-01-11 |
 | I4 | Create Termux package output | TASK:COMPLETE | 2026-01-11 |
 | I5 | Store secrets in Bitwarden | TASK:COMPLETE | 2026-01-11 |
-| I6 | Test on Nix-managed host | TASK:PENDING | |
+| I6 | Test on Nix-managed host | TASK:BLOCKED | Requires Nix host |
 | I7 | Test Termux installation | TASK:PENDING | |
 | I8 | Add task automation to Nix module | TASK:PENDING | |
 | I9 | Add skills support to Nix module | TASK:PENDING | |
