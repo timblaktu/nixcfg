@@ -3,7 +3,7 @@
 ## ⚠️ CRITICAL RULES ⚠️
 - **MANDATORY RESPONSE ENDING**: EVERY response MUST end with a ready-to-paste prompt for the next session after context is cleared. NO EXCEPTIONS.
 - NEVER clutter this user-global CLAUDE.md file with project- or session-specific content, e.g. tasks, status, etc
-- **NO AI attribution in commit messages** - they should appear human-authored
+- **NEVER include AI attribution in commit messages** - NO "Generated with Claude Code", NO "Co-Authored-By: Claude", NO emoji robots, NO links to claude.com. Commit messages must appear entirely human-authored.
 - **Commit messages focus on technical content** - describe what changed and why
 - ALWAYS use the following date/time stamp format for time annotations: `date +%Y-%m-%d\ %H:%M:%S\ %Z`
 - ALWAYS use rg and fd commands with Bash tool for file searching (never grep/find or Search/Find tools)
