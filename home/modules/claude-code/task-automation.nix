@@ -171,16 +171,22 @@ let
         ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
     }
 
+    blocked_count() {
+        ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:BLOCKED\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
+    }
+
     save_state() {
         local tasks_run=$1
         local status=$2
         local pending_now=''${3:-$(pending_count)}
+        local blocked_now=$(blocked_count)
         local runtime=$(($(date +%s) - START_TIME))
         cat > "$STATE_FILE" << EOF
     LAST_RUN=$(date -Iseconds)
     TASKS_RUN=$tasks_run
     STATUS=$status
     PENDING_NOW=$pending_now
+    BLOCKED_NOW=$blocked_now
     RUNTIME_SECONDS=$runtime
     PLAN_FILE=$PLAN_FILE_ABS
     EOF
@@ -204,6 +210,7 @@ let
         local reason=$1
         local tasks_run=$2
         local pending=$3
+        local blocked=$(blocked_count)
         local runtime=$(($(date +%s) - START_TIME))
         local runtime_fmt=$(format_runtime $runtime)
 
@@ -212,10 +219,17 @@ let
         echo -e "''${CYAN}  Session Summary''${NC}"
         echo -e "''${CYAN}===============================================''${NC}"
         echo -e "  Reason:    ''${reason}"
-        echo -e "  Tasks:     ''${tasks_run} completed, ''${pending} pending"
+        if [[ "$blocked" -gt 0 ]]; then
+            echo -e "  Tasks:     ''${tasks_run} completed, ''${pending} pending, ''${YELLOW}''${blocked} blocked''${NC}"
+        else
+            echo -e "  Tasks:     ''${tasks_run} completed, ''${pending} pending"
+        fi
         echo -e "  Runtime:   ''${runtime_fmt}"
         echo -e "  Logs:      ''${LOG_DIR}/"
         echo -e "''${CYAN}===============================================''${NC}"
+        if [[ "$blocked" -gt 0 ]]; then
+            echo -e "''${YELLOW}Note: ''${blocked} task(s) are BLOCKED and require manual intervention''${NC}"
+        fi
     }
 
     run_task() {
@@ -268,6 +282,13 @@ let
             return 2
         fi
 
+        # Permission issue - Claude is asking for write permission
+        if echo "$output" | ${pkgs.ripgrep}/bin/rg -qi "need.*permission|waiting.*permission|grant.*permission|approve.*permission"; then
+            echo -e "\n''${YELLOW}Permission required - user interaction needed, skipping''${NC}"
+            save_state "$task_num" "permission_required" "$pending_before"
+            return 4
+        fi
+
         # Other failure
         echo -e "\n''${RED}Task #''${task_num} failed (exit: $exit_code)''${NC}"
         save_state "$task_num" "failed" "$pending_before"
@@ -294,7 +315,11 @@ let
 
     # Pre-flight validation
     if [[ "$INITIAL_PENDING" == "0" ]]; then
+        blocked=$(blocked_count)
         echo -e "''${GREEN}No pending tasks found. Nothing to do.''${NC}"
+        if [[ "$blocked" -gt 0 ]]; then
+            echo -e "''${YELLOW}Note: ''${blocked} task(s) are BLOCKED and require manual intervention''${NC}"
+        fi
         save_state "0" "no_pending" "0"
         exit 0
     fi
@@ -391,6 +416,13 @@ let
             3)  # All complete
                 print_exit_summary "All tasks completed (confirmed by Claude)" "$task_counter" "0"
                 exit 0
+                ;;
+            4)  # Permission required - user interaction needed
+                task_counter=$((task_counter - 1))  # Don't count as attempt
+                pending_now=$(pending_count)
+                print_exit_summary "Stopped: Claude requires write permission" "$task_counter" "$pending_now"
+                save_state "$task_counter" "permission_required"
+                exit 1
                 ;;
             *)  # Failure
                 retries=0
