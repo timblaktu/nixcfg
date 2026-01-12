@@ -15,7 +15,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | R1 | Document current account submodule structure | TASK:COMPLETE | 2026-01-11 |
 | R2 | Document wrapper script generation across platforms | TASK:COMPLETE | 2026-01-11 |
 | R3 | Document run-tasks.sh for Nix module adaptation | TASK:COMPLETE | 2026-01-11 |
-| R4 | Document skills structure for Nix module adaptation | TASK:PENDING | |
+| R4 | Document skills structure for Nix module adaptation | TASK:COMPLETE | 2026-01-11 |
 | R5 | Draft complete API options Nix code | TASK:PENDING | |
 | R6 | Draft complete wrapper script Nix code | TASK:PENDING | |
 
@@ -116,11 +116,11 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 **Output**: Document in "R4 Findings" section below.
 
 **Definition of Done** (ALL must be true):
-- [ ] R4 Findings contains "Directory Structure" subsection showing the file tree of ~/.claude/skills/
-- [ ] R4 Findings contains "SKILL.md Format" subsection with an example or template of the format
-- [ ] R4 Findings contains "Supporting Files" subsection listing other files (REFERENCE.md, etc.) and their purpose
-- [ ] R4 Findings contains "Built-in Skills" subsection listing which skills should ship with the Nix module
-- [ ] R4 Findings placeholder text `*(Task R4 will populate this section)*` is replaced
+- [x] R4 Findings contains "Directory Structure" subsection showing the file tree of ~/.claude/skills/
+- [x] R4 Findings contains "SKILL.md Format" subsection with an example or template of the format
+- [x] R4 Findings contains "Supporting Files" subsection listing other files (REFERENCE.md, etc.) and their purpose
+- [x] R4 Findings contains "Built-in Skills" subsection listing which skills should ship with the Nix module
+- [x] R4 Findings placeholder text `*(Task R4 will populate this section)*` is replaced
 
 ---
 
@@ -531,7 +531,159 @@ If no pending tasks remain, state "All tasks complete!"
 
 ### R4 Findings
 
-*(Task R4 will populate this section)*
+#### Directory Structure
+
+```
+~/.claude/skills/
+└── adr-writer/
+    ├── SKILL.md      # Main skill definition (required)
+    └── REFERENCE.md  # Supporting documentation (optional)
+```
+
+Skills are organized as directories under `~/.claude/skills/`. Each skill directory must contain a `SKILL.md` file and may include supporting files like `REFERENCE.md`.
+
+#### SKILL.md Format
+
+The `SKILL.md` file uses YAML frontmatter followed by markdown content:
+
+```markdown
+---
+name: <skill-id>
+description: <description for skill discovery and triggering>
+---
+
+# [Skill Title]
+
+## [Template/Instructions Section]
+
+[The main content that Claude uses when the skill is invoked]
+
+## Instructions
+
+[Step-by-step usage guidance]
+
+## Best Practices
+
+[Guidelines for effective use]
+
+...additional sections as needed...
+```
+
+**Frontmatter Fields**:
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Skill identifier (lowercase, hyphenated) |
+| `description` | Yes | Used by Claude to determine when to invoke the skill |
+
+**Content Sections** (vary by skill type):
+- Template sections with code blocks for copy-paste content
+- Instructions for step-by-step usage
+- Best practices and guidelines
+- Links to supporting files via relative paths `[REFERENCE.md](REFERENCE.md)`
+
+#### Supporting Files
+
+**REFERENCE.md** (optional):
+- Extended documentation too long for SKILL.md
+- Deep-dive explanations, examples, alternatives
+- Referenced from SKILL.md via markdown links
+- Example: ADR criteria definitions, writing guidelines, naming conventions
+
+**Other possible supporting files**:
+| File | Purpose |
+|------|---------|
+| `REFERENCE.md` | Extended reference documentation |
+| `EXAMPLES.md` | Example usage and outputs |
+| `templates/*.md` | Reusable template files |
+| `*.json` | Configuration or schema files |
+
+#### Built-in Skills
+
+Skills to ship with the Nix module:
+
+| Skill | Files | Purpose | Priority |
+|-------|-------|---------|----------|
+| `adr-writer` | `SKILL.md`, `REFERENCE.md` | Write Architecture Decision Records | High - already exists |
+
+**Potential future built-in skills**:
+
+| Skill | Purpose | Status |
+|-------|---------|--------|
+| `commit-message` | Generate conventional commit messages | Could extract from existing claude-utils.bash |
+| `pr-description` | Generate PR descriptions | Common workflow |
+| `code-review` | Structured code review guidance | Common workflow |
+| `nix-module` | Write Nix modules following best practices | Project-specific but useful |
+
+**Recommendation**: Start with `adr-writer` as the only built-in, allow users to define custom skills via Nix options.
+
+#### Nix Module Adaptation Notes
+
+**Skill Option Structure**:
+
+```nix
+skills = {
+  enable = mkEnableOption "Claude Code skills";
+
+  builtins = {
+    adr-writer = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable ADR writing skill";
+    };
+  };
+
+  custom = mkOption {
+    type = types.attrsOf (types.submodule {
+      options = {
+        description = mkOption {
+          type = types.str;
+          description = "Skill description for discovery";
+        };
+        skillContent = mkOption {
+          type = types.str;
+          description = "SKILL.md content (without frontmatter - generated)";
+        };
+        referenceContent = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Optional REFERENCE.md content";
+        };
+        extraFiles = mkOption {
+          type = types.attrsOf types.str;
+          default = {};
+          description = "Additional files as name -> content attrset";
+        };
+      };
+    });
+    default = {};
+    description = "Custom skill definitions";
+  };
+};
+```
+
+**Deployment**:
+- Deploy skills to each account's `skills/` directory
+- Generate SKILL.md with proper frontmatter from options
+- Copy supporting files alongside
+- For Termux package: include skills in `share/claude-skills/`
+
+**File Generation Example**:
+
+```nix
+# Generate SKILL.md with frontmatter
+mkSkillFile = name: skill: ''
+  ---
+  name: ${name}
+  description: ${skill.description}
+  ---
+
+  ${skill.skillContent}
+'';
+
+# Deploy to account directory
+"claude-runtime/.claude-${accountName}/skills/${skillName}/SKILL.md".text =
+  mkSkillFile skillName skill;
+```
 
 ---
 
@@ -1154,10 +1306,10 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Task R3 complete - documented run-tasks.sh script with CLI options, dependencies, safety limits, and Nix adaptation notes.
-Next step: Start Task R4 - Document skills structure for Nix module adaptation.
-Key context: Read ~/.claude/skills/ directory and SKILL.md format for skills documentation.
-Verification: R4 Findings section is populated with directory structure, SKILL.md format, and built-in skills.
+Current status: Task R4 complete - documented skills structure including SKILL.md format with YAML frontmatter, supporting files, and Nix module adaptation notes.
+Next step: Start Task R5 - Draft complete API options Nix code.
+Key context: Use R1 findings to draft complete Nix code for API options (baseUrl, authMethod, disableApiKey, modelMappings, secrets, extraEnvVars).
+Verification: R5 Draft Code section contains valid Nix syntax for all API options.
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux
   - Phase 2 (I1-I9): Implementation tasks - require Nix host
