@@ -28,6 +28,11 @@ let
     say "ENVIRONMENT_NOT_CAPABLE" and explain briefly. Do NOT mark the task complete -
     leave it PENDING for another host to pick up.
 
+    CRITICAL: Do NOT invent "alternative approaches" or workarounds to tasks.
+    If a task has prerequisites that aren't met (e.g., "test the Nix-generated package"
+    but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE.
+    Complete the task as defined or mark it not capable - no workarounds.
+
     After completing the task, provide a summary:
 
     ## Task Completed
@@ -169,7 +174,7 @@ let
     mkdir -p "$LOG_DIR"
 
     # Build the prompt
-    PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, say 'ALL_TASKS_DONE'. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), say 'ENVIRONMENT_NOT_CAPABLE' and explain briefly. Do NOT mark the task complete - leave it PENDING for another host to pick up."
+    PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, say 'ALL_TASKS_DONE'. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), say 'ENVIRONMENT_NOT_CAPABLE' and explain briefly. Do NOT mark the task complete - leave it PENDING for another host to pick up. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds."
 
     # Functions
     pending_count() {
@@ -419,11 +424,12 @@ let
                 save_state "$task_counter" "permission_required"
                 exit 1
                 ;;
-            5)  # Environment not capable - task stays PENDING, continue to next
+            5)  # Environment not capable - task requires different host
                 task_counter=$((task_counter - 1))  # Don't count as attempt
-                retries=0
-                consecutive_rate_limits=0
-                echo -e "''${BLUE}Task requires different environment, continuing to next task...''${NC}"
+                pending_now=$(pending_count)
+                print_exit_summary "Task requires different host (ENVIRONMENT_NOT_CAPABLE)" "$task_counter" "$pending_now"
+                save_state "$task_counter" "environment_not_capable"
+                exit 0  # Exit cleanly - user should run on appropriate host
                 ;;
             *)  # Failure
                 retries=0

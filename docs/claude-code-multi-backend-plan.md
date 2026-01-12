@@ -28,8 +28,8 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | I3 | Add work account configuration | TASK:COMPLETE | 2026-01-11 |
 | I4 | Create Termux package output | TASK:COMPLETE | 2026-01-11 |
 | I5 | Store secrets in Bitwarden | TASK:COMPLETE | 2026-01-11 |
-| I6 | Test on Nix-managed host | TASK:BLOCKED | 2026-01-11 |
-| I7 | Test Termux installation | TASK:COMPLETE | 2026-01-11 |
+| I6 | Test on Nix-managed host | TASK:PENDING | |
+| I7 | Test Termux installation | TASK:PENDING | |
 | I8 | Add task automation to Nix module | TASK:COMPLETE | 2026-01-11 |
 | I9 | Add skills support to Nix module | TASK:COMPLETE | 2026-01-11 |
 
@@ -1835,11 +1835,9 @@ claudework --print "Hello, what model are you?"
 
 #### I6 Implementation Summary
 
-**Status**: BLOCKED - Requires Nix-managed host (attempted 2026-01-11 on Termux)
+**Status**: PENDING - Requires Nix-managed host
 
-This task requires a Nix-managed host (thinky-nixos, wsl-nixos, etc.).
-
-**Environment Check (2026-01-11)**: Attempted on Termux/Android - Nix not available. Task remains PENDING for execution on a Nix-managed host.
+**Environment Requirement**: This task MUST be run on a Nix-managed host (thinky-nixos, wsl-nixos, etc.), NOT on Termux. When run-tasks encounters this task on Termux, it will detect ENVIRONMENT_NOT_CAPABLE and exit cleanly.
 
 **Prerequisites to Complete**:
 1. Push all changes from Termux to remote: `git push origin dev`
@@ -1898,43 +1896,28 @@ claudemax --version
 claudework --version  # After storing token
 ```
 
-#### I7 Implementation Summary (2026-01-11)
+#### I7 Pre-validation Test (2026-01-11) - ARCHIVED
 
-**Alternative Approach**: Since the Nix package hasn't been built yet (requires I6 to pass first), we manually created the wrapper scripts based on what `mkTermuxWrapperScript` would generate. This validates the script design and Termux compatibility.
+> **NOTE**: This was a manual pre-validation test, NOT the actual task completion.
+> The actual task requires testing the **Nix-generated** package from I6, not manually created scripts.
+> This section is preserved for reference but the task remains PENDING.
 
-**Files created on Termux**:
-- `~/bin/claudemax` - Max account wrapper (standard Anthropic API)
-- `~/bin/claudepro` - Pro account wrapper (standard Anthropic API)
-- `~/bin/claudework` - Work account wrapper (Code-Companion proxy with bearer auth)
+**Manual Test Results** (validates script design, not Nix package):
 
-**Test Results**:
+Manual wrapper scripts were created to validate the `mkTermuxWrapperScript` design:
+- `~/bin/claudemax`, `~/bin/claudepro`, `~/bin/claudework`
 
 | Test | Result |
 |------|--------|
 | Script syntax validation (bash -n) | PASS - all 3 scripts |
 | `claudemax --version` | PASS - returns `2.1.5 (Claude Code)` |
-| `claudepro --version` | PASS - returns `2.1.5 (Claude Code)` |
-| `claudework --version` | PASS - shows expected bearer token warning, then version |
-| Config directory creation | PASS - `~/.claude-max`, `~/.claude-pro`, `~/.claude-work` created |
-| Runtime file population | PASS - `.claude.json`, `projects/`, `todos/` etc. created |
+| Config directory creation | PASS - directories created correctly |
+| Bearer token warning (work) | PASS - displays expected warning |
 
-**Environment Variables Verified** (claudework):
-- `ANTHROPIC_BASE_URL=https://codecompanionv2.d-dp.nextcloud.aero`
-- `ANTHROPIC_API_KEY=""` (empty as required by proxy)
-- `ANTHROPIC_DEFAULT_SONNET_MODEL=devstral`
-- `ANTHROPIC_DEFAULT_OPUS_MODEL=devstral`
-- `ANTHROPIC_DEFAULT_HAIKU_MODEL=qwen-a3b`
-
-**Token Warning** (expected for work account):
-```
-Warning: Bearer token not found at /data/data/com.termux/files/home/.secrets/claude-work-token
-   Create it with: mkdir -p ~/.secrets && echo 'your-token' > $TOKEN_FILE
-```
-
-**Notes**:
-- The manually created scripts match exactly what `mkTermuxWrapperScript` in `lib.nix` would generate
-- Once I6 passes and the Nix package is built, the scripts can be replaced via `install-termux-claude`
-- API authentication (bearer token for work, API key for max/pro) is a user-dependent step
+**Actual Task Requirement** (still PENDING):
+1. Build package on Nix host: `nix build .#termux-claude-scripts`
+2. Transfer to Termux and install via `install-termux-claude`
+3. Test the Nix-generated scripts (not manual recreations)
 
 ---
 
