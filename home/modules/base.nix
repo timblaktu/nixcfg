@@ -342,11 +342,45 @@ in
           max = {
             enable = true;
             displayName = "Claude Max Account";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
           };
           pro = {
             enable = true;
             displayName = "Claude Pro Account";
             model = "sonnet";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
+          };
+          work = {
+            enable = true;
+            displayName = "Work Code-Companion";
+            model = "sonnet";
+            api = {
+              baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+              authMethod = "bearer";
+              disableApiKey = true;
+              modelMappings = {
+                sonnet = "devstral";
+                opus = "devstral";
+                haiku = "qwen-a3b";
+              };
+            };
+            secrets.bearerToken.bitwarden = {
+              item = "Code-Companion";
+              field = "bearer_token";
+            };
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
           };
         };
         statusline = {

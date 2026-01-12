@@ -25,7 +25,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 |------|------|--------|------|
 | I1 | Implement API options in account submodule | TASK:COMPLETE | 2026-01-11 |
 | I2 | Implement wrapper script generation | TASK:COMPLETE | 2026-01-11 |
-| I3 | Add work account configuration | TASK:PENDING | |
+| I3 | Add work account configuration | TASK:COMPLETE | 2026-01-11 |
 | I4 | Create Termux package output | TASK:PENDING | |
 | I5 | Store secrets in Bitwarden | TASK:PENDING | |
 | I6 | Test on Nix-managed host | TASK:PENDING | |
@@ -1511,6 +1511,43 @@ accounts = {
 };
 ```
 
+#### I3 Implementation Summary (2026-01-11)
+
+**File modified**: `home/modules/base.nix` (lines 341-385)
+
+**Changes**:
+
+1. **Added work account** with Code-Companion proxy configuration:
+   - `displayName`: "Work Code-Companion"
+   - `model`: "sonnet" (default model for this account)
+   - `api.baseUrl`: "https://codecompanionv2.d-dp.nextcloud.aero"
+   - `api.authMethod`: "bearer"
+   - `api.disableApiKey`: true (required by proxy)
+   - `api.modelMappings`: Maps sonnet/opus to "devstral", haiku to "qwen-a3b"
+   - `secrets.bearerToken.bitwarden`: References "Code-Companion" item, "bearer_token" field
+
+2. **Added extraEnvVars to existing max and pro accounts**:
+   - `DISABLE_TELEMETRY = "1"`
+   - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"`
+   - `DISABLE_ERROR_REPORTING = "1"`
+
+**Environment Variables Generated** (for work account):
+
+| Variable | Value |
+|----------|-------|
+| `ANTHROPIC_BASE_URL` | `https://codecompanionv2.d-dp.nextcloud.aero` |
+| `ANTHROPIC_API_KEY` | `""` (empty string) |
+| `ANTHROPIC_AUTH_TOKEN` | Retrieved via rbw from Bitwarden |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `devstral` |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | `devstral` |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | `qwen-a3b` |
+
+**Validation**: Requires `nix flake check` on a Nix-managed host. Cannot validate on Termux.
+
+**Next Steps**:
+- Task I5: Store the actual bearer token in Bitwarden
+- Task I6: Test on Nix-managed host with `nix flake check` and `home-manager switch`
+
 ---
 
 ### Task I4: Create Termux package output
@@ -1929,17 +1966,19 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Tasks I1 and I2 COMPLETE. Implemented:
+Current status: Tasks I1, I2, and I3 COMPLETE. Implemented:
   - I1: API options in account submodule (claude-code.nix)
   - I2: Shared wrapper library (home/modules/claude-code/lib.nix) + refactored development.nix
-CRITICAL: Run `nix flake check` to validate I2 changes before proceeding (I2 was done on Termux, needs Nix validation).
-Next step: Task I3 - Add work account configuration to base.nix (REQUIRES NIX HOST).
+  - I3: Work account configuration in base.nix (max, pro, work with Code-Companion API)
+CRITICAL: Run `nix flake check` to validate I2 and I3 changes (done on Termux, needs Nix validation).
+Next step: Task I4 - Create Termux package output (REQUIRES NIX HOST).
 Key context:
   - New shared library at home/modules/claude-code/lib.nix
   - development.nix now uses claudeLib.mkClaudeWrapperScript
+  - Work account configured with Code-Companion proxy (baseUrl, bearer auth, model mappings)
   - Migration files (wsl/linux/darwin-home-files.nix) are DISABLED, not used
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): COMPLETE
-  - Phase 2 (I1-I2): COMPLETE (I2 needs validation)
-  - Phase 2 (I3-I9): 7 remaining
+  - Phase 2 (I1-I3): COMPLETE (needs Nix validation)
+  - Phase 2 (I4-I9): 6 remaining
 ```
