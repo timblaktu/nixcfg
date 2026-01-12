@@ -23,7 +23,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 
 | Task | Name | Status | Date |
 |------|------|--------|------|
-| I1 | Implement API options in account submodule | TASK:PENDING | |
+| I1 | Implement API options in account submodule | TASK:COMPLETE | 2026-01-11 |
 | I2 | Implement wrapper script generation | TASK:PENDING | |
 | I3 | Add work account configuration | TASK:PENDING | |
 | I4 | Create Termux package output | TASK:PENDING | |

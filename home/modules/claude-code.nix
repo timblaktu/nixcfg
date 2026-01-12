@@ -139,10 +139,11 @@ with lib;
       example = "/home/user/projects/my-nixos-config";
     };
 
-    # Simplified accounts support (max and pro only)
+    # Account profiles with API proxy and secrets support
     accounts = mkOption {
       type = types.attrsOf (types.submodule {
         options = {
+          # ─── Existing Options (preserved) ─────────────────────────
           enable = mkEnableOption "this Claude Code account profile";
 
           displayName = mkOption {
@@ -156,10 +157,111 @@ with lib;
             default = null;
             description = "Default model for this account (null means use global default)";
           };
+
+          # ─── NEW: API Configuration ───────────────────────────────
+          api = {
+            baseUrl = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Custom API base URL for this account.
+                Set to null (default) to use the standard Anthropic API.
+                Example: "https://codecompanionv2.d-dp.nextcloud.aero"
+              '';
+              example = "https://api.example.com/v1";
+            };
+
+            authMethod = mkOption {
+              type = types.enum [ "api-key" "bearer" "bedrock" ];
+              default = "api-key";
+              description = ''
+                Authentication method for this account:
+                - "api-key": Standard Anthropic API key (ANTHROPIC_API_KEY)
+                - "bearer": Bearer token authentication (ANTHROPIC_AUTH_TOKEN)
+                - "bedrock": AWS Bedrock authentication
+              '';
+            };
+
+            disableApiKey = mkOption {
+              type = types.bool;
+              default = false;
+              description = ''
+                Set ANTHROPIC_API_KEY to an empty string.
+                Required by some proxy servers that reject requests with API keys.
+              '';
+            };
+
+            modelMappings = mkOption {
+              type = types.attrsOf types.str;
+              default = { };
+              description = ''
+                Map Claude model names to proxy-specific model names.
+                Keys are Claude model names (sonnet, opus, haiku).
+                Values are the proxy model identifiers.
+              '';
+              example = {
+                sonnet = "devstral";
+                opus = "devstral";
+                haiku = "qwen-a3b";
+              };
+            };
+          };
+
+          # ─── NEW: Secrets Configuration ───────────────────────────
+          secrets = {
+            bearerToken = mkOption {
+              type = types.nullOr (types.submodule {
+                options = {
+                  bitwarden = mkOption {
+                    type = types.submodule {
+                      options = {
+                        item = mkOption {
+                          type = types.str;
+                          description = "Bitwarden item name containing the token";
+                          example = "Code-Companion";
+                        };
+                        field = mkOption {
+                          type = types.str;
+                          description = "Field name within the Bitwarden item";
+                          example = "bearer_token";
+                        };
+                      };
+                    };
+                    description = "Bitwarden reference for retrieving the bearer token via rbw";
+                  };
+                };
+              });
+              default = null;
+              description = ''
+                Secret management for bearer token authentication.
+                On Nix-managed hosts, tokens are retrieved via rbw (Bitwarden CLI).
+                On Termux, tokens are read from ~/.secrets/claude-<account>-token files.
+              '';
+            };
+          };
+
+          # ─── NEW: Extra Environment Variables ─────────────────────
+          extraEnvVars = mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            description = ''
+              Additional environment variables to set for this account.
+              These are exported before launching Claude Code.
+            '';
+            example = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
+          };
         };
       });
       default = { };
-      description = "Claude Code account profiles (max and pro supported)";
+      description = ''
+        Claude Code account profiles.
+        Each account can have its own API configuration, secrets, and environment.
+        Common accounts: max, pro, work
+      '';
     };
 
     defaultAccount = mkOption {
