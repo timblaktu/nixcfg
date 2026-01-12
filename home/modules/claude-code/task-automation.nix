@@ -336,7 +336,7 @@ let
     fi
 
     if ${pkgs.ripgrep}/bin/rg -q '\|\s*Pending\s*\|' "$PLAN_FILE" && ! ${pkgs.ripgrep}/bin/rg -q '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE"; then
-        echo -e "''${YELLOW}Warning: Plan file uses 'Pending' instead of 'TASK:PENDING'''${NC}"
+        echo -e "''${YELLOW}Warning: Plan file uses 'Pending' instead of 'TASK:PENDING'''''${NC}"
         echo -e "''${YELLOW}Please update status tokens for reliable matching''${NC}"
     fi
 
@@ -463,7 +463,8 @@ let
     print_exit_summary "Requested tasks completed" "$task_counter" "$remaining"
   '';
 
-in {
+in
+{
   options.programs.claude-code-enhanced.taskAutomation = {
     enable = mkEnableOption "Claude Code task automation (run-tasks script and /next-task command)";
 
@@ -524,13 +525,15 @@ in {
 
     # Deploy /next-task slash command to each enabled account's commands/ directory
     home.file = mkMerge (
-      mapAttrsToList (accountName: account:
-        if account.enable then {
-          "src/nixcfg/claude-runtime/.claude-${accountName}/commands/next-task.md" = {
-            text = nextTaskMd;
-          };
-        } else {}
-      ) cfg.accounts
+      mapAttrsToList
+        (accountName: account:
+          if account.enable then {
+            "src/nixcfg/claude-runtime/.claude-${accountName}/commands/next-task.md" = {
+              text = nextTaskMd;
+            };
+          } else { }
+        )
+        cfg.accounts
     );
   };
 }
