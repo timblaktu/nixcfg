@@ -252,6 +252,17 @@ let
 
         output=$(claude -p --permission-mode bypassPermissions "$PROMPT" 2>&1 | tee "$log_file") || exit_code=$?
 
+        # CHECK OUTPUT SIGNALS FIRST (regardless of exit code)
+        # These signals are in Claude's output text, not dependent on exit code
+
+        # Environment not capable - skip this task, leave PENDING for another host
+        # Check this FIRST because Claude returns exit code 0 even when saying ENVIRONMENT_NOT_CAPABLE
+        if echo "$output" | ${pkgs.ripgrep}/bin/rg -qi "ENVIRONMENT_NOT_CAPABLE|cannot.*run.*on.*this.*host|requires.*nix|not.*available.*termux|environment.*not.*capable|skip.*this.*task.*host"; then
+            echo -e "\n''${YELLOW}Task cannot run on this host - leaving PENDING for another host''${NC}"
+            save_state "$task_num" "environment_not_capable" "$pending_before"
+            return 5
+        fi
+
         # SUCCESS PATH: exit code 0
         if [[ $exit_code -eq 0 ]]; then
             if echo "$output" | ${pkgs.ripgrep}/bin/rg -q "ALL_TASKS_DONE|no TASK:PENDING found"; then
@@ -285,13 +296,8 @@ let
             return 4
         fi
 
-        # Environment not capable - Claude detected it can't run this task on current host
-        # Task stays PENDING for another host to pick up later
-        if echo "$output" | ${pkgs.ripgrep}/bin/rg -qi "ENVIRONMENT_NOT_CAPABLE|cannot.*run.*on.*this.*host|requires.*nix|not.*available.*termux|environment.*not.*capable|skip.*this.*task.*host"; then
-            echo -e "\n''${YELLOW}Environment not capable - task requires different host, skipping''${NC}"
-            save_state "$task_num" "env_not_capable" "$pending_before"
-            return 5
-        fi
+        # Note: ENVIRONMENT_NOT_CAPABLE is now checked BEFORE success/failure path split
+        # (see lines 258-264) because Claude returns exit code 0 even when saying this
 
         # Other failure
         echo -e "\n''${RED}Task #''${task_num} failed (exit: $exit_code)''${NC}"
