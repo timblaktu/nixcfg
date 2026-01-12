@@ -1790,19 +1790,52 @@ chmod 600 ~/.secrets/claude-work-token
 
 ### Task I6: Test on Nix-managed host
 
+**Environment Requirement**: This task MUST be run on a Nix-managed host (e.g., `thinky-nixos`, `wsl-nixos`), NOT on Termux.
+
+**Prerequisites**:
+1. Push all changes from Termux to remote (`git push`)
+2. SSH to or work directly on a Nix-managed host
+3. Pull the latest changes (`git pull`)
+4. Have the bearer token stored in Bitwarden (Task I5)
+
+**Test Steps**:
+
 ```bash
-# Rebuild home-manager
+# 1. Validate flake
+nix flake check
+
+# 2. Rebuild home-manager (or dry-run first)
+home-manager switch --flake .#tim@thinky-nixos --dry-run
+# If dry-run succeeds:
 home-manager switch --flake .#tim@thinky-nixos
 
-# Verify wrappers exist
+# 3. Verify wrappers exist
 which claudemax claudepro claudework
 
-# Test work account (requires VPN)
-claudework --version
+# 4. Test basic invocation
+claudemax --version
+claudepro --version
+claudework --version  # Requires VPN access
 
-# Test bearer token retrieval
-rbw get "Code-Companion" "bearer_token"
+# 5. Test bearer token retrieval (for work account)
+rbw unlock
+rbw get "Code-Companion" "bearer_token" | head -c 10  # Should show first 10 chars
+
+# 6. Test work account with API (requires VPN)
+claudework --print "Hello, what model are you?"
 ```
+
+**Definition of Done** (ALL must be true):
+- [ ] `nix flake check` passes without errors
+- [ ] `home-manager switch` completes successfully
+- [ ] `claudemax`, `claudepro`, `claudework` commands exist in PATH
+- [ ] Each wrapper can be invoked with `--version` without errors
+- [ ] Bearer token retrieval via `rbw get "Code-Companion" "bearer_token"` works
+- [ ] Work account can connect to Code-Companion API (requires VPN)
+
+#### I6 Implementation Summary
+
+*(To be populated when task is executed on a Nix-managed host)*
 
 ---
 
