@@ -16,7 +16,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | R2 | Document wrapper script generation across platforms | TASK:COMPLETE | 2026-01-11 |
 | R3 | Document run-tasks.sh for Nix module adaptation | TASK:COMPLETE | 2026-01-11 |
 | R4 | Document skills structure for Nix module adaptation | TASK:COMPLETE | 2026-01-11 |
-| R5 | Draft complete API options Nix code | TASK:PENDING | |
+| R5 | Draft complete API options Nix code | TASK:COMPLETE | 2026-01-11 |
 | R6 | Draft complete wrapper script Nix code | TASK:PENDING | |
 
 ### Phase 2: Implementation (Requires Nix Host)
@@ -140,14 +140,14 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 **Output**: Complete Nix code block in "R5 Draft Code" section below.
 
 **Definition of Done** (ALL must be true):
-- [ ] R5 Draft Code contains a complete `accounts = mkOption { ... }` block in valid Nix syntax
-- [ ] R5 Draft Code includes `api.baseUrl` option with type `types.nullOr types.str`
-- [ ] R5 Draft Code includes `api.authMethod` option with type `types.enum [ "api-key" "bearer" "bedrock" ]`
-- [ ] R5 Draft Code includes `api.disableApiKey` option with type `types.bool`
-- [ ] R5 Draft Code includes `api.modelMappings` option with type `types.attrsOf types.str`
-- [ ] R5 Draft Code includes `secrets.bearerToken.bitwarden` submodule with `item` and `field` options
-- [ ] R5 Draft Code includes `extraEnvVars` option with type `types.attrsOf types.str`
-- [ ] R5 Draft Code placeholder text `*(Task R5 will populate this section)*` is replaced
+- [x] R5 Draft Code contains a complete `accounts = mkOption { ... }` block in valid Nix syntax
+- [x] R5 Draft Code includes `api.baseUrl` option with type `types.nullOr types.str`
+- [x] R5 Draft Code includes `api.authMethod` option with type `types.enum [ "api-key" "bearer" "bedrock" ]`
+- [x] R5 Draft Code includes `api.disableApiKey` option with type `types.bool`
+- [x] R5 Draft Code includes `api.modelMappings` option with type `types.attrsOf types.str`
+- [x] R5 Draft Code includes `secrets.bearerToken.bitwarden` submodule with `item` and `field` options
+- [x] R5 Draft Code includes `extraEnvVars` option with type `types.attrsOf types.str`
+- [x] R5 Draft Code placeholder text `*(Task R5 will populate this section)*` is replaced
 
 ---
 
@@ -689,7 +689,228 @@ mkSkillFile = name: skill: ''
 
 ### R5 Draft Code
 
-*(Task R5 will populate this section)*
+#### Complete Account Submodule with API Options
+
+This code block is designed to **replace** the existing `accounts = mkOption { ... }` block at `home/modules/claude-code.nix:143-163`. It extends the current structure with API proxy support, secrets management, and extra environment variables.
+
+```nix
+# Location: home/modules/claude-code.nix (replace lines 142-163)
+# Prerequisites: inherit (lib) types mkOption mkEnableOption;
+
+# Account submodule with API proxy support
+accounts = mkOption {
+  type = types.attrsOf (types.submodule {
+    options = {
+      # ─── Existing Options (preserved) ─────────────────────────
+      enable = mkEnableOption "this Claude Code account profile";
+
+      displayName = mkOption {
+        type = types.str;
+        description = "Display name for this account profile";
+        example = "Claude Max Account";
+      };
+
+      model = mkOption {
+        type = types.nullOr (types.enum [ "sonnet" "opus" "haiku" ]);
+        default = null;
+        description = "Default model for this account (null means use global default)";
+      };
+
+      # ─── NEW: API Configuration ───────────────────────────────
+      api = {
+        baseUrl = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            Custom API base URL for this account.
+            Set to null (default) to use the standard Anthropic API.
+            Example: "https://codecompanionv2.d-dp.nextcloud.aero"
+          '';
+          example = "https://api.example.com/v1";
+        };
+
+        authMethod = mkOption {
+          type = types.enum [ "api-key" "bearer" "bedrock" ];
+          default = "api-key";
+          description = ''
+            Authentication method for this account:
+            - "api-key": Standard Anthropic API key (ANTHROPIC_API_KEY)
+            - "bearer": Bearer token authentication (ANTHROPIC_AUTH_TOKEN)
+            - "bedrock": AWS Bedrock authentication
+          '';
+        };
+
+        disableApiKey = mkOption {
+          type = types.bool;
+          default = false;
+          description = ''
+            Set ANTHROPIC_API_KEY to an empty string.
+            Required by some proxy servers that reject requests with API keys.
+          '';
+        };
+
+        modelMappings = mkOption {
+          type = types.attrsOf types.str;
+          default = { };
+          description = ''
+            Map Claude model names to proxy-specific model names.
+            Keys are Claude model names (sonnet, opus, haiku).
+            Values are the proxy model identifiers.
+          '';
+          example = {
+            sonnet = "devstral";
+            opus = "devstral";
+            haiku = "qwen-a3b";
+          };
+        };
+      };
+
+      # ─── NEW: Secrets Configuration ───────────────────────────
+      secrets = {
+        bearerToken = mkOption {
+          type = types.nullOr (types.submodule {
+            options = {
+              bitwarden = mkOption {
+                type = types.submodule {
+                  options = {
+                    item = mkOption {
+                      type = types.str;
+                      description = "Bitwarden item name containing the token";
+                      example = "Code-Companion";
+                    };
+                    field = mkOption {
+                      type = types.str;
+                      description = "Field name within the Bitwarden item";
+                      example = "bearer_token";
+                    };
+                  };
+                };
+                description = "Bitwarden reference for retrieving the bearer token via rbw";
+              };
+            };
+          });
+          default = null;
+          description = ''
+            Secret management for bearer token authentication.
+            On Nix-managed hosts, tokens are retrieved via rbw (Bitwarden CLI).
+            On Termux, tokens are read from ~/.secrets/claude-<account>-token files.
+          '';
+        };
+
+        # Future extensibility for other secret types
+        # apiKey = mkOption { ... };  # For non-standard API key sources
+      };
+
+      # ─── NEW: Extra Environment Variables ─────────────────────
+      extraEnvVars = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        description = ''
+          Additional environment variables to set for this account.
+          These are exported before launching Claude Code.
+        '';
+        example = {
+          DISABLE_TELEMETRY = "1";
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+          DISABLE_ERROR_REPORTING = "1";
+        };
+      };
+    };
+  });
+  default = { };
+  description = ''
+    Claude Code account profiles.
+    Each account can have its own API configuration, secrets, and environment.
+    Common accounts: max, pro, work
+  '';
+};
+```
+
+#### Usage Example (for base.nix)
+
+This shows how to define accounts using the new options:
+
+```nix
+# Location: home/modules/base.nix (accounts definition)
+programs.claude-code-enhanced = {
+  accounts = {
+    # Standard Anthropic API account (existing pattern)
+    max = {
+      enable = true;
+      displayName = "Claude Max Account";
+      extraEnvVars = {
+        DISABLE_TELEMETRY = "1";
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+        DISABLE_ERROR_REPORTING = "1";
+      };
+    };
+
+    # Standard Anthropic API with default model override
+    pro = {
+      enable = true;
+      displayName = "Claude Pro Account";
+      model = "sonnet";
+      extraEnvVars = {
+        DISABLE_TELEMETRY = "1";
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+        DISABLE_ERROR_REPORTING = "1";
+      };
+    };
+
+    # Work proxy account (Code-Companion)
+    work = {
+      enable = true;
+      displayName = "Work Code-Companion";
+      model = "sonnet";
+
+      api = {
+        baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+        authMethod = "bearer";
+        disableApiKey = true;
+        modelMappings = {
+          sonnet = "devstral";
+          opus = "devstral";
+          haiku = "qwen-a3b";
+        };
+      };
+
+      secrets.bearerToken.bitwarden = {
+        item = "Code-Companion";
+        field = "bearer_token";
+      };
+
+      extraEnvVars = {
+        DISABLE_TELEMETRY = "1";
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+        DISABLE_ERROR_REPORTING = "1";
+      };
+    };
+  };
+};
+```
+
+#### Validation Notes
+
+The Nix code above:
+- Uses `types.nullOr` for optional values (baseUrl, bearerToken)
+- Uses `types.enum` for constrained choices (authMethod)
+- Uses `types.attrsOf types.str` for key-value mappings (modelMappings, extraEnvVars)
+- Uses nested `types.submodule` for structured options (secrets.bearerToken.bitwarden)
+- Includes `description` and `example` attributes for documentation
+- Maintains backwards compatibility - existing configs continue to work unchanged
+- All new options have sensible defaults (null, false, {})
+
+#### Environment Variables Generated
+
+| Option | Environment Variable | Value |
+|--------|---------------------|-------|
+| `api.baseUrl` | `ANTHROPIC_BASE_URL` | The URL value |
+| `api.authMethod == "bearer"` | `ANTHROPIC_AUTH_TOKEN` | Token from secrets |
+| `api.disableApiKey` | `ANTHROPIC_API_KEY` | Empty string `""` |
+| `api.modelMappings.sonnet` | `ANTHROPIC_DEFAULT_SONNET_MODEL` | Mapped model name |
+| `api.modelMappings.opus` | `ANTHROPIC_DEFAULT_OPUS_MODEL` | Mapped model name |
+| `api.modelMappings.haiku` | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Mapped model name |
+| `extraEnvVars.<name>` | `<NAME>` | The value |
 
 ---
 
@@ -1306,11 +1527,11 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Task R4 complete - documented skills structure including SKILL.md format with YAML frontmatter, supporting files, and Nix module adaptation notes.
-Next step: Start Task R5 - Draft complete API options Nix code.
-Key context: Use R1 findings to draft complete Nix code for API options (baseUrl, authMethod, disableApiKey, modelMappings, secrets, extraEnvVars).
-Verification: R5 Draft Code section contains valid Nix syntax for all API options.
+Current status: Task R5 complete - drafted complete API options Nix code including accounts submodule with api.baseUrl, api.authMethod, api.disableApiKey, api.modelMappings, secrets.bearerToken.bitwarden, and extraEnvVars options.
+Next step: Start Task R6 - Draft complete wrapper script Nix code.
+Key context: Use R2 findings to draft mkClaudeWrapperScript function that handles API options, bearer auth via rbw, model mappings, and extraEnvVars.
+Verification: R6 Draft Code section contains valid Nix function handling all API options.
 Total tasks: 15 (6 research + 9 implementation)
-  - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux
+  - Phase 1 (R1-R6): Research tasks - can run autonomously in Termux (5 complete, 1 remaining)
   - Phase 2 (I1-I9): Implementation tasks - require Nix host
 ```
