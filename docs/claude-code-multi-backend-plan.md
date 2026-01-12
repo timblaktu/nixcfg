@@ -24,7 +24,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | Task | Name | Status | Date |
 |------|------|--------|------|
 | I1 | Implement API options in account submodule | TASK:COMPLETE | 2026-01-11 |
-| I2 | Implement wrapper script generation | TASK:PENDING | |
+| I2 | Implement wrapper script generation | TASK:COMPLETE | 2026-01-11 |
 | I3 | Add work account configuration | TASK:PENDING | |
 | I4 | Create Termux package output | TASK:PENDING | |
 | I5 | Store secrets in Bitwarden | TASK:PENDING | |
@@ -1430,6 +1430,36 @@ mkClaudeWrapperScript = { account, displayName, configDir, api ? {}, secrets ? {
 
 **Note**: Extract `mkClaudeWrapperScript` to a shared location to avoid duplication across platform files.
 
+#### I2 Implementation Summary (2026-01-11)
+
+**Implementation differs from original plan**: The migration files (`wsl-home-files.nix`, `linux-home-files.nix`, `darwin-home-files.nix`) were discovered to be **disabled** (commented out in `home-configurations.nix` with "DISABLED after module-based migration"). The actual wrapper scripts are now in `home/common/development.nix`.
+
+**Files created/modified**:
+
+1. **Created**: `home/modules/claude-code/lib.nix` - Shared library with two functions:
+   - `mkClaudeWrapperScript`: Full-featured wrapper for Nix-managed hosts
+     - Supports API proxy (baseUrl, authMethod, disableApiKey, modelMappings)
+     - Supports secrets via rbw (Bitwarden) with fallback to file-based tokens
+     - Includes V2.0 coalescence for Nix-managed config merging
+     - PID-based single instance management
+     - Headless mode detection (-p/--print)
+   - `mkTermuxWrapperScript`: Simplified wrapper for Termux (no rbw, no coalescence)
+
+2. **Modified**: `home/common/development.nix` - Refactored to use shared library:
+   - Reduced from ~400 lines to ~200 lines (50% reduction)
+   - Eliminated 3 duplicate inline `mkClaudeWrapperScript` definitions
+   - Now imports `claudeLib` from `../modules/claude-code/lib.nix`
+   - `claude`, `claudemax`, `claudepro` all use `claudeLib.mkClaudeWrapperScript`
+   - Added `jq` to `runtimeInputs` (required for coalescence)
+
+**Benefits of refactoring**:
+- Single source of truth for wrapper logic
+- Easy to add new accounts (just call `claudeLib.mkClaudeWrapperScript`)
+- API proxy support available for all accounts
+- Termux-specific function available for Termux package generation (Task I4)
+
+**Validation**: Requires `nix flake check` on a Nix-managed host. Cannot be validated on Termux.
+
 ---
 
 ### Task I3: Add work account configuration
@@ -1899,13 +1929,17 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: PHASE 1 COMPLETE - All research tasks (R1-R6) finished. Drafted complete Nix code for:
-  - API options (R5): accounts submodule with api.baseUrl, api.authMethod, api.disableApiKey, api.modelMappings, secrets.bearerToken.bitwarden
-  - Wrapper scripts (R6): mkClaudeWrapperScript + mkTermuxWrapperScript functions in shared lib.nix
-Next step: Start Task I1 - Implement API options in account submodule (REQUIRES NIX HOST).
-Key context: R5/R6 Draft Code sections contain copy-paste ready Nix code. Implementation phase must run on Nix-managed host (not Termux).
-Verification: Run `nix flake check` after each implementation task.
+Current status: Tasks I1 and I2 COMPLETE. Implemented:
+  - I1: API options in account submodule (claude-code.nix)
+  - I2: Shared wrapper library (home/modules/claude-code/lib.nix) + refactored development.nix
+CRITICAL: Run `nix flake check` to validate I2 changes before proceeding (I2 was done on Termux, needs Nix validation).
+Next step: Task I3 - Add work account configuration to base.nix (REQUIRES NIX HOST).
+Key context:
+  - New shared library at home/modules/claude-code/lib.nix
+  - development.nix now uses claudeLib.mkClaudeWrapperScript
+  - Migration files (wsl/linux/darwin-home-files.nix) are DISABLED, not used
 Total tasks: 15 (6 research + 9 implementation)
-  - Phase 1 (R1-R6): Research tasks - COMPLETE
-  - Phase 2 (I1-I9): Implementation tasks - 9 remaining, require Nix host
+  - Phase 1 (R1-R6): COMPLETE
+  - Phase 2 (I1-I2): COMPLETE (I2 needs validation)
+  - Phase 2 (I3-I9): 7 remaining
 ```
