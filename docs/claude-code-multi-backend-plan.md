@@ -28,7 +28,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | I3 | Add work account configuration | TASK:COMPLETE | 2026-01-11 |
 | I4 | Create Termux package output | TASK:COMPLETE | 2026-01-11 |
 | I5 | Store secrets in Bitwarden | TASK:COMPLETE | 2026-01-11 |
-| I6 | Test on Nix-managed host | TASK:PENDING | |
+| I6 | Test on Nix-managed host | TASK:BLOCKED | 2026-01-11 |
 | I7 | Test Termux installation | TASK:PENDING | |
 | I8 | Add task automation to Nix module | TASK:COMPLETE | 2026-01-11 |
 | I9 | Add skills support to Nix module | TASK:COMPLETE | 2026-01-11 |
@@ -1835,9 +1835,11 @@ claudework --print "Hello, what model are you?"
 
 #### I6 Implementation Summary
 
-**Status**: PENDING - Requires Nix-managed host
+**Status**: BLOCKED - Requires Nix-managed host (attempted 2026-01-11 on Termux)
 
-This task requires a Nix-managed host (thinky-nixos, wsl-nixos, etc.). When run-tasks encounters this task on Termux, Claude will detect the environment limitation and return `ENVIRONMENT_NOT_CAPABLE`, leaving the task PENDING for a Nix host to pick up.
+This task requires a Nix-managed host (thinky-nixos, wsl-nixos, etc.).
+
+**Environment Check (2026-01-11)**: Attempted on Termux/Android - Nix not available. Task remains PENDING for execution on a Nix-managed host.
 
 **Prerequisites to Complete**:
 1. Push all changes from Termux to remote: `git push origin dev`
