@@ -28,8 +28,8 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | I3 | Add work account configuration | TASK:COMPLETE | 2026-01-11 |
 | I4 | Create Termux package output | TASK:COMPLETE | 2026-01-11 |
 | I5 | Store secrets in Bitwarden | TASK:COMPLETE | 2026-01-11 |
-| I6 | Test on Nix-managed host | TASK:BLOCKED | Requires Nix host |
-| I7 | Test Termux installation | TASK:BLOCKED | Requires I6 (Nix build) |
+| I6 | Test on Nix-managed host | TASK:PENDING | |
+| I7 | Test Termux installation | TASK:PENDING | |
 | I8 | Add task automation to Nix module | TASK:COMPLETE | 2026-01-11 |
 | I9 | Add skills support to Nix module | TASK:COMPLETE | 2026-01-11 |
 
@@ -1835,9 +1835,9 @@ claudework --print "Hello, what model are you?"
 
 #### I6 Implementation Summary
 
-**Attempted**: 2026-01-11 on Termux
+**Status**: PENDING - Requires Nix-managed host
 
-**BLOCKED**: Task I6 requires a Nix-managed host (thinky-nixos, wsl-nixos, etc.) but current session is running on Termux (Android).
+This task requires a Nix-managed host (thinky-nixos, wsl-nixos, etc.). When run-tasks encounters this task on Termux, Claude will detect the environment limitation and return `ENVIRONMENT_NOT_CAPABLE`, leaving the task PENDING for a Nix host to pick up.
 
 **Prerequisites to Complete**:
 1. Push all changes from Termux to remote: `git push origin dev`
@@ -1846,9 +1846,8 @@ claudework --print "Hello, what model are you?"
 4. Have bearer token stored in Bitwarden (see Task I5)
 5. Be on VPN for Code-Companion access (for work account test)
 
-**Next steps to complete I6**:
+**Test Steps** (on Nix-managed host):
 
-On a Nix-managed host, run:
 ```bash
 # 1. Validate flake
 nix flake check
@@ -1872,8 +1871,6 @@ rbw get "Code-Companion" "bearer_token" | head -c 10
 # 6. Test work account (requires VPN)
 claudework --print "Hello, what model are you?"
 ```
-
-**Status**: Cannot be completed from Termux - requires user action on Nix host
 
 ---
 
@@ -2228,9 +2225,6 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
 
-BLOCKER: Tasks I6/I7 require Nix host - cannot run on Termux.
-         Must switch to thinky-nixos, wsl-nixos, or similar to continue.
-
 Current status: ALL CODE TASKS COMPLETE (I1-I5, I8, I9)
   - I1: API options in account submodule (claude-code.nix)
   - I2: Shared wrapper library (home/modules/claude-code/lib.nix) + refactored development.nix
@@ -2240,9 +2234,13 @@ Current status: ALL CODE TASKS COMPLETE (I1-I5, I8, I9)
   - I8: Task automation Nix module (task-automation.nix) with run-tasks + /next-task
   - I9: Skills Nix module (skills.nix) with adr-writer built-in + custom skills support
 
-REMAINING: I6 and I7 (testing tasks - require Nix host)
+REMAINING: I6 and I7 (testing tasks - PENDING, portable across hosts)
 
-Next step: Task I6 - Test on Nix-managed host (requires Nix host)
+Note: Tasks I6/I7 require Nix-managed host. When run-tasks runs on Termux,
+Claude will detect "ENVIRONMENT_NOT_CAPABLE" and leave tasks PENDING for
+a Nix host to complete. No manual BLOCKED/unblocking needed.
+
+Next step: Task I6 - Test on Nix-managed host
   Run: nix flake check && home-manager switch --flake .#tim@thinky-nixos
   Test: claudemax --version, claudepro --version, claudework --version
 
@@ -2265,5 +2263,5 @@ Key context:
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): COMPLETE
   - Phase 2 (I1-I5, I8, I9): COMPLETE (code written, unvalidated)
-  - Phase 2 (I6, I7): BLOCKED - needs Nix host for validation
+  - Phase 2 (I6, I7): PENDING - will run on Nix host via runtime detection
 ```

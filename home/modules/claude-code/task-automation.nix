@@ -23,6 +23,11 @@ let
     2. Look for files matching `*-research.md`, `*-plan.md`, or `*-tasks.md` in docs/
     3. Ask the user which file to use
 
+    IMPORTANT: If you determine the task cannot be executed on the current host
+    (e.g., requires Nix but running on Termux, or requires specific tools not available),
+    say "ENVIRONMENT_NOT_CAPABLE" and explain briefly. Do NOT mark the task complete -
+    leave it PENDING for another host to pick up.
+
     After completing the task, provide a summary:
 
     ## Task Completed
@@ -164,29 +169,23 @@ let
     mkdir -p "$LOG_DIR"
 
     # Build the prompt
-    PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, say 'ALL_TASKS_DONE'."
+    PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, say 'ALL_TASKS_DONE'. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), say 'ENVIRONMENT_NOT_CAPABLE' and explain briefly. Do NOT mark the task complete - leave it PENDING for another host to pick up."
 
     # Functions
     pending_count() {
         ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
     }
 
-    blocked_count() {
-        ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:BLOCKED\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
-    }
-
     save_state() {
         local tasks_run=$1
         local status=$2
         local pending_now=''${3:-$(pending_count)}
-        local blocked_now=$(blocked_count)
         local runtime=$(($(date +%s) - START_TIME))
         cat > "$STATE_FILE" << EOF
     LAST_RUN=$(date -Iseconds)
     TASKS_RUN=$tasks_run
     STATUS=$status
     PENDING_NOW=$pending_now
-    BLOCKED_NOW=$blocked_now
     RUNTIME_SECONDS=$runtime
     PLAN_FILE=$PLAN_FILE_ABS
     EOF
@@ -210,7 +209,6 @@ let
         local reason=$1
         local tasks_run=$2
         local pending=$3
-        local blocked=$(blocked_count)
         local runtime=$(($(date +%s) - START_TIME))
         local runtime_fmt=$(format_runtime $runtime)
 
@@ -219,17 +217,10 @@ let
         echo -e "''${CYAN}  Session Summary''${NC}"
         echo -e "''${CYAN}===============================================''${NC}"
         echo -e "  Reason:    ''${reason}"
-        if [[ "$blocked" -gt 0 ]]; then
-            echo -e "  Tasks:     ''${tasks_run} completed, ''${pending} pending, ''${YELLOW}''${blocked} blocked''${NC}"
-        else
-            echo -e "  Tasks:     ''${tasks_run} completed, ''${pending} pending"
-        fi
+        echo -e "  Tasks:     ''${tasks_run} completed, ''${pending} pending"
         echo -e "  Runtime:   ''${runtime_fmt}"
         echo -e "  Logs:      ''${LOG_DIR}/"
         echo -e "''${CYAN}===============================================''${NC}"
-        if [[ "$blocked" -gt 0 ]]; then
-            echo -e "''${YELLOW}Note: ''${blocked} task(s) are BLOCKED and require manual intervention''${NC}"
-        fi
     }
 
     run_task() {
@@ -289,6 +280,14 @@ let
             return 4
         fi
 
+        # Environment not capable - Claude detected it can't run this task on current host
+        # Task stays PENDING for another host to pick up later
+        if echo "$output" | ${pkgs.ripgrep}/bin/rg -qi "ENVIRONMENT_NOT_CAPABLE|cannot.*run.*on.*this.*host|requires.*nix|not.*available.*termux|environment.*not.*capable|skip.*this.*task.*host"; then
+            echo -e "\n''${YELLOW}Environment not capable - task requires different host, skipping''${NC}"
+            save_state "$task_num" "env_not_capable" "$pending_before"
+            return 5
+        fi
+
         # Other failure
         echo -e "\n''${RED}Task #''${task_num} failed (exit: $exit_code)''${NC}"
         save_state "$task_num" "failed" "$pending_before"
@@ -315,11 +314,7 @@ let
 
     # Pre-flight validation
     if [[ "$INITIAL_PENDING" == "0" ]]; then
-        blocked=$(blocked_count)
         echo -e "''${GREEN}No pending tasks found. Nothing to do.''${NC}"
-        if [[ "$blocked" -gt 0 ]]; then
-            echo -e "''${YELLOW}Note: ''${blocked} task(s) are BLOCKED and require manual intervention''${NC}"
-        fi
         save_state "0" "no_pending" "0"
         exit 0
     fi
@@ -423,6 +418,12 @@ let
                 print_exit_summary "Stopped: Claude requires write permission" "$task_counter" "$pending_now"
                 save_state "$task_counter" "permission_required"
                 exit 1
+                ;;
+            5)  # Environment not capable - task stays PENDING, continue to next
+                task_counter=$((task_counter - 1))  # Don't count as attempt
+                retries=0
+                consecutive_rate_limits=0
+                echo -e "''${BLUE}Task requires different environment, continuing to next task...''${NC}"
                 ;;
             *)  # Failure
                 retries=0
