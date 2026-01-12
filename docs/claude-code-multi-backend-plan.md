@@ -31,7 +31,7 @@ Integrate work's Code-Companion proxy as a new Claude Code "account" alongside e
 | I6 | Test on Nix-managed host | TASK:BLOCKED | Requires Nix host |
 | I7 | Test Termux installation | TASK:BLOCKED | Requires I6 (Nix build) |
 | I8 | Add task automation to Nix module | TASK:COMPLETE | 2026-01-11 |
-| I9 | Add skills support to Nix module | TASK:PENDING | |
+| I9 | Add skills support to Nix module | TASK:COMPLETE | 2026-01-11 |
 
 ---
 
@@ -2057,6 +2057,63 @@ in {
 
 **Source**: Adapt from existing `~/.claude/skills/adr-writer/`
 
+#### I9 Implementation Summary (2026-01-11)
+
+**Files created**:
+
+1. **Created**: `home/modules/claude-code/skills.nix` - Complete Nix module with:
+   - `skills.enable` option to enable skills management
+   - `skills.builtins.adr-writer` option (default: true) - Enable ADR writing skill
+   - `skills.custom` option for user-defined skills with submodule:
+     - `description` - Skill description for Claude discovery
+     - `skillContent` - SKILL.md content (frontmatter auto-generated)
+     - `referenceContent` - Optional REFERENCE.md content
+     - `extraFiles` - Additional files as name -> content attrset
+   - Activation script that deploys skills to each account's `skills/` directory
+   - Also deploys to base `.claude/skills/` if defaultAccount is set
+   - Assertions for validating builtin skill names
+
+2. **Created**: `home/modules/claude-code/skills/adr-writer/SKILL.md` - Built-in ADR skill
+   - YAML frontmatter with name and description
+   - ADR template with Status, Context, Decision, Consequences sections
+   - Instructions for writing ADRs
+   - Best practices and status lifecycle documentation
+
+3. **Created**: `home/modules/claude-code/skills/adr-writer/REFERENCE.md` - Extended reference
+   - Criteria for identifying architectural decisions
+   - Context and consequences writing guidelines
+   - Do's and Don'ts
+   - File naming conventions and superseding guidance
+
+4. **Modified**: `home/modules/claude-code.nix` - Added import for skills.nix
+
+**Usage** (after enabling in Nix config):
+```nix
+programs.claude-code-enhanced = {
+  enable = true;
+  skills = {
+    enable = true;
+    builtins.adr-writer = true;  # Enabled by default
+    custom = {
+      commit-message = {
+        description = "Generate conventional commit messages";
+        skillContent = ''
+          # Commit Message Generator
+          ...
+        '';
+      };
+    };
+  };
+};
+```
+
+**Skill Deployment**:
+- Built-in skills: Copied from `home/modules/claude-code/skills/<name>/`
+- Custom skills: SKILL.md generated with frontmatter from options
+- All skills deployed to `<runtime>/.claude-<account>/skills/<skill-name>/`
+
+**Validation**: Requires `nix flake check` on a Nix-managed host. Cannot validate on Termux.
+
 ---
 
 ## Features Analysis (2026-01-11)
@@ -2172,20 +2229,20 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
 
 BLOCKER: Tasks I6/I7 require Nix host - cannot run on Termux.
-         Must switch to thinky-nixos, wsl-nixos, or similar to continue I6/I7.
+         Must switch to thinky-nixos, wsl-nixos, or similar to continue.
 
-Current status: Tasks I1-I5, I8 COMPLETE (code written, needs validation)
+Current status: ALL CODE TASKS COMPLETE (I1-I5, I8, I9)
   - I1: API options in account submodule (claude-code.nix)
   - I2: Shared wrapper library (home/modules/claude-code/lib.nix) + refactored development.nix
   - I3: Work account configuration in base.nix (max, pro, work with Code-Companion API)
   - I4: Termux package output (flake-modules/termux-outputs.nix)
   - I5: Secret storage documentation (manual user step)
   - I8: Task automation Nix module (task-automation.nix) with run-tasks + /next-task
+  - I9: Skills Nix module (skills.nix) with adr-writer built-in + custom skills support
 
-Next step: Task I9 - Add skills support to Nix module (can be done on Termux)
-  OR: Task I6 - Test on Nix-managed host (requires Nix host)
+REMAINING: I6 and I7 (testing tasks - require Nix host)
 
-For I6 (Nix host required):
+Next step: Task I6 - Test on Nix-managed host (requires Nix host)
   Run: nix flake check && home-manager switch --flake .#tim@thinky-nixos
   Test: claudemax --version, claudepro --version, claudework --version
 
@@ -2201,11 +2258,12 @@ Key context:
   - aarch64-linux added to systems list in flake.nix
   - Account definitions duplicated in termux-outputs.nix for standalone builds
   - Migration files (wsl/linux/darwin-home-files.nix) are DISABLED
-  - Task automation module added at home/modules/claude-code/task-automation.nix
+  - Task automation module at home/modules/claude-code/task-automation.nix
+  - Skills module at home/modules/claude-code/skills.nix
+  - Built-in skill files at home/modules/claude-code/skills/adr-writer/
 
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): COMPLETE
-  - Phase 2 (I1-I5, I8): COMPLETE (code written, unvalidated)
-  - Phase 2 (I6, I7): BLOCKED - needs Nix host
-  - Phase 2 (I9): 1 remaining - can be done on Termux
+  - Phase 2 (I1-I5, I8, I9): COMPLETE (code written, unvalidated)
+  - Phase 2 (I6, I7): BLOCKED - needs Nix host for validation
 ```
