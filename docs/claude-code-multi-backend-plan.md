@@ -1835,7 +1835,45 @@ claudework --print "Hello, what model are you?"
 
 #### I6 Implementation Summary
 
-*(To be populated when task is executed on a Nix-managed host)*
+**Attempted**: 2026-01-11 on Termux
+
+**BLOCKED**: Task I6 requires a Nix-managed host (thinky-nixos, wsl-nixos, etc.) but current session is running on Termux (Android).
+
+**Prerequisites to Complete**:
+1. Push all changes from Termux to remote: `git push origin dev`
+2. Access a Nix-managed host (SSH or direct)
+3. Pull latest changes: `git pull origin dev`
+4. Have bearer token stored in Bitwarden (see Task I5)
+5. Be on VPN for Code-Companion access (for work account test)
+
+**Next steps to complete I6**:
+
+On a Nix-managed host, run:
+```bash
+# 1. Validate flake
+nix flake check
+
+# 2. Test home-manager switch (dry-run first)
+home-manager switch --flake .#tim@thinky-nixos --dry-run
+home-manager switch --flake .#tim@thinky-nixos
+
+# 3. Verify wrappers exist
+which claudemax claudepro claudework
+
+# 4. Test basic invocation
+claudemax --version
+claudepro --version
+claudework --version
+
+# 5. Test bearer token retrieval
+rbw unlock
+rbw get "Code-Companion" "bearer_token" | head -c 10
+
+# 6. Test work account (requires VPN)
+claudework --print "Hello, what model are you?"
+```
+
+**Status**: Cannot be completed from Termux - requires user action on Nix host
 
 ---
 
@@ -2085,22 +2123,37 @@ Do NOT use "Pending" or "Complete" without the "TASK:" prefix.
 
 ```
 Continue claude-code-multi-backend integration. Plan file: docs/claude-code-multi-backend-plan.md
-Current status: Tasks I1-I5 COMPLETE. Implemented:
+
+BLOCKER: Task I6 requires Nix host - cannot run on Termux.
+         Must switch to thinky-nixos, wsl-nixos, or similar to continue.
+
+Current status: Tasks I1-I5 COMPLETE (code written, needs validation)
   - I1: API options in account submodule (claude-code.nix)
   - I2: Shared wrapper library (home/modules/claude-code/lib.nix) + refactored development.nix
   - I3: Work account configuration in base.nix (max, pro, work with Code-Companion API)
   - I4: Termux package output (flake-modules/termux-outputs.nix)
   - I5: Secret storage documentation (manual user step)
-CRITICAL: Run `nix flake check` to validate all changes (needs Nix host).
-Next step: Task I6 - Test on Nix-managed host (home-manager switch, verify wrappers work).
-User action needed: Store actual bearer token in Bitwarden (see I5 docs) before testing work account.
+
+Next step: Task I6 - Test on Nix-managed host
+  Run: nix flake check && home-manager switch --flake .#tim@thinky-nixos
+  Test: claudemax --version, claudepro --version, claudework --version
+
+User actions needed BEFORE running I6:
+  1. Push changes: git push origin dev
+  2. SSH to Nix host: ssh thinky-nixos
+  3. Pull changes: cd ~/src/nixcfg && git pull
+  4. Store bearer token: rbw add "Code-Companion" (with bearer_token field)
+  5. Connect to VPN (for work account test)
+
 Key context:
   - Termux package at packages.aarch64-linux.termux-claude-scripts
   - aarch64-linux added to systems list in flake.nix
   - Account definitions duplicated in termux-outputs.nix for standalone builds
-  - Migration files (wsl/linux/darwin-home-files.nix) are DISABLED, not used
+  - Migration files (wsl/linux/darwin-home-files.nix) are DISABLED
+
 Total tasks: 15 (6 research + 9 implementation)
   - Phase 1 (R1-R6): COMPLETE
-  - Phase 2 (I1-I5): COMPLETE (needs Nix validation)
-  - Phase 2 (I6-I9): 4 remaining
+  - Phase 2 (I1-I5): COMPLETE (code written, unvalidated)
+  - Phase 2 (I6): BLOCKED - needs Nix host
+  - Phase 2 (I7-I9): 3 remaining after I6
 ```
