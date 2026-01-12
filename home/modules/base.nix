@@ -396,6 +396,10 @@ in
           # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
           # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
         };
+        # Task automation - provides run-tasks script and /next-task command
+        taskAutomation.enable = true;
+        # Skills - provides ADR-writer and custom skills
+        skills.enable = true;
       };
 
       # Yazi file manager configuration
