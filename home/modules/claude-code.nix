@@ -371,7 +371,8 @@ with lib;
       claudeCodeMcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
 
       # Base settings configuration
-      mkSettingsTemplate = model: pkgs.writeText "claude-settings.json" (builtins.toJSON (
+      # accountApi: optional { baseUrl, modelMappings, extraEnvVars } for account-specific env
+      mkSettingsTemplate = { model, accountApi ? null }: pkgs.writeText "claude-settings.json" (builtins.toJSON (
         let
           hasHooks = cfg._internal.hooks.PreToolUse != null || cfg._internal.hooks.PostToolUse != null ||
             cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
@@ -386,12 +387,28 @@ with lib;
             defaultMode = cfg.permissions.defaultMode;
             additionalDirectories = cfg.permissions.additionalDirectories;
           };
+
+          # Build account-specific env vars for settings.json
+          # Claude Code v2.0+ reads API config from settings.json "env", not shell env vars
+          accountEnvVars =
+            if accountApi == null then { }
+            else
+              (optionalAttrs (accountApi.baseUrl or null != null) {
+                ANTHROPIC_BASE_URL = accountApi.baseUrl;
+              })
+              // (lib.mapAttrs'
+                (model: mapping: lib.nameValuePair "ANTHROPIC_DEFAULT_${lib.toUpper model}_MODEL" mapping)
+                (accountApi.modelMappings or { }))
+              // (accountApi.extraEnvVars or { });
+
+          # Merge global env vars with account-specific ones (account takes precedence)
+          mergedEnvVars = cfg.environmentVariables // accountEnvVars;
         in
         {
           model = model;
           permissions = permissionsV2;
         }
-        // optionalAttrs (cfg.environmentVariables != { }) { env = cfg.environmentVariables; }
+        // optionalAttrs (mergedEnvVars != { }) { env = mergedEnvVars; }
         // optionalAttrs hasHooks { hooks = cleanHooks; }
         // optionalAttrs (cfg.experimental != { }) { experimental = cfg.experimental; }
         // optionalAttrs hasStatusline cfg._internal.statuslineSettings
@@ -403,8 +420,8 @@ with lib;
         }
       ));
 
-      # Default settings template
-      settingsTemplate = mkSettingsTemplate cfg.defaultModel;
+      # Default settings template (no account-specific API config)
+      settingsTemplate = mkSettingsTemplate { model = cfg.defaultModel; };
 
       # MCP configuration template
       mcpTemplate = pkgs.writeText "claude-mcp.json" (builtins.toJSON {
@@ -558,8 +575,15 @@ with lib;
             # RUNTIME-ONLY: Create directories for session data
             $DRY_RUN_CMD mkdir -p "$accountDir"/{logs,projects,shell-snapshots,statsig,todos,commands}
           
-            # SETTINGS: Always deploy v2.0 schema settings (migration-safe)
-            copy_template "${mkSettingsTemplate (if account.model != null then account.model else cfg.defaultModel)}" "$accountDir/settings.json"
+            # SETTINGS: Always deploy v2.0 schema settings with account-specific API config
+            copy_template "${mkSettingsTemplate {
+              model = if account.model != null then account.model else cfg.defaultModel;
+              accountApi = {
+                baseUrl = account.api.baseUrl;
+                modelMappings = account.api.modelMappings;
+                extraEnvVars = account.extraEnvVars;
+              };
+            }}" "$accountDir/settings.json"
             echo "🔧 Updated settings to v2.0 schema: $accountDir/settings.json"
           
             # MCP SERVERS: Always deploy separate .mcp.json file (v2.0 schema)
