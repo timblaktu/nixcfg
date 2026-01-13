@@ -28,6 +28,11 @@ let
     output on its own line: ENVIRONMENT_NOT_CAPABLE
     Then explain briefly. Do NOT mark the task complete - leave it PENDING for another host.
 
+    IMPORTANT: If the task is marked as "Interactive" in the plan file, or requires user
+    decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED
+    Then present the questions/options clearly. Do NOT mark the task complete - leave it
+    PENDING so the user can complete it in an interactive session using /next-task.
+
     CRITICAL: Do NOT invent "alternative approaches" or workarounds to tasks.
     If a task has prerequisites that aren't met (e.g., "test the Nix-generated package"
     but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE.
@@ -194,7 +199,7 @@ let
       # Build the prompt
       # NOTE: Sentinel tokens (ALL_TASKS_DONE, ENVIRONMENT_NOT_CAPABLE) must appear on their own line
       # for reliable detection - the script uses ^TOKEN anchored patterns to avoid false positives
-      PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave it PENDING for another host to pick up. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
+      PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave it PENDING for another host to pick up. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave PENDING for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
 
       # Functions
       pending_count() {
@@ -414,6 +419,13 @@ let
               return 5
           fi
 
+          # User input required - interactive task, needs manual completion via /next-task
+          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^USER_INPUT_REQUIRED'; then
+              echo -e "  ''${YELLOW}⌨ ''${task_name}: requires user input (use /next-task interactively)''${NC}"
+              save_state "$iteration" "user_input_required" "$pending_before"
+              return 6
+          fi
+
           # All tasks done
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^ALL_TASKS_DONE'; then
               local pending_after=$(pending_count)
@@ -578,6 +590,13 @@ let
                   print_exit_summary "Task requires different host (ENVIRONMENT_NOT_CAPABLE)" "$task_counter" "$pending_now"
                   save_state "$task_counter" "environment_not_capable"
                   exit 0  # Exit cleanly - user should run on appropriate host
+                  ;;
+              6)  # User input required - interactive task
+                  task_counter=$((task_counter - 1))  # Don't count as attempt
+                  pending_now=$(pending_count)
+                  print_exit_summary "Task requires user input - run /next-task interactively" "$task_counter" "$pending_now"
+                  save_state "$task_counter" "user_input_required"
+                  exit 0  # Exit cleanly - user should run /next-task manually
                   ;;
               *)  # Failure
                   retries=0

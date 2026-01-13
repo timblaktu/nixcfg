@@ -136,7 +136,7 @@ in
             bearerToken = {
               bitwarden = {
                 item = "PAC Code Companion v2 - API Key";
-                field = "Password";
+                # No field specified - uses default password from Bitwarden item
               };
             };
           };

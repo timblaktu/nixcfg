@@ -51,19 +51,43 @@ build-profiles/
 .archive/
 
 # === Claude Code Configuration ===
-# Ignore all runtime state
-claude-runtime/*/*
-.claude/*
-# ..but include settings/configuration
-!claude-runtime/*/settings.json
-!.claude/settings.json
+# Runtime state files (regenerated each session)
+claude-runtime/*/.claude.json
+claude-runtime/*/.claude.json.backup
+claude-runtime/*/.credentials.json
+claude-runtime/*/.mcp.json
+claude-runtime/*/history.jsonl
 
-# Home Manager managed claude command symlinks (deployed to nix store)
+# Nix-generated agent definitions (may be in agents/ subdir or root)
+claude-runtime/*/agents/**
+claude-runtime/*/code-searcher.md
+claude-runtime/*/pdf-indexer.md
+claude-runtime/*/get-current-datetime.md
+claude-runtime/*/memory-bank-synchronizer.md
+claude-runtime/*/ux-design-expert.md
+
+# Runtime state directories (contain session-specific data)
+claude-runtime/*/debug/**
+claude-runtime/*/file-history/**
+claude-runtime/*/logs/**
+claude-runtime/*/plans/**
+claude-runtime/*/projects/**
+claude-runtime/*/session-env/**
+claude-runtime/*/shell-snapshots/**
+claude-runtime/*/statsig/**
+claude-runtime/*/todos/**
+claude-runtime/*/skills/**
+
+# Nix-generated slash commands (contain nix store paths)
 claude-runtime/.claude-*/commands/nixmemory.*
 claude-runtime/.claude-*/commands/usermemory.*
 claude-runtime/.claude-*/commands/globalmemory.*
 claude-runtime/.claude-*/commands/*remember.*
 claude-runtime/.claude-*/commands/next-task.*
+
+# Web session runtime (.claude/ in repo root)
+.claude/*
+!.claude/settings.json
 
 # Task automation runtime state
 .claude-task-logs/
