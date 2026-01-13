@@ -54,6 +54,105 @@ let
     IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response
   '';
 
+  # Generate zsh completion for run-tasks-<account>
+  mkZshCompletion = { accountName }:
+    pkgs.writeText "_run-tasks-${accountName}" ''
+      #compdef run-tasks-${accountName}
+
+      _run_tasks_${lib.replaceStrings ["-"] ["_"] accountName}() {
+        local curcontext="$curcontext" state line
+        typeset -A opt_args
+
+        _arguments -C \
+          '-n[Run N tasks]:number of tasks:' \
+          '-a[Run all pending tasks]' \
+          '--all[Run all pending tasks]' \
+          '-c[Run continuously]' \
+          '--continuous[Run continuously]' \
+          '-d[Seconds between tasks]:delay seconds:' \
+          '--delay[Seconds between tasks]:delay seconds:' \
+          '--model[Override model]:model:(opus sonnet haiku qwen-a3b)' \
+          '--task[Run specific task by ID]:task ID:->tasks' \
+          '--list[Show all tasks with status]' \
+          '--dry-run[Show what would execute without running]' \
+          '-h[Show help]' \
+          '--help[Show help]' \
+          '1:plan file:_files -g "*.md"' \
+          && return 0
+
+        case $state in
+          tasks)
+            # Extract task IDs from the plan file if available
+            local plan_file
+            plan_file="''${words[(r)*.md]}"
+            if [[ -n "$plan_file" && -f "$plan_file" ]]; then
+              local -a task_ids
+              task_ids=($(${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' "$plan_file" 2>/dev/null | \
+                ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([A-Za-z0-9_-]\+\)[[:space:]]*|.*/\1/p' | \
+                ${pkgs.coreutils}/bin/tr '\n' ' '))
+              if [[ ''${#task_ids[@]} -gt 0 ]]; then
+                _values 'task ID' "''${task_ids[@]}"
+              fi
+            fi
+            ;;
+        esac
+      }
+
+      _run_tasks_${lib.replaceStrings ["-"] ["_"] accountName} "$@"
+    '';
+
+  # Generate bash completion for run-tasks-<account>
+  mkBashCompletion = { accountName }:
+    pkgs.writeText "run-tasks-${accountName}.bash" ''
+      # Bash completion for run-tasks-${accountName}
+      _run_tasks_${lib.replaceStrings ["-"] ["_"] accountName}() {
+        local cur prev words cword
+        COMPREPLY=()
+        cur="''${COMP_WORDS[COMP_CWORD]}"
+        prev="''${COMP_WORDS[COMP_CWORD-1]}"
+
+        # Options that take values
+        case "$prev" in
+          -n|-d|--delay)
+            # Numeric value expected
+            return 0
+            ;;
+          --model)
+            COMPREPLY=( $(compgen -W "opus sonnet haiku qwen-a3b" -- "$cur") )
+            return 0
+            ;;
+          --task)
+            # Try to extract task IDs from plan file
+            local plan_file=""
+            for word in "''${COMP_WORDS[@]}"; do
+              if [[ "$word" == *.md ]]; then
+                plan_file="$word"
+                break
+              fi
+            done
+            if [[ -n "$plan_file" && -f "$plan_file" ]]; then
+              local task_ids
+              task_ids=$(${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' "$plan_file" 2>/dev/null | \
+                ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([A-Za-z0-9_-]\+\)[[:space:]]*|.*/\1/p' | \
+                ${pkgs.coreutils}/bin/tr '\n' ' ')
+              COMPREPLY=( $(compgen -W "$task_ids" -- "$cur") )
+            fi
+            return 0
+            ;;
+        esac
+
+        # Complete options
+        if [[ "$cur" == -* ]]; then
+          COMPREPLY=( $(compgen -W "-n -a --all -c --continuous -d --delay --model --task --list --dry-run -h --help" -- "$cur") )
+          return 0
+        fi
+
+        # Complete markdown files
+        COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
+      }
+      complete -F _run_tasks_${lib.replaceStrings ["-"] ["_"] accountName} run-tasks-${accountName}
+    '';
+
   # Generate a run-tasks script for a specific account
   # This creates run-tasks-<account> scripts (e.g., run-tasks-max, run-tasks-pro, run-tasks-work)
   mkRunTasksScript = { accountName, displayName, claudeWrapper }:
@@ -638,6 +737,20 @@ let
               fi
           fi
 
+          # Task already complete (--task specific)
+          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^TASK_ALREADY_COMPLETE'; then
+              echo -e "  ''${YELLOW}⊘ ''${task_name}: already complete''${NC}"
+              save_state "$iteration" "task_already_complete" "$pending_before"
+              return 7
+          fi
+
+          # Task not found (--task specific)
+          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^TASK_NOT_FOUND'; then
+              echo -e "  ''${RED}✗ ''${task_name}: not found in plan file''${NC}"
+              save_state "$iteration" "task_not_found" "$pending_before"
+              return 8
+          fi
+
           # PRIORITY 4: Success path - exit code 0 and type is "result" with subtype "success"
           if [[ $exit_code -eq 0 && "$json_type" == "result" && "$json_subtype" == "success" ]]; then
               local pending_after=$(pending_count)
@@ -894,6 +1007,20 @@ let
                   save_state "$task_counter" "user_input_required"
                   exit 0  # Exit cleanly - user should run /next-task manually
                   ;;
+              7)  # Task already complete (--task specific)
+                  task_counter=$((task_counter - 1))  # Don't count as attempt
+                  pending_now=$(pending_count)
+                  print_exit_summary "Specified task already complete" "$task_counter" "$pending_now"
+                  save_state "$task_counter" "task_already_complete"
+                  exit 0  # Exit cleanly - task was already done
+                  ;;
+              8)  # Task not found (--task specific)
+                  task_counter=$((task_counter - 1))  # Don't count as attempt
+                  pending_now=$(pending_count)
+                  print_exit_summary "Specified task not found in plan file" "$task_counter" "$pending_now"
+                  save_state "$task_counter" "task_not_found"
+                  exit 1  # Exit with error - task ID was invalid
+                  ;;
               *)  # Failure
                   retries=0
                   consecutive_rate_limits=0
@@ -992,7 +1119,8 @@ in
     # Deploy /next-task slash command to each enabled account's commands/ directory
     # Use cfg.nixcfgPath for consistency with memory-commands.nix (fixes symlink creation)
     home.file = mkMerge (
-      mapAttrsToList
+      # Slash commands
+      (mapAttrsToList
         (accountName: account:
           if account.enable then {
             "${cfg.nixcfgPath}/claude-runtime/.claude-${accountName}/commands/next-task.md" = {
@@ -1000,7 +1128,29 @@ in
             };
           } else { }
         )
-        cfg.accounts
+        cfg.accounts)
+      ++
+      # Zsh completions
+      (mapAttrsToList
+        (accountName: account:
+          if account.enable then {
+            ".local/share/zsh/site-functions/_run-tasks-${accountName}" = {
+              source = mkZshCompletion { inherit accountName; };
+            };
+          } else { }
+        )
+        cfg.accounts)
+      ++
+      # Bash completions
+      (mapAttrsToList
+        (accountName: account:
+          if account.enable then {
+            ".local/share/bash-completion/completions/run-tasks-${accountName}" = {
+              source = mkBashCompletion { inherit accountName; };
+            };
+          } else { }
+        )
+        cfg.accounts)
     );
   };
 }
