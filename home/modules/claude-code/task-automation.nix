@@ -99,6 +99,9 @@ let
       MODE="single"
       COUNT=1
       DRY_RUN=false
+      MODEL_OVERRIDE=""
+      TASK_ID=""
+      LIST_TASKS=false
 
       usage() {
           cat << 'EOF'
@@ -116,18 +119,26 @@ let
         -a, --all         Run all pending tasks
         -c, --continuous  Run continuously (survives rate limits)
         -d, --delay N     Seconds between tasks (default: ${toString taskCfg.safetyLimits.delayBetweenTasks})
-        --dry-run         Show prompt without executing
+        --model MODEL     Override model (alias or full name, e.g., opus, qwen-a3b)
+        --dry-run         Show what would execute without running
         -h, --help        Show this help
+
+      Task Selection:
+        --task ID         Run specific task by ID (e.g., --task F1)
+                          Can combine with -n: --task F1 -n 3 (run F1, then next 2)
+        --list            Show all tasks with status, select with fzf if interactive
 
       Plan File Format:
         The plan file must contain a Progress Tracking table with unique status tokens:
 
-        | Task | Name | Status | Date |
-        |------|------|--------|------|
-        | 1    | ...  | TASK:COMPLETE | 2026-01-10 |
-        | 2    | ...  | TASK:PENDING  |      |
+        | Task | Name | Status | Date | Model |
+        |------|------|--------|------|-------|
+        | 1    | ...  | TASK:COMPLETE | 2026-01-10 |     |
+        | 2    | ...  | TASK:PENDING  |      | qwen |
 
         Status tokens: TASK:PENDING, TASK:COMPLETE (unique to avoid false matches)
+        Model column: Optional, specifies model for this task (alias or full name)
+        Model priority: --model CLI flag > Model column > account default
 
       Safety Limits (configurable via Nix):
         Max iterations:  ${toString taskCfg.safetyLimits.maxIterations}
@@ -135,11 +146,12 @@ let
         Rate limit wait: ${toString taskCfg.safetyLimits.rateLimitWaitSeconds} seconds
 
       Examples:
-        run-tasks-${accountName} docs/research-plan.md           # Run 1 task
-        run-tasks-${accountName} docs/research-plan.md -n 5      # Run 5 tasks
-        run-tasks-${accountName} docs/research-plan.md -a        # Run all pending
-        run-tasks-${accountName} docs/research-plan.md -c        # Run continuously
-        run-tasks-${accountName} docs/research-plan.md --dry-run # Show prompt only
+        run-tasks-${accountName} docs/plan.md               # Run next pending task
+        run-tasks-${accountName} docs/plan.md -n 5          # Run 5 tasks sequentially
+        run-tasks-${accountName} docs/plan.md --task F1     # Run task F1 specifically
+        run-tasks-${accountName} docs/plan.md --task F1 -n 3 # Run F1, then next 2 pending
+        run-tasks-${accountName} docs/plan.md --list        # Show task status, select with fzf
+        run-tasks-${accountName} docs/plan.md --dry-run     # Preview what would execute
       EOF
           exit 0
       }
@@ -151,6 +163,9 @@ let
               -a|--all) MODE="all"; shift ;;
               -c|--continuous) MODE="continuous"; shift ;;
               -d|--delay) DELAY_BETWEEN_TASKS="$2"; shift 2 ;;
+              --model) MODEL_OVERRIDE="$2"; shift 2 ;;
+              --task) TASK_ID="$2"; shift 2 ;;
+              --list) LIST_TASKS=true; shift ;;
               --dry-run) DRY_RUN=true; shift ;;
               -h|--help) usage ;;
               -*)
@@ -227,6 +242,27 @@ let
               else
                   echo "unknown"
               fi
+          fi
+      }
+
+      # Extract model specification from the first TASK:PENDING row in the plan file
+      # Looks for a Model column (5th column typically: Task | Name | Status | Date | Model)
+      # Returns the model name if specified, empty string if not
+      get_next_task_model() {
+          local line
+          line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null) || { echo ""; return; }
+          # Count pipe characters to determine column count
+          local col_count
+          col_count=$(echo "$line" | ${pkgs.coreutils}/bin/tr -cd '|' | ${pkgs.coreutils}/bin/wc -c)
+
+          # If we have 6+ pipes (5+ columns), try to extract the 5th column (Model)
+          # Format: | Task | Name | Status | Date | Model |
+          if [[ $col_count -ge 6 ]]; then
+              local model
+              model=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[^|]*|[^|]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
+              echo "$model"
+          else
+              echo ""
           fi
       }
 
@@ -317,22 +353,188 @@ let
           return 1
       }
 
+      # List all tasks with their status
+      # Output: Task ID | Name | Status | Date | Model (tab-separated for fzf)
+      list_all_tasks() {
+          # Find all table rows with TASK: status markers
+          ${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' "$PLAN_FILE" 2>/dev/null | while read -r line; do
+              # Extract columns: | Task | Name | Status | Date | Model |
+              local task_id name status date model
+              task_id=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
+              name=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
+              status=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/.*|\s*\(TASK:[A-Z]*\)\s*|.*/\1/p')
+              date=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[^|]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
+
+              # Try to extract model from 5th column
+              local col_count
+              col_count=$(echo "$line" | ${pkgs.coreutils}/bin/tr -cd '|' | ${pkgs.coreutils}/bin/wc -c)
+              if [[ $col_count -ge 6 ]]; then
+                  model=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[^|]*|[^|]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
+              else
+                  model=""
+              fi
+
+              # Output tab-separated for easy parsing
+              printf "%s\t%s\t%s\t%s\t%s\n" "$task_id" "$name" "$status" "''${date:--}" "''${model:--}"
+          done
+      }
+
+      # Display formatted task list with status highlighting
+      show_task_list() {
+          local pending_count=0
+          local complete_count=0
+          local next_pending=""
+
+          echo -e "''${CYAN}Tasks in: $PLAN_FILE_ABS''${NC}"
+          echo ""
+          printf "''${BLUE}%-8s %-30s %-15s %-12s %-10s''${NC}\n" "ID" "Name" "Status" "Date" "Model"
+          echo "-------- ------------------------------ --------------- ------------ ----------"
+
+          list_all_tasks | while IFS=$'\t' read -r task_id name status date model; do
+              local status_color=""
+              local marker=""
+              case "$status" in
+                  TASK:PENDING)
+                      status_color="''${YELLOW}"
+                      pending_count=$((pending_count + 1))
+                      if [[ -z "$next_pending" ]]; then
+                          next_pending="$task_id"
+                          marker="→"
+                      fi
+                      ;;
+                  TASK:COMPLETE)
+                      status_color="''${GREEN}"
+                      complete_count=$((complete_count + 1))
+                      ;;
+                  *)
+                      status_color="''${NC}"
+                      ;;
+              esac
+              printf "%-1s ''${CYAN}%-7s''${NC} %-30s ''${status_color}%-15s''${NC} %-12s %-10s\n" \
+                  "$marker" "$task_id" "''${name:0:30}" "$status" "$date" "$model"
+          done
+
+          echo ""
+          # Re-count since subshell vars don't persist
+          local p=$(${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0")
+          local c=$(${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:COMPLETE\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0")
+          echo -e "''${GREEN}Complete: $c''${NC}  ''${YELLOW}Pending: $p''${NC}"
+      }
+
+      # Interactive task selection with fzf
+      select_task_with_fzf() {
+          if ! command -v ${pkgs.fzf}/bin/fzf &>/dev/null; then
+              echo -e "''${RED}fzf not available for interactive selection''${NC}" >&2
+              return 1
+          fi
+
+          local selected
+          selected=$(list_all_tasks | ${pkgs.fzf}/bin/fzf \
+              --header="Select task (TAB to multi-select, ENTER to confirm)" \
+              --preview="echo 'Task: {1}  Status: {3}'" \
+              --preview-window=up:1 \
+              --delimiter=$'\t' \
+              --with-nth=1,2,3 \
+              --ansi \
+              --height=50% \
+              --reverse \
+              --prompt="Task> " \
+              --bind="ctrl-a:select-all" \
+              | ${pkgs.coreutils}/bin/cut -f1)
+
+          if [[ -n "$selected" ]]; then
+              echo "$selected"
+          else
+              return 1
+          fi
+      }
+
+      # Get task line by ID, returns empty if not found
+      get_task_line_by_id() {
+          local target_id="$1"
+          ${pkgs.ripgrep}/bin/rg "\|\s*$target_id\s*\|" "$PLAN_FILE" 2>/dev/null | ${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' | head -1
+      }
+
+      # Check if a task ID exists and is PENDING
+      is_task_pending() {
+          local target_id="$1"
+          local line
+          line=$(get_task_line_by_id "$target_id")
+          [[ -n "$line" ]] && echo "$line" | ${pkgs.ripgrep}/bin/rg -q '\|\s*TASK:PENDING\s*\|'
+      }
+
+      # Get model for specific task by ID
+      get_task_model_by_id() {
+          local target_id="$1"
+          local line
+          line=$(get_task_line_by_id "$target_id")
+          if [[ -z "$line" ]]; then
+              echo ""
+              return
+          fi
+
+          local col_count
+          col_count=$(echo "$line" | ${pkgs.coreutils}/bin/tr -cd '|' | ${pkgs.coreutils}/bin/wc -c)
+          if [[ $col_count -ge 6 ]]; then
+              echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[^|]*|[^|]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' '
+          else
+              echo ""
+          fi
+      }
+
       run_task() {
           local iteration=$1
           local rate_limit_count=''${2:-0}
+          local target_task_id="''${3:-}"  # Optional: specific task ID to run
           local pending_before=$(pending_count)
-          local task_name=$(get_next_task_name)
+
+          # Determine task name and model based on whether we have a specific task ID
+          local task_name task_model
+          if [[ -n "$target_task_id" ]]; then
+              task_name="$target_task_id"
+              task_model=$(get_task_model_by_id "$target_task_id")
+          else
+              task_name=$(get_next_task_name)
+              task_model=$(get_next_task_model)
+          fi
+
           local timestamp=$(date +"%Y%m%d_%H%M%S")
           # Log file naming: LOG_DIR/YYYYMMDD_HHMMSS_TASKNAME.{log,json}
           # User can tail LOG_DIR/*.log for live output
           local log_base="''${LOG_DIR}/''${timestamp}_''${task_name}"
 
+          # Determine which model to use: CLI override > Model column > account default
+          local model_to_use=""
+          if [[ -n "$MODEL_OVERRIDE" ]]; then
+              model_to_use="$MODEL_OVERRIDE"
+          elif [[ -n "$task_model" ]]; then
+              model_to_use="$task_model"
+          fi
+
+          # Build model flag for claude command
+          local model_flag=""
+          if [[ -n "$model_to_use" ]]; then
+              model_flag="--model $model_to_use"
+          fi
+
           # Single-line compact header: [N/total] TASK @ TIME (logs: basename)
-          echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${pending_before} pending)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC}"
+          if [[ -n "$model_to_use" ]]; then
+              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${pending_before} pending)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC} ''${YELLOW}[model: ''${model_to_use}]''${NC}"
+          else
+              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${pending_before} pending)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC}"
+          fi
 
           if [[ "$DRY_RUN" == true ]]; then
-              echo -e "  ''${YELLOW}[DRY RUN] Would execute: $CLAUDE_CMD -p ...''${NC}"
+              echo -e "  ''${YELLOW}[DRY RUN] Would execute: $CLAUDE_CMD -p $model_flag ...''${NC}"
               return 0
+          fi
+
+          # Build prompt - either for specific task or first pending
+          local task_prompt
+          if [[ -n "$target_task_id" ]]; then
+              task_prompt="Read ''${PLAN_FILE_ABS}, find the task with ID \"$target_task_id\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If the task is already TASK:COMPLETE, output on its own line: TASK_ALREADY_COMPLETE. If no such task ID found, output on its own line: TASK_NOT_FOUND. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave it PENDING for another host to pick up. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave PENDING for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met, that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
+          else
+              task_prompt="$PROMPT"
           fi
 
           local json_output
@@ -342,7 +544,7 @@ let
           # Capture JSON output to stdout, stderr separately for error analysis
           # Using --output-format json for structured response parsing
           {
-              json_output=$($CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions "$PROMPT" 2>"''${log_base}.stderr")
+              json_output=$($CLAUDE_CMD -p $model_flag --output-format json --permission-mode bypassPermissions "$task_prompt" 2>"''${log_base}.stderr")
               exit_code=$?
           } || exit_code=$?
 
@@ -458,6 +660,28 @@ let
           return 0
       }
 
+      # Handle --list mode: show task status and optionally select with fzf
+      if [[ "$LIST_TASKS" == true ]]; then
+          show_task_list
+          echo ""
+
+          # If interactive terminal, offer fzf selection
+          if [[ -t 0 && -t 1 ]]; then
+              echo -e "''${BLUE}Press Enter to select a task with fzf, or Ctrl+C to exit...''${NC}"
+              read -r
+              selected=$(select_task_with_fzf) || exit 0
+              if [[ -n "$selected" ]]; then
+                  TASK_ID="$selected"
+                  echo -e "''${GREEN}Selected: $TASK_ID''${NC}"
+              fi
+          fi
+
+          # If no task selected (non-interactive or user cancelled), just exit
+          if [[ -z "$TASK_ID" ]]; then
+              exit 0
+          fi
+      fi
+
       # Header
       echo -e "''${GREEN}"
       cat << 'BANNER'
@@ -470,12 +694,31 @@ let
 
       echo "Plan file: $PLAN_FILE_ABS"
       echo "Account: $ACCOUNT_DISPLAY ($CLAUDE_CMD)"
-      echo "Mode: $MODE $([ "$MODE" = "count" ] && echo "($COUNT)")"
+
+      # Display mode with task ID if specified
+      if [[ -n "$TASK_ID" ]]; then
+          echo "Mode: $MODE (starting with task: $TASK_ID)"
+      else
+          echo "Mode: $MODE $([ "$MODE" = "count" ] && echo "($COUNT)")"
+      fi
+
       INITIAL_PENDING=$(pending_count)
       echo "Pending tasks: $INITIAL_PENDING"
       echo "Delay: ''${DELAY_BETWEEN_TASKS}s"
       echo "Safety limits: ''${MAX_ITERATIONS} iterations, ''${MAX_RUNTIME_HOURS}h runtime"
       echo ""
+
+      # Validate --task ID if specified
+      if [[ -n "$TASK_ID" ]]; then
+          if ! get_task_line_by_id "$TASK_ID" &>/dev/null || [[ -z "$(get_task_line_by_id "$TASK_ID")" ]]; then
+              echo -e "''${RED}Error: Task '$TASK_ID' not found in plan file''${NC}"
+              echo "Use --list to see available tasks"
+              exit 1
+          fi
+          if ! is_task_pending "$TASK_ID"; then
+              echo -e "''${YELLOW}Warning: Task '$TASK_ID' is not PENDING (may already be complete)''${NC}"
+          fi
+      fi
 
       # Pre-flight validation
       if [[ "$INITIAL_PENDING" == "0" ]]; then
@@ -494,9 +737,52 @@ let
           echo -e "''${YELLOW}Please update status tokens for reliable matching''${NC}"
       fi
 
+      # Enhanced dry-run: show detailed execution preview
       if [[ "$DRY_RUN" == true ]]; then
           echo -e "''${YELLOW}=== DRY RUN MODE ===''${NC}"
           echo ""
+
+          # Determine which task would run (no 'local' - we're at script top level)
+          preview_task_id=""
+          preview_task_model=""
+          preview_model_source=""
+          preview_effective_model=""
+
+          if [[ -n "$TASK_ID" ]]; then
+              preview_task_id="$TASK_ID"
+              preview_task_model=$(get_task_model_by_id "$TASK_ID")
+          else
+              preview_task_id=$(get_next_task_name)
+              preview_task_model=$(get_next_task_model)
+          fi
+
+          # Determine effective model
+          if [[ -n "$MODEL_OVERRIDE" ]]; then
+              preview_model_source="CLI --model flag"
+              preview_effective_model="$MODEL_OVERRIDE"
+          elif [[ -n "$preview_task_model" ]]; then
+              preview_model_source="Plan file Model column"
+              preview_effective_model="$preview_task_model"
+          else
+              preview_model_source="Account default"
+              preview_effective_model="(default)"
+          fi
+
+          echo -e "''${CYAN}Execution Preview:''${NC}"
+          echo "  Task ID:     $preview_task_id"
+          echo "  Model:       $preview_effective_model ($preview_model_source)"
+          echo "  Claude cmd:  $CLAUDE_CMD"
+          echo ""
+          echo -e "''${CYAN}Would execute:''${NC}"
+          if [[ "$preview_effective_model" != "(default)" ]]; then
+              echo "  $CLAUDE_CMD -p --model $preview_effective_model --output-format json --permission-mode bypassPermissions <prompt>"
+          else
+              echo "  $CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions <prompt>"
+          fi
+          echo ""
+          echo -e "''${CYAN}Prompt (truncated):''${NC}"
+          echo "  ''${PROMPT:0:200}..."
+          exit 0
       fi
 
       # Trap Ctrl+C
@@ -506,6 +792,7 @@ let
       task_counter=0
       retries=0
       consecutive_rate_limits=0
+      specific_task_done=false  # Track if we've run the --task specified task
 
       while true; do
           pending=$(pending_count)
@@ -544,7 +831,16 @@ let
 
           task_counter=$((task_counter + 1))
 
-          run_task $task_counter $consecutive_rate_limits
+          # Determine which task to run:
+          # - First iteration with --task: run the specific task
+          # - Subsequent iterations: run next pending task
+          current_task_id=""
+          if [[ -n "$TASK_ID" && "$specific_task_done" == false ]]; then
+              current_task_id="$TASK_ID"
+              specific_task_done=true
+          fi
+
+          run_task $task_counter $consecutive_rate_limits "$current_task_id"
           result=$?
 
           case $result in
