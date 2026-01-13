@@ -43,16 +43,16 @@
       bearerToken = secrets.bearerToken or null;
 
       # Generate API environment variable exports
+      # NOTE: Claude Code requires ANTHROPIC_API_KEY for third-party proxies (not ANTHROPIC_AUTH_TOKEN)
+      # ANTHROPIC_AUTH_TOKEN is for Anthropic's OAuth flow; API_KEY is used for both Anthropic API
+      # and third-party endpoints when ANTHROPIC_BASE_URL is set.
       apiEnvVars = lib.concatStringsSep "\n" (lib.filter (s: s != "") [
         # ANTHROPIC_BASE_URL - set if custom baseUrl specified
         (lib.optionalString (baseUrl != null) ''
           export ANTHROPIC_BASE_URL="${baseUrl}"'')
 
-        # ANTHROPIC_API_KEY - set to empty string if disableApiKey is true
-        (lib.optionalString disableApiKey ''
-          export ANTHROPIC_API_KEY=""'')
-
-        # ANTHROPIC_AUTH_TOKEN - retrieve via rbw if bearer auth + bitwarden configured
+        # ANTHROPIC_API_KEY - retrieve via rbw if bearer auth + bitwarden configured
+        # For third-party proxies, this replaces ANTHROPIC_AUTH_TOKEN
         (lib.optionalString (authMethod == "bearer" && bearerToken != null && bearerToken.bitwarden or null != null) (
           let
             bwItem = bearerToken.bitwarden.item;
@@ -69,24 +69,28 @@
               else "Field: ${bwField}";
           in
           ''
-            # Retrieve bearer token from Bitwarden via rbw
+            # Retrieve API key/bearer token from Bitwarden via rbw
             if command -v rbw >/dev/null 2>&1; then
-              ANTHROPIC_AUTH_TOKEN="$(${rbwCmd} 2>/dev/null)" || {
-                echo "Warning: Failed to retrieve bearer token from Bitwarden" >&2
+              ANTHROPIC_API_KEY="$(${rbwCmd} 2>/dev/null)" || {
+                echo "Warning: Failed to retrieve API key from Bitwarden" >&2
                 echo "   Item: ${bwItem}, ${fieldDesc}" >&2
               }
-              export ANTHROPIC_AUTH_TOKEN
+              export ANTHROPIC_API_KEY
             else
               # Fallback for systems without rbw (e.g., Termux)
               if [[ -f "$HOME/.secrets/claude-${account}-token" ]]; then
-                ANTHROPIC_AUTH_TOKEN="$(cat "$HOME/.secrets/claude-${account}-token")"
-                export ANTHROPIC_AUTH_TOKEN
+                ANTHROPIC_API_KEY="$(cat "$HOME/.secrets/claude-${account}-token")"
+                export ANTHROPIC_API_KEY
               else
-                echo "Warning: Bearer token not found" >&2
+                echo "Warning: API key not found" >&2
                 echo "   Expected: ~/.secrets/claude-${account}-token (or rbw configured)" >&2
               fi
             fi''
         ))
+
+        # ANTHROPIC_API_KEY - set to empty string only if disableApiKey is true AND no bearer auth
+        (lib.optionalString (disableApiKey && authMethod != "bearer") ''
+          export ANTHROPIC_API_KEY=""'')
       ]);
 
       # Generate model mapping environment variables
@@ -202,19 +206,20 @@
       ${lib.optionalString (baseUrl != null) ''
       export ANTHROPIC_BASE_URL="${baseUrl}"
       ''}
-      ${lib.optionalString disableApiKey ''
-      export ANTHROPIC_API_KEY=""
-      ''}
       ${lib.optionalString (authMethod == "bearer") ''
-      # Bearer token - read from local secrets file on Termux
+      # API key for third-party proxy - read from local secrets file on Termux
+      # NOTE: Claude Code uses ANTHROPIC_API_KEY (not AUTH_TOKEN) for proxy endpoints
       TOKEN_FILE="$HOME/.secrets/claude-${account}-token"
       if [[ -f "$TOKEN_FILE" ]]; then
-        ANTHROPIC_AUTH_TOKEN="$(cat "$TOKEN_FILE")"
-        export ANTHROPIC_AUTH_TOKEN
+        ANTHROPIC_API_KEY="$(cat "$TOKEN_FILE")"
+        export ANTHROPIC_API_KEY
       else
-        echo "Warning: Bearer token not found at $TOKEN_FILE" >&2
+        echo "Warning: API key not found at $TOKEN_FILE" >&2
         echo "   Create it with: mkdir -p ~/.secrets && echo 'your-token' > $TOKEN_FILE" >&2
       fi
+      ''}
+      ${lib.optionalString (disableApiKey && authMethod != "bearer") ''
+      export ANTHROPIC_API_KEY=""
       ''}
       ${lib.concatStringsSep "\n" (lib.mapAttrsToList (model: mapping: ''
       export ANTHROPIC_DEFAULT_${lib.toUpper model}_MODEL="${mapping}"

@@ -125,11 +125,11 @@ in
           api = {
             baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
             authMethod = "bearer";
-            disableApiKey = true;
+            # Note: disableApiKey not needed - bearer auth sets ANTHROPIC_API_KEY from Bitwarden
             modelMappings = {
-              sonnet = "devstral";
-              opus = "devstral";
-              haiku = "qwen-a3b";
+              opus = "claude"; # Best reasoning for complex tasks (200K context)
+              sonnet = "kimi-linear-reap-a3b"; # Long-context coding workloads (200K context)
+              haiku = "qwen-a3b"; # Fast + images/OCR (250K context)
             };
           };
           secrets = {
@@ -217,6 +217,64 @@ in
             echo "NPM check test passed (placeholder)" > $out
           '';
         };
+      })
+
+      # Show Claude Code model mappings for current session
+      (pkgs.writeShellApplication {
+        name = "claude-models";
+        text = ''
+          # Display current Claude Code model mappings
+
+          echo "Claude Code Model Mappings"
+          echo "=========================="
+          echo ""
+
+          # Check if we're in a Claude session by looking for the model env vars
+          if [[ -z "''${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]] && \
+             [[ -z "''${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" ]] && \
+             [[ -z "''${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" ]]; then
+            echo "No model mappings found in environment."
+            echo "This command should be run from within a Claude Code session."
+            echo ""
+            echo "Launch Claude Code with one of these wrappers:"
+            echo "  - claudemax   (Anthropic Max account)"
+            echo "  - claudepro   (Anthropic Pro account)"
+            echo "  - claudework  (PAC Code-Companion)"
+            exit 1
+          fi
+
+          # Show API base URL if set
+          if [[ -n "''${ANTHROPIC_BASE_URL:-}" ]]; then
+            echo "API Base URL: ''${ANTHROPIC_BASE_URL}"
+            echo ""
+          fi
+
+          # Display model mappings
+          echo "Model Alias Mappings:"
+          echo "--------------------"
+
+          if [[ -n "''${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]]; then
+            echo "  opus   → ''${ANTHROPIC_DEFAULT_OPUS_MODEL}"
+          fi
+
+          if [[ -n "''${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" ]]; then
+            echo "  sonnet → ''${ANTHROPIC_DEFAULT_SONNET_MODEL}"
+          fi
+
+          if [[ -n "''${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" ]]; then
+            echo "  haiku  → ''${ANTHROPIC_DEFAULT_HAIKU_MODEL}"
+          fi
+
+          echo ""
+          echo "Usage:"
+          echo "  /model opus   - Switch to opus model"
+          echo "  /model sonnet - Switch to sonnet model"
+          echo "  /model haiku  - Switch to haiku model"
+          echo ""
+          echo "Or use full model names directly:"
+          echo "  --model <full-model-name>"
+        '';
+        runtimeInputs = with pkgs; [ coreutils ];
       })
     ];
   };

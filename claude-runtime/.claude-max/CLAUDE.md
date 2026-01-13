@@ -24,6 +24,8 @@
 - NEVER sudo long-running commands with timeout parameters (causes Claude Code crashes with EPERM errors and inability to cleanup). 
   - What to do instead: Provide the command for user to run manually.
 - **NEVER resolve merge conflicts automatically** - When encountering git merge conflicts, ALWAYS stop immediately and ask the user to review conflicts. Show conflicted files and let user make resolution decisions.
+- **NEVER use `git add -f` or `--force`** - If `git add` fails because a file matches .gitignore, that's intentional. Do not bypass gitignore patterns. If you believe a file should be tracked, ask the user first.
+- **Respect .gitignore** - Files matching gitignore patterns (like `.claude/`, `CLAUDE.md`) should NOT be committed. Plan files and session state work locally without git tracking.
 - **ALL github.com/timblaktu repositories are USER-OWNED**
   - When encountering issues with timblaktu repos, **ALWAYS use fd to locate the local working tree (typically cloned at ~/src) and work there in an appropriate branch**, instead of changing flake inputs to avoid them.
 - ALWAYS use `echo "$WSL_DISTRO_NAME"` to determine if you're running in WSL, and what WSL instance you and/or your MCP servers are running in.
