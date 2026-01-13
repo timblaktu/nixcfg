@@ -53,6 +53,15 @@
 - Clear Definition of Done for each task
 - Execution Strategy diagrams for tasks with parallel subagents
 
+**Task ID naming rules** (CRITICAL for `run-tasks` log file generation):
+- Task IDs appear in first column of Progress Tracking table (e.g., `R0.1`, `D1`, `P2.3`)
+- Task Names appear in second column - these are used for log filenames
+- **AVOID these characters in Task Name column**: `/` `:` `\` `*` `?` `"` `<` `>` `|` (filesystem-unsafe)
+- Good: `R0.2.01 | Terms_AMD_Platform-Users-Guide`
+- Bad: `R0.2.01 | Terms: AMD/Platform-Users-Guide` (contains `:` and `/`)
+- The script sanitizes names but descriptive safe names are preferred
+- Use underscores `_` or hyphens `-` as separators instead of `/` or `:`
+
 **Parallelism pattern** (Option C - recommended):
 - Design tasks for internal parallelism via Claude Task tool
 - Spawn parallel subagents within a single task

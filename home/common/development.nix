@@ -122,13 +122,31 @@ in
           account = "work";
           displayName = "Work Code-Companion";
           configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-work";
+          api = {
+            baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+            authMethod = "bearer";
+            disableApiKey = true;
+            modelMappings = {
+              sonnet = "devstral";
+              opus = "devstral";
+              haiku = "qwen-a3b";
+            };
+          };
+          secrets = {
+            bearerToken = {
+              bitwarden = {
+                item = "PAC Code Companion v2 - API Key";
+                field = "Password";
+              };
+            };
+          };
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";
             CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
             DISABLE_ERROR_REPORTING = "1";
           };
         };
-        runtimeInputs = with pkgs; [ procps coreutils claude-code jq ];
+        runtimeInputs = with pkgs; [ procps coreutils claude-code jq rbw ];
       })
 
       # Claude Code wrapper and update utilities

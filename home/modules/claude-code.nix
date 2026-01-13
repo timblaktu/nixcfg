@@ -414,6 +414,13 @@ with lib;
       # CLAUDE.md template
       claudeMdTemplate = pkgs.writeText "claude-memory.md" userGlobalMemoryContent;
 
+      # Sub-agent file templates (from sub-agents.nix)
+      agentTemplates = mapAttrs
+        (name: agent:
+          pkgs.writeText "claude-agent-${builtins.baseNameOf name}" agent.text
+        )
+        cfg._internal.subAgentFiles;
+
       # Enterprise Settings template (top-precedence configuration)
       enterpriseSettingsTemplate = pkgs.writeText "enterprise-managed-settings.json" (builtins.toJSON (
         let
@@ -502,10 +509,6 @@ with lib;
           "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
         })
 
-        # Sub-agent definitions
-        (mkIf (cfg._internal.subAgentFiles != { }) (
-          mapAttrs (name: value: { text = value.text; }) cfg._internal.subAgentFiles
-        ))
       ];
 
       # Activation script to populate runtime directories with templates
@@ -607,7 +610,16 @@ with lib;
               $DRY_RUN_CMD chmod 644 "$accountDir/.claude.json"
               echo "🆕 Created minimal runtime config: $accountDir/.claude.json"
             fi
-          
+
+            # SUB-AGENTS: Deploy agent files to agents directory
+            ${optionalString (cfg._internal.subAgentFiles != {}) ''
+            $DRY_RUN_CMD mkdir -p "$accountDir/agents"
+            ${concatStringsSep "\n" (mapAttrsToList (path: template: ''
+            copy_template "${template}" "$accountDir/agents/${builtins.baseNameOf path}"
+            '') agentTemplates)}
+            echo "🤖 Deployed ${toString (length (attrNames cfg._internal.subAgentFiles))} sub-agent(s)"
+            ''}
+
             echo "✅ Account ${name} configured with statusline support"
           fi
         '') cfg.accounts)}
@@ -671,7 +683,16 @@ with lib;
           $DRY_RUN_CMD chmod 644 "$baseDir/.claude.json"
           echo "🆕 Created minimal runtime config: $baseDir/.claude.json"
         fi
-      
+
+        # SUB-AGENTS: Deploy agent files to agents directory
+        ${optionalString (cfg._internal.subAgentFiles != {}) ''
+        $DRY_RUN_CMD mkdir -p "$baseDir/agents"
+        ${concatStringsSep "\n" (mapAttrsToList (path: template: ''
+        copy_template "${template}" "$baseDir/agents/${builtins.baseNameOf path}"
+        '') agentTemplates)}
+        echo "🤖 Deployed ${toString (length (attrNames cfg._internal.subAgentFiles))} sub-agent(s)"
+        ''}
+
         echo "✅ Base directory configured with statusline support"
         ''}
       '';

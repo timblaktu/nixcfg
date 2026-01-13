@@ -373,8 +373,8 @@ in
               };
             };
             secrets.bearerToken.bitwarden = {
-              item = "Code-Companion";
-              field = "bearer_token";
+              item = "PAC Code Companion v2 - API Key";
+              field = "Password";
             };
             extraEnvVars = {
               DISABLE_TELEMETRY = "1";

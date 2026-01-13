@@ -25,8 +25,8 @@ let
 
     IMPORTANT: If you determine the task cannot be executed on the current host
     (e.g., requires Nix but running on Termux, or requires specific tools not available),
-    say "ENVIRONMENT_NOT_CAPABLE" and explain briefly. Do NOT mark the task complete -
-    leave it PENDING for another host to pick up.
+    output on its own line: ENVIRONMENT_NOT_CAPABLE
+    Then explain briefly. Do NOT mark the task complete - leave it PENDING for another host.
 
     CRITICAL: Do NOT invent "alternative approaches" or workarounds to tasks.
     If a task has prerequisites that aren't met (e.g., "test the Nix-generated package"
@@ -44,7 +44,9 @@ let
     - **Task ID**: [next task number/name]
     - **Description**: [brief description]
 
-    If no pending tasks remain, output "ALL_TASKS_DONE"
+    If no pending tasks remain, output on its own line: ALL_TASKS_DONE
+
+    IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response
   '';
 
   # Generate a run-tasks script for a specific account
@@ -190,7 +192,9 @@ let
       mkdir -p "$LOG_DIR"
 
       # Build the prompt
-      PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, say 'ALL_TASKS_DONE'. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), say 'ENVIRONMENT_NOT_CAPABLE' and explain briefly. Do NOT mark the task complete - leave it PENDING for another host to pick up. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds."
+      # NOTE: Sentinel tokens (ALL_TASKS_DONE, ENVIRONMENT_NOT_CAPABLE) must appear on their own line
+      # for reliable detection - the script uses ^TOKEN anchored patterns to avoid false positives
+      PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave it PENDING for another host to pick up. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
 
       # Functions
       pending_count() {
@@ -199,6 +203,7 @@ let
 
       # Extract task ID/name from the first TASK:PENDING row in the plan file
       # Looks for patterns like "| R1 |" or "| I7 |" in the row with TASK:PENDING
+      # Returns a sanitized name safe for use in filenames (no /, :, or spaces)
       get_next_task_name() {
           local line
           line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null) || { echo "unknown"; return; }
@@ -206,12 +211,14 @@ let
           local task_id
           task_id=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([A-Za-z0-9_-]\+\)[[:space:]]*|.*/\1/p')
           if [[ -n "$task_id" && "$task_id" != "Task" ]]; then
-              echo "$task_id"
+              # Sanitize for filename: replace / and : with _, remove other unsafe chars
+              echo "$task_id" | ${pkgs.coreutils}/bin/tr '/:' '__' | ${pkgs.coreutils}/bin/tr -cd 'A-Za-z0-9._-'
           else
               # Try second column
               task_id=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
               if [[ -n "$task_id" ]]; then
-                  echo "$task_id"
+                  # Sanitize for filename: replace / and : with _, remove other unsafe chars
+                  echo "$task_id" | ${pkgs.coreutils}/bin/tr '/:' '__' | ${pkgs.coreutils}/bin/tr -cd 'A-Za-z0-9._-'
               else
                   echo "unknown"
               fi
@@ -397,17 +404,18 @@ let
           fi
 
           # PRIORITY 3: Check protocol sentinels in result text (defined in our prompt)
-          # These are reliable because we control the exact tokens
+          # IMPORTANT: Match only at line start to avoid false positives from code blocks,
+          # ready-to-paste prompts, or quoted instructions that mention these tokens
 
           # Environment not capable - skip this task, leave PENDING for another host
-          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q "ENVIRONMENT_NOT_CAPABLE"; then
+          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^ENVIRONMENT_NOT_CAPABLE'; then
               echo -e "  ''${YELLOW}⊘ ''${task_name}: requires different host''${NC}"
               save_state "$iteration" "environment_not_capable" "$pending_before"
               return 5
           fi
 
           # All tasks done
-          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q "ALL_TASKS_DONE"; then
+          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^ALL_TASKS_DONE'; then
               local pending_after=$(pending_count)
               if [[ "$pending_after" == "0" ]]; then
                   echo -e "  ''${GREEN}✓ All tasks complete''${NC}"

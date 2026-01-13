@@ -1,6 +1,7 @@
 ---
 name: code-searcher
 description: Efficient codebase analysis with Chain of Density (CoD) support for minimal token usage
+
 ---
 
 # Code Searcher
