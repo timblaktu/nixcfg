@@ -400,6 +400,72 @@ in
         taskAutomation.enable = true;
         # Skills - provides ADR-writer and custom skills
         skills.enable = true;
+        # Custom sub-agents
+        subAgents.custom = {
+          pdf-indexer = {
+            description = "Extract TOC, metadata, and key content from PDF documents. Uses pdftotext via Bash to bypass Read tool token limits. Handles PDFs of any size.";
+            tools = [ "Bash" "Glob" ];
+            capabilities = [
+              "Extract metadata (title, pages, size) using pdfinfo"
+              "Extract text content using pdftotext with page range control"
+              "Size-based routing: full extraction for small PDFs, TOC-only for large"
+              "Structured markdown output with page references"
+            ];
+            instructions = ''
+              ## Why This Agent Exists
+
+              The Read tool has a 25,000 token limit for PDFs, which fails on documents > ~30 pages.
+              This agent uses `pdftotext` via Bash to extract text content, bypassing that limitation.
+
+              ## Required Tools
+
+              Use `poppler-utils` via nix-shell:
+
+              ```bash
+              nix-shell -p poppler-utils --run 'pdfinfo "file.pdf"'
+              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 10 "file.pdf" -'
+              ```
+
+              ## Size-Based Extraction Strategy
+
+              **Small PDFs (≤50 pages):** Extract all pages
+              ```bash
+              nix-shell -p poppler-utils --run 'pdftotext "PATH" -' 2>/dev/null | head -500
+              ```
+
+              **Medium PDFs (51-200 pages):** Extract first 15 pages (usually contains TOC)
+              ```bash
+              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 15 "PATH" -' 2>/dev/null
+              ```
+
+              **Large PDFs (>200 pages):** Extract first 20 pages only
+              ```bash
+              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 20 "PATH" -' 2>/dev/null
+              ```
+
+              ## Output Format
+
+              Return structured markdown with:
+              - Document title and revision
+              - Page count and file size
+              - Table of contents with page numbers
+              - Document type classification
+
+              ## Handling Multiple PDFs
+
+              Use `fd` to list PDFs first:
+              ```bash
+              fd -t f -e pdf -e PDF . "DIRECTORY_PATH"
+              ```
+              Then process each individually.
+            '';
+            examples = [
+              "Index this PDF: /path/to/document.pdf"
+              "Index all PDFs in /path/to/docs/ and return a markdown table"
+              "Extract the TOC from /path/to/large-manual.pdf"
+            ];
+          };
+        };
       };
 
       # Yazi file manager configuration

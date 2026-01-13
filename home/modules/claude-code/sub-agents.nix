@@ -12,28 +12,30 @@ let
     , instructions
     , examples ? [ ]
     , constraints ? [ ]
+    , tools ? [ ]
     }: {
       text = ''
         ---
         name: ${lib.toLower (lib.replaceStrings [" "] ["-"] name)}
         description: ${description}
+        ${optionalString (tools != []) "tools: ${concatStringsSep ", " tools}"}
         ---
-      
+
         # ${name}
-      
+
         ${description}
-      
+
         ## Capabilities
         ${concatStringsSep "\n" (map (cap: "- ${cap}") capabilities)}
-      
+
         ## Instructions
         ${instructions}
-      
+
         ${optionalString (examples != []) ''
           ## Examples
           ${concatStringsSep "\n\n" examples}
         ''}
-      
+
         ${optionalString (constraints != []) ''
           ## Constraints
           ${concatStringsSep "\n" (map (c: "- ${c}") constraints)}
@@ -119,6 +121,11 @@ in
             type = types.listOf types.str;
             default = [ ];
             description = "Agent constraints";
+          };
+          tools = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Tools available to this agent (e.g., Bash, Glob, Read)";
           };
         };
       });

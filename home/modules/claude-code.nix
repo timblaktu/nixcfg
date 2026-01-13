@@ -501,6 +501,11 @@ with lib;
         (mkIf (cfg._internal.mcpServers != { }) {
           "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
         })
+
+        # Sub-agent definitions
+        (mkIf (cfg._internal.subAgentFiles != { }) (
+          mapAttrs (name: value: { text = value.text; }) cfg._internal.subAgentFiles
+        ))
       ];
 
       # Activation script to populate runtime directories with templates
