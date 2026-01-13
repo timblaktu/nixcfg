@@ -39,6 +39,31 @@
 - Built-in `/memory` and `#` commands will fail on read-only files - use the /nix* versions instead
 - This file is the single source of truth for all Claude Code account configurations
 
+## Plan File Conventions
+
+**Canonical location for plan files**: `.claude/user-plans/` directory in each project
+
+**Naming conventions**:
+- Numbered prefix for sequenced plans: `001-name.md`, `002-name.md`, etc.
+- Lower numbers execute first; higher numbers are deferred/later phases
+- Use descriptive names: `001-isar-prototype.md`, `002-isar-ci-design.md`
+
+**Plan file format** (for `run-tasks` compatibility):
+- Progress Tracking table with `TASK:PENDING` / `TASK:COMPLETE` status tokens
+- Clear Definition of Done for each task
+- Execution Strategy diagrams for tasks with parallel subagents
+
+**Parallelism pattern** (Option C - recommended):
+- Design tasks for internal parallelism via Claude Task tool
+- Spawn parallel subagents within a single task
+- Sequential prereqs → Parallel work → Synthesis
+- See `nixcfg/.claude/user-plans/parallel-task-runner-enhancement.md` for details
+
+**Interactive tasks**:
+- Tasks requiring user decisions should be marked as "Interactive"
+- Claude presents options, waits for explicit user approval
+- Do NOT proceed without documented user decisions
+
 ## Active Configuration
 
 ### Model

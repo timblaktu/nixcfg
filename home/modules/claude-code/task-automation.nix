@@ -667,11 +667,12 @@ in
       (filterAttrs (_: account: account.enable) cfg.accounts);
 
     # Deploy /next-task slash command to each enabled account's commands/ directory
+    # Use cfg.nixcfgPath for consistency with memory-commands.nix (fixes symlink creation)
     home.file = mkMerge (
       mapAttrsToList
         (accountName: account:
           if account.enable then {
-            "src/nixcfg/claude-runtime/.claude-${accountName}/commands/next-task.md" = {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${accountName}/commands/next-task.md" = {
               text = nextTaskMd;
             };
           } else { }

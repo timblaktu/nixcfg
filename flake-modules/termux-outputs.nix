@@ -97,7 +97,21 @@
 
         wrapperScripts = lib.mapAttrs mkTermuxWrapper enabledAccounts;
 
-        # Install script for Termux - use writeTextFile to preserve Termux shebang
+        # Generate script content for embedding in installer
+        # This creates the actual script content that will be written via heredoc
+        scriptContents = lib.mapAttrs
+          (name: account:
+            claudeLib.mkTermuxWrapperScript {
+              inherit (account) displayName;
+              account = name;
+              api = account.api or { };
+              extraEnvVars = account.extraEnvVars or { };
+            }
+          )
+          enabledAccounts;
+
+        # Install script for Termux - SELF-CONTAINED with embedded scripts
+        # This script can be copied to Termux and run directly without Nix
         installScript = pkgs.writeTextFile {
           name = "install-termux-claude";
           executable = true;
@@ -112,11 +126,14 @@
             echo "Installing Claude Code account wrappers to $INSTALL_DIR..."
             echo ""
 
-            ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: script: ''
-            cp "${script}/bin/claude${name}" "$INSTALL_DIR/"
+            # Embedded script generation - no external dependencies
+            ${lib.concatStringsSep "\n\n" (lib.mapAttrsToList (name: content: ''
+            cat > "$INSTALL_DIR/claude${name}" << 'SCRIPT_EOF'
+            ${content}
+            SCRIPT_EOF
             chmod +x "$INSTALL_DIR/claude${name}"
             echo "  Installed: claude${name}"
-            '') wrapperScripts)}
+            '') scriptContents)}
 
             echo ""
             echo "Installation complete!"
