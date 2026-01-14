@@ -127,8 +127,8 @@ in
             authMethod = "bearer";
             # Note: disableApiKey not needed - bearer auth sets ANTHROPIC_API_KEY from Bitwarden
             modelMappings = {
-              opus = "claude"; # Best reasoning for complex tasks (200K context)
-              sonnet = "kimi-linear-reap-a3b"; # Long-context coding workloads (200K context)
+              opus = "devstral"; # Best reasoning (matches settings.json)
+              sonnet = "devstral"; # Default model (matches settings.json)
               haiku = "qwen-a3b"; # Fast + images/OCR (250K context)
             };
           };

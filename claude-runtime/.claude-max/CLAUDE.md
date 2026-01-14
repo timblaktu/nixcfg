@@ -75,6 +75,37 @@
 - Claude presents options, waits for explicit user approval
 - Do NOT proceed without documented user decisions
 
+**Task Reset Protocol**:
+When a task fails, is rejected, or needs re-execution:
+1. **Update Status**: Change `TASK:COMPLETE` back to `TASK:PENDING` in Progress Tracking table
+2. **Clear Artifacts**: Delete or rename ALL artifacts listed in the task's "Definition of Done"
+3. **Add Reset Note**: Document why the task was reset in the task section with date and reason
+
+Why this matters: Stale artifacts from failed/incomplete runs cause subsequent runs to falsely detect completion. The model sees the artifact exists and may conclude work is done without verifying quality/completeness.
+
+Example reset note format:
+```
+**Reset History**:
+- 2026-01-13: Reset - previous run created doc but actual work not performed
+  - Deleted: `path/to/artifact.md`
+  - Reason: Task requires X, previous run only did Y
+```
+
+## Task Artifact Management
+
+**Critical Rule**: When `/next-task` or any task runner finds a PENDING task:
+- Check if artifacts from "Definition of Done" already exist
+- If artifacts exist but task is PENDING, treat as **conflict**:
+  - Artifacts may be stale from a failed previous run
+  - Do NOT assume existing artifacts mean task is complete
+  - Delete stale artifacts before proceeding, or ask user
+- Never skip task execution just because an output file exists
+
+**When resetting tasks**:
+- ALL artifacts listed in "Definition of Done" MUST be deleted or renamed
+- Document the reset with date and reason in the task section
+- This prevents false completion detection on re-run
+
 ## Active Configuration
 
 ### Model

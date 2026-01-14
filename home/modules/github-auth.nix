@@ -304,7 +304,7 @@ in
             ${if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops}/bin/glab auth status || true
           ''}
         '')
-      ] ++ (optionalsList (cfg.gitlab.enable && cfg.gitlab.glab.enable) [
+      ] ++ (optionals (cfg.gitlab.enable && cfg.gitlab.glab.enable) [
         (if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops)
       ]);
 

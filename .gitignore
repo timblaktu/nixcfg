@@ -22,6 +22,7 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+**/*.backup*
 *.orig
 **/__pycache__/
 

@@ -71,7 +71,7 @@
           ''
             # Retrieve API key/bearer token from Bitwarden via rbw
             if command -v rbw >/dev/null 2>&1; then
-              ANTHROPIC_API_KEY="$(${rbwCmd} 2>/dev/null)" || {
+              ANTHROPIC_API_KEY="$(${rbwCmd} </dev/null 2>/dev/null)" || {
                 echo "Warning: Failed to retrieve API key from Bitwarden" >&2
                 echo "   Item: ${bwItem}, ${fieldDesc}" >&2
               }
