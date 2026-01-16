@@ -517,6 +517,26 @@ in
               DISABLE_TELEMETRY = "1";
             };
           };
+          work = {
+            enable = true;
+            displayName = "OpenCode Work Code-Companion";
+            provider = "custom";
+            model = "qwen-a3b";
+            api = {
+              baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+              apiKeyEnvVar = "ANTHROPIC_API_KEY";
+            };
+            secrets.bearerToken.bitwarden = {
+              item = "PAC Code Companion v2 - API Key";
+              field = "Password";
+            };
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
+              ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
+              ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
+            };
+          };
         };
         mcpServers = {
           context7.enable = true;

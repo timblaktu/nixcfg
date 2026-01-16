@@ -173,6 +173,40 @@ in
             default = { };
             description = "Additional environment variables for this account";
           };
+
+          secrets = mkOption {
+            type = types.submodule {
+              options = {
+                bearerToken = mkOption {
+                  type = types.submodule {
+                    options = {
+                      bitwarden = mkOption {
+                        type = types.nullOr (types.submodule {
+                          options = {
+                            item = mkOption {
+                              type = types.str;
+                              description = "Bitwarden item name containing the bearer token";
+                            };
+                            field = mkOption {
+                              type = types.str;
+                              default = "Password";
+                              description = "Field name in Bitwarden item (default: Password)";
+                            };
+                          };
+                        });
+                        default = null;
+                        description = "Bitwarden configuration for bearer token retrieval";
+                      };
+                    };
+                  };
+                  default = { };
+                  description = "Bearer token configuration for API authentication";
+                };
+              };
+            };
+            default = { };
+            description = "Secret management configuration for this account";
+          };
         };
       });
       default = { };
@@ -483,6 +517,8 @@ in
       mkAccountScript = accountName: accountCfg:
         let
           configDir = "${runtimePath}/.opencode-${accountName}";
+
+          # Static env vars
           envVars = {
             OPENCODE_CONFIG_DIR = configDir;
           } // optionalAttrs (accountCfg.api.baseUrl != null) {
@@ -491,10 +527,38 @@ in
 
           envExports = concatStringsSep "\n"
             (mapAttrsToList (k: v: "export ${k}=${escapeShellArg v}") envVars);
+
+          # Bitwarden token fetch logic (if configured)
+          hasBitwardenToken = accountCfg.secrets.bearerToken.bitwarden != null;
+          bitwardenFetch = optionalString hasBitwardenToken ''
+            # Retrieve API key/bearer token from Bitwarden via rbw
+            if command -v rbw >/dev/null 2>&1; then
+              ${accountCfg.api.apiKeyEnvVar}="$(rbw get ${escapeShellArg accountCfg.secrets.bearerToken.bitwarden.item} </dev/null 2>/dev/null)" || {
+                echo "Warning: Failed to retrieve API key from Bitwarden" >&2
+                echo "   Item: ${accountCfg.secrets.bearerToken.bitwarden.item}, Field: ${accountCfg.secrets.bearerToken.bitwarden.field}" >&2
+              }
+              export ${accountCfg.api.apiKeyEnvVar}
+            else
+              # Fallback for systems without rbw (e.g., Termux)
+              if [[ -f "$HOME/.secrets/opencode-${accountName}-token" ]]; then
+                ${accountCfg.api.apiKeyEnvVar}="$(cat "$HOME/.secrets/opencode-${accountName}-token")"
+                export ${accountCfg.api.apiKeyEnvVar}
+              else
+                echo "Warning: API key not found" >&2
+                echo "   Expected: ~/.secrets/opencode-${accountName}-token (or rbw configured)" >&2
+              fi
+            fi
+          '';
         in
         pkgs.writeShellScriptBin "opencode-${accountName}" ''
           #!/usr/bin/env bash
+          set -o errexit
+          set -o nounset
+          set -o pipefail
+
           ${envExports}
+          ${bitwardenFetch}
+
           exec ${cfg.package}/bin/opencode "$@"
         '';
 
