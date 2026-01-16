@@ -24,6 +24,7 @@ in
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
     ./claude-code.nix # Claude Code Enhanced - renamed to avoid upstream conflict
+    ./opencode.nix # OpenCode AI coding assistant
     ./secrets-management.nix # RBW and SOPS configuration
     ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
     ./podman-tools.nix # Container tools configuration
@@ -367,9 +368,9 @@ in
               authMethod = "bearer";
               disableApiKey = true;
               modelMappings = {
-                sonnet = "devstral";
-                opus = "devstral";
-                haiku = "qwen-a3b";
+                haiku = "devstral";
+                sonnet = "qwen-a3b";
+                opus = "claude-sonnet-4-5-20250929";
               };
             };
             secrets.bearerToken.bitwarden = {
@@ -380,6 +381,23 @@ in
               DISABLE_TELEMETRY = "1";
               CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
               DISABLE_ERROR_REPORTING = "1";
+              ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
+              ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
+              # ANTHROPIC_DEFAULT_OPUS_MODEL = "kimi-linear-reap-a3b";
+              ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
+              # From https://git.panasonic.aero/platform/sandbox/pac-claude-proxy/-/blob/main/anthropic_proxy.py?ref_type=heads#L29
+              # MODEL_MAP = {
+              #     "claude-sonnet-4-5-20250929": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+              #     "claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+              #     "claude-opus-4-5-20251101": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+              #     "claude-opus-4-20250514": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+              #     "claude-opus-4-20250514-v3:0": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+              #     "claude-sonnet-4-20250514": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+              #     "claude-3-7-sonnet-20250219": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+              #     "claude-3-5-sonnet-20241022": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+              #     # Haiku - map to Sonnet (Haiku not available)
+              #     "claude-haiku-4-5-20251001": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+              # }
             };
           };
         };
@@ -465,6 +483,45 @@ in
               "Extract the TOC from /path/to/large-manual.pdf"
             ];
           };
+        };
+      };
+
+      # OpenCode Enhanced - AI coding assistant (complements claude-code)
+      # Uses shared MCP server definitions for DRY configuration
+      # Named opencode-enhanced to avoid conflict with upstream home-manager programs.opencode
+      programs.opencode-enhanced = {
+        enable = cfg.enableClaudeCode; # Enable alongside claude-code
+        defaultModel = "anthropic/claude-sonnet-4-5";
+        defaultAccount = "max";
+        # Provider configuration - API key via environment variable
+        provider = {
+          anthropic = {
+            options = {
+              apiKey = "{env:ANTHROPIC_API_KEY}";
+            };
+          };
+        };
+        accounts = {
+          max = {
+            enable = true;
+            displayName = "OpenCode Max Account";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+            };
+          };
+          pro = {
+            enable = true;
+            displayName = "OpenCode Pro Account";
+            model = "anthropic/claude-sonnet-4-5";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+            };
+          };
+        };
+        mcpServers = {
+          context7.enable = true;
+          sequentialThinking.enable = true;
+          nixos.enable = true;
         };
       };
 

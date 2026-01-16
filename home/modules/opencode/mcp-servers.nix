@@ -6,11 +6,13 @@
 with lib;
 
 let
-  cfg = config.programs.opencode;
+  cfg = config.programs.opencode-enhanced;
   sharedMcpDefs = import ../shared/mcp-server-defs.nix { inherit lib; };
 
   # Transform shared MCP server definition to OpenCode format
-  # OpenCode uses: { type = "local"; command = [...]; environment = {}; }
+  # OpenCode uses: { type = "local"; command = [...]; environment = {}; enabled = true; }
+  # NOTE: OpenCode uses "enabled" (with 'd'), not "enable"
+  # NOTE: OpenCode doesn't support "timeout" at server level
   toOpencodeFormat = serverCfg: {
     type = "local";
     command =
@@ -20,16 +22,14 @@ let
         [ "nix" ] ++ serverCfg.args
       else
         [ serverCfg.command ] ++ (serverCfg.args or [ ]);
-    enable = true;
+    enabled = true;
   } // optionalAttrs (serverCfg.env or { } != { }) {
     environment = serverCfg.env;
-  } // optionalAttrs (serverCfg.timeout or null != null) {
-    timeout = serverCfg.timeout * 1000; # Convert seconds to milliseconds
   };
 
 in
 {
-  options.programs.opencode.mcpServers = {
+  options.programs.opencode-enhanced.mcpServers = {
     # Pre-configured servers using shared definitions
     nixos = {
       enable = mkEnableOption "NixOS MCP server for package/option search";
@@ -117,110 +117,111 @@ in
       };
     };
 
-    # Custom servers (raw configuration)
+    # Custom servers (raw configuration matching OpenCode schema)
     custom = mkOption {
       type = types.attrsOf (types.submodule {
         options = {
-          enable = mkOption {
+          enabled = mkOption {
             type = types.bool;
             default = true;
+            description = "Whether this server is enabled";
           };
           type = mkOption {
             type = types.enum [ "local" "remote" ];
             default = "local";
+            description = "Server type: local (command) or remote (url)";
           };
           command = mkOption {
             type = types.listOf types.str;
             default = [ ];
+            description = "Command to start local server";
           };
           url = mkOption {
             type = types.nullOr types.str;
             default = null;
+            description = "URL for remote server";
           };
           environment = mkOption {
             type = types.attrsOf types.str;
             default = { };
+            description = "Environment variables for the server";
           };
           headers = mkOption {
             type = types.attrsOf types.str;
             default = { };
-          };
-          timeout = mkOption {
-            type = types.nullOr types.int;
-            default = null;
+            description = "HTTP headers for remote server";
           };
         };
       });
       default = { };
-      description = "Custom MCP server definitions";
+      description = "Custom MCP server definitions (matches OpenCode schema directly)";
     };
   };
 
   config = mkIf cfg.enable {
     # Merge pre-configured servers with custom servers
-    programs.opencode._internal.mcpServers =
+    # NOTE: Using if-then-else instead of mkIf because this data is JSON-serialized
+    # mkIf creates lazy thunks that don't serialize properly to JSON
+    programs.opencode-enhanced._internal.mcpServers =
       let
-        # Build pre-configured server configs
-        preConfigured = {
-          "mcp-nixos" = mkIf cfg.mcpServers.nixos.enable
-            (toOpencodeFormat (sharedMcpDefs.nixos.mkConfig {
+        # Build pre-configured server configs using if-then-else for JSON serialization
+        preConfigured =
+          (if cfg.mcpServers.nixos.enable then {
+            "mcp-nixos" = toOpencodeFormat (sharedMcpDefs.nixos.mkConfig {
               cacheTtl = cfg.mcpServers.nixos.cacheTtl;
               debug = cfg.debug;
-            }));
-
-          "sequential-thinking" = mkIf cfg.mcpServers.sequentialThinking.enable
-            (toOpencodeFormat (sharedMcpDefs.sequentialThinking.mkConfig {
+            });
+          } else { })
+          // (if cfg.mcpServers.sequentialThinking.enable then {
+            "sequential-thinking" = toOpencodeFormat (sharedMcpDefs.sequentialThinking.mkConfig {
               timeout = cfg.mcpServers.sequentialThinking.timeout;
               debug = cfg.debug;
-            }));
-
-          "context7" = mkIf cfg.mcpServers.context7.enable
-            (toOpencodeFormat (sharedMcpDefs.context7.mkConfig {
+            });
+          } else { })
+          // (if cfg.mcpServers.context7.enable then {
+            "context7" = toOpencodeFormat (sharedMcpDefs.context7.mkConfig {
               debug = cfg.debug;
-            }));
-
-          "serena" = mkIf cfg.mcpServers.serena.enable
-            (toOpencodeFormat (sharedMcpDefs.serena.mkConfig {
+            });
+          } else { })
+          // (if cfg.mcpServers.serena.enable then {
+            "serena" = toOpencodeFormat (sharedMcpDefs.serena.mkConfig {
               context = cfg.mcpServers.serena.context;
               debug = cfg.debug;
-            }));
-
-          "brave-search" = mkIf (cfg.mcpServers.brave.enable && cfg.mcpServers.brave.apiKey != "")
-            (toOpencodeFormat (sharedMcpDefs.brave.mkConfig {
+            });
+          } else { })
+          // (if (cfg.mcpServers.brave.enable && cfg.mcpServers.brave.apiKey != "") then {
+            "brave-search" = toOpencodeFormat (sharedMcpDefs.brave.mkConfig {
               apiKey = cfg.mcpServers.brave.apiKey;
               searchCount = cfg.mcpServers.brave.searchCount;
               debug = cfg.debug;
-            }));
-
-          "puppeteer" = mkIf cfg.mcpServers.puppeteer.enable
-            (toOpencodeFormat (sharedMcpDefs.puppeteer.mkConfig {
+            });
+          } else { })
+          // (if cfg.mcpServers.puppeteer.enable then {
+            "puppeteer" = toOpencodeFormat (sharedMcpDefs.puppeteer.mkConfig {
               headless = cfg.mcpServers.puppeteer.headless;
               debug = cfg.debug;
-            }));
-
-          "github" = mkIf (cfg.mcpServers.github.enable && cfg.mcpServers.github.token != "")
-            (toOpencodeFormat (sharedMcpDefs.github.mkConfig {
+            });
+          } else { })
+          // (if (cfg.mcpServers.github.enable && cfg.mcpServers.github.token != "") then {
+            "github" = toOpencodeFormat (sharedMcpDefs.github.mkConfig {
               token = cfg.mcpServers.github.token;
               debug = cfg.debug;
-            }));
-
-          "gitlab" = mkIf cfg.mcpServers.gitlab.enable
-            (toOpencodeFormat (sharedMcpDefs.gitlab.mkConfig {
+            });
+          } else { })
+          // (if cfg.mcpServers.gitlab.enable then {
+            "gitlab" = toOpencodeFormat (sharedMcpDefs.gitlab.mkConfig {
               url = cfg.mcpServers.gitlab.url;
               token = cfg.mcpServers.gitlab.token;
               debug = cfg.debug;
-            }));
-
-          "filesystem" = mkIf cfg.mcpServers.filesystem.enable
-            (toOpencodeFormat (sharedMcpDefs.filesystem.mkConfig {
+            });
+          } else { })
+          // (if cfg.mcpServers.filesystem.enable then {
+            "filesystem" = toOpencodeFormat (sharedMcpDefs.filesystem.mkConfig {
               allowedPaths = cfg.mcpServers.filesystem.allowedPaths;
               debug = cfg.debug;
-            }));
-        };
-
-        # Filter out disabled servers and merge with custom
-        enabledPreConfigured = filterAttrs (n: v: v != false && v != null) preConfigured;
+            });
+          } else { });
       in
-      enabledPreConfigured // cfg.mcpServers.custom;
+      preConfigured // cfg.mcpServers.custom;
   };
 }

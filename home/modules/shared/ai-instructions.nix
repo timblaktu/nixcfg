@@ -75,30 +75,32 @@ with lib;
       ${concatStringsSep "\n" (map formatServer servers)}
     '';
 
+}
+
+  # Standalone function to generate full memory content for a tool
+  # Must be outside the attr set to avoid self-reference issues in lazy evaluation
+  // {
   # Generate full memory content for a tool
   # Arguments:
   #   toolName: "Claude Code" or "OpenCode"
   #   config: tool configuration (for MCP status, etc.)
   #   extraContent: tool-specific additional content
-  mkMemoryContent = { toolName, screenshotDir ? null, mcpServers ? [ ], extraContent ? "" }:
-    let
-      baseContent = ''
-        # ${toolName} Configuration for User
+  mkMemoryContent = self: { toolName, screenshotDir ? null, mcpServers ? [ ], extraContent ? "" }:
+    ''
+      # ${toolName} Configuration for User
 
-        ${baseRules}
+      ${self.baseRules}
 
-        ${gitCommitRules}
+      ${self.gitCommitRules}
 
-        ${wslRules}
+      ${self.wslRules}
 
-        ${optionalString (screenshotDir != null) (mkScreenshotRules screenshotDir)}
+      ${optionalString (screenshotDir != null) (self.mkScreenshotRules screenshotDir)}
 
-        ${nixFlakeGitRules}
+      ${self.nixFlakeGitRules}
 
-        ${optionalString (mcpServers != []) (formatMcpStatus mcpServers)}
+      ${optionalString (mcpServers != []) (self.formatMcpStatus mcpServers)}
 
-        ${extraContent}
-      '';
-    in
-    baseContent;
+      ${extraContent}
+    '';
 }

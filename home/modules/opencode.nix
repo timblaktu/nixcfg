@@ -9,7 +9,7 @@
 with lib;
 
 let
-  cfg = config.programs.opencode;
+  cfg = config.programs.opencode-enhanced;
 
   # Import shared modules for DRY configuration
   sharedInstructions = import ./shared/ai-instructions.nix { inherit lib; };
@@ -94,7 +94,8 @@ in
     ./opencode/mcp-servers.nix
   ];
 
-  options.programs.opencode = {
+  # Named opencode-enhanced to avoid conflict with upstream home-manager programs.opencode
+  options.programs.opencode-enhanced = {
     enable = mkEnableOption "OpenCode AI coding assistant";
 
     package = mkPackageOption pkgs "opencode" { };
@@ -443,19 +444,14 @@ in
           };
         }
         // optionalAttrs (formatterConfig != { }) { formatter = formatterConfig; }
+        // optionalAttrs (cfg.provider != { }) { provider = cfg.provider; }
         // {
-          compaction = {
-            auto = cfg.compaction.auto;
-            prune = cfg.compaction.prune;
-          };
           watcher = {
             ignore = cfg.watcher.ignore;
           };
           autoupdate = cfg.autoupdate;
           share = cfg.share;
-        }
-        // optionalAttrs (cfg.provider != { }) { provider = cfg.provider; }
-        // optionalAttrs (cfg.experimental != { }) { experimental = cfg.experimental; };
+        };
 
       # Generate AGENTS.md content using shared instructions
       mkAgentsMdContent = accountName:
@@ -467,7 +463,7 @@ in
             })
             (attrNames mcpConfig);
         in
-        sharedInstructions.mkMemoryContent {
+        sharedInstructions.mkMemoryContent sharedInstructions {
           toolName = "OpenCode";
           screenshotDir = "/mnt/c/Users/tblack/OneDrive/Pictures/Screenshots 1";
           mcpServers = mcpServerStatus;
