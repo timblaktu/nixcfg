@@ -31,6 +31,15 @@
 - ALWAYS use `echo "$WSL_DISTRO_NAME"` to determine if you're running in WSL, and what WSL instance you and/or your MCP servers are running in.
 - If running in WSL, you can access other WSL instances' rootfs mounted at `/mnt/wsl/$WSL_DISTRO_NAME/`
 
+## CI/CD and Testing Philosophy
+
+**CRITICAL PREFERENCE**: CI/CD is just orchestration - everything must be reproducible everywhere.
+- Tests that "only run in CI" or "only run locally" indicate a design problem
+- If something can run in CI, it should run identically on any developer machine with the same inputs/environment
+- Use feature flags, environment detection, or pytest skip conditions based on available services
+- Never create CI-specific test logic or separate test suites for CI vs local
+- Example: E2E tests should check for required services (Typesense, VLM endpoints) and skip gracefully if unavailable, but the test code itself is identical everywhere
+
 ## Custom Memory Management Commands
 - /nixmemory (alias: /usermemory, /globalmemory) - Opens user-global memory file in editor (like /memory but always user-scoped)
 - `/nixremember <content>` (alias: /userremember, /globalremember) - Appends content to memory (like # command but for Nix-managed memory)
