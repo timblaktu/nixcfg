@@ -1,3 +1,6 @@
+# Claude Code MCP Servers Sub-module
+# Provides pre-configured MCP servers using shared definitions
+# Transforms shared/mcp-server-defs.nix to Claude Code's JSON format
 { config, lib, pkgs, ... }:
 
 with lib;
@@ -5,6 +8,20 @@ with lib;
 let
   cfg = config.programs.claude-code-enhanced;
 
+  # Import shared MCP server definitions for DRY consistency with opencode
+  sharedMcpDefs = import ../shared/mcp-server-defs.nix { inherit lib; };
+
+  # Transform shared MCP server definition to Claude Code format
+  # Claude Code uses: { command, args, env, timeout?, retries? }
+  toClaudeCodeFormat = serverCfg: {
+    inherit (serverCfg) command args timeout retries;
+    env = (serverCfg.env or { }) // {
+      DEBUG = if cfg.debug then "*" else "";
+      NODE_ENV = if cfg.debug then "development" else "production";
+    };
+  };
+
+  # Legacy helper for backward compatibility (servers not yet in shared defs)
   mkMcpServer =
     { command
     , args ? [ ]
@@ -145,96 +162,85 @@ in
     };
   };
 
+  # Build MCP server configurations using shared definitions where available
   config.programs.claude-code-enhanced._internal.mcpServers = cfg.mcpServers.custom //
+    # NixOS MCP server (using shared definition)
     optionalAttrs cfg.mcpServers.nixos.enable {
-      mcp-nixos = mkMcpServer {
-        # Use nix run directly to avoid build dependencies
-        command = "nix";
-        args = [ "run" "github:utensils/mcp-nixos" "--" ];
-        env = {
-          MCP_NIXOS_CLEANUP_ORPHANS = "true";
-          MCP_NIXOS_CACHE_TTL = toString cfg.mcpServers.nixos.cacheTtl;
-        };
-      };
+      mcp-nixos = toClaudeCodeFormat (sharedMcpDefs.nixos.mkConfig {
+        cacheTtl = cfg.mcpServers.nixos.cacheTtl;
+        debug = cfg.debug;
+      });
     } //
-    # Python/UV version - kept for future development but disabled by default
+    # Python/UV version - uses shared definition
     optionalAttrs cfg.mcpServers.sequentialThinkingPython.enable {
-      sequential-thinking-python = mkMcpServer {
-        command = "sequential-thinking-mcp"; # Use program name, not store path
-        args = [ ];
+      sequential-thinking-python = toClaudeCodeFormat (sharedMcpDefs.sequentialThinkingPython.mkConfig {
         timeout = cfg.mcpServers.sequentialThinkingPython.timeout;
-      };
+        debug = cfg.debug;
+      });
     } //
-    # Official TypeScript version from @modelcontextprotocol
+    # Official TypeScript version (using shared definition)
     optionalAttrs cfg.mcpServers.sequentialThinking.enable {
-      sequential-thinking = mkMcpServer {
-        command = "npx";
-        args = [ "-y" "@modelcontextprotocol/server-sequential-thinking" ];
+      sequential-thinking = toClaudeCodeFormat (sharedMcpDefs.sequentialThinking.mkConfig {
         timeout = cfg.mcpServers.sequentialThinking.timeout;
-      };
+        debug = cfg.debug;
+      });
     } //
+    # Context7 (using shared definition)
     optionalAttrs cfg.mcpServers.context7.enable {
-      context7 = mkMcpServer {
-        command = "npx";
-        args = [ "-y" "@upstash/context7-mcp" ];
-      };
+      context7 = toClaudeCodeFormat (sharedMcpDefs.context7.mkConfig {
+        debug = cfg.debug;
+      });
     } //
+    # Serena (using shared definition)
     optionalAttrs cfg.mcpServers.serena.enable {
-      serena = mkMcpServer {
-        command = "nix";
-        args = [ "run" "github:oraios/serena" "--" "start-mcp-server" "--transport" "stdio" "--context" cfg.mcpServers.serena.context ];
-      };
+      serena = toClaudeCodeFormat (sharedMcpDefs.serena.mkConfig {
+        context = cfg.mcpServers.serena.context;
+        debug = cfg.debug;
+      });
     } //
+    # Brave Search (using shared definition)
     optionalAttrs (cfg.mcpServers.brave.apiKey != null) {
-      brave-search = mkMcpServer {
-        command = "npx";
-        args = [ "-y" "@modelcontextprotocol/server-brave-search" ];
-        env = {
-          BRAVE_API_KEY = cfg.mcpServers.brave.apiKey;
-          BRAVE_SEARCH_COUNT = toString cfg.mcpServers.brave.searchCount;
-        };
-      };
+      brave-search = toClaudeCodeFormat (sharedMcpDefs.brave.mkConfig {
+        apiKey = cfg.mcpServers.brave.apiKey;
+        searchCount = cfg.mcpServers.brave.searchCount;
+        debug = cfg.debug;
+      });
     } //
+    # Puppeteer (using shared definition)
     optionalAttrs cfg.mcpServers.puppeteer.enable {
-      puppeteer = mkMcpServer {
-        command = "npx";
-        args = [ "-y" "@modelcontextprotocol/server-puppeteer" ];
-        env.PUPPETEER_HEADLESS = toString cfg.mcpServers.puppeteer.headless;
-      };
+      puppeteer = toClaudeCodeFormat (sharedMcpDefs.puppeteer.mkConfig {
+        headless = cfg.mcpServers.puppeteer.headless;
+        debug = cfg.debug;
+      });
     } //
+    # GitHub (using shared definition)
     optionalAttrs (cfg.mcpServers.github.token != null) {
-      github = mkMcpServer {
-        command = "npx";
-        args = [ "-y" "@modelcontextprotocol/server-github" ];
-        env = {
-          GITHUB_PERSONAL_ACCESS_TOKEN = cfg.mcpServers.github.token;
-          GITHUB_DEFAULT_BRANCH = cfg.mcpServers.github.defaultBranch;
-        };
-      };
+      github = toClaudeCodeFormat (sharedMcpDefs.github.mkConfig {
+        token = cfg.mcpServers.github.token;
+        defaultBranch = cfg.mcpServers.github.defaultBranch;
+        debug = cfg.debug;
+      });
     } //
+    # GitLab (using shared definition)
     optionalAttrs cfg.mcpServers.gitlab.enable {
-      gitlab = mkMcpServer {
-        command = "npx";
-        args = [ "-y" "@modelcontextprotocol/server-gitlab" ];
-        env = { GITLAB_URL = cfg.mcpServers.gitlab.url; } //
-          optionalAttrs (cfg.mcpServers.gitlab.token != null) {
-            GITLAB_TOKEN = cfg.mcpServers.gitlab.token;
-          };
-      };
+      gitlab = toClaudeCodeFormat (sharedMcpDefs.gitlab.mkConfig {
+        url = cfg.mcpServers.gitlab.url;
+        token = cfg.mcpServers.gitlab.token;
+        debug = cfg.debug;
+      });
     } //
+    # Filesystem (using shared definition)
     optionalAttrs cfg.mcpServers.mcpFilesystem.enable {
-      mcp-filesystem = mkMcpServer {
-        command = "npx";
-        args = [ "-y" "@modelcontextprotocol/server-filesystem" ] ++ cfg.mcpServers.mcpFilesystem.allowedPaths;
-      };
+      mcp-filesystem = toClaudeCodeFormat (sharedMcpDefs.filesystem.mkConfig {
+        allowedPaths = cfg.mcpServers.mcpFilesystem.allowedPaths;
+        debug = cfg.debug;
+      });
     } //
+    # CLI MCP server (using shared definition)
     optionalAttrs cfg.mcpServers.cliMcpServer.enable {
-      cli-mcp-server = mkMcpServer {
-        command = "nix";
-        args = [ "run" "--accept-flake-config" "github:timblaktu/cli-mcp-server" "--" ];
-        env = {
-          ALLOWED_DIR = cfg.mcpServers.cliMcpServer.allowedDir;
-        };
-      };
+      cli-mcp-server = toClaudeCodeFormat (sharedMcpDefs.cliMcpServer.mkConfig {
+        allowedDir = cfg.mcpServers.cliMcpServer.allowedDir;
+        debug = cfg.debug;
+      });
     };
 }
