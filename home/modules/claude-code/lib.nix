@@ -69,15 +69,14 @@
               else "Field: ${bwField}";
           in
           ''
-            # Retrieve bearer token from Bitwarden via rbw
+            # Retrieve API key from Bitwarden via rbw
+            # Code-Companion proxy expects x-api-key header (sent when ANTHROPIC_API_KEY is set)
             if command -v rbw >/dev/null 2>&1; then
-              ANTHROPIC_AUTH_TOKEN="$(${rbwCmd} </dev/null 2>/dev/null)" || {
-                echo "Warning: Failed to retrieve bearer token from Bitwarden" >&2
+              ANTHROPIC_API_KEY="$(${rbwCmd} </dev/null 2>/dev/null)" || {
+                echo "Warning: Failed to retrieve API key from Bitwarden" >&2
                 echo "   Item: ${bwItem}, ${fieldDesc}" >&2
               }
-              export ANTHROPIC_AUTH_TOKEN
-              # CRITICAL: Explicitly blank API_KEY to prevent conflicts with bearer auth
-              export ANTHROPIC_API_KEY=""
+              export ANTHROPIC_API_KEY
             else
               echo "Error: rbw (Bitwarden CLI) is required but not found" >&2
               echo "   Install rbw and configure Bitwarden access to retrieve API keys" >&2

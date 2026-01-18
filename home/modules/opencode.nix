@@ -545,16 +545,14 @@ in
                 else "(default password)";
             in
             ''
-              # Retrieve bearer token from Bitwarden via rbw
-              # For Code-Companion proxy: use ANTHROPIC_AUTH_TOKEN and blank ANTHROPIC_API_KEY
+              # Retrieve API key from Bitwarden via rbw
+              # Code-Companion proxy expects x-api-key header (sent when ANTHROPIC_API_KEY is set)
               if command -v rbw >/dev/null 2>&1; then
-                ANTHROPIC_AUTH_TOKEN="$(${rbwCmd} </dev/null 2>/dev/null)" || {
-                  echo "Warning: Failed to retrieve bearer token from Bitwarden" >&2
+                ${accountCfg.api.apiKeyEnvVar}="$(${rbwCmd} </dev/null 2>/dev/null)" || {
+                  echo "Warning: Failed to retrieve API key from Bitwarden" >&2
                   echo "   Item: ${bwItem}, ${fieldDesc}" >&2
                 }
-                export ANTHROPIC_AUTH_TOKEN
-                # CRITICAL: Explicitly blank API_KEY to prevent conflicts with bearer auth
-                export ANTHROPIC_API_KEY=""
+                export ${accountCfg.api.apiKeyEnvVar}
               else
                 echo "Error: rbw (Bitwarden CLI) is required but not found" >&2
                 echo "   Install rbw and configure Bitwarden access to retrieve API keys" >&2
