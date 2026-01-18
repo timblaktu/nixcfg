@@ -374,8 +374,8 @@ in
               };
             };
             secrets.bearerToken.bitwarden = {
-              item = "PAC Code Companion v2 - API Key";
-              field = "Password";
+              item = "PAC Code Companion v2";
+              field = "API Key";
             };
             extraEnvVars = {
               DISABLE_TELEMETRY = "1";
@@ -527,8 +527,8 @@ in
               apiKeyEnvVar = "ANTHROPIC_API_KEY";
             };
             secrets.bearerToken.bitwarden = {
-              item = "PAC Code Companion v2 - API Key";
-              field = "Password";
+              item = "PAC Code Companion v2";
+              field = "API Key";
             };
             extraEnvVars = {
               DISABLE_TELEMETRY = "1";

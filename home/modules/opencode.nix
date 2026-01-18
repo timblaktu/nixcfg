@@ -530,27 +530,41 @@ in
 
           # Bitwarden token fetch logic (if configured)
           hasBitwardenToken = accountCfg.secrets.bearerToken.bitwarden != null;
-          bitwardenFetch = optionalString hasBitwardenToken ''
-            # Retrieve API key/bearer token from Bitwarden via rbw
-            if command -v rbw >/dev/null 2>&1; then
-              ${accountCfg.api.apiKeyEnvVar}="$(rbw get ${escapeShellArg accountCfg.secrets.bearerToken.bitwarden.item} </dev/null 2>/dev/null)" || {
-                echo "Warning: Failed to retrieve API key from Bitwarden" >&2
-                echo "   Item: ${accountCfg.secrets.bearerToken.bitwarden.item}, Field: ${accountCfg.secrets.bearerToken.bitwarden.field}" >&2
-              }
-              export ${accountCfg.api.apiKeyEnvVar}
-            else
-              # Fallback for systems without rbw (e.g., Termux)
-              if [[ -f "$HOME/.secrets/opencode-${accountName}-token" ]]; then
-                ${accountCfg.api.apiKeyEnvVar}="$(cat "$HOME/.secrets/opencode-${accountName}-token")"
-                export ${accountCfg.api.apiKeyEnvVar}
+          bitwardenFetch = optionalString hasBitwardenToken (
+            let
+              bwItem = accountCfg.secrets.bearerToken.bitwarden.item;
+              bwField = accountCfg.secrets.bearerToken.bitwarden.field;
+              # Build rbw command with --field if specified
+              rbwCmd =
+                if bwField != null && bwField != ""
+                then ''rbw get ${escapeShellArg bwItem} --field ${escapeShellArg bwField}''
+                else ''rbw get ${escapeShellArg bwItem}'';
+              fieldDesc =
+                if bwField != null && bwField != ""
+                then "Field: ${bwField}"
+                else "(default password)";
+            in
+            ''
+              # Retrieve bearer token from Bitwarden via rbw
+              # For Code-Companion proxy: use ANTHROPIC_AUTH_TOKEN and blank ANTHROPIC_API_KEY
+              if command -v rbw >/dev/null 2>&1; then
+                ANTHROPIC_AUTH_TOKEN="$(${rbwCmd} </dev/null 2>/dev/null)" || {
+                  echo "Warning: Failed to retrieve bearer token from Bitwarden" >&2
+                  echo "   Item: ${bwItem}, ${fieldDesc}" >&2
+                }
+                export ANTHROPIC_AUTH_TOKEN
+                # CRITICAL: Explicitly blank API_KEY to prevent conflicts with bearer auth
+                export ANTHROPIC_API_KEY=""
               else
-                echo "Warning: API key not found" >&2
-                echo "   Expected: ~/.secrets/opencode-${accountName}-token (or rbw configured)" >&2
+                echo "Error: rbw (Bitwarden CLI) is required but not found" >&2
+                echo "   Install rbw and configure Bitwarden access to retrieve API keys" >&2
+                echo "   See: home/modules/secrets-management.nix for configuration" >&2
+                exit 1
               fi
-            fi
-          '';
+            ''
+          );
         in
-        pkgs.writeShellScriptBin "opencode-${accountName}" ''
+        pkgs.writeShellScriptBin "opencode${accountName}" ''
           #!/usr/bin/env bash
           set -o errexit
           set -o nounset

@@ -72,13 +72,44 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 For completed work history, see git log on `dev` and `main` branches.
 
-### 🔧 **Claude Code Multi-Backend Integration** (IN PROGRESS)
+### 🔍 **OpenCode Branch Validation** (IN PROGRESS - 2026-01-16)
 
-**Plan File**: `docs/claude-code-multi-backend-plan.md`
+**Branch**: `opencode`
+**Status**: Secrets handling fixes completed, environment variable naming needs clarification
 
-**Goal**: Add work's Code-Companion proxy as new account alongside personal accounts (max, pro), with unified Termux support via Nix-generated scripts.
+**Completed**:
+- ✅ Fixed Bitwarden configuration (item: "PAC Code Companion v2", field: "API Key")
+- ✅ Fixed CRITICAL BUG: opencode.nix wrapper now uses --field parameter in rbw get call
+- ✅ Removed file fallback logic (requires rbw, fails fast with clear error if not available)
+- ✅ Fixed wrapper naming: `opencodework`, `opencodemax`, `opencodepro` (no hyphens, matches claude pattern)
+- ✅ Updated authentication to use ANTHROPIC_AUTH_TOKEN (not ANTHROPIC_API_KEY) per Code-Companion docs
+- ✅ Added explicit ANTHROPIC_API_KEY="" to prevent conflicts with bearer auth
+- ✅ Researched OpenCode auth - confirmed it uses same ANTHROPIC_* variables as Claude Code
+- ✅ Documented SOPS integration plan (docs/claude-opencode-sops-integration-plan.md)
 
-**Key Design**: Generate Termux configuration as Nix package outputs - no nix-on-droid required.
+**Pending Validation**:
+- ⏳ Test claudework command with Code-Companion proxy (uses ANTHROPIC_AUTH_TOKEN)
+- ⏳ Test opencodework command with Code-Companion proxy (uses ANTHROPIC_AUTH_TOKEN)
+- ⏳ Verify both tools connect to codecompanionv2.d-dp.nextcloud.aero successfully
+
+**Files Modified** (opencode branch):
+- `home/modules/base.nix:376-379,529-532`: Fixed Bitwarden item/field (both claude-code + opencode)
+- `home/common/development.nix:135-142`: Fixed claudework wrapper Bitwarden config
+- `home/modules/claude-code/lib.nix:54-87`: Uses ANTHROPIC_AUTH_TOKEN, blanks ANTHROPIC_API_KEY, removed file fallback
+- `home/modules/opencode.nix:545-562`: Uses ANTHROPIC_AUTH_TOKEN, blanks ANTHROPIC_API_KEY, fixed rbw --field bug
+- `docs/claude-opencode-sops-integration-plan.md`: Comprehensive 3-week SOPS integration plan
+
+**Next Steps**:
+1. Run: `home-manager switch --flake .#tim@thinky-nixos`
+2. Test: `claudework` - verify Bitwarden token fetch and Code-Companion proxy connection
+3. Test: `opencodework` - verify Bitwarden token fetch and Code-Companion proxy connection
+4. If tests pass: Continue with SOPS integration on same branch OR merge opencode branch
+
+**SOPS Integration Plan** (ready when approved):
+- Plan documented at `docs/claude-opencode-sops-integration-plan.md`
+- Dual-mode: Runtime (rbw, current) + Build-time (sops-nix, new)
+- Timeline: 3 weeks (module options, SOPS setup, docs, testing)
+- User preference: Continue on opencode branch for simplicity
 
 ### 🚧 **Deferred Tasks**
 

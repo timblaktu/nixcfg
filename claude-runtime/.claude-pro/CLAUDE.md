@@ -79,3 +79,4 @@
 - MCP server issues: Check `/tmp/claude_desktop.log` and `~/AppData/Roaming/Claude/logs/`
 - Hook failures: Review hook timeout settings
 - MCP Documentation: See `home/modules/README-MCP.md` for detailed troubleshooting
+- ALWAYS stage changed files related to nix-based flake-based workflows, which is most of what I do

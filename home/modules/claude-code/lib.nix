@@ -51,8 +51,8 @@
         (lib.optionalString (baseUrl != null) ''
           export ANTHROPIC_BASE_URL="${baseUrl}"'')
 
-        # ANTHROPIC_API_KEY - retrieve via rbw if bearer auth + bitwarden configured
-        # For third-party proxies, this replaces ANTHROPIC_AUTH_TOKEN
+        # ANTHROPIC_AUTH_TOKEN - retrieve via rbw if bearer auth + bitwarden configured
+        # For third-party proxies (Code-Companion), use AUTH_TOKEN and blank out API_KEY
         (lib.optionalString (authMethod == "bearer" && bearerToken != null && bearerToken.bitwarden or null != null) (
           let
             bwItem = bearerToken.bitwarden.item;
@@ -62,29 +62,27 @@
             rbwCmd =
               if bwField == null || bwField == ""
               then ''rbw get "${bwItem}"''
-              else ''rbw get "${bwItem}" "${bwField}"'';
+              else ''rbw get "${bwItem}" --field "${bwField}"'';
             fieldDesc =
               if bwField == null || bwField == ""
               then "(default password)"
               else "Field: ${bwField}";
           in
           ''
-            # Retrieve API key/bearer token from Bitwarden via rbw
+            # Retrieve bearer token from Bitwarden via rbw
             if command -v rbw >/dev/null 2>&1; then
-              ANTHROPIC_API_KEY="$(${rbwCmd} </dev/null 2>/dev/null)" || {
-                echo "Warning: Failed to retrieve API key from Bitwarden" >&2
+              ANTHROPIC_AUTH_TOKEN="$(${rbwCmd} </dev/null 2>/dev/null)" || {
+                echo "Warning: Failed to retrieve bearer token from Bitwarden" >&2
                 echo "   Item: ${bwItem}, ${fieldDesc}" >&2
               }
-              export ANTHROPIC_API_KEY
+              export ANTHROPIC_AUTH_TOKEN
+              # CRITICAL: Explicitly blank API_KEY to prevent conflicts with bearer auth
+              export ANTHROPIC_API_KEY=""
             else
-              # Fallback for systems without rbw (e.g., Termux)
-              if [[ -f "$HOME/.secrets/claude-${account}-token" ]]; then
-                ANTHROPIC_API_KEY="$(cat "$HOME/.secrets/claude-${account}-token")"
-                export ANTHROPIC_API_KEY
-              else
-                echo "Warning: API key not found" >&2
-                echo "   Expected: ~/.secrets/claude-${account}-token (or rbw configured)" >&2
-              fi
+              echo "Error: rbw (Bitwarden CLI) is required but not found" >&2
+              echo "   Install rbw and configure Bitwarden access to retrieve API keys" >&2
+              echo "   See: home/modules/secrets-management.nix for configuration" >&2
+              exit 1
             fi''
         ))
 
