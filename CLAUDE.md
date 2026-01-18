@@ -72,44 +72,47 @@ home-manager switch --flake .#tim@thinky-nixos  # Test config switch
 
 For completed work history, see git log on `dev` and `main` branches.
 
-### 🔍 **OpenCode Branch Validation** (IN PROGRESS - 2026-01-16)
+### ✅ **OpenCode Branch Validation** (COMPLETED - 2026-01-17)
 
 **Branch**: `opencode`
-**Status**: Secrets handling fixes completed, environment variable naming needs clarification
+**Status**: All validation tests passed, ready for merge or SOPS integration
 
-**Completed**:
+**Completed Work**:
 - ✅ Fixed Bitwarden configuration (item: "PAC Code Companion v2", field: "API Key")
-- ✅ Fixed CRITICAL BUG: opencode.nix wrapper now uses --field parameter in rbw get call
+- ✅ Fixed CRITICAL BUG: Missing `--field` flag in rbw get command (lib.nix + opencode.nix)
 - ✅ Removed file fallback logic (requires rbw, fails fast with clear error if not available)
 - ✅ Fixed wrapper naming: `opencodework`, `opencodemax`, `opencodepro` (no hyphens, matches claude pattern)
 - ✅ Updated authentication to use ANTHROPIC_AUTH_TOKEN (not ANTHROPIC_API_KEY) per Code-Companion docs
 - ✅ Added explicit ANTHROPIC_API_KEY="" to prevent conflicts with bearer auth
-- ✅ Researched OpenCode auth - confirmed it uses same ANTHROPIC_* variables as Claude Code
 - ✅ Documented SOPS integration plan (docs/claude-opencode-sops-integration-plan.md)
+- ✅ **VALIDATED**: Both `claudework` and `opencodework` successfully connect to Code-Companion proxy
 
-**Pending Validation**:
-- ⏳ Test claudework command with Code-Companion proxy (uses ANTHROPIC_AUTH_TOKEN)
-- ⏳ Test opencodework command with Code-Companion proxy (uses ANTHROPIC_AUTH_TOKEN)
-- ⏳ Verify both tools connect to codecompanionv2.d-dp.nextcloud.aero successfully
+**Key Technical Fix**:
+```nix
+# Before (BROKEN): rbw get "ITEM" "FIELD"
+# After (FIXED):   rbw get "ITEM" --field "FIELD"
+```
 
-**Files Modified** (opencode branch):
-- `home/modules/base.nix:376-379,529-532`: Fixed Bitwarden item/field (both claude-code + opencode)
-- `home/common/development.nix:135-142`: Fixed claudework wrapper Bitwarden config
-- `home/modules/claude-code/lib.nix:54-87`: Uses ANTHROPIC_AUTH_TOKEN, blanks ANTHROPIC_API_KEY, removed file fallback
-- `home/modules/opencode.nix:545-562`: Uses ANTHROPIC_AUTH_TOKEN, blanks ANTHROPIC_API_KEY, fixed rbw --field bug
-- `docs/claude-opencode-sops-integration-plan.md`: Comprehensive 3-week SOPS integration plan
+**Files Modified**:
+- `home/modules/claude-code/lib.nix:65` - Added `--field` flag to rbw command
+- `home/modules/opencode.nix:539` - Already had correct syntax
+- `home/modules/base.nix:376-379,529-532` - Fixed Bitwarden item/field references
+- `home/common/development.nix:135-142` - Fixed claudework wrapper config
+- `docs/claude-opencode-sops-integration-plan.md` - Comprehensive 3-week SOPS plan
+- `opencode-runtime/.opencode-work/*` - Generated work account configurations
 
-**Next Steps**:
-1. Run: `home-manager switch --flake .#tim@thinky-nixos`
-2. Test: `claudework` - verify Bitwarden token fetch and Code-Companion proxy connection
-3. Test: `opencodework` - verify Bitwarden token fetch and Code-Companion proxy connection
-4. If tests pass: Continue with SOPS integration on same branch OR merge opencode branch
+**Commit**: `9530a1f` - "Fix rbw command syntax and add opencode-work configuration"
+
+**Decision Point**: Choose next action:
+- **Option A**: Merge `opencode` branch to `main` (validation complete, working system)
+- **Option B**: Continue with SOPS integration on `opencode` branch (3-week plan ready)
+- **Option C**: Test additional scenarios before deciding
 
 **SOPS Integration Plan** (ready when approved):
-- Plan documented at `docs/claude-opencode-sops-integration-plan.md`
-- Dual-mode: Runtime (rbw, current) + Build-time (sops-nix, new)
+- Plan: `docs/claude-opencode-sops-integration-plan.md`
+- Features: Dual-mode (runtime rbw + build-time sops-nix)
 - Timeline: 3 weeks (module options, SOPS setup, docs, testing)
-- User preference: Continue on opencode branch for simplicity
+- Benefit: No rbw unlock required, faster launch, offline support
 
 ### 🚧 **Deferred Tasks**
 
