@@ -522,7 +522,7 @@ in
           envVars = {
             OPENCODE_CONFIG_DIR = configDir;
           } // optionalAttrs (accountCfg.api.baseUrl != null) {
-            "${accountCfg.api.apiKeyEnvVar}_BASE_URL" = accountCfg.api.baseUrl;
+            ANTHROPIC_BASE_URL = accountCfg.api.baseUrl;
           } // accountCfg.extraEnvVars;
 
           envExports = concatStringsSep "\n"
