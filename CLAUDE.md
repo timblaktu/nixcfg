@@ -114,6 +114,75 @@ For completed work history, see git log on `dev` and `main` branches.
 - Timeline: 3 weeks (module options, SOPS setup, docs, testing)
 - Benefit: No rbw unlock required, faster launch, offline support
 
+### ✅ **Termux Package Building - TUR Integration** (COMPLETED - 2026-01-19)
+
+**Branch**: `opencode` (implementation complete, ready for new branch/commit)
+**Status**: Production-ready package definition and CI/CD, ready for TUR fork deployment
+
+**What Was Built**:
+- ✅ Complete Termux package definition for claude-wrappers
+- ✅ Three wrapper commands: `claudemax`, `claudepro`, `claudework`
+- ✅ Interactive setup helper: `claude-setup-work`
+- ✅ GitHub Actions workflow for automated builds and APT publishing
+- ✅ Setup script for end users: `setup-termux-repos.sh`
+- ✅ Comprehensive documentation (3 guides, README, integration architecture)
+
+**Location**: `tur-package/` directory
+
+**Key Files**:
+- `tur-package/claude-wrappers/build.sh` - Package definition following TUR conventions
+- `tur-package/claude-wrappers/{claudemax,claudepro,claudework}` - Wrapper scripts
+- `tur-package/.github/workflows/build-claude-wrappers.yml` - CI/CD automation
+- `tur-package/TUR-FORK-SETUP.md` - Complete deployment guide
+- `tur-package/nixcfg-integration/setup-termux-repos.sh` - One-command user setup
+- `tur-package/README.md` - Project overview
+
+**Architecture**: Producer-Consumer Pattern
+```
+TUR Fork (timblaktu/tur)           nixcfg Repository
+├─ Produces .deb packages     ←─   ├─ Package definitions (tur-package/)
+├─ GitHub Actions builds           ├─ Setup scripts
+├─ APT repository (Pages)          └─ Documentation
+└─ Distribution                →   End Users: pkg install claude-wrappers
+```
+
+**Features**:
+- Platform-independent package (no compilation needed)
+- Follows TUR best practices and conventions
+- Automated building and publishing via GitHub Actions
+- APT repository hosted on GitHub Pages
+- Separate config directories per account (max, pro, work)
+- Bearer token authentication for Code-Companion proxy
+- Security-conscious (chmod 600 for secrets)
+- Extensive error handling and user feedback
+
+**Next Steps**:
+1. **Choose branch strategy**: Create `termux-packages` branch or work on current `opencode`?
+2. **Commit changes**: Stage tur-package/ directory and commit
+3. **Fork TUR**: Fork https://github.com/termux-user-repository/tur
+4. **Deploy**: Copy package definition to TUR fork, enable Actions/Pages
+5. **Test**: Install on Termux device and validate end-to-end
+
+**Advantages Over Previous Approach**:
+- ✅ `pkg install claude-wrappers` (vs manual copy)
+- ✅ `pkg upgrade` for updates (vs manual sync)
+- ✅ Proper versioning and dependency tracking
+- ✅ Discoverable via `pkg search`
+- ✅ Integrated with Termux ecosystem
+- ✅ Automated CI/CD pipeline
+
+**Documentation**:
+- [tur-package/README.md](tur-package/README.md) - Project overview
+- [tur-package/TUR-FORK-SETUP.md](tur-package/TUR-FORK-SETUP.md) - Deployment guide
+- [tur-package/nixcfg-integration/INTEGRATION-GUIDE.md](tur-package/nixcfg-integration/INTEGRATION-GUIDE.md) - Architecture
+
+**Research Findings**:
+- Studied TUR (Termux User Repository) structure and conventions
+- Analyzed existing packages for best practices
+- Confirmed Docker-based builds are standard for TUR
+- Native on-device builds possible but not used by TUR community
+- GitHub Actions + GitHub Pages is proven TUR deployment pattern
+
 ### 🚧 **Deferred Tasks**
 
 #### **Fork Development Work** (DEFERRED)

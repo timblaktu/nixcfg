@@ -1,0 +1,26 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+# ═══════════════════════════════════════════════════════════════════
+# Claude Max Account Wrapper
+# ═══════════════════════════════════════════════════════════════════
+# This script configures Claude Code for the Max account with default
+# Anthropic API endpoint and disabled telemetry.
+
+# ─── Extra Environment Variables ─────────────────────────────────
+export DISABLE_TELEMETRY="1"
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+export DISABLE_ERROR_REPORTING="1"
+
+# ─── Config Directory ────────────────────────────────────────────
+export CLAUDE_CONFIG_DIR="$HOME/.claude-max"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+
+# ─── Launch Claude ───────────────────────────────────────────────
+if ! command -v claude &> /dev/null; then
+  echo "Error: claude command not found" >&2
+  echo "Install Claude Code with: npm install -g @anthropic/claude-code" >&2
+  exit 1
+fi
+
+exec claude "$@"
