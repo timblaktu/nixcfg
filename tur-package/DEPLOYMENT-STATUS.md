@@ -316,24 +316,53 @@ Start at Phase 1 if fork doesn't exist, or resume at first unchecked item.
 
 ---
 
-**Deployment Status**: 🔄 IN PROGRESS - Waiting for GitHub Pages deployment
-**Last Action**: Fixed workflow, deployed to gh-pages, configured Pages
-**Next Action**: Wait for Pages to go live (5-10 min), then test installation
+**Deployment Status**: ✅ **DEPLOYED** - APT repository live, ready for user testing
+**Current Version**: 1.0.1-1
+**Last Action**: Deployed v1.0.1 with preinst conflict detection
+**Next Action**: Test installation on Termux device
 
 **Recent Updates** (2026-01-19):
+
+**Phase 1-6: Initial Deployment (COMPLETED)**
 - ✅ Forked TUR repository to timblaktu/tur
 - ✅ Cloned fork locally to ~/tur-fork
 - ✅ Copied package files and workflow
 - ✅ Fixed workflow bug (removed gh-pages checkout for initial deployment)
-- ✅ Build succeeded, deployed to gh-pages branch (commit: b444bcd)
-- ✅ All repository files confirmed present:
-  - dists/stable/Release
-  - dists/stable/main/binary-all/Packages.gz
-  - dists/stable/main/binary-all/claude-wrappers_1.0.0-1.deb
-- 🔄 GitHub Pages deployment in progress (legacy build type)
-- ⏳ Waiting for https://timblaktu.github.io/tur to go live
+- ✅ Build succeeded, deployed to gh-pages branch
+- ✅ GitHub Pages configured and live
+- ✅ v1.0.0 deployed successfully
+
+**Phase 7: Preinst Conflict Detection (COMPLETED)**
+- ✅ Added preinst script to build.sh
+- ✅ Detects untracked files (manual installations)
+- ✅ Provides clear error messages with backup/removal instructions
+- ✅ Prevents silent overwrites and data loss
+- ✅ Bumped version to 1.0.1
+- ✅ Deployed to TUR fork (commit: bbfaa5f)
+- ✅ Build successful, deployed to gh-pages (commit: 61551d6)
+- ✅ GitHub Pages updated and serving v1.0.1
+
+**Phase 8: User Testing (PENDING)**
+- ⏳ Install package on Termux device
+- ⏳ Test preinst conflict detection
+- ⏳ Verify wrapper functionality
+
+**Repository Status**:
+- TUR Fork: https://github.com/timblaktu/tur
+- APT Repository: https://timblaktu.github.io/tur (LIVE)
+- Current Package: claude-wrappers_1.0.1-1_all.deb
+- Workflow Status: Operational (GitHub Actions)
 
 **Known Issues**:
-- GitHub Release step fails (version output not passed correctly from build job)
+- GitHub Release creation fails (empty tag name in workflow)
   - Not critical - APT repository is the primary distribution method
+  - .deb files are in GitHub Actions artifacts
   - Can be fixed in future update if needed
+
+**Success Criteria** (for Phase 8):
+- ✅ GitHub Actions workflow succeeds (green checkmark)
+- ✅ APT repository accessible at https://timblaktu.github.io/tur
+- ⏳ `pkg install claude-wrappers` works on Termux
+- ⏳ Preinst conflict detection works as expected
+- ⏳ All three wrappers are executable: `which claudemax claudepro claudework`
+- ⏳ At least one wrapper successfully runs: `claudemax --version`
