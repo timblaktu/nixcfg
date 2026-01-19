@@ -122,8 +122,8 @@ For completed work history, see git log on `dev` and `main` branches.
 **Package Architecture** (4 separate packages):
 ```
 TUR Packages:
-├── claude-code          ⏳ Priority 0: Binary installation (CRITICAL - BLOCKS TESTING)
-├── claude-wrappers      ✅ v1.0.1 deployed (cannot test without claude-code)
+├── claude-code          ✅ Ready to deploy - npm wrapper, blocks testing (DEPLOY NEXT)
+├── claude-wrappers      ✅ v1.0.1 deployed (awaiting claude-code for testing)
 ├── opencode             ⏳ Binary installation
 └── opencode-wrappers    ⏳ Multi-account wrappers (copy/adapt from claude-wrappers)
 ```
@@ -174,20 +174,48 @@ claudemax --version
 
 ---
 
-#### ⏳ **claude-code** (PRIORITY 0 - CRITICAL)
+#### ✅ **claude-code** (READY FOR DEPLOYMENT)
 
-**Status**: Not yet created - blocks all testing
+**Status**: Package created, ready to deploy to TUR fork
+**Commit**: `90ba8ff` + `a4bfd40`
 
-**Requirements**:
-- Install Claude Code binary (`npm install -g @anthropic/claude-code`)
-- OR vendor the binary if npm installation is problematic
-- Provide `/data/data/com.termux/files/usr/bin/claude` command
+**What Was Built**:
+- ✅ npm wrapper package (installs `@anthropic-ai/claude-code` from npm)
+- ✅ Provides `/data/data/com.termux/files/usr/bin/claude` command
+- ✅ GitHub Actions workflow for automated builds and APT publishing
+- ✅ Comprehensive documentation and deployment guide
+- ✅ Post-install and pre-removal scripts with helpful messages
 
-**Options**:
-1. Wrap npm installation in package (lighter, upstream tracking)
-2. Vendor the binary directly (more reliable, no npm dependency)
+**Architecture Decision**: npm wrapper (not vendored binary)
+- **Advantages**: Lighter weight, automatic upstream tracking, simpler maintenance
+- **Trade-offs**: Requires nodejs-lts dependency, network during installation
 
-**Next Action**: Create `tur-package/claude-code/build.sh` in nixcfg repo
+**Files Created**:
+- `tur-package/claude-code/build.sh` - Package definition with npm installation
+- `tur-package/claude-code/README.md` - User documentation (usage, troubleshooting)
+- `tur-package/claude-code/DEPLOYMENT.md` - Deployment guide for maintainers
+- `tur-package/.github/workflows/build-claude-code.yml` - CI/CD automation
+
+**Deployment Steps** (see `tur-package/claude-code/DEPLOYMENT.md`):
+```bash
+cd ~/path/to/tur
+cp -r ~/termux-src/nixcfg/tur-package/claude-code tur/
+cp ~/termux-src/nixcfg/tur-package/.github/workflows/build-claude-code.yml .github/workflows/
+git add tur/claude-code/ .github/workflows/build-claude-code.yml
+git commit -m "Add claude-code package (Priority 0)"
+git push origin master
+# Watch build: https://github.com/timblaktu/tur/actions
+```
+
+**Post-Deployment Testing**:
+```bash
+# On Termux device
+pkg update
+pkg install claude-code
+claude --version
+pkg install claude-wrappers
+claudemax --version  # Should work now!
+```
 
 ---
 
@@ -220,11 +248,12 @@ claudemax --version
 
 **RESUME PROMPT FOR NEXT SESSION**:
 ```
-Create claude-code TUR package (Priority 0).
-Goal: Install Claude Code binary to make claude-wrappers testable.
-Location: tur-package/claude-code/ in nixcfg repo.
-Decision needed: npm wrapper vs vendored binary.
-Context: Blocks testing of deployed claude-wrappers v1.0.1.
+Deploy claude-code TUR package to TUR fork.
+Goal: Build and publish claude-code to make claude-wrappers testable.
+Actions: Copy package + workflow to TUR fork, push to trigger CI/CD.
+Location: tur-package/claude-code/ ready in nixcfg repo.
+Guide: tur-package/claude-code/DEPLOYMENT.md
+Context: Package created (commits 90ba8ff + a4bfd40), awaiting deployment.
 ```
 
 **Documentation**:
