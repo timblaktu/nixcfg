@@ -220,11 +220,14 @@ in
         };
       };
 
+      services.atd.enable = true;
+
       # Configure sudo access
       security.sudo.wheelNeedsPassword = lib.mkDefault cfg.requireWheelPassword;
 
       # Basic system packages
       environment.systemPackages = with pkgs; [
+        at
         vim
         wget
         curl

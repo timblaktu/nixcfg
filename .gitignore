@@ -20,7 +20,7 @@ Thumbs.db
 
 # Temp files
 *.log
-*.tmp
+**/*.tmp*
 *.bak
 **/*.backup*
 *.orig
