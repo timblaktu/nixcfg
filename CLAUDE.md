@@ -156,12 +156,70 @@ TUR Fork (timblaktu/tur)           nixcfg Repository
 - Security-conscious (chmod 600 for secrets)
 - Extensive error handling and user feedback
 
-**Next Steps**:
-1. **Choose branch strategy**: Create `termux-packages` branch or work on current `opencode`?
-2. **Commit changes**: Stage tur-package/ directory and commit
-3. **Fork TUR**: Fork https://github.com/termux-user-repository/tur
-4. **Deploy**: Copy package definition to TUR fork, enable Actions/Pages
-5. **Test**: Install on Termux device and validate end-to-end
+**Status**: ✅ **COMMITTED** - Ready for TUR fork deployment (Commit: 69a033b)
+
+**Next Steps to Deploy** (in order):
+
+1. **Fork TUR Repository** (5 minutes)
+   - Visit: https://github.com/termux-user-repository/tur
+   - Click "Fork" → Choose timblaktu account
+   - Wait for fork to complete
+
+2. **Clone Your Fork** (if working locally)
+   ```bash
+   git clone https://github.com/timblaktu/tur.git ~/tur-fork
+   cd ~/tur-fork
+   git remote add upstream https://github.com/termux-user-repository/tur.git
+   ```
+
+3. **Copy Package Files to Fork** (2 minutes)
+   ```bash
+   # From nixcfg repo
+   cp -r ~/termux-src/nixcfg/tur-package/claude-wrappers ~/tur-fork/tur/
+   cp ~/termux-src/nixcfg/tur-package/.github/workflows/build-claude-wrappers.yml \
+      ~/tur-fork/.github/workflows/
+   ```
+
+4. **Enable GitHub Infrastructure** (3 minutes)
+   - Go to fork Settings → Actions → Enable Actions
+   - Go to Settings → Pages → Source: gh-pages branch, / (root)
+   - Save settings
+
+5. **Commit and Push to Trigger Build** (2 minutes)
+   ```bash
+   cd ~/tur-fork
+   git add tur/claude-wrappers/ .github/workflows/build-claude-wrappers.yml
+   git commit -m "Add claude-wrappers package"
+   git push origin master
+   ```
+
+6. **Monitor Build** (15-30 minutes)
+   - Go to Actions tab, watch "Build claude-wrappers" workflow
+   - Verify build job completes successfully
+   - Verify publish job deploys to gh-pages
+   - Check GitHub Releases for .deb package
+
+7. **Test on Termux Device** (5 minutes)
+   ```bash
+   # On Termux
+   echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
+     tee $PREFIX/etc/apt/sources.list.d/timblaktu-tur.list
+   pkg update
+   pkg install claude-wrappers
+   which claudemax claudepro claudework
+   claudemax --version  # Verify it works
+   ```
+
+**SIMPLE RESUME PROMPT FOR NEXT SESSION**:
+```
+Continue with TUR deployment: Fork TUR and deploy claude-wrappers package.
+Follow the Next Steps in CLAUDE.md section "Termux Package Building - TUR Integration".
+```
+
+**OR if already forked**:
+```
+Continue TUR deployment at step 3: Copy files to my TUR fork and deploy.
+```
 
 **Advantages Over Previous Approach**:
 - ✅ `pkg install claude-wrappers` (vs manual copy)
@@ -182,6 +240,25 @@ TUR Fork (timblaktu/tur)           nixcfg Repository
 - Confirmed Docker-based builds are standard for TUR
 - Native on-device builds possible but not used by TUR community
 - GitHub Actions + GitHub Pages is proven TUR deployment pattern
+
+**Implementation Summary**:
+```
+✅ Package Definition    - build.sh following TUR standards
+✅ Wrapper Scripts       - claudemax, claudepro, claudework (generic template)
+✅ Setup Helper          - claude-setup-work (interactive token config)
+✅ CI/CD Automation      - GitHub Actions workflow for builds
+✅ APT Repository        - Automated publishing to GitHub Pages
+✅ Documentation         - 3 comprehensive guides + README
+✅ Security Review       - All workplace-specific info removed
+✅ Git Commit            - 69a033b on opencode branch
+⏳ TUR Fork Deployment  - Ready to execute (see Next Steps above)
+```
+
+**File Locations**:
+- Package: `tur-package/claude-wrappers/` (copy to TUR fork)
+- Workflow: `tur-package/.github/workflows/build-claude-wrappers.yml`
+- Guides: `tur-package/{README.md,TUR-FORK-SETUP.md}`
+- Integration: `tur-package/nixcfg-integration/`
 
 ### 🚧 **Deferred Tasks**
 
