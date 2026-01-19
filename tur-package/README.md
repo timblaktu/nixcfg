@@ -4,10 +4,11 @@ Complete implementation of Claude Code multi-account wrappers as Termux `.deb` p
 
 ## Executive Summary
 
-**Status**: ✅ Implementation complete - Ready for TUR fork deployment
+**Status**: 🚧 Phase 1 Complete (claude-wrappers), Phase 2 In Progress (claude-code)
 
 **What we built**:
-- Production-ready Termux package definition for claude-wrappers
+- ✅ Production-ready Termux package for claude-wrappers (deployed v1.0.1)
+- ✅ Production-ready Termux package for claude-code (ready for deployment)
 - Three wrapper commands: `claudemax`, `claudepro`, `claudework`
 - GitHub Actions CI/CD for automated builds and publishing
 - APT repository setup via GitHub Pages
@@ -16,6 +17,12 @@ Complete implementation of Claude Code multi-account wrappers as Termux `.deb` p
 **Architecture**: Producer-Consumer pattern
 - **TUR Fork** (timblaktu/tur): Produces and distributes `.deb` packages
 - **nixcfg Repo**: Documents usage and provides setup scripts
+
+**Package Status**:
+- `claude-code`: ✅ Created, ready to deploy (Priority 0 - blocks testing)
+- `claude-wrappers`: ✅ Deployed v1.0.1, awaiting claude-code for testing
+- `opencode`: ⏳ Planned
+- `opencode-wrappers`: ⏳ Planned
 
 ## Quick Start
 
@@ -50,7 +57,11 @@ tur-package/
 ├── README.md (this file)             # Overview
 ├── TUR-FORK-SETUP.md                 # Complete TUR setup guide
 │
-├── claude-wrappers/                  # Copy this to TUR fork
+├── claude-code/                      # ✅ Copy this to TUR fork (Priority 0)
+│   ├── build.sh                      # Package definition (npm wrapper)
+│   └── README.md                     # Package documentation
+│
+├── claude-wrappers/                  # ✅ Copy this to TUR fork (deployed v1.0.1)
 │   ├── build.sh                      # Package definition
 │   ├── claudemax                     # Max account wrapper
 │   ├── claudepro                     # Pro account wrapper
@@ -60,7 +71,8 @@ tur-package/
 │
 ├── .github/
 │   └── workflows/
-│       └── build-claude-wrappers.yml # CI/CD workflow (copy to TUR fork)
+│       ├── build-claude-code.yml     # ✅ CI/CD for claude-code
+│       └── build-claude-wrappers.yml # ✅ CI/CD for claude-wrappers
 │
 └── nixcfg-integration/               # For nixcfg users
     ├── INTEGRATION-GUIDE.md          # Integration architecture
