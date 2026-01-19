@@ -141,20 +141,14 @@ jobs:
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout gh-pages branch
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          path: repo
-
       - name: Download all packages
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Update repository
+      - name: Create repository structure
         run: |
-          # Copy new packages to repository
+          # Create repository directory structure
           mkdir -p repo/dists/stable/main/binary-all
           cp artifacts/claude-wrappers-all/*.deb repo/dists/stable/main/binary-all/ || true
 
