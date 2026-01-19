@@ -114,39 +114,50 @@ For completed work history, see git log on `dev` and `main` branches.
 - Timeline: 3 weeks (module options, SOPS setup, docs, testing)
 - Benefit: No rbw unlock required, faster launch, offline support
 
-### ✅ **Termux Package Building - TUR Integration** (DEPLOYED - 2026-01-19)
+### 🚧 **Termux Package Building - TUR Integration** (IN PROGRESS - 2026-01-19)
 
 **Branch**: `opencode`
-**Status**: ✅ **DEPLOYED** - Package live in APT repository, ready for testing
+**Status**: ⏳ **BLOCKED** - Wrappers deployed but cannot be tested without binary packages
 
-**Deployment Complete**:
-- ✅ TUR fork created: https://github.com/timblaktu/tur
-- ✅ Package v1.0.1 built and deployed
-- ✅ APT repository live: https://timblaktu.github.io/tur
-- ✅ GitHub Actions CI/CD operational
-- ✅ Preinst conflict detection implemented
-- ⏳ User testing pending (installation on Termux device)
+**Package Architecture** (4 separate packages):
+```
+TUR Packages:
+├── claude-code          ⏳ Priority 0: Binary installation (CRITICAL - BLOCKS TESTING)
+├── claude-wrappers      ✅ v1.0.1 deployed (cannot test without claude-code)
+├── opencode             ⏳ Binary installation
+└── opencode-wrappers    ⏳ Multi-account wrappers (copy/adapt from claude-wrappers)
+```
 
-**What Was Built**:
-- ✅ Complete Termux package definition for claude-wrappers
-- ✅ Three wrapper commands: `claudemax`, `claudepro`, `claudework`
-- ✅ Interactive setup helper: `claude-setup-work`
-- ✅ GitHub Actions workflow for automated builds and APT publishing
-- ✅ **Preinst conflict detection** - fails fast with informative errors
-- ✅ Comprehensive documentation (3 guides, README, integration architecture)
-
-**Current Version**: `1.0.1-1`
-- Added preinst script for file conflict detection
-- Checks for untracked files before installation
-- Provides backup/removal instructions
-- Prevents silent overwrites
+**Architecture Decision**: Separate packages (not monolithic, not shared library)
+- Each binary has its own package (claude-code, opencode)
+- Each has separate wrapper package (claude-wrappers, opencode-wrappers)
+- Accept wrapper code duplication for simplicity
+- Matches Debian single-responsibility pattern
 
 **Repository URLs**:
 - TUR Fork: https://github.com/timblaktu/tur
 - APT Repository: https://timblaktu.github.io/tur
 - Workflow: https://github.com/timblaktu/tur/actions
 
-**Installation Instructions**:
+---
+
+#### ✅ **claude-wrappers** (DEPLOYED v1.0.1)
+
+**What Was Built**:
+- ✅ Three wrapper commands: `claudemax`, `claudepro`, `claudework`
+- ✅ Interactive setup helper: `claude-setup-work`
+- ✅ GitHub Actions workflow for automated builds and APT publishing
+- ✅ Preinst conflict detection - fails fast with informative errors
+- ✅ Comprehensive documentation
+
+**Features vs nixcfg HM Module**:
+- ✅ Basic: Config directory switching, telemetry disabling, token management
+- ❌ Advanced: V2.0 coalescence, PID management, rbw integration, headless mode
+- **Decision**: Advanced features are LOW PRIORITY for Termux use case
+
+**Current Limitation**: Cannot be tested without `claude-code` package providing the binary
+
+**Installation** (when claude-code is ready):
 ```bash
 # Add repository
 echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
@@ -154,32 +165,66 @@ echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
 
 # Update and install
 pkg update
-pkg install claude-wrappers
+pkg install claude-code claude-wrappers
 
 # Verify installation
-which claudemax claudepro claudework
+which claude claudemax claudepro claudework
 claudemax --version
 ```
 
-**Preinst Conflict Detection**:
-If manual wrappers exist in `$PREFIX/bin/`, installation will fail with:
-- List of conflicting files
-- Clear backup instructions
-- Option to remove and retry
-- No silent overwrites
+---
 
-**Next Steps**:
-1. Test installation on Termux device
-2. Verify preinst conflict detection works
-3. Test wrapper functionality
-4. Consider updating nixcfg opencode branch with TUR changes
+#### ⏳ **claude-code** (PRIORITY 0 - CRITICAL)
 
-**RESUME PROMPT FOR TESTING SESSION**:
+**Status**: Not yet created - blocks all testing
+
+**Requirements**:
+- Install Claude Code binary (`npm install -g @anthropic/claude-code`)
+- OR vendor the binary if npm installation is problematic
+- Provide `/data/data/com.termux/files/usr/bin/claude` command
+
+**Options**:
+1. Wrap npm installation in package (lighter, upstream tracking)
+2. Vendor the binary directly (more reliable, no npm dependency)
+
+**Next Action**: Create `tur-package/claude-code/build.sh` in nixcfg repo
+
+---
+
+#### ⏳ **opencode** (PENDING)
+
+**Status**: Not yet created
+
+**Requirements**:
+- Install OpenCode binary
+- Provide command for opencode-wrappers to call
+- Similar approach to claude-code package
+
+---
+
+#### ⏳ **opencode-wrappers** (PENDING)
+
+**Status**: Not yet created
+
+**Requirements**:
+- Copy/adapt structure from claude-wrappers
+- Three wrappers: `opencodemax`, `opencodepro`, `opencodework`
+- Accept code duplication (don't create shared library)
+
+**Alignment with nixcfg**:
+- nixcfg `home/modules/claude-code/lib.nix` → duplicated in both wrapper packages
+- nixcfg `home/modules/shared/*` → not packaged (user config files)
+- Both use same pattern, accept duplication for simplicity
+
+---
+
+**RESUME PROMPT FOR NEXT SESSION**:
 ```
-Test claude-wrappers installation from TUR repository.
-Repository: https://timblaktu.github.io/tur
-Follow installation instructions in CLAUDE.md "Termux Package Building" section.
-Test preinst conflict detection if manual wrappers exist.
+Create claude-code TUR package (Priority 0).
+Goal: Install Claude Code binary to make claude-wrappers testable.
+Location: tur-package/claude-code/ in nixcfg repo.
+Decision needed: npm wrapper vs vendored binary.
+Context: Blocks testing of deployed claude-wrappers v1.0.1.
 ```
 
 **Documentation**:
@@ -189,9 +234,9 @@ Test preinst conflict detection if manual wrappers exist.
 - [tur-package/nixcfg-integration/INTEGRATION-GUIDE.md](tur-package/nixcfg-integration/INTEGRATION-GUIDE.md) - Architecture
 
 **File Locations**:
-- Source: `tur-package/claude-wrappers/` (nixcfg repo)
-- Deployed: `tur/claude-wrappers/` (TUR fork)
-- Workflow: `.github/workflows/build-claude-wrappers.yml` (TUR fork)
+- Source: `tur-package/{package-name}/` (nixcfg repo)
+- Deployed: `tur/{package-name}/` (TUR fork)
+- Workflow: `.github/workflows/*.yml` (TUR fork)
 - Artifacts: `dists/stable/main/binary-all/` (gh-pages branch)
 
 ### 🚧 **Deferred Tasks**
