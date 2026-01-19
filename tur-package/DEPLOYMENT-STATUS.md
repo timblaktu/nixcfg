@@ -316,6 +316,24 @@ Start at Phase 1 if fork doesn't exist, or resume at first unchecked item.
 
 ---
 
-**Deployment Status**: ⏳ READY TO START - Fork not yet created
-**Last Action**: Committed implementation to nixcfg opencode branch
-**Next Action**: Fork TUR repository (Phase 1)
+**Deployment Status**: 🔄 IN PROGRESS - Waiting for GitHub Pages deployment
+**Last Action**: Fixed workflow, deployed to gh-pages, configured Pages
+**Next Action**: Wait for Pages to go live (5-10 min), then test installation
+
+**Recent Updates** (2026-01-19):
+- ✅ Forked TUR repository to timblaktu/tur
+- ✅ Cloned fork locally to ~/tur-fork
+- ✅ Copied package files and workflow
+- ✅ Fixed workflow bug (removed gh-pages checkout for initial deployment)
+- ✅ Build succeeded, deployed to gh-pages branch (commit: b444bcd)
+- ✅ All repository files confirmed present:
+  - dists/stable/Release
+  - dists/stable/main/binary-all/Packages.gz
+  - dists/stable/main/binary-all/claude-wrappers_1.0.0-1.deb
+- 🔄 GitHub Pages deployment in progress (legacy build type)
+- ⏳ Waiting for https://timblaktu.github.io/tur to go live
+
+**Known Issues**:
+- GitHub Release step fails (version output not passed correctly from build job)
+  - Not critical - APT repository is the primary distribution method
+  - Can be fixed in future update if needed
