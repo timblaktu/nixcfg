@@ -122,11 +122,17 @@ For completed work history, see git log on `dev` and `main` branches.
 **Package Architecture** (4 separate packages):
 ```
 TUR Packages:
-├── claude-code          ✅ Ready to deploy - npm wrapper, blocks testing (DEPLOY NEXT)
-├── claude-wrappers      ✅ v1.0.1 deployed (awaiting claude-code for testing)
-├── opencode             ⏳ Binary installation
-└── opencode-wrappers    ⏳ Multi-account wrappers (copy/adapt from claude-wrappers)
+├── claude-code          ✅ Ready to deploy - npm wrapper (commits 90ba8ff, a4bfd40)
+├── claude-wrappers      ✅ v1.0.1 deployed (awaiting testing)
+├── opencode             ⏳ CREATE NEXT - copy/adapt claude-code
+└── opencode-wrappers    ⏳ CREATE NEXT - copy/adapt claude-wrappers
 ```
+
+**Deployment Strategy**: Create all 4 packages, deploy together, test later
+- Phase 1: ✅ claude-code + claude-wrappers created
+- Phase 2: ⏳ opencode + opencode-wrappers (next session)
+- Phase 3: ⏳ Deploy all 4 to TUR fork in batch
+- Phase 4: ⏳ Test all packages on Termux device when user available
 
 **Architecture Decision**: Separate packages (not monolithic, not shared library)
 - Each binary has its own package (claude-code, opencode)
@@ -219,41 +225,53 @@ claudemax --version  # Should work now!
 
 ---
 
-#### ⏳ **opencode** (PENDING)
+#### ⏳ **opencode** (NEXT SESSION - CREATE)
 
-**Status**: Not yet created
+**Status**: Not yet created - will copy/adapt from claude-code
 
-**Requirements**:
-- Install OpenCode binary
-- Provide command for opencode-wrappers to call
-- Similar approach to claude-code package
+**Plan**:
+1. Copy `tur-package/claude-code/` → `tur-package/opencode/`
+2. Update npm package name (find correct opencode package name)
+3. Update binary name/path
+4. Update documentation references
+5. Create workflow: `build-opencode.yml` (copy from build-claude-code.yml)
+
+**Estimated effort**: ~15 minutes (mostly find/replace)
 
 ---
 
-#### ⏳ **opencode-wrappers** (PENDING)
+#### ⏳ **opencode-wrappers** (NEXT SESSION - CREATE)
 
-**Status**: Not yet created
+**Status**: Not yet created - will copy/adapt from claude-wrappers
 
-**Requirements**:
-- Copy/adapt structure from claude-wrappers
-- Three wrappers: `opencodemax`, `opencodepro`, `opencodework`
-- Accept code duplication (don't create shared library)
+**Plan**:
+1. Copy `tur-package/claude-wrappers/` → `tur-package/opencode-wrappers/`
+2. Rename commands: `opencodemax`, `opencodepro`, `opencodework`
+3. Update config dirs: `~/.opencode-max/`, etc.
+4. Update all documentation references
+5. Create workflow: `build-opencode-wrappers.yml`
 
-**Alignment with nixcfg**:
-- nixcfg `home/modules/claude-code/lib.nix` → duplicated in both wrapper packages
-- nixcfg `home/modules/shared/*` → not packaged (user config files)
-- Both use same pattern, accept duplication for simplicity
+**Estimated effort**: ~20 minutes (rename + test)
+
+**Architecture Note**: Accept code duplication between claude-wrappers and opencode-wrappers
+- Simpler than shared library
+- Each package is self-contained
+- Matches Debian single-responsibility pattern
 
 ---
 
 **RESUME PROMPT FOR NEXT SESSION**:
 ```
-Deploy claude-code TUR package to TUR fork.
-Goal: Build and publish claude-code to make claude-wrappers testable.
-Actions: Copy package + workflow to TUR fork, push to trigger CI/CD.
-Location: tur-package/claude-code/ ready in nixcfg repo.
-Guide: tur-package/claude-code/DEPLOYMENT.md
-Context: Package created (commits 90ba8ff + a4bfd40), awaiting deployment.
+Complete TUR package suite: Create opencode + opencode-wrappers packages.
+Phase 1: Create packages (copy/adapt from claude equivalents)
+  - tur-package/opencode/ (npm wrapper, copy claude-code pattern)
+  - tur-package/opencode-wrappers/ (copy claude-wrappers, rename commands)
+  - Both GitHub Actions workflows
+  - Update documentation
+Phase 2: Deploy all 4 packages to TUR fork in one batch
+Phase 3: Test later when user has Termux device access
+Context: claude-code + claude-wrappers ready (commits 90ba8ff, a4bfd40, 318a599)
+Pattern established, now replicate for opencode suite.
 ```
 
 **Documentation**:
