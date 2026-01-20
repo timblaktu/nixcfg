@@ -28,13 +28,16 @@
 | Security review | ✅ Complete | All workplace info removed, generic templates |
 | Git commits | ⏳ Pending | Need to commit opencode packages |
 
-### What's NOT Complete (Deployment)
+### Deployment to TUR Fork - COMPLETED (2026-01-19)
 
-- [ ] opencode + opencode-wrappers copied to TUR fork
-- [ ] claude-code copied to TUR fork
-- [ ] All 4 packages pushed to TUR fork
-- [ ] GitHub Actions builds executed and verified
-- [ ] Installation tested on Termux device
+- ✅ opencode + opencode-wrappers copied to TUR fork
+- ✅ claude-code copied to TUR fork
+- ✅ All 4 workflows copied to .github/workflows/
+- ✅ Committed to feature branch `add-claude-opencode-packages` (commit c7ff190)
+- ✅ Pushed to GitHub - CI/CD builds triggered
+- ⏳ GitHub Actions builds running (monitor at https://github.com/timblaktu/tur/actions)
+- ⏳ Merge to master after build verification
+- ⏳ Installation tested on Termux device
 
 ## Deployment Checklist
 

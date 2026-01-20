@@ -278,18 +278,26 @@ claudemax --version  # Should work now!
 - ✅ All 4 packages created (claude-code, claude-wrappers, opencode, opencode-wrappers)
 - ✅ All documentation complete
 - ✅ All GitHub Actions workflows complete
-- ⏳ Ready for batch deployment to TUR fork
-- ⏳ Testing on Termux device (when available)
+- ✅ Deployed to TUR fork feature branch `add-claude-opencode-packages`
+- ✅ Pushed to GitHub - CI/CD builds running
+- ⏳ Monitor builds at https://github.com/timblaktu/tur/actions
+- ⏳ Merge to master after build verification
+- ⏳ Test installation on Termux device
+
+**TUR Fork Commits**:
+- nixcfg: `33a38cc`, `9375192` (opencode packages created)
+- TUR fork: `c7ff190` (all packages deployed to feature branch)
 
 **RESUME PROMPT FOR NEXT SESSION**:
 ```
-Deploy all 4 TUR packages (claude-code, claude-wrappers, opencode, opencode-wrappers) to TUR fork.
-Phase 1: Copy all packages to TUR fork (~/tur-fork/tur/)
-Phase 2: Copy all 4 workflows to .github/workflows/
-Phase 3: Commit and push to trigger CI/CD
-Phase 4: Monitor builds and verify deployments
-Phase 5: Test installation on Termux device
-Context: All packages ready (commit 33a38cc), pattern established, batch deployment strategy
+Monitor TUR package builds and complete deployment.
+Phase 1: Check GitHub Actions at https://github.com/timblaktu/tur/actions
+Phase 2: Verify all 3 workflows succeed (claude-code, opencode, opencode-wrappers)
+Phase 3: Merge feature branch to master (creates PR or direct merge)
+Phase 4: Test installation: pkg install claude-code opencode opencode-wrappers
+Phase 5: Verify wrappers work: claudemax, opencodemax, etc.
+Context: All packages pushed to branch add-claude-opencode-packages (commit c7ff190)
+Branch: add-claude-opencode-packages (not master - proper Git workflow)
 ```
 
 **Documentation**:
