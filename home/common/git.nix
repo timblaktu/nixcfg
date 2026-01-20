@@ -135,44 +135,8 @@
     };
   };
 
-  # GitHub CLI (settings from existing ~/.config/gh/config.yml)
-  programs.gh = {
-    enable = true;
-
-    # Wrap gh with auto-authentication check
-    package = pkgs.writeShellScriptBin "gh" ''
-      # If this is a credential helper call and gh is not authenticated, prompt for auth
-      if [ "$1" = "auth" ] && [ "$2" = "git-credential" ]; then
-        # Check if gh is authenticated
-        if ! ${pkgs.gh}/bin/gh auth status >/dev/null 2>&1; then
-          echo "GitHub CLI is not authenticated. Please authenticate now." >&2
-          echo "" >&2
-          ${pkgs.gh}/bin/gh auth login
-
-          # Check if auth succeeded
-          if ! ${pkgs.gh}/bin/gh auth status >/dev/null 2>&1; then
-            echo "Authentication failed. Git operation will fail." >&2
-            exit 1
-          fi
-        fi
-      fi
-
-      # Call the real gh command
-      exec ${pkgs.gh}/bin/gh "$@"
-    '';
-
-    settings = {
-      git_protocol = "https"; # From existing config (not ssh)
-      editor = ""; # Blank in existing config - will refer to environment
-      prompt = "enabled";
-      prefer_editor_prompt = "disabled"; # From existing config
-      pager = ""; # Blank - will refer to environment
-      # Custom aliases from existing config
-      aliases = {
-        co = "pr checkout";
-      };
-    };
-  };
+  # GitHub CLI configuration is managed by github-auth.nix module
+  # See home/modules/github-auth.nix for the complete setup with Bitwarden integration
 
   # Install additional Git-related tools
   home.packages = with pkgs; [

@@ -25,6 +25,22 @@
                 username = "tim";
                 homeDirectory = "/home/tim";
               };
+
+              # Secrets management
+              secretsManagement = {
+                enable = true;
+                rbw.email = "timblaktu@gmail.com";
+              };
+
+              # GitHub authentication
+              githubAuth = {
+                enable = true;
+                mode = "bitwarden";
+                bitwarden = {
+                  item = "github.com";
+                  field = "PAT-timtam2026";
+                };
+              };
             }
             # ../home/migration/darwin-home-files.nix # macOS-specific unified files configuration - DISABLED after module-based migration
           ];
@@ -54,6 +70,22 @@
                   explorer = "explorer.exe .";
                 };
               };
+              # Secrets management
+              secretsManagement = {
+                enable = true;
+                rbw.email = "timblaktu@gmail.com";
+              };
+
+              # GitHub authentication
+              githubAuth = {
+                enable = true;
+                mode = "bitwarden";
+                bitwarden = {
+                  item = "github.com";
+                  field = "PAT-timtam2026";
+                };
+              };
+
               targets.wsl = {
                 enable = true;
                 windowsTools = {
@@ -194,7 +226,23 @@
               home.packages = with pkgs; [
                 wslu
               ];
-              secretsManagement.rbw.email = "timblaktu@gmail.com";
+
+              # Secrets management
+              secretsManagement = {
+                enable = true;
+                rbw.email = "timblaktu@gmail.com";
+              };
+
+              # GitHub and GitLab authentication
+              githubAuth = {
+                enable = true;
+                mode = "bitwarden";
+                bitwarden = {
+                  item = "github.com";
+                  field = "PAT-timtam2026";
+                };
+              };
+
               targets.wsl = {
                 enable = true;
                 windowsTools = {
@@ -264,6 +312,22 @@
                 homeDirectory = "/home/tim";
                 environmentVariables = {
                   EDITOR = "nvim";
+                };
+              };
+
+              # Secrets management
+              secretsManagement = {
+                enable = true;
+                rbw.email = "timblaktu@gmail.com";
+              };
+
+              # GitHub authentication
+              githubAuth = {
+                enable = true;
+                mode = "bitwarden";
+                bitwarden = {
+                  item = "github.com";
+                  field = "PAT-timtam2026";
                 };
               };
             }
