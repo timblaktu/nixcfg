@@ -1,43 +1,55 @@
 # TUR Deployment Status
 
-**Last Updated**: 2026-01-19
+**Last Updated**: 2026-01-20
 **Branch**: opencode
-**Current Session**: Creating opencode + opencode-wrappers packages
+**Status**: ✅ DEPLOYMENT COMPLETE
 
-## Current State: ✅ ALL 4 PACKAGES CREATED - READY FOR BATCH DEPLOYMENT
+## Current State: ✅ ALL 4 PACKAGES DEPLOYED AND PUBLISHED
 
-### Package Creation Status
+### Package Deployment Status
 
-| Package | Status | Version | Details |
-|---------|--------|---------|---------|
-| claude-code | ✅ Created | 0.1.0-1 | npm wrapper for @anthropic-ai/claude-code |
-| claude-wrappers | ✅ Deployed | 1.0.1-1 | Multi-account wrappers (deployed to TUR) |
-| opencode | ✅ Created | 0.1.0-1 | npm wrapper for @opencode-ai/sdk |
-| opencode-wrappers | ✅ Created | 1.0.0-1 | Multi-account wrappers (ready to deploy) |
+| Package | Status | Version | Published URL |
+|---------|--------|---------|---------------|
+| claude-code | ✅ Deployed | 0.1.0-1 | [claude-code_0.1.0-1.deb](https://timblaktu.github.io/tur/dists/stable/main/binary-all/claude-code_0.1.0-1.deb) |
+| claude-wrappers | ✅ Deployed | 1.0.1-1 | [claude-wrappers_1.0.1-1.deb](https://timblaktu.github.io/tur/dists/stable/main/binary-all/claude-wrappers_1.0.1-1.deb) |
+| opencode | ✅ Deployed | 0.1.0-1 | [opencode_0.1.0-1.deb](https://timblaktu.github.io/tur/dists/stable/main/binary-all/opencode_0.1.0-1.deb) |
+| opencode-wrappers | ✅ Deployed | 1.0.0-1 | [opencode-wrappers_1.0.0-1.deb](https://timblaktu.github.io/tur/dists/stable/main/binary-all/opencode-wrappers_1.0.0-1.deb) |
+
+### Deployment Timeline
+
+| Date | Event | Details |
+|------|-------|---------|
+| 2026-01-19 | Package Creation | All 4 packages created in nixcfg repo |
+| 2026-01-19 | Initial Deployment | Packages deployed to TUR fork (commit 4215392) |
+| 2026-01-19/20 | Bug Discovery | Workflow bug found: force_orphan wiping packages |
+| 2026-01-20 | Bug Fix | Changed to keep_files in wrapper workflows (commit 55010d6) |
+| 2026-01-20 | Successful Deployment | All 4 packages published to APT repository |
+| 2026-01-20 | Verification | All packages verified accessible via HTTPS |
 
 ### What's Complete
 
 | Task | Status | Details |
 |------|--------|---------|
-| claude-wrappers package | ✅ Complete | Deployed v1.0.1 to TUR fork |
-| claude-code package | ✅ Complete | Ready for deployment (Priority 0) |
-| opencode package | ✅ Complete | Ready for deployment |
-| opencode-wrappers package | ✅ Complete | Ready for deployment |
-| GitHub Actions workflows | ✅ Complete | 4 workflows (all packages) |
-| Documentation | ✅ Complete | README, DEPLOYMENT guides, package docs |
-| Security review | ✅ Complete | All workplace info removed, generic templates |
-| Git commits | ⏳ Pending | Need to commit opencode packages |
+| claude-code package | ✅ Complete | Deployed v0.1.0-1 (22 MB npm wrapper) |
+| claude-wrappers package | ✅ Complete | Deployed v1.0.1-1 (3.9 KB) |
+| opencode package | ✅ Complete | Deployed v0.1.0-1 (44 KB npm wrapper) |
+| opencode-wrappers package | ✅ Complete | Deployed v1.0.0-1 (3.9 KB) |
+| GitHub Actions workflows | ✅ Complete | 4 workflows, all executing successfully |
+| Workflow bug fix | ✅ Complete | force_orphan → keep_files |
+| APT repository | ✅ Complete | All packages published and accessible |
+| Documentation | ✅ Complete | README, testing guide, troubleshooting |
+| Git commits | ✅ Complete | All changes committed to nixcfg and TUR fork |
 
-### Deployment to TUR Fork - COMPLETED (2026-01-19)
+### Deployment to TUR Fork - COMPLETED (2026-01-20)
 
-- ✅ opencode + opencode-wrappers copied to TUR fork
-- ✅ claude-code copied to TUR fork
+- ✅ All 4 packages created and deployed to TUR fork (commit 4215392)
 - ✅ All 4 workflows copied to .github/workflows/
-- ✅ Committed to feature branch `add-claude-opencode-packages` (commit c7ff190)
-- ✅ Pushed to GitHub - CI/CD builds triggered
-- ⏳ GitHub Actions builds running (monitor at https://github.com/timblaktu/tur/actions)
-- ⏳ Merge to master after build verification
-- ⏳ Installation tested on Termux device
+- ✅ Workflow bug identified and fixed (commit 55010d6)
+- ✅ GitHub Actions builds completed successfully
+- ✅ All 4 packages published to gh-pages branch (commit f77d16d)
+- ✅ APT repository accessible at https://timblaktu.github.io/tur
+- ✅ All package URLs verified (HTTP 200)
+- ⏳ Installation testing on Termux device (next step)
 
 ## Deployment Checklist
 
@@ -378,3 +390,64 @@ Start at Phase 1 if fork doesn't exist, or resume at first unchecked item.
 - ⏳ Preinst conflict detection works as expected
 - ⏳ All three wrappers are executable: `which claudemax claudepro claudework`
 - ⏳ At least one wrapper successfully runs: `claudemax --version`
+
+---
+
+## Final Status Summary (2026-01-20)
+
+### ✅ Deployment Complete
+
+All phases completed successfully:
+
+1. ✅ **Package Creation**: All 4 packages created with comprehensive documentation
+2. ✅ **TUR Fork Setup**: Repository forked and configured
+3. ✅ **File Deployment**: All packages and workflows copied to TUR fork
+4. ✅ **CI/CD**: GitHub Actions workflows created and tested
+5. ✅ **Bug Fix**: Workflow bug identified and fixed (force_orphan → keep_files)
+6. ✅ **APT Publishing**: All 4 packages published and accessible
+7. ✅ **Verification**: All package URLs verified (HTTP 200)
+
+### 📦 Published Packages
+
+All packages available at https://timblaktu.github.io/tur/dists/stable/main/binary-all/:
+
+- claude-code_0.1.0-1.deb (22 MB)
+- claude-wrappers_1.0.1-1.deb (3.9 KB)
+- opencode_0.1.0-1.deb (44 KB)
+- opencode-wrappers_1.0.0-1.deb (3.9 KB)
+
+### 🧪 Next Steps: Testing on Termux Device
+
+**Testing Guide**: See [TERMUX-TESTING.md](TERMUX-TESTING.md) for complete testing procedures.
+
+**Quick Installation**:
+```bash
+echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
+  tee $PREFIX/etc/apt/sources.list.d/timblaktu-tur.list
+pkg update
+pkg install claude-code claude-wrappers opencode opencode-wrappers
+```
+
+### 📚 Documentation
+
+- [README.md](README.md) - Project overview and usage
+- [TERMUX-TESTING.md](TERMUX-TESTING.md) - Comprehensive testing guide
+- [TUR-FORK-SETUP.md](TUR-FORK-SETUP.md) - Deployment process
+- [CLAUDE.md](../CLAUDE.md) - nixcfg project status
+
+### 🔗 Repository Links
+
+- **TUR Fork**: https://github.com/timblaktu/tur
+- **APT Repository**: https://timblaktu.github.io/tur
+- **Workflows**: https://github.com/timblaktu/tur/actions
+- **nixcfg Source**: ~/termux-src/nixcfg/tur-package/
+
+### 🎯 Success Criteria for Testing Phase
+
+- [ ] Install packages on Termux device
+- [ ] Verify binary functionality (claude, opencode)
+- [ ] Test all 6 wrappers (claudemax, claudepro, claudework, opencodemax, opencodepro, opencodework)
+- [ ] Verify configuration directory creation
+- [ ] Confirm telemetry is disabled
+- [ ] Test multi-account switching
+- [ ] Document any issues or missing features

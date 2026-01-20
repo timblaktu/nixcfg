@@ -4,7 +4,7 @@ Complete implementation of Claude Code multi-account wrappers as Termux `.deb` p
 
 ## Executive Summary
 
-**Status**: 🚧 All 4 Packages Created - Ready for Batch Deployment
+**Status**: ✅ All 4 Packages Deployed - Ready for Testing
 
 **What we built**:
 - ✅ Production-ready Termux packages for Claude Code and OpenCode
@@ -12,18 +12,19 @@ Complete implementation of Claude Code multi-account wrappers as Termux `.deb` p
 - ✅ GitHub Actions CI/CD for automated builds and publishing (4 workflows)
 - ✅ APT repository setup via GitHub Pages
 - ✅ Setup scripts and comprehensive documentation
+- ✅ Workflow bug fixed (force_orphan → keep_files)
 
 **Architecture**: Producer-Consumer pattern
 - **TUR Fork** (timblaktu/tur): Produces and distributes `.deb` packages
 - **nixcfg Repo**: Documents usage and provides setup scripts
 
-**Package Status** (2026-01-19):
-- `claude-code`: ✅ Created, ready to deploy (npm wrapper for @anthropic-ai/claude-code)
-- `claude-wrappers`: ✅ Deployed v1.0.1, awaiting claude-code for testing
-- `opencode`: ✅ Created, ready to deploy (npm wrapper for @opencode-ai/sdk)
-- `opencode-wrappers`: ✅ Created, ready to deploy (v1.0.0)
+**Package Status** (2026-01-20):
+- `claude-code`: ✅ v0.1.0-1 deployed (22 MB npm wrapper)
+- `claude-wrappers`: ✅ v1.0.1-1 deployed (3.9 KB)
+- `opencode`: ✅ v0.1.0-1 deployed (44 KB npm wrapper)
+- `opencode-wrappers`: ✅ v1.0.0-1 deployed (3.9 KB)
 
-**Deployment Strategy**: Create all 4 packages, deploy together, test later
+**Deployment Complete**: All packages published at https://timblaktu.github.io/tur/dists/stable/main/binary-all/
 
 ## Quick Start
 
@@ -245,28 +246,50 @@ git push origin master
 # 5. Users upgrade: pkg upgrade claude-wrappers
 ```
 
-## Testing Checklist
+## Testing on Termux
 
-### Pre-Deployment Testing
+**Comprehensive Testing Guide**: See [TERMUX-TESTING.md](TERMUX-TESTING.md) for detailed testing instructions.
 
-- [ ] Build.sh syntax is valid
-- [ ] All wrapper scripts have correct shebangs
-- [ ] README.md is complete
-- [ ] postinst script runs without errors
-- [ ] DEBIAN/control has all required fields
-- [ ] File permissions are correct (755 for scripts)
+### Quick Testing Steps
 
-### Post-Deployment Testing
+1. **Install packages**:
+   ```bash
+   echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
+     tee $PREFIX/etc/apt/sources.list.d/timblaktu-tur.list
+   pkg update
+   pkg install claude-code claude-wrappers opencode opencode-wrappers
+   ```
 
-- [ ] GitHub Actions workflow runs successfully
-- [ ] .deb package builds without errors
-- [ ] APT repository is accessible via GitHub Pages
-- [ ] Packages.gz contains claude-wrappers
-- [ ] GitHub Release is created
-- [ ] `pkg install claude-wrappers` works on Termux
-- [ ] All wrappers execute correctly
-- [ ] claude-setup-work helper works
-- [ ] Documentation is accessible
+2. **Verify installation**:
+   ```bash
+   claude --version && opencode --version
+   which claudemax claudepro claudework
+   which opencodemax opencodepro opencodework
+   ```
+
+3. **Test wrappers**:
+   ```bash
+   claudemax --help
+   opencodemax --help
+   ```
+
+### Testing Checklist Summary
+
+✅ **Deployment Complete** (2026-01-20):
+- [x] All 4 packages published to APT repository
+- [x] GitHub Actions workflows executing successfully
+- [x] Workflow bug fixed (force_orphan → keep_files)
+- [x] All packages accessible via HTTPS
+
+⏳ **On-Device Testing Required**:
+- [ ] Installation on Termux device
+- [ ] Binary functionality (claude, opencode)
+- [ ] Wrapper functionality (all 6 wrappers)
+- [ ] Configuration directory creation
+- [ ] Telemetry disabling verification
+- [ ] Multiple account switching
+
+See [TERMUX-TESTING.md](TERMUX-TESTING.md) for complete testing procedures and troubleshooting.
 
 ## Troubleshooting
 

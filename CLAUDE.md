@@ -327,7 +327,21 @@ claude --version
 opencode --version
 ```
 
-**Next Steps**: Test packages on Termux device when user is available.
+**Testing Instructions**: See [tur-package/TERMUX-TESTING.md](tur-package/TERMUX-TESTING.md) for comprehensive testing guide.
+
+**Quick Start Testing**:
+```bash
+# On Termux device
+echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
+  tee $PREFIX/etc/apt/sources.list.d/timblaktu-tur.list
+pkg update
+pkg install claude-code claude-wrappers opencode opencode-wrappers
+
+# Verify
+claude --version && opencode --version
+which claudemax claudepro claudework
+which opencodemax opencodepro opencodework
+```
 
 **Documentation**:
 - [tur-package/README.md](tur-package/README.md) - Project overview
