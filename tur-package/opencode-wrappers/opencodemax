@@ -1,0 +1,26 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+# ═══════════════════════════════════════════════════════════════════
+# OpenCode Max Account Wrapper
+# ═══════════════════════════════════════════════════════════════════
+# This script configures OpenCode for the Max account with default
+# API endpoint and disabled telemetry.
+
+# ─── Extra Environment Variables ─────────────────────────────────
+export DISABLE_TELEMETRY="1"
+export OPENCODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+export DISABLE_ERROR_REPORTING="1"
+
+# ─── Config Directory ────────────────────────────────────────────
+export OPENCODE_CONFIG_DIR="$HOME/.opencode-max"
+mkdir -p "$OPENCODE_CONFIG_DIR"
+
+# ─── Launch OpenCode ─────────────────────────────────────────────
+if ! command -v opencode &> /dev/null; then
+  echo "Error: opencode command not found" >&2
+  echo "Install OpenCode with: npm install -g @opencode-ai/sdk" >&2
+  exit 1
+fi
+
+exec opencode "$@"

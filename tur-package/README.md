@@ -4,25 +4,26 @@ Complete implementation of Claude Code multi-account wrappers as Termux `.deb` p
 
 ## Executive Summary
 
-**Status**: 🚧 Phase 1 Complete (claude-wrappers), Phase 2 In Progress (claude-code)
+**Status**: 🚧 All 4 Packages Created - Ready for Batch Deployment
 
 **What we built**:
-- ✅ Production-ready Termux package for claude-wrappers (deployed v1.0.1)
-- ✅ Production-ready Termux package for claude-code (ready for deployment)
-- Three wrapper commands: `claudemax`, `claudepro`, `claudework`
-- GitHub Actions CI/CD for automated builds and publishing
-- APT repository setup via GitHub Pages
-- Setup scripts and comprehensive documentation
+- ✅ Production-ready Termux packages for Claude Code and OpenCode
+- ✅ Multi-account wrappers for both: `claudemax`, `claudepro`, `claudework`, `opencodemax`, `opencodepro`, `opencodework`
+- ✅ GitHub Actions CI/CD for automated builds and publishing (4 workflows)
+- ✅ APT repository setup via GitHub Pages
+- ✅ Setup scripts and comprehensive documentation
 
 **Architecture**: Producer-Consumer pattern
 - **TUR Fork** (timblaktu/tur): Produces and distributes `.deb` packages
 - **nixcfg Repo**: Documents usage and provides setup scripts
 
-**Package Status**:
-- `claude-code`: ✅ Created, ready to deploy (Priority 0 - blocks testing)
+**Package Status** (2026-01-19):
+- `claude-code`: ✅ Created, ready to deploy (npm wrapper for @anthropic-ai/claude-code)
 - `claude-wrappers`: ✅ Deployed v1.0.1, awaiting claude-code for testing
-- `opencode`: ⏳ Planned
-- `opencode-wrappers`: ⏳ Planned
+- `opencode`: ✅ Created, ready to deploy (npm wrapper for @opencode-ai/sdk)
+- `opencode-wrappers`: ✅ Created, ready to deploy (v1.0.0)
+
+**Deployment Strategy**: Create all 4 packages, deploy together, test later
 
 ## Quick Start
 
@@ -56,12 +57,14 @@ See [TUR-FORK-SETUP.md](TUR-FORK-SETUP.md) for complete guide.
 tur-package/
 ├── README.md (this file)             # Overview
 ├── TUR-FORK-SETUP.md                 # Complete TUR setup guide
+├── DEPLOYMENT-STATUS.md              # Deployment tracking
 │
-├── claude-code/                      # ✅ Copy this to TUR fork (Priority 0)
+├── claude-code/                      # ✅ Ready to deploy
 │   ├── build.sh                      # Package definition (npm wrapper)
-│   └── README.md                     # Package documentation
+│   ├── README.md                     # Package documentation
+│   └── DEPLOYMENT.md                 # Deployment guide
 │
-├── claude-wrappers/                  # ✅ Copy this to TUR fork (deployed v1.0.1)
+├── claude-wrappers/                  # ✅ Deployed v1.0.1
 │   ├── build.sh                      # Package definition
 │   ├── claudemax                     # Max account wrapper
 │   ├── claudepro                     # Pro account wrapper
@@ -69,10 +72,25 @@ tur-package/
 │   ├── claude-setup-work             # Setup helper
 │   └── README.md                     # Package documentation
 │
+├── opencode/                         # ✅ Ready to deploy
+│   ├── build.sh                      # Package definition (npm wrapper)
+│   ├── README.md                     # Package documentation
+│   └── DEPLOYMENT.md                 # Deployment guide
+│
+├── opencode-wrappers/                # ✅ Ready to deploy
+│   ├── build.sh                      # Package definition
+│   ├── opencodemax                   # Max account wrapper
+│   ├── opencodepro                   # Pro account wrapper
+│   ├── opencodework                  # Work account wrapper
+│   ├── opencode-setup-work           # Setup helper
+│   └── README.md                     # Package documentation
+│
 ├── .github/
 │   └── workflows/
 │       ├── build-claude-code.yml     # ✅ CI/CD for claude-code
-│       └── build-claude-wrappers.yml # ✅ CI/CD for claude-wrappers
+│       ├── build-claude-wrappers.yml # ✅ CI/CD for claude-wrappers
+│       ├── build-opencode.yml        # ✅ CI/CD for opencode
+│       └── build-opencode-wrappers.yml # ✅ CI/CD for opencode-wrappers
 │
 └── nixcfg-integration/               # For nixcfg users
     ├── INTEGRATION-GUIDE.md          # Integration architecture
@@ -305,7 +323,7 @@ git push origin master
 ### Possible Improvements
 
 1. **Additional Packages**
-   - OpenCode wrappers
+   - ✅ OpenCode wrappers (COMPLETED - opencode + opencode-wrappers)
    - MCP server packages
    - Configuration templates
 

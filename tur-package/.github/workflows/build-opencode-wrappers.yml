@@ -1,0 +1,213 @@
+name: Build opencode-wrappers
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - dev
+    paths:
+      - 'tur/opencode-wrappers/**'
+      - '.github/workflows/build-opencode-wrappers.yml'
+  pull_request:
+    paths:
+      - 'tur/opencode-wrappers/**'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if no changes'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write  # Needed for GitHub Pages deployment
+
+jobs:
+  build:
+    name: Build opencode-wrappers package
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Platform-independent package, but build for all architectures
+        # for consistency with TUR infrastructure
+        arch: [all]
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1000
+
+      - name: Set up build environment
+        run: |
+          # Install termux-packages build dependencies
+          sudo apt-get update
+          sudo apt-get install -y \
+            dpkg-dev \
+            debhelper \
+            build-essential
+
+      - name: Build package
+        id: build
+        run: |
+          # Since this is a platform-independent package with SKIP_SRC_EXTRACT,
+          # we can build it directly without the full termux-packages Docker setup
+
+          cd tur/opencode-wrappers
+
+          # Create package directory structure
+          PKG_NAME="opencode-wrappers"
+          VERSION=$(grep '^TERMUX_PKG_VERSION=' build.sh | cut -d= -f2)
+          REVISION=$(grep '^TERMUX_PKG_REVISION=' build.sh | cut -d= -f2)
+          ARCH="all"
+          PKG_DIR="${PKG_NAME}_${VERSION}-${REVISION}"
+
+          mkdir -p "${PKG_DIR}/DEBIAN"
+          mkdir -p "${PKG_DIR}/data/data/com.termux/files/usr/bin"
+          mkdir -p "${PKG_DIR}/data/data/com.termux/files/usr/share/doc/opencode-wrappers"
+
+          # Generate control file
+          cat > "${PKG_DIR}/DEBIAN/control" << EOF
+          Package: opencode-wrappers
+          Version: ${VERSION}-${REVISION}
+          Architecture: ${ARCH}
+          Maintainer: Tim Blaktu <timblaktu@users.noreply.github.com>
+          Depends: bash
+          Suggests: nodejs-lts
+          Description: OpenCode multi-account wrapper scripts for Termux
+           Provides wrapper scripts for managing multiple OpenCode accounts:
+           - opencodemax:  OpenCode Max account
+           - opencodepro:  OpenCode Pro account
+           - opencodework: Custom proxy template (requires configuration)
+           .
+           Each wrapper sets up account-specific configuration and launches
+           OpenCode with proper environment variables.
+          Homepage: https://github.com/timblaktu/nixcfg
+          EOF
+
+          # Copy files
+          install -m755 opencodemax "${PKG_DIR}/data/data/com.termux/files/usr/bin/"
+          install -m755 opencodepro "${PKG_DIR}/data/data/com.termux/files/usr/bin/"
+          install -m755 opencodework "${PKG_DIR}/data/data/com.termux/files/usr/bin/"
+          install -m755 opencode-setup-work "${PKG_DIR}/data/data/com.termux/files/usr/bin/"
+          install -m644 README.md "${PKG_DIR}/data/data/com.termux/files/usr/share/doc/opencode-wrappers/"
+
+          # Create postinst script
+          cat > "${PKG_DIR}/DEBIAN/postinst" << 'POSTINST_EOF'
+          #!/data/data/com.termux/files/usr/bin/sh
+          echo ""
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║  OpenCode Wrappers Installed                                   ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "Available commands:"
+          echo "  opencodemax   - OpenCode Max account"
+          echo "  opencodepro   - OpenCode Pro account"
+          echo "  opencodework  - Custom proxy template"
+          echo ""
+          echo "To configure opencodework for your proxy:"
+          echo "  1. Edit: \$PREFIX/bin/opencodework"
+          echo "  2. Run: opencode-setup-work"
+          echo ""
+          echo "Documentation:"
+          echo "  \$PREFIX/share/doc/opencode-wrappers/README.md"
+          echo ""
+          echo "Note: OpenCode must be installed separately."
+          echo "      Install with: npm install -g @opencode-ai/sdk"
+          echo ""
+          POSTINST_EOF
+
+          chmod 755 "${PKG_DIR}/DEBIAN/postinst"
+
+          # Build .deb package
+          dpkg-deb --build "${PKG_DIR}"
+
+          # Save output info
+          echo "package_file=${PKG_DIR}.deb" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}-${REVISION}" >> $GITHUB_OUTPUT
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-wrappers-all
+          path: tur/opencode-wrappers/*.deb
+          retention-days: 30
+
+  publish:
+    name: Publish to APT repository
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create repository structure
+        run: |
+          # Create repository directory structure
+          mkdir -p repo/dists/stable/main/binary-all
+          cp artifacts/opencode-wrappers-all/*.deb repo/dists/stable/main/binary-all/ || true
+
+          cd repo
+
+          # Generate Packages file
+          dpkg-scanpackages dists/stable/main/binary-all /dev/null | \
+            gzip -9c > dists/stable/main/binary-all/Packages.gz
+
+          # Generate Release file
+          cat > dists/stable/Release << EOF
+          Origin: timblaktu-tur
+          Label: Tim's TUR Packages
+          Suite: stable
+          Codename: stable
+          Architectures: all aarch64 arm i686 x86_64
+          Components: main
+          Description: Personal Termux packages (OpenCode wrappers)
+          Date: $(date -R)
+          EOF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./repo
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: opencode-wrappers-${{ needs.build.outputs.version }}
+          name: OpenCode Wrappers ${{ needs.build.outputs.version }}
+          body: |
+            ## Installation
+
+            ```bash
+            # Add repository
+            echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
+              tee $PREFIX/etc/apt/sources.list.d/timblaktu-tur.list
+
+            # Update and install
+            pkg update
+            pkg install opencode-wrappers
+            ```
+
+            ## What's Included
+
+            - `opencodemax` - OpenCode Max account wrapper
+            - `opencodepro` - OpenCode Pro account wrapper
+            - `opencodework` - Custom proxy template wrapper
+            - `opencode-setup-work` - Interactive setup helper
+
+            See the [README](https://github.com/timblaktu/nixcfg/tree/main/tur-package/opencode-wrappers/README.md) for full documentation.
+          files: artifacts/opencode-wrappers-all/*.deb
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
