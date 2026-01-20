@@ -274,30 +274,71 @@ claudemax --version  # Should work now!
 
 ---
 
-**DEPLOYMENT STATUS (2026-01-19)**:
-- ✅ All 4 packages created (claude-code, claude-wrappers, opencode, opencode-wrappers)
-- ✅ All documentation complete
-- ✅ All GitHub Actions workflows complete
-- ✅ Deployed to TUR fork feature branch `add-claude-opencode-packages`
-- ✅ Pushed to GitHub - CI/CD builds running
-- ⏳ Monitor builds at https://github.com/timblaktu/tur/actions
-- ⏳ Merge to master after build verification
-- ⏳ Test installation on Termux device
+**DEPLOYMENT STATUS (2026-01-19/20)**: ⚠️ **BLOCKED - WORKFLOW BUG FOUND**
+
+**Current State**:
+- ✅ All 4 packages created and merged to master (commit 4215392)
+- ✅ All workflows executing successfully
+- ❌ **CRITICAL BUG**: Only 1 of 4 packages published to APT repository
+- ❌ Packages overwriting each other instead of accumulating
+
+**Published Packages** (https://timblaktu.github.io/tur):
+- ✅ claude-wrappers_1.0.1-1.deb (3.9 KB) - ONLY package currently available
+- ❌ claude-code - built successfully, then overwritten
+- ❌ opencode - build succeeds, publish step fails with git error
+- ❌ opencode-wrappers - built successfully, then overwritten
+
+**Root Cause Identified**:
+```yaml
+# build-claude-wrappers.yml:178 (WRONG - wipes all files)
+force_orphan: true
+
+# Other workflows (CORRECT - preserves existing packages)
+keep_files: true
+```
+
+The `force_orphan: true` setting creates a new orphan commit that wipes out all previous packages. Each workflow run overwrites the entire gh-pages branch instead of adding to it.
+
+**Additional Issue**:
+- opencode publish step consistently fails with: "The process '/usr/bin/git' failed with exit code 1"
+- Build succeeds, artifact created, but git push to gh-pages fails
+- Needs investigation after fixing force_orphan issue
 
 **TUR Fork Commits**:
-- nixcfg: `33a38cc`, `9375192` (opencode packages created)
-- TUR fork: `c7ff190` (all packages deployed to feature branch)
+- nixcfg: `33a38cc`, `9375192`, `5b0af0f` (all packages created and documented)
+- TUR fork master: `4215392` (merge commit - all packages deployed)
+- TUR fork gh-pages: `e61d93d` (only claude-wrappers, others overwritten)
 
-**RESUME PROMPT FOR NEXT SESSION**:
+**NEXT SESSION PROMPT**:
 ```
-Monitor TUR package builds and complete deployment.
-Phase 1: Check GitHub Actions at https://github.com/timblaktu/tur/actions
-Phase 2: Verify all 3 workflows succeed (claude-code, opencode, opencode-wrappers)
-Phase 3: Merge feature branch to master (creates PR or direct merge)
-Phase 4: Test installation: pkg install claude-code opencode opencode-wrappers
-Phase 5: Verify wrappers work: claudemax, opencodemax, etc.
-Context: All packages pushed to branch add-claude-opencode-packages (commit c7ff190)
-Branch: add-claude-opencode-packages (not master - proper Git workflow)
+Fix TUR package deployment workflow bug and complete deployment.
+
+CRITICAL BUG: Workflows overwriting packages instead of accumulating.
+
+Root Cause: build-claude-wrappers.yml:178 uses "force_orphan: true"
+Fix Required: Change to "keep_files: true" (matching other workflows)
+
+Current Status:
+- Repo: ~/tur-fork (branch: master)
+- Published: Only claude-wrappers_1.0.1-1.deb
+- Missing: claude-code, opencode, opencode-wrappers
+- All 4 packages built successfully, just need workflow fix
+
+Steps:
+1. Edit ~/tur-fork/.github/workflows/build-claude-wrappers.yml:178
+   Change: force_orphan: true → keep_files: true
+2. Commit and push to master
+3. Manually trigger all 4 workflows: gh workflow run "Build X" --ref master -f force_rebuild=true
+4. Monitor builds: gh run list --repo timblaktu/tur --limit 10
+5. Verify all 4 .deb files published: https://github.com/timblaktu/tur/tree/gh-pages/dists/stable/main/binary-all
+6. Test installation on Termux device
+
+Note: opencode publish may need additional debugging (git error in publish step)
+
+URLs:
+- Actions: https://github.com/timblaktu/tur/actions
+- Published packages: https://timblaktu.github.io/tur/dists/stable/main/binary-all/
+- APT repo: https://timblaktu.github.io/tur
 ```
 
 **Documentation**:
