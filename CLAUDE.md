@@ -114,25 +114,26 @@ For completed work history, see git log on `dev` and `main` branches.
 - Timeline: 3 weeks (module options, SOPS setup, docs, testing)
 - Benefit: No rbw unlock required, faster launch, offline support
 
-### 🚧 **Termux Package Building - TUR Integration** (IN PROGRESS - 2026-01-19)
+### ✅ **Termux Package Building - TUR Integration** (COMPLETED - 2026-01-20)
 
 **Branch**: `opencode`
-**Status**: ⏳ **BLOCKED** - Wrappers deployed but cannot be tested without binary packages
+**Status**: ✅ **ALL PACKAGES DEPLOYED** - Ready for testing on Termux device
 
 **Package Architecture** (4 separate packages):
 ```
 TUR Packages:
-├── claude-code          ✅ Ready to deploy - npm wrapper (commits 90ba8ff, a4bfd40)
-├── claude-wrappers      ✅ v1.0.1 deployed (awaiting testing)
-├── opencode             ⏳ CREATE NEXT - copy/adapt claude-code
-└── opencode-wrappers    ⏳ CREATE NEXT - copy/adapt claude-wrappers
+├── claude-code          ✅ v0.1.0-1 deployed (22 MB npm wrapper)
+├── claude-wrappers      ✅ v1.0.1-1 deployed (3.9 KB)
+├── opencode             ✅ v0.1.0-1 deployed (44 KB npm wrapper)
+└── opencode-wrappers    ✅ v1.0.0-1 deployed (3.9 KB)
 ```
 
-**Deployment Strategy**: Create all 4 packages, deploy together, test later
+**Deployment Timeline**:
 - Phase 1: ✅ claude-code + claude-wrappers created
-- Phase 2: ⏳ opencode + opencode-wrappers (next session)
-- Phase 3: ⏳ Deploy all 4 to TUR fork in batch
-- Phase 4: ⏳ Test all packages on Termux device when user available
+- Phase 2: ✅ opencode + opencode-wrappers created
+- Phase 3: ✅ All 4 packages deployed to TUR fork (commit 4215392)
+- Phase 4: ✅ Workflow bug fixed (commit 55010d6)
+- Phase 5: ⏳ Test all packages on Termux device (next session)
 
 **Architecture Decision**: Separate packages (not monolithic, not shared library)
 - Each binary has its own package (claude-code, opencode)
@@ -274,72 +275,59 @@ claudemax --version  # Should work now!
 
 ---
 
-**DEPLOYMENT STATUS (2026-01-19/20)**: ⚠️ **BLOCKED - WORKFLOW BUG FOUND**
+**DEPLOYMENT STATUS (2026-01-20)**: ✅ **COMPLETED - ALL PACKAGES DEPLOYED**
 
-**Current State**:
+**Final State**:
 - ✅ All 4 packages created and merged to master (commit 4215392)
-- ✅ All workflows executing successfully
-- ❌ **CRITICAL BUG**: Only 1 of 4 packages published to APT repository
-- ❌ Packages overwriting each other instead of accumulating
+- ✅ Workflow bug fixed (commit 55010d6)
+- ✅ All 4 packages successfully published to APT repository
+- ✅ All packages accessible via HTTPS
 
-**Published Packages** (https://timblaktu.github.io/tur):
-- ✅ claude-wrappers_1.0.1-1.deb (3.9 KB) - ONLY package currently available
-- ❌ claude-code - built successfully, then overwritten
-- ❌ opencode - build succeeds, publish step fails with git error
-- ❌ opencode-wrappers - built successfully, then overwritten
+**Published Packages** (https://timblaktu.github.io/tur/dists/stable/main/binary-all/):
+- ✅ claude-code_0.1.0-1.deb (22 MB) - npm wrapper for @anthropic-ai/claude-code
+- ✅ claude-wrappers_1.0.1-1.deb (3.9 KB) - claudemax, claudepro, claudework
+- ✅ opencode_0.1.0-1.deb (44 KB) - npm wrapper for @opencode-ai/sdk
+- ✅ opencode-wrappers_1.0.0-1.deb (3.9 KB) - opencodemax, opencodepro, opencodework
 
-**Root Cause Identified**:
+**Bug Fixed**:
 ```yaml
-# build-claude-wrappers.yml:178 (WRONG - wipes all files)
-force_orphan: true
+# BEFORE (build-claude-wrappers.yml:178, build-opencode-wrappers.yml:178)
+force_orphan: true  # ❌ Wipes all existing packages
 
-# Other workflows (CORRECT - preserves existing packages)
-keep_files: true
+# AFTER (commit 55010d6)
+keep_files: true    # ✅ Preserves existing packages
 ```
 
-The `force_orphan: true` setting creates a new orphan commit that wipes out all previous packages. Each workflow run overwrites the entire gh-pages branch instead of adding to it.
-
-**Additional Issue**:
-- opencode publish step consistently fails with: "The process '/usr/bin/git' failed with exit code 1"
-- Build succeeds, artifact created, but git push to gh-pages fails
-- Needs investigation after fixing force_orphan issue
+**Resolution Details**:
+- Root cause: Both wrapper workflows used `force_orphan: true`, causing each run to wipe gh-pages
+- Fixed: Changed to `keep_files: true` in both wrapper workflows
+- Race condition: opencode-wrappers workflow failed due to simultaneous pushes, but all packages still published
+- Final result: All 4 packages verified accessible via HTTP 200
 
 **TUR Fork Commits**:
-- nixcfg: `33a38cc`, `9375192`, `5b0af0f` (all packages created and documented)
-- TUR fork master: `4215392` (merge commit - all packages deployed)
-- TUR fork gh-pages: `e61d93d` (only claude-wrappers, others overwritten)
+- nixcfg: `33a38cc` (all 4 packages created)
+- TUR fork master: `4215392` (initial deployment), `55010d6` (workflow fix)
+- TUR fork gh-pages: `f77d16d` (all 4 packages published)
 
-**NEXT SESSION PROMPT**:
+**Installation Instructions**:
+```bash
+# Add repository
+echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
+  tee $PREFIX/etc/apt/sources.list.d/timblaktu-tur.list
+
+# Update and install
+pkg update
+pkg install claude-code claude-wrappers    # For Claude Code
+pkg install opencode opencode-wrappers      # For OpenCode
+
+# Verify installation
+which claude claudemax claudepro claudework
+which opencode opencodemax opencodepro opencodework
+claude --version
+opencode --version
 ```
-Fix TUR package deployment workflow bug and complete deployment.
 
-CRITICAL BUG: Workflows overwriting packages instead of accumulating.
-
-Root Cause: build-claude-wrappers.yml:178 uses "force_orphan: true"
-Fix Required: Change to "keep_files: true" (matching other workflows)
-
-Current Status:
-- Repo: ~/tur-fork (branch: master)
-- Published: Only claude-wrappers_1.0.1-1.deb
-- Missing: claude-code, opencode, opencode-wrappers
-- All 4 packages built successfully, just need workflow fix
-
-Steps:
-1. Edit ~/tur-fork/.github/workflows/build-claude-wrappers.yml:178
-   Change: force_orphan: true → keep_files: true
-2. Commit and push to master
-3. Manually trigger all 4 workflows: gh workflow run "Build X" --ref master -f force_rebuild=true
-4. Monitor builds: gh run list --repo timblaktu/tur --limit 10
-5. Verify all 4 .deb files published: https://github.com/timblaktu/tur/tree/gh-pages/dists/stable/main/binary-all
-6. Test installation on Termux device
-
-Note: opencode publish may need additional debugging (git error in publish step)
-
-URLs:
-- Actions: https://github.com/timblaktu/tur/actions
-- Published packages: https://timblaktu.github.io/tur/dists/stable/main/binary-all/
-- APT repo: https://timblaktu.github.io/tur
-```
+**Next Steps**: Test packages on Termux device when user is available.
 
 **Documentation**:
 - [tur-package/README.md](tur-package/README.md) - Project overview
