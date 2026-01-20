@@ -500,6 +500,21 @@ in
               apiKey = "{env:ANTHROPIC_API_KEY}";
             };
           };
+          # Custom Code-Companion provider using OpenAI-compatible API
+          codecompanion = {
+            npm = "@ai-sdk/openai-compatible";
+            name = "Code Companion V2";
+            options = {
+              baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
+              apiKey = "{env:ANTHROPIC_API_KEY}";
+            };
+            models = {
+              "qwen-a3b" = { name = "Qwen A3B"; };
+              "devstral" = { name = "Devstral"; };
+              "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
+              "glm-47" = { name = "GLM 47"; };
+            };
+          };
         };
         accounts = {
           max = {
@@ -521,9 +536,10 @@ in
             enable = true;
             displayName = "OpenCode Work Code-Companion";
             provider = "custom";
-            model = "qwen-a3b";
+            model = "codecompanion/qwen-a3b";
+            # API config is in the top-level codecompanion provider block
+            # We still need the env var name for the wrapper script
             api = {
-              baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
               apiKeyEnvVar = "ANTHROPIC_API_KEY";
             };
             secrets.bearerToken.bitwarden = {
@@ -532,9 +548,6 @@ in
             };
             extraEnvVars = {
               DISABLE_TELEMETRY = "1";
-              ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
-              ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
-              ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
             };
           };
         };
