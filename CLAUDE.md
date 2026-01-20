@@ -225,53 +225,71 @@ claudemax --version  # Should work now!
 
 ---
 
-#### ⏳ **opencode** (NEXT SESSION - CREATE)
+#### ✅ **opencode** (COMPLETED - 2026-01-19)
 
-**Status**: Not yet created - will copy/adapt from claude-code
+**Status**: Package created, ready to deploy (commit 33a38cc)
 
-**Plan**:
-1. Copy `tur-package/claude-code/` → `tur-package/opencode/`
-2. Update npm package name (find correct opencode package name)
-3. Update binary name/path
-4. Update documentation references
-5. Create workflow: `build-opencode.yml` (copy from build-claude-code.yml)
+**What Was Built**:
+- ✅ npm wrapper package (installs `@opencode-ai/sdk` from npm)
+- ✅ Provides `/data/data/com.termux/files/usr/bin/opencode` command
+- ✅ GitHub Actions workflow for automated builds and APT publishing
+- ✅ Comprehensive documentation and deployment guide
+- ✅ Post-install and pre-removal scripts with helpful messages
 
-**Estimated effort**: ~15 minutes (mostly find/replace)
+**Architecture Decision**: npm wrapper (parallel to claude-code)
+- **npm package**: `@opencode-ai/sdk` (not `@anthropic-ai/claude-code`)
+- **Upstream**: https://github.com/anomalyco/opencode
+- **Advantages**: Lighter weight, automatic upstream tracking, simpler maintenance
+
+**Files Created**:
+- `tur-package/opencode/build.sh` - Package definition with npm installation
+- `tur-package/opencode/README.md` - User documentation (usage, troubleshooting)
+- `tur-package/opencode/DEPLOYMENT.md` - Deployment guide for maintainers
+- `tur-package/.github/workflows/build-opencode.yml` - CI/CD automation
 
 ---
 
-#### ⏳ **opencode-wrappers** (NEXT SESSION - CREATE)
+#### ✅ **opencode-wrappers** (COMPLETED - 2026-01-19)
 
-**Status**: Not yet created - will copy/adapt from claude-wrappers
+**Status**: Package created, ready to deploy (commit 33a38cc)
 
-**Plan**:
-1. Copy `tur-package/claude-wrappers/` → `tur-package/opencode-wrappers/`
-2. Rename commands: `opencodemax`, `opencodepro`, `opencodework`
-3. Update config dirs: `~/.opencode-max/`, etc.
-4. Update all documentation references
-5. Create workflow: `build-opencode-wrappers.yml`
+**What Was Built**:
+- ✅ Three wrapper commands: `opencodemax`, `opencodepro`, `opencodework`
+- ✅ Interactive setup helper: `opencode-setup-work`
+- ✅ GitHub Actions workflow for automated builds and APT publishing
+- ✅ Preinst conflict detection - fails fast with informative errors
+- ✅ Comprehensive documentation (parallel to claude-wrappers)
 
-**Estimated effort**: ~20 minutes (rename + test)
+**Files Created**:
+- `tur-package/opencode-wrappers/build.sh` - Package definition
+- `tur-package/opencode-wrappers/README.md` - User documentation
+- `tur-package/opencode-wrappers/{opencodemax,opencodepro,opencodework}` - Wrapper scripts
+- `tur-package/opencode-wrappers/opencode-setup-work` - Setup helper
+- `tur-package/.github/workflows/build-opencode-wrappers.yml` - CI/CD automation
 
-**Architecture Note**: Accept code duplication between claude-wrappers and opencode-wrappers
+**Architecture Note**: Code duplication accepted (parallel to claude-wrappers)
 - Simpler than shared library
 - Each package is self-contained
 - Matches Debian single-responsibility pattern
 
 ---
 
+**DEPLOYMENT STATUS (2026-01-19)**:
+- ✅ All 4 packages created (claude-code, claude-wrappers, opencode, opencode-wrappers)
+- ✅ All documentation complete
+- ✅ All GitHub Actions workflows complete
+- ⏳ Ready for batch deployment to TUR fork
+- ⏳ Testing on Termux device (when available)
+
 **RESUME PROMPT FOR NEXT SESSION**:
 ```
-Complete TUR package suite: Create opencode + opencode-wrappers packages.
-Phase 1: Create packages (copy/adapt from claude equivalents)
-  - tur-package/opencode/ (npm wrapper, copy claude-code pattern)
-  - tur-package/opencode-wrappers/ (copy claude-wrappers, rename commands)
-  - Both GitHub Actions workflows
-  - Update documentation
-Phase 2: Deploy all 4 packages to TUR fork in one batch
-Phase 3: Test later when user has Termux device access
-Context: claude-code + claude-wrappers ready (commits 90ba8ff, a4bfd40, 318a599)
-Pattern established, now replicate for opencode suite.
+Deploy all 4 TUR packages (claude-code, claude-wrappers, opencode, opencode-wrappers) to TUR fork.
+Phase 1: Copy all packages to TUR fork (~/tur-fork/tur/)
+Phase 2: Copy all 4 workflows to .github/workflows/
+Phase 3: Commit and push to trigger CI/CD
+Phase 4: Monitor builds and verify deployments
+Phase 5: Test installation on Termux device
+Context: All packages ready (commit 33a38cc), pattern established, batch deployment strategy
 ```
 
 **Documentation**:
