@@ -358,30 +358,38 @@ which opencodemax opencodepro opencodework
 
 ### 🔧 **Pending Tasks**
 
-#### ✅ **OpenCode Permissions Configuration** (COMPLETED - 2026-01-20)
+#### ✅ **OpenCode Vision Support Configuration** (COMPLETED - 2026-01-20)
 
 **Branch**: `opencode`
-**Status**: ✅ Fixed and committed (commit c2ec743)
+**Status**: ✅ Fixed and committed (commit ad71afc)
 
 **Problem Resolved**:
-- OpenCode was failing to read local image files, falling back to ineffective WebFetch
-- Root cause: Missing `permissions` configuration in opencode-enhanced (base.nix:492-559)
+- OpenCode was failing to read local image files with error "model may not be able to read images"
+- Root cause: Missing `modalities` configuration for custom qwen-a3b model
+
+**Investigation Journey**:
+1. ✅ Permissions were already correctly configured (commit c2ec743)
+2. ❌ Initially tried `supports_vision: true` (hallucinated from LiteLLM docs)
+3. ✅ Found actual OpenCode requirement: `modalities` object via [issue #3084](https://github.com/anomalyco/opencode/issues/3084)
 
 **Solution Implemented**:
-- Added permissions block to opencode-enhanced in home/modules/base.nix (lines 554-566)
-- Permissions now match claude-code configuration:
-  - Allows: Bash, Read, Write, Edit, WebFetch, MCP servers (context7, mcp-nixos, sequential-thinking)
-  - Denies: Search, Find, dangerous Bash operations
+- Added modalities to qwen-a3b model in codecompanion provider (base.nix:534-537):
+```nix
+modalities = {
+  input = [ "text" "image" ];
+  output = [ "text" ];
+};
+```
 
 **Files Modified**:
-- `home/modules/base.nix:554-566` - Added permissions configuration
-- `opencode-runtime/.opencode-*/opencode.json` - Generated configs updated for all accounts
+- `home/modules/base.nix:534-537` - Added modalities configuration
+- `opencode-runtime/.opencode-*/opencode.json` - Regenerated with modalities
 
 **Verification**:
 ```bash
-# Verify permissions in generated config:
-cat opencode-runtime/.opencode-work/opencode.json | jq '.permission'
-# ✅ Shows all tool permissions correctly configured
+# Verify modalities in generated config:
+cat opencode-runtime/.opencode-work/opencode.json | jq '.provider.codecompanion.models."qwen-a3b".modalities'
+# ✅ Shows: {"input": ["text", "image"], "output": ["text"]}
 ```
 
 **Testing Instructions**:
@@ -392,11 +400,11 @@ opencodework
 # Test with canary image:
 # Prompt: "What is the sum of the numbers in the image at '/mnt/c/Users/blackt1/OneDrive - Panasonic Avionics Corporation/Pictures/numbers-to-sum.jpg'?"
 
-# Expected: OpenCode uses Read tool to access image (not WebFetch)
+# Expected: OpenCode uses Read tool to access image without permission prompts
 # This enables proper OCR workflow with codecompanion/qwen-a3b model
 ```
 
-**Next Step**: Test OpenCode with canary image to verify Read tool access and assess qwen-a3b vision capabilities for mkb OCR integration.
+**Key Learning**: OpenCode custom models require explicit modalities declarations, not `supports_vision` flags (which are LiteLLM-specific).
 
 ---
 
