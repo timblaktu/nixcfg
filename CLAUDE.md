@@ -9,6 +9,7 @@
 - **DEPENDENCY ANALYSIS BOUNDARY**: When hitting build system complexity (Nix dependency injection, flake outputs), document the issue and recommend next steps rather than deep-diving into the build system
 - **NIX FLAKE CHECK DEBUGGING**: When `nix flake check` fails, debug in-place using: (1) `nix log /nix/store/...` for detailed failure logs, (2) `nix flake check --verbose --debug --print-build-logs`, (3) `nix build .#checks.SYSTEM.TEST_NAME` for individual test execution, (4) `nix repl` + `:lf .` for interactive flake exploration. NEVER waste time on manual test reproduction - use Nix's built-in debugging tools.
 - **RAPID ITERATION = FREQUENT CHECK-INS**: When user says "rapid iteration" or "quick/short responses", this means STOP AFTER EACH SMALL STEP and report back for guidance. Do NOT interpret as "work faster" - it means "communicate more frequently". After each change, explain what you did and ask what to do next.
+- **MODULE NAMING CONVENTION**: Use standard `programs.claude-code` and `programs.opencode` namespaces. Upstream home-manager modules are disabled via `disabledModules` in base.nix to avoid conflicts. Our enhanced implementations provide multi-account support, categorized hooks, statusline variants, MCP helpers, and WSL integration.
 
 # 🔧 **DEVELOPMENT ENVIRONMENT**
 - Claude code may be running in the terminal or the web. Both use the same .claude/ and CLAUDE.md files in the repo.
