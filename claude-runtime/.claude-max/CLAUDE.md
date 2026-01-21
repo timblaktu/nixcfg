@@ -173,6 +173,30 @@ Example reset note format:
 - nixos-test-driver backdoor protocol: service prints "Spawning backdoor root shell..." to /dev/hvc0 (virtconsole)
 - Key doc: `isar/.research/CRITICAL-DECISION-SUMMARY.md`
 
+### kas-container Build Process (CRITICAL)
+- **NEVER run kas-container builds in background** - output buffering causes monitoring issues
+- **Run kas-container in foreground** in a separate terminal or use `script` for logging
+- **If a build gets stuck/killed**: Check for orphaned processes with `sudo podman ps -a` (kas runs privileged containers)
+- **Cleanup orphaned containers**: `sudo podman rm -f <container_id>`
+- **Cleanup orphaned processes**: Check `pgrep -a podman` and `pgrep -a conmon`
+- **WSL cgroup issue**: Podman shows warnings about cgroupv2/systemd - containers run but `podman ps` as user may not see root containers
+- **Build progress**: Check `build/tmp/deploy/images/` for output, not just console (build may be in WIC generation)
+
+### ISAR Test Parity with n3x (Plan 005)
+- **Approach**: Parameterized builder - ISAR machines consume test scripts from n3x
+- **Test source of truth**: n3x repository exports `lib.testScripts`, ISAR imports via flake
+- **Architecture**: n3x is primary project; ISAR is secondary POC. DRY principle - define tests once in n3x.
+- **Sharing mechanism**:
+  1. n3x exports `lib.testScripts` in flake.nix (raw Python strings)
+  2. ISAR adds n3x as flake input
+  3. ISAR uses `n3x.lib.testScripts.k3sCluster` in its `mkIsarTest` wrapper
+  4. Test scripts are just strings - same API (wait_for_unit, succeed, etc.)
+  5. Machine definitions differ per project; test logic is shared
+- **k3s for ISAR**: Static binary (mimic NixOS) with dependencies: kmod, socat, iptables, nftables, iproute2, ipset, bridge-utils, ethtool, util-linux, conntrack-tools
+- **Network config**: netplan + systemd-networkd (matches NixOS approach)
+- **Plan file**: `.claude/user-plans/005-isar-test-parity-with-n3x.md`
+- **Session 2 ready**: Extract Python testScript strings from n3x, create tests/lib/test-scripts.nix, export via lib.testScripts
+
 ### Claude Task Runner Artifacts
 - `.claude-task-logs/` and `.claude-task-state` are local session state
 - Should be gitignored explicitly (pattern `**/.claude` doesn't match `.claude-task-*` prefix)
