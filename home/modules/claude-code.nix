@@ -15,10 +15,10 @@ with lib;
     ./claude-code-statusline.nix
   ];
 
-  # NOTE: Renamed from programs.claude-code to programs.claude-code-enhanced
+  # NOTE: Renamed from programs.claude-code to programs.claude-code
   # to avoid conflict with upstream home-manager's programs.claude-code module.
   # See docs/claude-code-upstream-contribution-plan.md for migration strategy.
-  options.programs.claude-code-enhanced = {
+  options.programs.claude-code = {
     enable = mkEnableOption "Claude Code Enhanced - feature-rich multi-account Claude Code management";
 
     debug = mkEnableOption "debug output for all components";
@@ -300,7 +300,7 @@ with lib;
 
   config =
     let
-      cfg = config.programs.claude-code-enhanced;
+      cfg = config.programs.claude-code;
 
       # Use the configurable nixcfg path
       nixcfgPath = cfg.nixcfgPath;

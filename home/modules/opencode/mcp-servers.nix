@@ -6,7 +6,7 @@
 with lib;
 
 let
-  cfg = config.programs.opencode-enhanced;
+  cfg = config.programs.opencode;
   sharedMcpDefs = import ../shared/mcp-server-defs.nix { inherit lib; };
 
   # Transform shared MCP server definition to OpenCode format
@@ -29,7 +29,7 @@ let
 
 in
 {
-  options.programs.opencode-enhanced.mcpServers = {
+  options.programs.opencode.mcpServers = {
     # Pre-configured servers using shared definitions
     nixos = {
       enable = mkEnableOption "NixOS MCP server for package/option search";
@@ -162,7 +162,7 @@ in
     # Merge pre-configured servers with custom servers
     # NOTE: Using if-then-else instead of mkIf because this data is JSON-serialized
     # mkIf creates lazy thunks that don't serialize properly to JSON
-    programs.opencode-enhanced._internal.mcpServers =
+    programs.opencode._internal.mcpServers =
       let
         # Build pre-configured server configs using if-then-else for JSON serialization
         preConfigured =

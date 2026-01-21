@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced;
+  cfg = config.programs.claude-code;
   taskCfg = cfg.taskAutomation;
 
   # Slash command for interactive task execution
@@ -1049,7 +1049,7 @@ let
 
 in
 {
-  options.programs.claude-code-enhanced.taskAutomation = {
+  options.programs.claude-code.taskAutomation = {
     enable = mkEnableOption "Claude Code task automation (run-tasks script and /next-task command)";
 
     safetyLimits = {

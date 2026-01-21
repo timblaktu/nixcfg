@@ -5,7 +5,7 @@
 # automatically discovered by Claude Code.
 #
 # Usage:
-#   programs.claude-code-enhanced.skills = {
+#   programs.claude-code.skills = {
 #     enable = true;
 #     builtins.adr-writer = true;  # Enable the ADR writing skill
 #     custom = {
@@ -21,7 +21,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced;
+  cfg = config.programs.claude-code;
   skillsCfg = cfg.skills;
   nixcfgPath = cfg.nixcfgPath;
   runtimePath = "${nixcfgPath}/claude-runtime";
@@ -121,7 +121,7 @@ let
 
 in
 {
-  options.programs.claude-code-enhanced.skills = {
+  options.programs.claude-code.skills = {
     enable = mkEnableOption "Claude Code skills management";
 
     builtins = {

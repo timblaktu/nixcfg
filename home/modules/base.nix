@@ -7,6 +7,21 @@ let
   cfg = config.homeBase;
 in
 {
+  # Disable upstream home-manager modules to avoid namespace conflicts.
+  # Our custom claude-code.nix and opencode.nix modules provide significantly
+  # more functionality (multi-account support, categorized hooks, statusline
+  # variants, MCP server helpers, WSL integration, etc.) than the basic upstream
+  # versions. By disabling the upstream modules, we can use the standard
+  # programs.claude-code and programs.opencode namespaces instead of requiring
+  # awkward -enhanced suffixes.
+  #
+  # Feature comparison: See docs/claude-code-module-comparison.md
+  # Upstream contribution plan: See home/modules/claude-code/UPSTREAM-CONTRIBUTION-PLAN.md
+  disabledModules = [
+    "programs/claude-code.nix" # Upstream: 441 lines, basic features
+    "programs/opencode.nix" # Upstream: 262 lines, basic features
+  ];
+
   imports = [
     ../common/git.nix
     ../common/tmux.nix
@@ -23,8 +38,8 @@ in
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
-    ./claude-code.nix # Claude Code Enhanced - renamed to avoid upstream conflict
-    ./opencode.nix # OpenCode AI coding assistant
+    ./claude-code.nix # Claude Code - enhanced multi-account module (upstream disabled via disabledModules)
+    ./opencode.nix # OpenCode - enhanced multi-account module (upstream disabled via disabledModules)
     ./secrets-management.nix # RBW and SOPS configuration
     ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
     ./podman-tools.nix # Container tools configuration
@@ -334,8 +349,11 @@ in
 
       # Validated scripts configuration removed - migrated to unified files
 
-      # Claude Code Enhanced - renamed to avoid conflict with upstream programs.claude-code
-      programs.claude-code-enhanced = {
+      # ─────────────────────────────────────────────────────────────────────────
+      # Claude Code - enhanced multi-account implementation
+      # Upstream home-manager module disabled via disabledModules (see top of file)
+      # ─────────────────────────────────────────────────────────────────────────
+      programs.claude-code = {
         enable = cfg.enableClaudeCode;
         defaultModel = "opus";
         defaultAccount = "max";
@@ -486,10 +504,12 @@ in
         };
       };
 
-      # OpenCode Enhanced - AI coding assistant (complements claude-code)
+      # ─────────────────────────────────────────────────────────────────────────
+      # OpenCode - enhanced multi-account implementation
+      # Upstream home-manager module disabled via disabledModules (see top of file)
       # Uses shared MCP server definitions for DRY configuration
-      # Named opencode-enhanced to avoid conflict with upstream home-manager programs.opencode
-      programs.opencode-enhanced = {
+      # ─────────────────────────────────────────────────────────────────────────
+      programs.opencode = {
         enable = cfg.enableClaudeCode; # Enable alongside claude-code
         defaultModel = "anthropic/claude-sonnet-4-5";
         defaultAccount = "max";

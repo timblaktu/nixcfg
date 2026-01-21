@@ -9,7 +9,7 @@
 with lib;
 
 let
-  cfg = config.programs.opencode-enhanced;
+  cfg = config.programs.opencode;
 
   # Import shared modules for DRY configuration
   sharedInstructions = import ./shared/ai-instructions.nix { inherit lib; };
@@ -95,7 +95,7 @@ in
   ];
 
   # Named opencode-enhanced to avoid conflict with upstream home-manager programs.opencode
-  options.programs.opencode-enhanced = {
+  options.programs.opencode = {
     enable = mkEnableOption "OpenCode AI coding assistant";
 
     package = mkPackageOption pkgs "opencode" { };

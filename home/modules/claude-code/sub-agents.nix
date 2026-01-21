@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced;
+  cfg = config.programs.claude-code;
 
   mkSubAgent =
     { name
@@ -45,7 +45,7 @@ let
 
 in
 {
-  options.programs.claude-code-enhanced.subAgents = {
+  options.programs.claude-code.subAgents = {
     codeSearcher = {
       enable = mkOption {
         type = types.bool;
@@ -134,7 +134,7 @@ in
     };
   };
 
-  config.programs.claude-code-enhanced._internal.subAgentFiles = mkMerge [
+  config.programs.claude-code._internal.subAgentFiles = mkMerge [
     (mkIf cfg.subAgents.codeSearcher.enable {
       ".claude/agents/code-searcher.md" = mkSubAgent {
         name = "Code Searcher";

@@ -21,8 +21,10 @@
   2. Options can be deprecated, renamed, or removed (e.g., `programs.zsh.initExtra` → `programs.zsh.initContent`)
   3. Different modules may have different option names (e.g., bash uses `initExtra`, zsh uses `initContent`)
   4. Making assumptions leads to evaluation warnings and errors
-- NEVER sudo long-running commands with timeout parameters (causes Claude Code crashes with EPERM errors and inability to cleanup). 
-  - What to do instead: Provide the command for user to run manually.
+- NEVER sudo long-running commands with timeout parameters (causes Claude Code crashes with EPERM errors and inability to cleanup).
+  - This rule does NOT apply to non-sudo builds like kas-container, nix-build, etc.
+  - ISAR/Yocto/BitBake builds: Incremental builds typically complete in 5-10 minutes due to sstate-cache. Full clean builds of Debian-based ISAR images are also fast (minimal compilation). Don't overestimate build times.
+  - Only defer to user for truly unpredictable long-running sudo commands.
 - **NEVER resolve merge conflicts automatically** - When encountering git merge conflicts, ALWAYS stop immediately and ask the user to review conflicts. Show conflicted files and let user make resolution decisions.
 - **NEVER use `git add -f` or `--force`** - If `git add` fails because a file matches .gitignore, that's intentional. Do not bypass gitignore patterns. If you believe a file should be tracked, ask the user first.
 - **Respect .gitignore** - Files matching gitignore patterns (like `.claude/`, `CLAUDE.md`) should NOT be committed. Plan files and session state work locally without git tracking.
@@ -162,10 +164,14 @@ Example reset note format:
 ## General Learnings
 
 ### ISAR Test Framework
-- ISAR tests require Debian environment (BitBake needs `dpkg`)
-- Tests designed to run in kas-container, not bare host
-- Use `KAS_CONTAINER_ENGINE=podman sh ./isar/kas/kas-container --isar shell` to enter test environment
-- Avocado framework is ISAR's standard test framework (extends CIBaseTest)
+- **Decision**: Use NixOS VM Test Driver (nixos-test-driver) with ISAR-built .wic images - NOT Avocado
+- ISAR builds images (BitBake/kas produces .wic files), Nix provides test harness
+- Tests run on host NixOS/Nix environment, not inside kas-container
+- Test images need `nixos-test-backdoor` package - include via `kas/test-overlay.yml`
+- Build test images: `kas-container --isar build kas/converix.yml:kas/machine/qemu-amd64.yml:kas/test-overlay.yml:kas/image/minimal-base.yml`
+- VM script derivations must NOT use `run-<name>-vm` pattern in derivation name (conflicts with nixos-test-driver regex)
+- nixos-test-driver backdoor protocol: service prints "Spawning backdoor root shell..." to /dev/hvc0 (virtconsole)
+- Key doc: `isar/.research/CRITICAL-DECISION-SUMMARY.md`
 
 ### Claude Task Runner Artifacts
 - `.claude-task-logs/` and `.claude-task-state` are local session state

@@ -6,7 +6,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced;
+  cfg = config.programs.claude-code;
 
   # Import shared MCP server definitions for DRY consistency with opencode
   sharedMcpDefs = import ../shared/mcp-server-defs.nix { inherit lib; };
@@ -39,7 +39,7 @@ let
 
 in
 {
-  options.programs.claude-code-enhanced.mcpServers = {
+  options.programs.claude-code.mcpServers = {
     nixos = {
       enable = mkEnableOption "NixOS package/option search server";
       cacheTtl = mkOption {
@@ -163,7 +163,7 @@ in
   };
 
   # Build MCP server configurations using shared definitions where available
-  config.programs.claude-code-enhanced._internal.mcpServers = cfg.mcpServers.custom //
+  config.programs.claude-code._internal.mcpServers = cfg.mcpServers.custom //
     # NixOS MCP server (using shared definition)
     optionalAttrs cfg.mcpServers.nixos.enable {
       mcp-nixos = toClaudeCodeFormat (sharedMcpDefs.nixos.mkConfig {
