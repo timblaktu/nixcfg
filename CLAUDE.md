@@ -361,7 +361,7 @@ which opencodemax opencodepro opencodework
 #### ✅ **OpenCode Vision Support Configuration** (COMPLETED - 2026-01-20)
 
 **Branch**: `opencode`
-**Status**: ✅ Fixed and committed (commit ad71afc)
+**Status**: ✅ Fixed, tested, and verified (commits c2ec743, ad71afc, 010f38f)
 
 **Problem Resolved**:
 - OpenCode was failing to read local image files with error "model may not be able to read images"
@@ -385,26 +385,13 @@ modalities = {
 - `home/modules/base.nix:534-537` - Added modalities configuration
 - `opencode-runtime/.opencode-*/opencode.json` - Regenerated with modalities
 
-**Verification**:
-```bash
-# Verify modalities in generated config:
-cat opencode-runtime/.opencode-work/opencode.json | jq '.provider.codecompanion.models."qwen-a3b".modalities'
-# ✅ Shows: {"input": ["text", "image"], "output": ["text"]}
-```
+**Verification & Testing**:
+✅ **PASSED**: opencodework successfully read local JPG image and performed OCR to sum numbers correctly
 
-**Testing Instructions**:
-```bash
-# Start opencode work account:
-opencodework
-
-# Test with canary image:
-# Prompt: "What is the sum of the numbers in the image at '/mnt/c/Users/blackt1/OneDrive - Panasonic Avionics Corporation/Pictures/numbers-to-sum.jpg'?"
-
-# Expected: OpenCode uses Read tool to access image without permission prompts
-# This enables proper OCR workflow with codecompanion/qwen-a3b model
-```
-
-**Key Learning**: OpenCode custom models require explicit modalities declarations, not `supports_vision` flags (which are LiteLLM-specific).
+**Key Learnings**:
+1. OpenCode custom models require explicit modalities declarations, not `supports_vision` flags (LiteLLM-specific)
+2. Qwen3-VL-30B-A3B is vision-language model: inputs images, outputs text only (not image generation)
+3. Model is ready for mkb integration for PDF OCR workload
 
 ---
 
