@@ -551,6 +551,19 @@ in
             };
           };
         };
+        permissions = {
+          Bash = "allow";
+          Read = "allow";
+          Write = "allow";
+          Edit = "allow";
+          WebFetch = "allow";
+          "mcp__context7" = "allow";
+          "mcp__mcp-nixos" = "allow";
+          "mcp__sequential-thinking" = "allow";
+          Search = "deny";
+          Find = "deny";
+          "Bash(rm -rf /*)" = "deny";
+        };
         mcpServers = {
           context7.enable = true;
           sequentialThinking.enable = true;
