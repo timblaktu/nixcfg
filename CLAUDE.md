@@ -355,6 +355,52 @@ which opencodemax opencodepro opencodework
 - Workflow: `.github/workflows/*.yml` (TUR fork)
 - Artifacts: `dists/stable/main/binary-all/` (gh-pages branch)
 
+### 🔧 **Pending Tasks**
+
+#### **OpenCode Permissions Configuration** (READY - 2026-01-20)
+
+**Branch**: `opencode`
+**Status**: Issue diagnosed, solution identified, ready to implement
+
+**Problem Identified**:
+- OpenCode failing to read local image files, falling back to ineffective WebFetch
+- Root cause: Missing `permissions` configuration in opencode-enhanced (base.nix:492-559)
+- OpenCode module supports permissions (opencode.nix:252-264) but base.nix doesn't configure it
+
+**Configuration Gap**:
+```
+Claude Code (.claude-work/.claude.json):
+  ✅ permissions.allow: ["Bash", "Read", "Write", "Edit", "WebFetch", "mcp__*"]
+  ✅ permissions.deny: ["Search", "Find", "Bash(rm -rf /*)"]
+
+OpenCode (.opencode-work/opencode.json):
+  ❌ No permissions field at all
+  ❌ Tools cannot be used without explicit permission
+```
+
+**Implementation Plan**:
+1. Add `permissions` field to opencode-enhanced in home/modules/base.nix (match claude-code)
+2. Rebuild opencode-work configuration: `nix flake check && home-manager switch`
+3. Test qwen-a3b with canary image: `/mnt/c/Users/blackt1/OneDrive - Panasonic Avionics Corporation/Pictures/numbers-to-sum.jpg`
+4. Verify tool permissions working (Read, Bash allowed)
+5. Assess qwen-a3b vision capabilities independently from config issues
+
+**Files to Modify**:
+- `home/modules/base.nix` (line 492-559: add permissions to opencode-enhanced block)
+- Pattern: Copy permissions structure from claude-code
+
+**Test Command**:
+```bash
+opencodework
+# Prompt: "What is the sum of the numbers in the image at '/mnt/c/Users/blackt1/OneDrive - Panasonic Avionics Corporation/Pictures/numbers-to-sum.jpg'?"
+```
+
+**Expected Outcome**: OpenCode should use Read tool to access image, not fall back to WebFetch.
+
+**Related Context**: This fixes configuration parity between claude-code and opencode, enabling proper tool usage for mkb integration with internal qwen model for OCR tasks.
+
+---
+
 ### 🚧 **Deferred Tasks**
 
 #### **Fork Development Work** (DEFERRED)
