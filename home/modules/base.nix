@@ -529,7 +529,13 @@ in
               apiKey = "{env:ANTHROPIC_API_KEY}";
             };
             models = {
-              "qwen-a3b" = { name = "Qwen A3B"; };
+              "qwen-a3b" = {
+                name = "Qwen A3B";
+                modalities = {
+                  input = [ "text" "image" ];
+                  output = [ "text" ];
+                };
+              };
               "devstral" = { name = "Devstral"; };
               "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
               "glm-47" = { name = "GLM 47"; };
