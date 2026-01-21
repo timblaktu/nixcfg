@@ -357,47 +357,45 @@ which opencodemax opencodepro opencodework
 
 ### 🔧 **Pending Tasks**
 
-#### **OpenCode Permissions Configuration** (READY - 2026-01-20)
+#### ✅ **OpenCode Permissions Configuration** (COMPLETED - 2026-01-20)
 
 **Branch**: `opencode`
-**Status**: Issue diagnosed, solution identified, ready to implement
+**Status**: ✅ Fixed and committed (commit c2ec743)
 
-**Problem Identified**:
-- OpenCode failing to read local image files, falling back to ineffective WebFetch
+**Problem Resolved**:
+- OpenCode was failing to read local image files, falling back to ineffective WebFetch
 - Root cause: Missing `permissions` configuration in opencode-enhanced (base.nix:492-559)
-- OpenCode module supports permissions (opencode.nix:252-264) but base.nix doesn't configure it
 
-**Configuration Gap**:
-```
-Claude Code (.claude-work/.claude.json):
-  ✅ permissions.allow: ["Bash", "Read", "Write", "Edit", "WebFetch", "mcp__*"]
-  ✅ permissions.deny: ["Search", "Find", "Bash(rm -rf /*)"]
+**Solution Implemented**:
+- Added permissions block to opencode-enhanced in home/modules/base.nix (lines 554-566)
+- Permissions now match claude-code configuration:
+  - Allows: Bash, Read, Write, Edit, WebFetch, MCP servers (context7, mcp-nixos, sequential-thinking)
+  - Denies: Search, Find, dangerous Bash operations
 
-OpenCode (.opencode-work/opencode.json):
-  ❌ No permissions field at all
-  ❌ Tools cannot be used without explicit permission
-```
+**Files Modified**:
+- `home/modules/base.nix:554-566` - Added permissions configuration
+- `opencode-runtime/.opencode-*/opencode.json` - Generated configs updated for all accounts
 
-**Implementation Plan**:
-1. Add `permissions` field to opencode-enhanced in home/modules/base.nix (match claude-code)
-2. Rebuild opencode-work configuration: `nix flake check && home-manager switch`
-3. Test qwen-a3b with canary image: `/mnt/c/Users/blackt1/OneDrive - Panasonic Avionics Corporation/Pictures/numbers-to-sum.jpg`
-4. Verify tool permissions working (Read, Bash allowed)
-5. Assess qwen-a3b vision capabilities independently from config issues
-
-**Files to Modify**:
-- `home/modules/base.nix` (line 492-559: add permissions to opencode-enhanced block)
-- Pattern: Copy permissions structure from claude-code
-
-**Test Command**:
+**Verification**:
 ```bash
-opencodework
-# Prompt: "What is the sum of the numbers in the image at '/mnt/c/Users/blackt1/OneDrive - Panasonic Avionics Corporation/Pictures/numbers-to-sum.jpg'?"
+# Verify permissions in generated config:
+cat opencode-runtime/.opencode-work/opencode.json | jq '.permission'
+# ✅ Shows all tool permissions correctly configured
 ```
 
-**Expected Outcome**: OpenCode should use Read tool to access image, not fall back to WebFetch.
+**Testing Instructions**:
+```bash
+# Start opencode work account:
+opencodework
 
-**Related Context**: This fixes configuration parity between claude-code and opencode, enabling proper tool usage for mkb integration with internal qwen model for OCR tasks.
+# Test with canary image:
+# Prompt: "What is the sum of the numbers in the image at '/mnt/c/Users/blackt1/OneDrive - Panasonic Avionics Corporation/Pictures/numbers-to-sum.jpg'?"
+
+# Expected: OpenCode uses Read tool to access image (not WebFetch)
+# This enables proper OCR workflow with codecompanion/qwen-a3b model
+```
+
+**Next Step**: Test OpenCode with canary image to verify Read tool access and assess qwen-a3b vision capabilities for mkb OCR integration.
 
 ---
 
