@@ -86,6 +86,9 @@ claude-runtime/.claude-*/commands/globalmemory.*
 claude-runtime/.claude-*/commands/*remember.*
 claude-runtime/.claude-*/commands/next-task.*
 
+# Nix-managed slash command subdirectories (all symlinks to nix store)
+claude-runtime/.claude-*/commands/*/
+
 # Web session runtime (.claude/ in repo root)
 .claude/*
 !.claude/settings.json

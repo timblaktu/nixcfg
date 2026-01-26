@@ -44,6 +44,11 @@
   - State what was NOT done if scope was limited (e.g., "Note: other machines like qemu-arm64 will be added in later tasks")
   - Include verification steps performed (e.g., "verified with `nix eval '.#lib.machines.machineNames'`")
   - This builds confidence that the right work was done before user approves and moves on
+- **UPDATE MEMORY BEFORE SUMMARY** - When ending a session or hitting a blocking issue:
+  1. FIRST: Update project memory (CLAUDE.md General Learnings) with blocking issues, discoveries, and next steps
+  2. THEN: Provide the summary and next-session prompt
+  - User cannot clear context until memory is updated - doing summary first wastes tokens
+  - This is especially critical for blocking issues that need investigation in next session
 
 ## CI/CD and Testing Philosophy
 
@@ -249,6 +254,25 @@ Example reset note format:
 - **Cleanup orphaned processes**: Check `pgrep -a podman` and `pgrep -a conmon`
 - **WSL cgroup issue**: Podman shows warnings about cgroupv2/systemd - containers run but `podman ps` as user may not see root containers
 - **Build progress**: Check `build/tmp/deploy/images/` for output, not just console (build may be in WIC generation)
+- **NEVER manually clean sstate/work directories** - BitBake tracks recipe changes via checksums and rebuilds what's necessary. Manual cleaning wastes time.
+- **ASK before triggering rebuilds** - If a fix requires rebuilding ISAR images, ASK the user first. Prefer test-level fixes (QEMU args, kernel cmdline) over image-level fixes.
+- **Prefer test-level fixes over image changes** - For test-specific issues, use:
+  1. Kernel cmdline params (e.g., `systemd.mask=service-name`)
+  2. QEMU args to configure test environment
+  3. Runtime test script workarounds
+  - Reserve image recipe changes for ACTUAL image requirements, not test workarounds
+
+### ISAR Build Cache Configuration (CRITICAL)
+- **isar-k3s currently uses PROJECT-LOCAL cache** - `build/downloads/` and `build/sstate-cache/`
+- **This is WRONG** - building in another directory loses all cached state
+- **TODO**: Configure shared user-level cache directories via kas local.conf:
+  ```yaml
+  local_conf_header:
+    shared-cache: |
+      DL_DIR = "${HOME}/.cache/isar/downloads"
+      SSTATE_DIR = "${HOME}/.cache/isar/sstate-cache"
+  ```
+- **When fixed**: All ISAR projects will share downloads and sstate cache, dramatically reducing rebuild times
 
 ### WIC Generation Hang Issue (ROOT CAUSE IDENTIFIED - 2026-01-21)
 - **Symptom**: Build hangs at 96% during `do_image_wic` task in WSL2
@@ -378,11 +402,26 @@ Example reset note format:
   ~/src/isar-k3s/            # feature/jetson-orin-nano-ota (ACTIVE - OTA work, plan file here)
   ```
 - **Plan file**: `isar-k3s/.claude/user-plans/011-unified-k3s-platform-v2.md`
-- **New Tasks (Architecture Review 2026-01-26)**:
-  - A1: Create Venn diagram visualization of abstractions + backend mappings
-  - A2: Update README with backend abstraction table
-  - A3: Update machine-roles.nix with server-1/agent-1 naming
-  - A4: Design unified network schema supporting all complexity levels
+- **Architecture Tasks (A1-A4)**: COMPLETE as of 2026-01-26
+- **Test Layer Hierarchy (User-Approved 2026-01-26)**:
+  - Layer 1: VM Boot (can QEMU/KVM boot a VM?)
+  - Layer 2: Two-VM Network (can VMs communicate via VDE?)
+  - Layer 3: K3s Service Starts (does K3s binary/service start?)
+  - Layer 4+: Cluster formation, networking, HA (DEFERRED - all timeout)
+- **Layer 3 Parity Milestone (L3 task) - SKIPPED**:
+  - NixOS: Layers 1-3 PASS (smoke tests)
+  - ISAR: Layers 1-2 PASS, Layer 3 **SKIPPED** (systemd boot blocking issue)
+  - Test exists at `nix/tests/k3s-service-starts.nix` but does NOT pass
+  - Decision: Skip until network abstraction work provides clarity
+- **Test Baseline Philosophy**: Layer 4+ tests timeout/broken anyway - don't protect broken tests
+- **ISAR K3s test image**: Must use `kas/test-k3s-overlay.yml` (includes nixos-test-backdoor)
+- **ISAR k3s-service-starts SKIPPED (2026-01-26)**: Test fails due to systemd boot blocking
+  - Systemd boot has 41+ pending jobs even with `systemd-networkd-wait-online.service` masked
+  - k3s-server.service job gets CANCELED (not failed) - entire boot transaction blocked
+  - Image-level mask is in place (`/etc/systemd/system/systemd-networkd-wait-online.service -> /dev/null`)
+  - **Lesson learned**: Should have used test-level fixes (kernel cmdline, QEMU args) instead of modifying image
+  - **Files modified**: `isar-k3s-image.inc` (added `mask_systemd_wait_online_for_test()`), `nix/isar-artifacts.nix` (updated hash)
+  - **Proper fix (later)**: Use `systemd.mask=service-name` kernel parameter at test time, not image build time
 
 ### Long-Running Task Strategy (2026-01-25)
 - **Problem**: Repeated `BashOutput` polling for background tasks consumes context rapidly; combined with memory-heavy commands (like `nix flake check`) can cause WSL OOM and session crashes
@@ -410,3 +449,39 @@ Example reset note format:
   4. Do NOT return full output - just the summary
   ```
 - Use mcp-nixos instead of web search for researching and investigating details about nix, nixpkgs, and NixOS.
+
+### Git Worktree Workflow for Multi-Session Isolation (2026-01-26)
+- **Use case**: Parallel work across multiple Claude Code accounts (Pro/Max) without interference
+- **Benefits**:
+  - Context separation: Each worktree maintains independent uncommitted changes and file states
+  - Parallel development: Multiple sessions can work simultaneously without conflicts
+  - Safe experimentation: Analysis/exploration in one worktree doesn't affect active development in another
+  - Shared nix store: Build artifacts are shared (efficient), but `/build` directories are isolated
+- **Setup pattern**:
+  ```bash
+  # From parent worktree (e.g., ~/src/project on branch feature/foo)
+  git worktree add ~/src/project-pro feature/foo-pro
+  # Creates new worktree at ~/src/project-pro on new branch feature/foo-pro
+  # New branch starts at same commit as current HEAD
+  ```
+- **Integration strategies**:
+  - **Merge** (when Pro work is stable): `cd ~/src/project && git merge feature/foo-pro`
+  - **Rebase** (keep Pro branch clean): `cd ~/src/project-pro && git rebase feature/foo`
+  - **Cherry-pick** (selective commits): `git cherry-pick <commit-hash>`
+- **Integration frequency recommendations**:
+  - Daily/session boundary: Documentation updates, bug fixes
+  - After milestones: Stable features, validated functionality
+  - Before hardware testing: Ensure all worktrees have latest changes
+  - End of phase: Full integration and cleanup
+- **Naming conventions**:
+  - Suffix branch names with account indicator: `-pro`, `-max`, `-session-DATE`
+  - Use descriptive worktree paths: `~/src/project-pro`, `~/src/project-spike`
+- **Common pitfalls**:
+  - Forgetting to sync: Branches diverge too far, making merge difficult
+  - Over-committing: Should commit logical units, not every small change
+  - Not tagging integration points: Hard to track when/what was merged
+- **Cleanup**:
+  ```bash
+  git worktree remove ~/src/project-pro  # Remove worktree
+  git branch -d feature/foo-pro          # Delete branch after merge
+  ```
