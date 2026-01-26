@@ -12,6 +12,8 @@ with lib;
     ./claude-code/memory-commands-static.nix
     ./claude-code/task-automation.nix
     ./claude-code/skills.nix
+    ./claude-code/git-commands.nix
+    ./claude-code/extended-commands.nix
     ./claude-code-statusline.nix
   ];
 
