@@ -25,6 +25,7 @@ in
   imports = [
     ../common/git.nix
     ../common/tmux.nix
+    ./tmux-auto-reload.nix # Auto-reload tmux config on HM generation change
     ../common/nixvim.nix
     ../common/zsh.nix
     ../common/environment.nix
@@ -339,6 +340,7 @@ in
       # Enable/disable modules based on configuration
       programs.git.enable = cfg.enableGit;
       programs.tmux.enable = cfg.enableTmux;
+      programs.tmux.autoReload.enable = cfg.enableTmux; # Auto-reload on HM generation change
 
       # Pass terminal verification configuration to the module
       terminalVerification = {
