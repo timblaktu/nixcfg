@@ -164,6 +164,8 @@ in
       set -ga terminal-overrides ",*:dim=\\E[2m"
       set -ga terminal-overrides ",*:smul=\\E[4m"
       set -ga terminal-overrides ",*:sitm=\\E[3m"
+      # Disable focus event reporting at terminal features level (in addition to focus-events=false)
+      set -ga terminal-features ",*:focus:0"
       set-hook -g client-resized 'refresh-client -S'
 
       # ---- PANE VISUAL INDICATORS ----

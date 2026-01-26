@@ -54,6 +54,62 @@
 - Never create CI-specific test logic or separate test suites for CI vs local
 - Example: E2E tests should check for required services (Typesense, VLM endpoints) and skip gracefully if unavailable, but the test code itself is identical everywhere
 
+## Documenting Temporary Fixes and Workarounds Protocol
+
+When applying changes that work around version incompatibilities, API changes, or other temporary issues which are likely to also be addressed upstream:
+
+**1. Code Comments MUST include:**
+- The specific error message being worked around (e.g., `ERROR: "The option 'X' does not exist"`)
+- Version context (e.g., "nixpkgs ~24.05+ has this option, current revision doesn't")
+- TODO with migration path (e.g., "Convert to systemd.settings.Manager when nixpkgs is updated")
+- Classification: WORKAROUND (temporary, to be reverted) vs API-ADAPTATION (permanent change to new API)
+
+**2. Commit Message MUST include:**
+- Summary of all issues being fixed with ERROR messages
+- All files modified grouped by issue
+- When/how each workaround can be removed
+- Whether each fix is a WORKAROUND or API-ADAPTATION
+
+**3. Identification Triggers** - Recognize these situations require special documentation:
+- Error: "option 'X' does not exist" → Option added in newer version
+- Error: "unexpected argument 'X'" → API signature changed
+- Error: "attribute 'X' missing. Did you mean Y?" → Attribute renamed
+- Error: "deprecated option 'X'" → Option scheduled for removal
+- Any fix that references "older/newer version" or "compatibility"
+
+## Nix Flake Verification Strategy
+
+**CRITICAL: Always use `--no-build` for routine verification**
+
+`nix flake check` behavior:
+- WITHOUT `--no-build`: Evaluates ALL outputs + BUILDS ALL checks (can take 30+ min, many tests timeout)
+- WITH `--no-build`: Evaluates only (~30-60s) - USE THIS FOR ROUTINE VERIFICATION
+
+**Verification commands by purpose:**
+```bash
+# Quick evaluation check (USE THIS 99% of the time)
+nix flake check --no-build
+
+# Format check only (fast)
+nix build '.#checks.x86_64-linux.nixpkgs-fmt'
+
+# Specific known-working test
+nix build '.#checks.x86_64-linux.TEST_NAME'
+```
+
+**Regression suite approach for multi-test projects (n3x, isar-k3s):**
+1. Establish BASELINE: Run each test individually, note which pass within <5 min
+2. Document baseline in plan file under "Regression Suite Baseline" section
+3. During development: Run ONLY baseline tests as regression suite
+4. Add tests to baseline only after they're verified working
+5. NEVER run `nix flake check` without `--no-build` as routine verification
+
+**When full test builds are appropriate:**
+- Explicitly requested by user
+- Specifically testing changes to test infrastructure
+- Final validation before PR/merge
+- Establishing baseline for new test suite
+
 ## Custom Memory Management Commands
 - /nixmemory (alias: /usermemory, /globalmemory) - Opens user-global memory file in editor (like /memory but always user-scoped)
 - `/nixremember <content>` (alias: /userremember, /globalremember) - Appends content to memory (like # command but for Nix-managed memory)
@@ -291,43 +347,66 @@ Example reset note format:
   - `test-swupdate-bundle-validation`: Validate .swu structure and CMS signatures
   - `test-swupdate-network-ota`: Two-VM OTA with HTTP server
 
-### Unified K3s Platform Architecture (Plan 010) - 2026-01-24
-- **Decision**: Merge n3x and isar-k3s into single repo with pluggable backends
-- **Supersedes**: Plan 009 Q1 (Federation approach rejected)
-- **Rationale**: Both repos do the SAME THING conceptually - only difference is rootfs/kernel generation
-- **Architecture**:
-  - `lib/` = SINGLE SOURCE OF TRUTH (Nix abstractions for machines, k3s, network, images, tests)
-  - `backends/nixos/` = NixOS implementation (consumes lib/*, produces NixOS config)
-  - `backends/isar/` = ISAR implementation (generates kas config from lib/*, BitBake reads Nix vars)
-- **Key pattern**: Nix injects configuration into BitBake via kas `local_conf_header`:
-  ```nix
-  kasOverride.local_conf_header.k3s-config = ''
-    K3S_ROLE = "${k3sConfig.role}"
-    K3S_CLUSTER_CIDR = "${k3sConfig.clusterCidr}"
-  '';
+### Unified K3s Platform Architecture (Plan 011) - Updated 2026-01-26
+- **SUPERSEDES Plan 010** - Plan 010 was based on main branches, missing 84 commits of mature functionality on n3x/simint
+- **Decision**: Merge n3x and isar-k3s into single repo with pluggable backends, starting from simint branch
+- **Core Terminology (User-Approved 2026-01-26)**:
+  - **Machine** = Hardware platform (Yocto sense): arch + BSP + boot method. Examples: `qemu-amd64`, `n100-bare`, `jetson-orin-nano`
+  - **System** = Complete buildable artifact (nixosConfiguration / ISAR image recipe)
+  - **Role** = `server` | `agent` only (K3s convention - workload config is K3s layer detail)
+  - Key: `qemu-amd64` and `n100-bare` are DIFFERENT Machines (different BSP/drivers)
+- **Architecture** (refined from Plan 010):
+  - `tests/lib/` = SHARED ABSTRACTIONS (already exists in simint - use it, don't recreate)
+  - `backends/nixos/` = NixOS implementation
+  - `backends/isar/` = ISAR implementation (imports test scripts from tests/lib/)
+- **Network Abstraction (User-Approved 2026-01-26)**:
+  - Interface keys: `cluster` (K3s traffic), `storage` (Longhorn), `external` (NAT)
+  - VLAN integration: Interface name includes VLAN notation (`eth1` flat, `eth1.10` VLAN 10)
+  - Unified schema supports 1+ interfaces, 0+ VLANs per interface
+  - Bonding: DEFERRED indefinitely (adds complexity, low priority)
+- **Test Priority Matrix (User-Approved 2026-01-26)**:
+  - [NOW]: Single-node + Server+Agent × (simple, multi-if, vlans) = 6 MVP tests
+  - [later]: HA Cluster, Multi-Agent, Full HA
+  - [much later]: All bonding tests
+- **nixpkgs Version Decision (2026-01-25)**: Switch n3x to `nixos-25.05` stable
+  - NixOS 25.05 stable has ALL the OLD APIs simint uses
+  - Aligns with jetpack-nixos (same nixpkgs, cleaner integration)
+- **Branch map** (Updated 2026-01-25):
   ```
-- **BitBake recipes become thin** - just read ${K3S_*}, ${NETWORK_*}, ${MACHINE_*} variables
-- **What gets unified**:
-  - Machine definitions (n3x hosts/ + isar-k3s kas/machine/ → lib/machines/)
-  - K3s configuration (modules/roles/ + recipes-core/k3s/ → lib/k3s/)
-  - Network profiles (modules/network/ + kas/network/ → lib/network/)
-  - Test scenarios (tests/lib/ + nix/tests/ → lib/tests/)
-- **Migration phases** (preserve passing tests at each step):
-  - Phase 0: Baseline documentation, create branch
-  - Phase 1: Extract lib/ abstractions from n3x
-  - Phase 2: Create NixOS backend consuming lib/
-  - Phase 3: Import ISAR as backend, wire to lib/
-  - Phase 4: Unify test suite across backends
-  - Phase 5: Cleanup, documentation
-- **Target repo**: ~/src/n3x becomes unified repo (feature/unified-platform branch)
-- **Plan file**: `.claude/user-plans/010-unified-k3s-platform.md`
-- **Git Worktrees** (created 2026-01-24, ACTIVELY USE THROUGHOUT):
+  ~/src/n3x/                 # feature/unified-platform-v2 (ACTIVE - based on simint)
+  ~/src/n3x-spike/           # feature/unified-platform (Plan 010 design spike - REFERENCE ONLY)
+  ~/src/isar-k3s/            # feature/jetson-orin-nano-ota (ACTIVE - OTA work, plan file here)
   ```
-  ~/src/n3x/                 # feature/unified-platform (active development)
-  ~/src/n3x-baseline/        # main branch (reference for comparison)
-  ~/src/isar-k3s/            # feature/jetson-orin-nano-ota (active development)
-  ~/src/isar-k3s-baseline/   # main branch (reference for comparison)
+- **Plan file**: `isar-k3s/.claude/user-plans/011-unified-k3s-platform-v2.md`
+- **New Tasks (Architecture Review 2026-01-26)**:
+  - A1: Create Venn diagram visualization of abstractions + backend mappings
+  - A2: Update README with backend abstraction table
+  - A3: Update machine-roles.nix with server-1/agent-1 naming
+  - A4: Design unified network schema supporting all complexity levels
+
+### Long-Running Task Strategy (2026-01-25)
+- **Problem**: Repeated `BashOutput` polling for background tasks consumes context rapidly; combined with memory-heavy commands (like `nix flake check`) can cause WSL OOM and session crashes
+- **Context cost**: Each `BashOutput` poll adds ~500-2000 tokens to context (the full stdout so far)
+- **Recommended approaches** (in order of preference):
+  1. **Sub-agent delegation**: Use Task tool with `general-purpose` agent to run the entire verification; agent returns ONLY a summary (pass/fail + key details). Parent context stays minimal.
+  2. **Fire-and-forget with final check**: Run command in background, do other lightweight work, check result ONCE at end of session (not repeatedly)
+  3. **User-executed commands**: For truly long/unpredictable tasks, provide commands for user to run in a separate terminal, then ask user to report results
+- **Anti-patterns to avoid**:
+  - Running command in background then polling `BashOutput` every 30-60 seconds
+  - Running memory-intensive Nix evaluations while simultaneously polling
+  - Using `head -100` on output then polling repeatedly (still accumulates context)
+- **WSL memory considerations**:
+  - `nix flake check` evaluates ALL derivations, can use 4-8GB RAM
+  - Avoid concurrent memory-heavy operations
+  - If WSL terminates unexpectedly, likely OOM - check with `dmesg | grep -i oom` after restart
+- **Sub-agent template for verification tasks**:
   ```
-  - **Use worktrees proactively**: Check baseline before/after changes, run parallel tests, diff against main
-  - **ISAR cache sharing**: `isar-k3s-baseline/build/{sstate-cache,downloads}` are symlinks to main repo
-  - **See plan file "Worktree Usage Throughout Plan 010" section** for detailed workflow patterns per phase
+  Task: Run 'nix flake check' in ~/src/n3x and report results
+
+  Instructions:
+  1. cd ~/src/n3x && nix flake check 2>&1
+  2. Wait for completion (may take 2-5 minutes)
+  3. Return ONLY: pass/fail status, count of warnings, any errors
+  4. Do NOT return full output - just the summary
+  ```
+- Use mcp-nixos instead of web search for researching and investigating details about nix, nixpkgs, and NixOS.
