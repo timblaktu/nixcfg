@@ -285,12 +285,11 @@ Example reset note format:
 - **Proper fix**: Patch gptfdisk to remove `sync()` call, keep only `fsync(fd)`
   - Create ISAR recipe patch for gptfdisk package
   - Or use `sfdisk` instead where possible (WIC already uses it for some operations)
-- **Temporary workaround (VERIFIED 2026-01-21)**: Unmount ALL 9p filesystems before building:
-  ```bash
-  sudo umount -l /mnt/c /usr/lib/wsl/drivers
-  ```
-  - `/mnt/c` is the Windows drive mount
-  - `/usr/lib/wsl/drivers` is another 9p mount that was causing hangs even when /mnt/c was unmounted
+- **kas-build wrapper solution (UPDATED 2026-01-27)**:
+  - Only unmounts `/mnt/c` (and other `/mnt/[a-z]` drives) - these are rw mounts that cause sync hangs
+  - Leaves `/usr/lib/wsl/drivers` mounted - it's read-only and doesn't contribute to sync hangs
+  - `/usr/lib/wsl/drivers` contains Windows kernel driver files (.sys), NOT user utilities
+  - WSL utilities like `clip.exe`, `powershell.exe` live on `/mnt/c`, not `/usr/lib/wsl/drivers`
 - **Kernel stack trace**: `super_lock → iterate_supers → ksys_sync → sync()`
 - **Cleanup after hang** (requires WSL restart for D-state processes):
   ```bash
@@ -300,6 +299,39 @@ Example reset note format:
   ```
 - **TODO**: Create ISAR patch for gptfdisk to use syncfs(fd) or just fsync(fd) instead of sync()
 - **kas-build remount fix (2026-01-22)**: The `kas-build` wrapper in ISAR flake.nix must remount 9p filesystems with `-o metadata,uid=$(id -u),gid=$(id -g)` options. Without these, WSL defaults to `fmask=111` which strips execute permissions, breaking `clip.exe`, `powershell.exe`, and neovim clipboard integration.
+
+### WSL Process Termination and Mount Preservation (CRITICAL - 2026-01-27)
+- **NEVER use SIGKILL (-9) on WSL when 9p mounts are temporarily unmounted**
+  - `trap` handlers CANNOT catch SIGKILL - cleanup code never runs
+  - If `kas-build` has unmounted `/mnt/c` and process is killed with -9, mounts stay unmounted
+  - Once 9p mounts are severed by SIGKILL, they cannot be restored from within WSL
+  - Requires `wsl --shutdown` from PowerShell to restore
+- **Signal priority for terminating builds/processes in WSL**:
+  1. **SIGTERM (15)** - Preferred. Allows trap handlers to run, remounts filesystems
+  2. **SIGINT (2)** - Also trapped. Ctrl+C equivalent
+  3. **SIGQUIT (3)** - Core dump but still trappable
+  4. **SIGHUP (1)** - Hangup, trappable
+  5. **SIGKILL (9)** - LAST RESORT ONLY. No cleanup, mounts stay broken
+- **When you must kill a stuck process**:
+  ```bash
+  # Try graceful termination first (gives kas-build time to remount)
+  kill -TERM <pid>
+  sleep 5
+  # If still running, try harder
+  kill -INT <pid>
+  sleep 3
+  # Only if absolutely necessary (will break mounts if kas-build has them unmounted)
+  kill -9 <pid>
+  ```
+- **Recovery after SIGKILL breaks mounts**:
+  ```bash
+  # Try the remount utility first
+  nix run '.#wsl-remount'
+  # If that shows empty filesystem, from PowerShell:
+  wsl --shutdown
+  # Then restart WSL
+  ```
+- **Best practice**: When working in parallel worktrees or separate Claude sessions, coordinate before killing builds that may have mounts unmounted
 
 ### ISAR Test Parity with n3x (Plan 005)
 - **Approach**: Parameterized builder - ISAR machines consume test scripts from n3x
@@ -395,13 +427,14 @@ Example reset note format:
 - **nixpkgs Version Decision (2026-01-25)**: Switch n3x to `nixos-25.05` stable
   - NixOS 25.05 stable has ALL the OLD APIs simint uses
   - Aligns with jetpack-nixos (same nixpkgs, cleaner integration)
-- **Branch map** (Updated 2026-01-25):
+- **Branch map** (Updated 2026-01-26):
   ```
-  ~/src/n3x/                 # feature/unified-platform-v2 (ACTIVE - based on simint)
+  ~/src/n3x/                 # feature/unified-platform-v2 (ACTIVE - ALL WORK HERE)
   ~/src/n3x-spike/           # feature/unified-platform (Plan 010 design spike - REFERENCE ONLY)
-  ~/src/isar-k3s/            # feature/jetson-orin-nano-ota (ACTIVE - OTA work, plan file here)
+  ~/src/isar-k3s/            # ABANDONED - migrated to n3x/backends/isar/
   ```
-- **Plan file**: `isar-k3s/.claude/user-plans/011-unified-k3s-platform-v2.md`
+- **Plan file**: `n3x/.claude/user-plans/011-unified-k3s-platform-v2.md`
+- **Archived isar-k3s plans**: `n3x/docs/archive/isar-plans/`
 - **Architecture Tasks (A1-A4)**: COMPLETE as of 2026-01-26
 - **Test Layer Hierarchy (User-Approved 2026-01-26)**:
   - Layer 1: VM Boot (can QEMU/KVM boot a VM?)
@@ -422,6 +455,45 @@ Example reset note format:
   - **Lesson learned**: Should have used test-level fixes (kernel cmdline, QEMU args) instead of modifying image
   - **Files modified**: `isar-k3s-image.inc` (added `mask_systemd_wait_online_for_test()`), `nix/isar-artifacts.nix` (updated hash)
   - **Proper fix (later)**: Use `systemd.mask=service-name` kernel parameter at test time, not image build time
+- **NixOS k3s-cluster-* tests DEFERRED (2026-01-27)**: Firewall bug blocks multi-node cluster formation
+  - Port 6443 works on localhost but blocked from eth1 (`refused connection: IN=eth1 ... DPT=6443`)
+  - serverFirewall.allowedTCPPorts includes 6443 but traffic still blocked
+  - Root cause: Likely `lib.recursiveUpdate` merge issue with firewall arrays OR base.nix overriding test config
+  - **Decision**: DEFER Layer 3+ (cluster) tests; focus on Layer 1-2 parity only
+  - **Working tests**: smoke-vm-boot (L1), smoke-two-vm-network (L2), smoke-k3s-service-starts (L3 single-node)
+  - **Future investigation**: Check `iptables -L -n` in VMs, consider adding eth1 to trustedInterfaces
+
+### Jetson Orin Nano ISAR Deployment (2026-01-26)
+- **Worktree setup**: `~/src/n3x-pro` on branch `feature/unified-platform-v2-pro` for parallel MAX account work
+- **Automation discovered**: `rebuild-isar-artifacts` flake app from isar-k3s (ADR 001)
+  - Single command builds ISAR image + hashes + adds to nix store + updates isar-artifacts.nix
+  - Usage: `nix run '.#rebuild-isar-artifacts' -- all -m jetson-orin-nano -r base`
+  - Script: `backends/isar/scripts/rebuild-isar-artifacts.sh`
+- **Shared cache configuration (MIGRATED 2026-01-26)**:
+  - Added to `backends/isar/kas/base.yml` under `local_conf_header.shared-cache`
+  - `DL_DIR = "${HOME}/.cache/yocto/downloads"`
+  - `SSTATE_DIR = "${HOME}/.cache/yocto/sstate"`
+  - NOW ACTIVE BY DEFAULT - all ISAR builds use user-global cache
+- **Migration from isar-k3s to n3x-pro**:
+  - Copied `rebuild-isar-artifacts.sh` to `backends/isar/scripts/`
+  - Added flake app to `flake.nix` (lines 672-689)
+  - Fixed `kas-build` wrapper to export `KAS_CONTAINER_ENGINE=podman`
+- **ROOT CAUSE IDENTIFIED (2026-01-26 19:17 PST)**:
+  - Error: `bwrap: not found` in sbuild-chroot rootfs_install_pkgs_download (exit code 127)
+  - ISAR commit 27651d51 (Sept 2024) introduced bubblewrap requirement for rootfs sandboxing
+  - ISAR CI updated to `kas-isar:4.8` (Dec 2024) which includes bwrap - we use `kas/kas:latest` (no bwrap)
+  - isar-k3s built successfully because they use kas-isar image
+  - **Solution**: Use `ghcr.io/siemens/kas/kas-isar:5.1` (latest per ISAR .gitlab-ci.yml)
+- **Files staged (NOT committed)**:
+  - `backends/isar/kas/base.yml` - shared cache config
+  - `backends/isar/scripts/rebuild-isar-artifacts.sh` - automation script (new file)
+  - `flake.nix` - rebuild-isar-artifacts app + kas-build KAS_CONTAINER_ENGINE fix
+- **Fix steps for next session**:
+  1. Pull: `podman pull ghcr.io/siemens/kas/kas-isar:5.1`
+  2. Export: `export KAS_CONTAINER_IMAGE_NAME="ghcr.io/siemens/kas/kas-isar:5.1"`
+  3. Retry: `nix develop .#isar --command bash -c "cd backends/isar && ./scripts/rebuild-isar-artifacts.sh all -m jetson-orin-nano -r base"`
+  4. Build flash script: Use `flake.lib.mkJetsonFlashScript` with rootfs from nix store
+  5. Flash hardware via USB recovery mode
 
 ### Long-Running Task Strategy (2026-01-25)
 - **Problem**: Repeated `BashOutput` polling for background tasks consumes context rapidly; combined with memory-heavy commands (like `nix flake check`) can cause WSL OOM and session crashes
