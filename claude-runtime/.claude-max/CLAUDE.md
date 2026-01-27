@@ -557,3 +557,24 @@ Example reset note format:
   git worktree remove ~/src/project-pro  # Remove worktree
   git branch -d feature/foo-pro          # Delete branch after merge
   ```
+
+## TODO: User Memory Architecture Refactoring
+
+**Issue**: The account-specific CLAUDE.md files (`.claude-max/CLAUDE.md`, `.claude-pro/CLAUDE.md`) have diverged significantly from the template (`home/modules/claude-code-user-memory-template.md`). Shared learnings must be manually copied between accounts.
+
+**Proposed Solution**: Instead of having the Nix derivation merge templates into account files at build time:
+1. Keep shared content in a single file (e.g., `claude-runtime/.claude/CLAUDE-SHARED.md`)
+2. Account-specific files reference the shared file at the top
+3. Claude Code can navigate to referenced files at runtime
+4. This creates an effective inheritance system without complex Nix merging
+
+**Benefits**:
+- Single source of truth for shared learnings
+- Account-specific customizations remain separate
+- No divergence issues
+- Claude can follow references to read shared content
+
+**Files to update**:
+- `home/modules/claude-code.nix` - Change deployment logic
+- `claude-runtime/.claude/CLAUDE-SHARED.md` - Create shared content file
+- `claude-runtime/.claude-*/CLAUDE.md` - Add reference to shared file
