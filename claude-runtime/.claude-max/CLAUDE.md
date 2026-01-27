@@ -254,7 +254,7 @@ Example reset note format:
 - **Cleanup orphaned processes**: Check `pgrep -a podman` and `pgrep -a conmon`
 - **WSL cgroup issue**: Podman shows warnings about cgroupv2/systemd - containers run but `podman ps` as user may not see root containers
 - **Build progress**: Check `build/tmp/deploy/images/` for output, not just console (build may be in WIC generation)
-- **NEVER manually clean sstate/work directories** - BitBake tracks recipe changes via checksums and rebuilds what's necessary. Manual cleaning wastes time.
+- **NEVER manually clean sstate/work directories** - BitBake tracks recipe changes via checksums and rebuilds what's necessary. Manual cleaning wastes time. Use `bitbake -c cleansstate <recipe>` when forced rebuild is needed (see "Stale sstate" section below).
 - **ASK before triggering rebuilds** - If a fix requires rebuilding ISAR images, ASK the user first. Prefer test-level fixes (QEMU args, kernel cmdline) over image-level fixes.
 - **Prefer test-level fixes over image changes** - For test-specific issues, use:
   1. Kernel cmdline params (e.g., `systemd.mask=service-name`)
@@ -262,17 +262,24 @@ Example reset note format:
   3. Runtime test script workarounds
   - Reserve image recipe changes for ACTUAL image requirements, not test workarounds
 
-### ISAR Build Cache Configuration (CRITICAL)
-- **isar-k3s currently uses PROJECT-LOCAL cache** - `build/downloads/` and `build/sstate-cache/`
-- **This is WRONG** - building in another directory loses all cached state
-- **TODO**: Configure shared user-level cache directories via kas local.conf:
+### ISAR Build Cache Configuration (UPDATED 2026-01-27)
+- **n3x uses shared user-level cache** - configured in `backends/isar/kas/base.yml`:
   ```yaml
   local_conf_header:
     shared-cache: |
-      DL_DIR = "${HOME}/.cache/isar/downloads"
-      SSTATE_DIR = "${HOME}/.cache/isar/sstate-cache"
+      DL_DIR = "${HOME}/.cache/yocto/downloads"
+      SSTATE_DIR = "${HOME}/.cache/yocto/sstate"
   ```
-- **When fixed**: All ISAR projects will share downloads and sstate cache, dramatically reducing rebuild times
+- **Stale sstate can cause missing files** (debian-configscript.sh issue 2026-01-27):
+  - Symptom: `image_postprocess_configure` fails with `cannot stat 'debian-configscript.sh'`
+  - Cause: ISAR `image.bbclass` dynamically adds distro config script to SRC_URI via `cfg_script()`
+  - If sstate was populated before distro was correctly configured, it serves stale fetch/unpack results
+  - BitBake task hash doesn't change (recipe unchanged), so it reuses bad cached result
+  - **Fix**: Use bitbake's built-in cleansstate task (NEVER use rm -rf on sstate):
+    ```bash
+    kas-container shell <full-kas-config> -c "bitbake -c cleansstate <recipe>"
+    ```
+  - Example: `kas-container shell kas/base.yml:kas/machine/qemu-amd64.yml:kas/test-k3s-overlay.yml:kas/network/simple.yml -c "bitbake -c cleansstate isar-k3s-image-server"`
 
 ### WIC Generation Hang Issue (ROOT CAUSE IDENTIFIED - 2026-01-21)
 - **Symptom**: Build hangs at 96% during `do_image_wic` task in WSL2
