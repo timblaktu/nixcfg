@@ -1,3 +1,8 @@
+---
+name: mikrotik-management
+description: Automate Mikrotik RouterOS configuration for VLANs, bridges, ports, IP addressing, DHCP, and DNS. Use for network infrastructure setup, switch configuration, factory reset procedures, or RouterOS management tasks.
+---
+
 # Mikrotik RouterOS Configuration Management Skill
 
 **Version**: 2.0.0 (Phase 1 Complete + DHCP/DNS)
@@ -5,8 +10,6 @@
 **RouterOS Version**: 7.x
 **Connection**: SSH to 192.168.88.1 (admin with blank password)
 **Last Updated**: 2026-01-27
-
----
 
 ## Overview
 
