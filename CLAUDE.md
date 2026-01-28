@@ -358,46 +358,50 @@ which opencodemax opencodepro opencodework
 
 ---
 
-### ✅ **Plan 013: Mikrotik Management Skill Enhancement** (COMPLETED - 2026-01-27)
+### ✅ **Plan 013: Mikrotik Management Skill Enhancement** (COMPLETED - 2026-01-28)
 
 **Branch**: `opencode`
-**Status**: ✅ Skill v2.0.0 complete with DHCP/DNS operations, ready for hardware deployment
+**Status**: ✅ Skill v2.1.0 complete - DHCP/DNS + Configuration Management, ready for hardware deployment
 
-**Objective**: Extend mikrotik-management skill to support complete L1.0 network configuration including DHCP server and DNS configuration.
+**Objective**: Extend mikrotik-management skill to support complete L1.0 network configuration with immutable infrastructure approach.
 
 **Completed Work**:
-- ✅ Extended skill with DHCP server operations (6 functions):
-  - `dhcp_pool_create()` - IP pool management
-  - `dhcp_server_create()` - DHCP server instances
-  - `dhcp_network_add()` - Network parameters (gateway, DNS, domain)
-  - `dhcp_lease_add()` - Static MAC→IP bindings
-  - `validate_dhcp()` - Configuration validation
-- ✅ Extended skill with DNS configuration operations (6 functions):
-  - `dns_server_set()` - Upstream DNS servers with idempotency
-  - `dns_static_add()` - Hostname→IP static entries
-  - `dns_cache_list()` - Cache inspection
-  - `validate_dns()` - Configuration validation
-- ✅ Updated L1.0 complete workflow to match user requirements:
-  - 8-port bridge (ether1-ether8) vs original 2-port design
-  - DHCP pool 10.0.0.100-200 with domain `attic.local`
-  - DNS upstream 1.1.1.1, 8.8.8.8
-  - Static lease for NUC (10.0.0.10 via MAC)
-  - Static DNS entries: `nux.attic.local` → 10.0.0.10
-  - 12-step automated workflow with validation
-- ✅ Updated validation workflow to include DHCP/DNS status
-- ✅ Created comprehensive L1.0 implementation plan (`.claude/user-plans/013-L1.0-implementation-plan.md`)
+
+**Phase 1** (2026-01-27) - Service Configuration:
+- ✅ DHCP server operations (6 functions): pool, server, network, leases, validation
+- ✅ DNS configuration (6 functions): upstream servers, static entries, cache, validation
+- ✅ L1.0 complete workflow (8-port bridge + DHCP + DNS)
+- ✅ mikrotik_status() function for compact status display
+
+**Phase 2** (2026-01-28) - Configuration Management:
+- ✅ Fixed YAML frontmatter (skill registration bug - `/mikrotik` commands not appearing)
+- ✅ Section 8: Configuration State Management
+  - `config_backup()` - Binary backups (device flash + local ~/.config)
+  - `config_export()` - Text exports (version-controllable, drift detection)
+  - `config_inspect()` - Detect L1.0 vs factory vs unknown state
+  - `config_restore()` - Restore from binary backup
+- ✅ Section 9: Reset & Deploy Operations
+  - `reset_to_factory()` - Factory reset with keep-users/no-defaults options
+  - `reset_and_configure()` - Immutable workflow: inspect → backup → reset → deploy → validate
+  - `apply_incremental_changes()` - Experimental incremental mode
+- ✅ Section 10: Validation & Drift Detection
+  - `validate_against_spec()` - Verify L1.0 compliance
+  - `config_drift_report()` - Compare current vs baseline
+
+**Design Philosophy**:
+- **Immutable infrastructure** (preferred): reset → configure → validate
+- **Incremental mode** (experimental): modify existing config without reset
+- **Safety first**: Automatic backups before destructive operations
+- **Local storage**: `~/.config/mikrotik/<device-ip>/{backups,exports}/`
 
 **Technical Details**:
-- All operations include idempotency checks (safe to re-run)
-- Configuration backup before changes
-- Validation after each step
-- Dry-run mode support
-- Consistent error handling and output parsing
+- All operations include idempotency checks and dry-run mode
+- RouterOS 7 integration: `/system backup`, `/export`, `/system reset-configuration`
+- Supports unknown firmware/config detection via `config_inspect()`
+- Automatic safety backups before reset operations
 
 **Files Modified**:
-- `home/modules/claude-code/skills/mikrotik-management/SKILL.md` - Extended sections 6-7, updated workflow
-- `.claude/user-plans/013-distributed-nix-binary-caching.md` - Updated L1.0 status to READY
-- `.claude/user-plans/013-L1.0-implementation-plan.md` - Complete deployment guide (local, gitignored)
+- `home/modules/claude-code/skills/mikrotik-management/SKILL.md` - v2.1.0 (1723 lines, +416 additions)
 
 **Network Configuration** (L1.0 ready to deploy):
 ```yaml
@@ -411,16 +415,21 @@ NUC Static Lease: 10.0.0.10 (MAC-based)
 DNS Entries: nux.attic.local, attic.local → 10.0.0.10
 ```
 
-**Skill Version**: 2.0.0 (Phase 1 complete - bridge, ports, IP, DHCP, DNS)
+**Skill Version**: 2.1.0 (Configuration Management Complete)
+
+**Commits**:
+- `4c02117` - Fix YAML frontmatter for skill registration
+- `94fcc2e` - Add configuration management (sections 8-10)
 
 **Next Steps**:
-- **Hardware Deployment**: Execute L1.0 workflow when Mikrotik switch is accessible
-- **Status Command**: Add compact status printing capability (slash command or skill function) - PENDING NEXT SESSION
+1. Run `home-manager switch` to deploy skill v2.1.0
+2. Restart claudepro to reload skill
+3. Test skill registration: `/skill mikrotik-management` should appear
+4. At hardware: Run `config_inspect()` → `reset_and_configure("L1.0")` → validate
 
 **Key Files**:
-- Skill: `home/modules/claude-code/skills/mikrotik-management/SKILL.md:606-778` (L1.0 complete workflow)
-- Plan: `.claude/user-plans/013-distributed-nix-binary-caching.md`
-- Implementation: `.claude/user-plans/013-L1.0-implementation-plan.md` (local only)
+- Skill: `home/modules/claude-code/skills/mikrotik-management/SKILL.md` (v2.1.0)
+- Workflows: Lines 606-778 (L1.0), 1842-1891 (reset-and-configure)
 
 ---
 
