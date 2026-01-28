@@ -152,17 +152,18 @@
         exec "${claudeBin}" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
       fi
 
-      # PID-based single instance management
+      # PID-based coalescence trigger (silent - multiple instances are allowed)
+      # Note: This does NOT enforce single-instance; it ensures coalescence runs
+      # when another instance exists. Per-worktree isolation planned for future.
       if [[ -f "$pidfile" ]]; then
         pid=$(cat "$pidfile")
         if kill -0 "$pid" 2>/dev/null; then
-          echo "Claude (${displayName}) is already running (PID: $pid)"
-          echo "   Using existing instance..."
+          # Another instance exists - coalesce and launch (no blocking)
           coalesce_config
           setup_environment
           exec "${claudeBin}" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
         else
-          echo "Cleaning up stale PID file..."
+          # Stale PID file - clean up silently
           rm -f "$pidfile"
         fi
       fi
