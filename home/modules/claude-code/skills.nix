@@ -36,6 +36,17 @@ let
         "REFERENCE.md" = ./skills/adr-writer/REFERENCE.md;
       };
     };
+    mikrotik-management = {
+      name = "mikrotik-management";
+      description = "Automate Mikrotik RouterOS configuration for VLANs, bridges, ports, and IP addressing. Use for network infrastructure setup, switch configuration, or RouterOS management tasks.";
+      files = {
+        "SKILL.md" = ./skills/mikrotik-management/SKILL.md;
+        "REFERENCE.md" = ./skills/mikrotik-management/REFERENCE.md;
+        "test-cases.md" = ./skills/mikrotik-management/test-cases.md;
+        "examples/README.md" = ./skills/mikrotik-management/examples/README.md;
+        "commands/README.md" = ./skills/mikrotik-management/commands/README.md;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -131,6 +142,14 @@ in
         description = ''
           Enable the ADR (Architecture Decision Record) writing skill.
           Helps create well-structured ADRs following the "Design It!" methodology.
+        '';
+      };
+      mikrotik-management = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the Mikrotik RouterOS management skill for network infrastructure configuration.
+          Automates switch configuration including VLANs, bridges, ports, and IP addressing.
         '';
       };
     };
