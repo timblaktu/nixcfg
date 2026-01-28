@@ -2041,6 +2041,475 @@ config_drift_report "$HOME/.config/mikrotik/192.168.88.1/exports/L1.0-deployed-b
 
 ---
 
+## Section 11: Local Configuration Design & Deployment
+
+Design and edit RouterOS configurations locally before deploying to hardware.
+
+**Philosophy**:
+- Design configurations in .rsc format (RouterOS native text export)
+- Store alongside device exports for consistency
+- Deploy complete configurations (immutable/declarative)
+- Version control .rsc files (infrastructure-as-code)
+
+**Storage Structure**:
+```
+~/.config/mikrotik/
+├── local-designs/              # Locally-designed configs
+│   ├── L1.0-v1.rsc
+│   ├── L1.0-v2-with-monitoring.rsc
+│   └── templates/              # Reusable templates
+│       ├── flat-network.rsc
+│       ├── vlan-trunk.rsc
+│       └── dhcp-dns-base.rsc
+├── 192.168.88.1/
+│   ├── backups/                # Binary .backup files (device flash)
+│   └── exports/                # Text .rsc exports (from device)
+```
+
+**Workflow**:
+1. Design .rsc locally (with Claude assistance)
+2. Parse and validate locally (no device connection needed)
+3. Deploy to device via `/import`
+4. Validate actual device state
+
+---
+
+### config-design-local - Create Configuration Locally
+
+Design RouterOS configuration without connecting to device.
+
+**Usage**:
+```bash
+config_design_local() {
+    local config_name="$1"       # e.g., "L1.0-v2"
+    local spec="${2:-custom}"    # "L1.0", "L2.0", or "custom"
+    local base_template="$3"     # Optional: path to template .rsc
+
+    local designs_dir="$HOME/.config/mikrotik/local-designs"
+    local output_file="$designs_dir/$config_name.rsc"
+
+    mkdir -p "$designs_dir"
+
+    echo "[INFO] Designing configuration: $config_name (spec: $spec)"
+
+    if [ -n "$base_template" ] && [ -f "$base_template" ]; then
+        echo "[INFO] Starting from template: $base_template"
+        cp "$base_template" "$output_file"
+    else
+        echo "[INFO] Creating from scratch based on spec: $spec"
+        # Generate .rsc content based on spec
+        case "$spec" in
+            L1.0)
+                cat > "$output_file" <<'EOF'
+# RouterOS Configuration: L1.0 Flat Network
+# Generated: $(date +%Y-%m-%d\ %H:%M:%S\ %Z)
+# Spec: 8-port bridge, 10.0.0.0/24, DHCP, DNS
+
+# Bridge configuration
+/interface bridge
+add name=bridge-attic comment="L1.0 flat network"
+
+# Add all physical ports to bridge
+/interface bridge port
+add bridge=bridge-attic interface=ether1
+add bridge=bridge-attic interface=ether2
+add bridge=bridge-attic interface=ether3
+add bridge=bridge-attic interface=ether4
+add bridge=bridge-attic interface=ether5
+add bridge=bridge-attic interface=ether6
+add bridge=bridge-attic interface=ether7
+add bridge=bridge-attic interface=ether8
+
+# IP address configuration
+/ip address
+add address=10.0.0.1/24 interface=bridge-attic comment="Gateway"
+
+# DHCP pool
+/ip pool
+add name=dhcp-pool-attic ranges=10.0.0.100-10.0.0.200
+
+# DHCP server
+/ip dhcp-server
+add name=dhcp-attic interface=bridge-attic address-pool=dhcp-pool-attic disabled=no
+
+# DHCP network configuration
+/ip dhcp-server network
+add address=10.0.0.0/24 gateway=10.0.0.1 dns-server=10.0.0.1 domain=attic.local comment="L1.0 network"
+
+# Static DHCP lease for NUC
+/ip dhcp-server lease
+add address=10.0.0.10 mac-address=XX:XX:XX:XX:XX:XX comment="NUC static lease"
+
+# DNS upstream servers
+/ip dns
+set servers=1.1.1.1,8.8.8.8 allow-remote-requests=yes
+
+# DNS static entries
+/ip dns static
+add name=nux.attic.local address=10.0.0.10 comment="NUC hostname"
+add name=attic.local address=10.0.0.10 comment="Domain apex"
+EOF
+                ;;
+            custom)
+                cat > "$output_file" <<'EOF'
+# RouterOS Configuration: Custom
+# Generated: $(date +%Y-%m-%d\ %H:%M:%S\ %Z)
+# Edit this file to match your requirements
+
+# Example: Basic bridge
+/interface bridge
+add name=bridge1 comment="Custom bridge"
+
+# Example: IP address
+/ip address
+add address=192.168.1.1/24 interface=bridge1
+
+# Add your configuration below:
+EOF
+                ;;
+            *)
+                echo "[ERROR] Unknown spec: $spec"
+                return 1
+                ;;
+        esac
+    fi
+
+    echo "[OK] Configuration created: $output_file"
+    echo "[NEXT] Edit with: \$EDITOR $output_file"
+    echo "[NEXT] Parse with: config_parse_rsc \"$output_file\""
+    echo "[NEXT] Deploy with: config_deploy_from_rsc 192.168.88.1 \"$output_file\""
+    return 0
+}
+
+# Examples:
+config_design_local "L1.0-v1" "L1.0"
+config_design_local "custom-network" "custom"
+config_design_local "L1.0-modified" "L1.0" "$HOME/.config/mikrotik/local-designs/templates/flat-network.rsc"
+```
+
+---
+
+### config-parse-rsc - Analyze .rsc Configuration File
+
+Parse and validate a .rsc file to understand its contents.
+
+**Usage**:
+```bash
+config_parse_rsc() {
+    local rsc_file="$1"
+
+    if [ ! -f "$rsc_file" ]; then
+        echo "[ERROR] File not found: $rsc_file"
+        return 1
+    fi
+
+    echo "[INFO] Parsing .rsc file: $rsc_file"
+    echo ""
+
+    # Extract key configuration elements
+    echo "=== Bridges ==="
+    grep -A 1 "^/interface bridge$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== Bridge Ports ==="
+    grep -A 10 "^/interface bridge port$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== IP Addresses ==="
+    grep -A 5 "^/ip address$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== DHCP Pools ==="
+    grep -A 5 "^/ip pool$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== DHCP Servers ==="
+    grep -A 5 "^/ip dhcp-server$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== DHCP Networks ==="
+    grep -A 5 "^/ip dhcp-server network$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== DHCP Leases (Static) ==="
+    grep -A 10 "^/ip dhcp-server lease$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== DNS Settings ==="
+    grep -A 3 "^/ip dns$" "$rsc_file" | grep "^set" || echo "(none)"
+    echo ""
+
+    echo "=== DNS Static Entries ==="
+    grep -A 10 "^/ip dns static$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    echo "=== VLANs ==="
+    grep -A 5 "^/interface vlan$" "$rsc_file" | grep "^add" || echo "(none)"
+    echo ""
+
+    # L1.0 compliance check (if applicable)
+    if grep -q "bridge-attic" "$rsc_file" && grep -q "10.0.0.1/24" "$rsc_file"; then
+        echo "[INFO] Detected L1.0 pattern - running compliance check..."
+        echo ""
+        echo "=== L1.0 Compliance ==="
+
+        # Check required elements
+        grep -q "name=bridge-attic" "$rsc_file" && echo "✓ Bridge: bridge-attic" || echo "✗ Bridge: bridge-attic"
+        grep -q "10.0.0.1/24" "$rsc_file" && echo "✓ Gateway: 10.0.0.1/24" || echo "✗ Gateway: 10.0.0.1/24"
+        grep -q "10.0.0.100-10.0.0.200" "$rsc_file" && echo "✓ DHCP Pool: 10.0.0.100-200" || echo "✗ DHCP Pool"
+        grep -q "domain=attic.local" "$rsc_file" && echo "✓ Domain: attic.local" || echo "✗ Domain: attic.local"
+        grep -q "1.1.1.1" "$rsc_file" && echo "✓ DNS: 1.1.1.1" || echo "✗ DNS upstream"
+        grep -q "nux.attic.local" "$rsc_file" && echo "✓ DNS static: nux.attic.local" || echo "✗ DNS static"
+
+        # Count bridge ports (should be 8 for L1.0)
+        local port_count=$(grep -A 10 "^/interface bridge port$" "$rsc_file" | grep -c "^add")
+        if [ "$port_count" -eq 8 ]; then
+            echo "✓ Bridge ports: 8 (ether1-ether8)"
+        else
+            echo "✗ Bridge ports: $port_count (expected 8)"
+        fi
+    fi
+
+    echo ""
+    echo "[OK] Parse complete"
+    return 0
+}
+
+# Example:
+config_parse_rsc "$HOME/.config/mikrotik/local-designs/L1.0-v1.rsc"
+```
+
+---
+
+### config-deploy-from-rsc - Deploy Local Configuration to Device
+
+Upload and import a locally-designed .rsc file to RouterOS device.
+
+**Usage**:
+```bash
+config_deploy_from_rsc() {
+    local device_ip="${1:-192.168.88.1}"
+    local rsc_file="$2"
+    local mode="${3:-replace}"      # "replace" or "merge"
+    local dry_run="${DRY_RUN:-0}"
+
+    if [ ! -f "$rsc_file" ]; then
+        echo "[ERROR] File not found: $rsc_file"
+        return 1
+    fi
+
+    echo "[INFO] Deploying configuration from: $rsc_file"
+    echo "[INFO] Target device: $device_ip"
+    echo "[INFO] Mode: $mode (replace=reset+import, merge=import only)"
+
+    # Safety backup first
+    local backup_name="pre-deploy-$(basename "$rsc_file" .rsc)-$(date +%Y%m%d-%H%M%S)"
+    echo "[INFO] Creating safety backup: $backup_name"
+    config_backup "$device_ip" "$backup_name"
+
+    if [ "$dry_run" -eq 1 ]; then
+        echo "[DRY-RUN] Would upload: $rsc_file"
+        echo "[DRY-RUN] Would import on device with mode: $mode"
+        config_parse_rsc "$rsc_file"
+        return 0
+    fi
+
+    # Upload .rsc file to device
+    local remote_filename="deploy-$(basename "$rsc_file")"
+    echo "[INFO] Uploading $rsc_file to device as $remote_filename..."
+
+    # Using SCP to upload (requires RouterOS 7+ with services enabled)
+    scp "$rsc_file" "admin@$device_ip:/$remote_filename" || {
+        echo "[ERROR] Upload failed - check SCP/SFTP service on device"
+        echo "[HINT] Enable with: /ip service set ssh address=0.0.0.0/0"
+        return 1
+    }
+
+    # If mode=replace, reset first
+    if [ "$mode" = "replace" ]; then
+        echo "[WARN] Mode=replace will RESET device to factory defaults first!"
+        read -p "Continue? (yes/no): " confirm
+        if [ "$confirm" != "yes" ]; then
+            echo "[ABORT] Deployment cancelled"
+            return 1
+        fi
+
+        reset_to_factory "$device_ip" "yes"  # keep-users=yes
+
+        # Wait for reboot
+        echo "[INFO] Waiting 30s for device reboot..."
+        sleep 30
+    fi
+
+    # Import configuration
+    echo "[INFO] Importing configuration: $remote_filename"
+    ssh_exec "/import file-name=$remote_filename" || {
+        echo "[ERROR] Import failed"
+        echo "[INFO] Rollback available with: config_restore \"$backup_name\""
+        return 1
+    }
+
+    # Cleanup uploaded file
+    ssh_exec "/file remove $remote_filename"
+
+    # Validate deployment
+    echo "[INFO] Validating deployment..."
+
+    # Try to detect spec from filename
+    if echo "$rsc_file" | grep -qi "L1.0"; then
+        validate_against_spec "L1.0" "$device_ip"
+    else
+        # Generic validation - just check if config was applied
+        echo "[INFO] Running basic connectivity check..."
+        mikrotik_status "$device_ip"
+    fi
+
+    echo ""
+    echo "[OK] Configuration deployed successfully"
+    echo "[INFO] Safety backup: $backup_name"
+    echo "[INFO] Rollback with: config_restore \"$backup_name\""
+    return 0
+}
+
+# Examples:
+config_deploy_from_rsc "192.168.88.1" "$HOME/.config/mikrotik/local-designs/L1.0-v1.rsc" "replace"
+config_deploy_from_rsc "192.168.88.1" "$HOME/.config/mikrotik/local-designs/L1.0-v2.rsc" "merge"
+```
+
+---
+
+### config-template-list - Show Available Templates
+
+**Usage**:
+```bash
+config_template_list() {
+    local templates_dir="$HOME/.config/mikrotik/local-designs/templates"
+
+    echo "[INFO] Available configuration templates:"
+    echo ""
+
+    if [ ! -d "$templates_dir" ] || [ -z "$(ls -A "$templates_dir" 2>/dev/null)" ]; then
+        echo "(no templates found)"
+        echo ""
+        echo "[HINT] Create templates in: $templates_dir"
+        echo "[HINT] Or use config_design_local to generate from specs"
+        return 0
+    fi
+
+    for template in "$templates_dir"/*.rsc; do
+        local name=$(basename "$template")
+        local desc=$(grep -m 1 "^# " "$template" | sed 's/^# //')
+        echo "  - $name"
+        [ -n "$desc" ] && echo "    $desc"
+    done
+
+    echo ""
+    echo "[NEXT] Use template with: config_design_local \"my-config\" \"custom\" \"$templates_dir/TEMPLATE.rsc\""
+    return 0
+}
+
+# Example:
+config_template_list
+```
+
+---
+
+### config-create-template - Save Configuration as Template
+
+**Usage**:
+```bash
+config_create_template() {
+    local source_file="$1"      # .rsc file to save as template
+    local template_name="$2"    # Name for template (without .rsc)
+
+    local templates_dir="$HOME/.config/mikrotik/local-designs/templates"
+    local output_file="$templates_dir/$template_name.rsc"
+
+    if [ ! -f "$source_file" ]; then
+        echo "[ERROR] Source file not found: $source_file"
+        return 1
+    fi
+
+    mkdir -p "$templates_dir"
+
+    echo "[INFO] Creating template: $template_name"
+    cp "$source_file" "$output_file"
+
+    echo "[OK] Template created: $output_file"
+    echo "[NEXT] Use with: config_design_local \"new-config\" \"custom\" \"$output_file\""
+    return 0
+}
+
+# Example:
+config_create_template "$HOME/.config/mikrotik/192.168.88.1/exports/working-config.rsc" "my-base-template"
+```
+
+---
+
+### Workflow Example: Design → Review → Deploy
+
+**Complete workflow using local design**:
+
+```bash
+# Step 1: Design configuration locally
+config_design_local "L1.0-custom" "L1.0"
+
+# Step 2: Edit the .rsc file (use your editor)
+$EDITOR ~/.config/mikrotik/local-designs/L1.0-custom.rsc
+
+# Step 3: Parse and validate locally
+config_parse_rsc ~/.config/mikrotik/local-designs/L1.0-custom.rsc
+
+# Step 4: Deploy to device (dry-run first)
+export DRY_RUN=1
+config_deploy_from_rsc "192.168.88.1" ~/.config/mikrotik/local-designs/L1.0-custom.rsc "replace"
+
+# Step 5: Deploy for real
+export DRY_RUN=0
+config_deploy_from_rsc "192.168.88.1" ~/.config/mikrotik/local-designs/L1.0-custom.rsc "replace"
+
+# Step 6: Validate
+validate_against_spec "L1.0" "192.168.88.1"
+
+# Step 7: Export final state and save as template
+config_export "L1.0-deployed-final"
+config_create_template ~/.config/mikrotik/192.168.88.1/exports/L1.0-deployed-final.rsc "L1.0-production"
+```
+
+---
+
+### .rsc Format Notes
+
+**RouterOS .rsc files**:
+- Plain text scripting format
+- Comments start with `#`
+- Commands are standard RouterOS CLI syntax
+- Sections start with `/path/to/resource`
+- Can be edited with any text editor
+- Version controllable (git-friendly)
+
+**Example .rsc structure**:
+```routeros
+# Configuration comment
+/interface bridge
+add name=bridge1 comment="My bridge"
+
+/interface bridge port
+add bridge=bridge1 interface=ether1
+add bridge=bridge1 interface=ether2
+
+/ip address
+add address=192.168.1.1/24 interface=bridge1
+```
+
+**Binary .backup vs text .rsc**:
+- `.backup` = Binary, not editable, for disaster recovery
+- `.rsc` = Text, editable, for version control and design
+- Use `.rsc` for local design workflow
+- Use `.backup` for device flash safety backups
+
+---
+
 ## Phase 2+ Extensions (Future - Not Yet Implemented)
 
 The following operations are designed but not yet implemented:

@@ -388,20 +388,34 @@ which opencodemax opencodepro opencodework
   - `validate_against_spec()` - Verify L1.0 compliance
   - `config_drift_report()` - Compare current vs baseline
 
+**Phase 3** (2026-01-28) - Local Configuration Design:
+- ✅ Section 11: Local Configuration Design & Deployment
+  - `config_design_local()` - Generate .rsc files from specs (L1.0, custom) or templates
+  - `config_parse_rsc()` - Parse and validate .rsc files locally (no device needed)
+  - `config_deploy_from_rsc()` - Upload and import .rsc to device (replace/merge modes)
+  - `config_template_list()` - Show available templates
+  - `config_create_template()` - Save .rsc as reusable template
+  - Complete workflow examples and .rsc format documentation
+- ✅ Infrastructure-as-Code workflow: Design locally → Version control → Deploy to device
+- ✅ Storage: `~/.config/mikrotik/local-designs/` for local configs and templates
+
 **Design Philosophy**:
 - **Immutable infrastructure** (preferred): reset → configure → validate
-- **Incremental mode** (experimental): modify existing config without reset
+- **Local design first**: Create/edit .rsc locally before deploying to hardware
+- **Version control**: .rsc files are text, git-friendly, infrastructure-as-code
 - **Safety first**: Automatic backups before destructive operations
-- **Local storage**: `~/.config/mikrotik/<device-ip>/{backups,exports}/`
+- **Template library**: Reusable configurations for common patterns
 
 **Technical Details**:
 - All operations include idempotency checks and dry-run mode
-- RouterOS 7 integration: `/system backup`, `/export`, `/system reset-configuration`
+- RouterOS 7 integration: `/system backup`, `/export`, `/import`, `/system reset-configuration`
 - Supports unknown firmware/config detection via `config_inspect()`
 - Automatic safety backups before reset operations
+- .rsc format: Plain text RouterOS scripting (human-readable, editable)
+- .backup format: Binary (device flash only, disaster recovery)
 
 **Files Modified**:
-- `home/modules/claude-code/skills/mikrotik-management/SKILL.md` - v2.1.0 (1723 lines, +416 additions)
+- `home/modules/claude-code/skills/mikrotik-management/SKILL.md` - v2.2.0 (2608 lines, +885 total additions)
 
 **Network Configuration** (L1.0 ready to deploy):
 ```yaml
@@ -415,21 +429,24 @@ NUC Static Lease: 10.0.0.10 (MAC-based)
 DNS Entries: nux.attic.local, attic.local → 10.0.0.10
 ```
 
-**Skill Version**: 2.1.0 (Configuration Management Complete)
+**Skill Version**: 2.2.0 (Local Design + Configuration Management)
 
 **Commits**:
 - `4c02117` - Fix YAML frontmatter for skill registration
-- `94fcc2e` - Add configuration management (sections 8-10)
+- `94fcc2e` - Add configuration management (sections 8-10, +416 lines)
+- `[pending]` - Add local configuration design (section 11, +469 lines)
 
 **Next Steps**:
-1. Run `home-manager switch` to deploy skill v2.1.0
+1. Run `home-manager switch` to deploy skill v2.2.0
 2. Restart claudepro to reload skill
-3. Test skill registration: `/skill mikrotik-management` should appear
-4. At hardware: Run `config_inspect()` → `reset_and_configure("L1.0")` → validate
+3. Test local design workflow:
+   - `config_design_local "test-L1.0" "L1.0"` (creates ~/.config/mikrotik/local-designs/test-L1.0.rsc)
+   - `config_parse_rsc ~/.config/mikrotik/local-designs/test-L1.0.rsc` (validates locally)
+4. At hardware: Deploy with `config_deploy_from_rsc 192.168.88.1 ~/.config/mikrotik/local-designs/test-L1.0.rsc "replace"`
 
 **Key Files**:
-- Skill: `home/modules/claude-code/skills/mikrotik-management/SKILL.md` (v2.1.0)
-- Workflows: Lines 606-778 (L1.0), 1842-1891 (reset-and-configure)
+- Skill: `home/modules/claude-code/skills/mikrotik-management/SKILL.md` (v2.2.0, 2608 lines)
+- Workflows: Lines 606-778 (L1.0), 1842-1891 (reset-and-configure), 2077-2510 (local design)
 
 ---
 
