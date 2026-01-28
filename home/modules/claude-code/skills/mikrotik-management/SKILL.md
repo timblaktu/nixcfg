@@ -759,6 +759,11 @@ validate_dhcp "$DHCP_SERVER_NAME" "$BRIDGE_NAME" "$DHCP_POOL_NAME"
 validate_dns "$DNS_UPSTREAM"
 echo ""
 
+# Step 13: Display final status summary
+echo "[STEP 13] Displaying configuration status..."
+mikrotik_status "$BRIDGE_NAME"
+echo ""
+
 echo "=========================================="
 echo "L1.0 Configuration Complete!"
 echo "=========================================="
@@ -833,6 +838,229 @@ echo ""
 
 echo "=================================="
 ```
+
+---
+
+## 8. Status and Monitoring Operations
+
+### mikrotik-status - Display Compact Multi-Resource Status
+
+**Purpose**: Single-command status check for complete L1.0 configuration with graceful error handling.
+
+**Usage**:
+```bash
+mikrotik_status() {
+    local bridge="${1:-bridge-attic}"
+
+    echo "=== Mikrotik Status: $bridge ==="
+
+    # Gather status from all subsystems (continue on errors)
+    _status_switch
+    _status_bridge "$bridge"
+    _status_ip "$bridge"
+    _status_dhcp "$bridge"
+    _status_dns
+
+    echo "======================================"
+}
+
+# Helper: Switch hardware and software status
+_status_switch() {
+    local output=$(ssh_exec "/system resource print" 2>&1)
+
+    if parse_errors "$output"; then
+        echo "Switch    : [ERROR: Cannot query system info]"
+        return 1
+    fi
+
+    local model=$(echo "$output" | grep -oP '(?<=board-name: ).*' | head -1)
+    local version=$(echo "$output" | grep -oP '(?<=version: )[\d.]+' | head -1)
+    local uptime=$(echo "$output" | grep -oP '(?<=uptime: ).*' | head -1)
+
+    echo "Switch    : ${model:-unknown} | v${version:-?} | Up ${uptime:-?}"
+}
+
+# Helper: Bridge and port status
+_status_bridge() {
+    local bridge="$1"
+    local output=$(ssh_exec "/interface bridge print detail where name=$bridge" 2>&1)
+
+    if parse_errors "$output" || ! echo "$output" | grep -q "name=$bridge"; then
+        echo "Bridge    : [NOT FOUND: $bridge]"
+        echo "Ports     : [SKIPPED: No bridge]"
+        return 1
+    fi
+
+    local vlan_filtering=$(parse_print_output "$output" "vlan-filtering")
+
+    # Count bridge ports
+    local port_output=$(ssh_exec "/interface bridge port print count-only where bridge=$bridge" 2>&1)
+    local port_count=$(parse_count "$port_output")
+
+    # Get port list (compact: ether1-8)
+    local port_list=$(ssh_exec "/interface bridge port print terse where bridge=$bridge" 2>&1 | \
+                      grep -oP '(?<=interface=)\S+' | tr '\n' ',' | sed 's/,$//')
+
+    echo "Bridge    : $bridge | ${port_count:-0} ports | VLAN: ${vlan_filtering:-unknown}"
+
+    if [ "$port_count" -gt 0 ]; then
+        echo "Ports     : ${port_list:-none} ✓"
+    else
+        echo "Ports     : [NONE CONFIGURED]"
+    fi
+}
+
+# Helper: IP address status
+_status_ip() {
+    local interface="$1"
+    local output=$(ssh_exec "/ip address print detail where interface=$interface" 2>&1)
+
+    if parse_errors "$output" || ! echo "$output" | grep -q "interface=$interface"; then
+        echo "IP        : [NOT CONFIGURED on $interface]"
+        return 1
+    fi
+
+    local address=$(parse_print_output "$output" "address")
+    local network=$(parse_print_output "$output" "network")
+
+    echo "IP        : ${address:-unknown} (${network:-unknown})"
+}
+
+# Helper: DHCP server and lease status
+_status_dhcp() {
+    local bridge="$1"
+
+    # Find DHCP server on this interface
+    local server_output=$(ssh_exec "/ip dhcp-server print detail where interface=$bridge" 2>&1)
+
+    if parse_errors "$server_output" || ! echo "$server_output" | grep -q "interface=$bridge"; then
+        echo "DHCP Pool : [NOT CONFIGURED]"
+        echo "DHCP Srv  : [NOT CONFIGURED on $bridge]"
+        echo "DHCP Net  : [NOT CONFIGURED]"
+        echo "DHCP Lease: [NOT CONFIGURED]"
+        return 1
+    fi
+
+    local server_name=$(parse_print_output "$server_output" "name")
+    local address_pool=$(parse_print_output "$server_output" "address-pool")
+    local disabled=$(parse_print_output "$server_output" "disabled")
+    local status=$([ "$disabled" = "yes" ] && echo "Disabled" || echo "Enabled")
+
+    # Get pool details
+    if [ -n "$address_pool" ]; then
+        local pool_output=$(ssh_exec "/ip pool print detail where name=$address_pool" 2>&1)
+        local ranges=$(parse_print_output "$pool_output" "ranges")
+        echo "DHCP Pool : $address_pool | ${ranges:-unknown}"
+    else
+        echo "DHCP Pool : [UNKNOWN]"
+    fi
+
+    echo "DHCP Srv  : ${server_name:-unknown} | $bridge | $status"
+
+    # Get network configuration
+    local net_output=$(ssh_exec "/ip dhcp-server network print detail" 2>&1)
+    if ! parse_errors "$net_output"; then
+        local net_address=$(echo "$net_output" | grep -oP '(?<=address=)[^\s]+' | head -1)
+        local net_gateway=$(echo "$net_output" | grep -oP '(?<=gateway=)[^\s]+' | head -1)
+        local net_dns=$(echo "$net_output" | grep -oP '(?<=dns-server=)[^\s]+' | head -1)
+        local net_domain=$(echo "$net_output" | grep -oP '(?<=domain=)[^\s]+' | head -1)
+
+        echo "DHCP Net  : ${net_address:-?} | GW: ${net_gateway:-?} | DNS: ${net_dns:-?} | ${net_domain:-no-domain}"
+    else
+        echo "DHCP Net  : [NOT CONFIGURED]"
+    fi
+
+    # Count static leases
+    local lease_count=$(ssh_exec "/ip dhcp-server lease print count-only where server=$server_name and !dynamic" 2>&1)
+    lease_count=$(parse_count "$lease_count")
+
+    if [ "$lease_count" -gt 0 ]; then
+        # Show first static lease as example
+        local lease_detail=$(ssh_exec "/ip dhcp-server lease print detail where server=$server_name and !dynamic" 2>&1 | head -20)
+        local lease_address=$(echo "$lease_detail" | grep -oP '(?<=address=)[^\s]+' | head -1)
+        local lease_mac=$(echo "$lease_detail" | grep -oP '(?<=mac-address=)[^\s]+' | head -1)
+        echo "DHCP Lease: $lease_count static ($lease_address → $lease_mac)"
+    else
+        echo "DHCP Lease: 0 static"
+    fi
+}
+
+# Helper: DNS configuration status
+_status_dns() {
+    local dns_output=$(ssh_exec "/ip dns print detail" 2>&1)
+
+    if parse_errors "$dns_output"; then
+        echo "DNS       : [ERROR: Cannot query DNS config]"
+        echo "DNS Static: [ERROR: Cannot query DNS static]"
+        return 1
+    fi
+
+    local servers=$(echo "$dns_output" | grep -oP '(?<=servers: ).*' | head -1)
+    local allow_remote=$(echo "$dns_output" | grep -oP '(?<=allow-remote-requests: ).*' | head -1)
+
+    echo "DNS       : ${servers:-none} | remote: ${allow_remote:-no}"
+
+    # Count static entries
+    local static_count=$(ssh_exec "/ip dns static print count-only" 2>&1)
+    static_count=$(parse_count "$static_count")
+
+    if [ "$static_count" -gt 0 ]; then
+        # Show static entries (compact: name → address)
+        local static_list=$(ssh_exec "/ip dns static print terse" 2>&1 | \
+                            grep -oP '(name=\S+|address=\S+)' | \
+                            paste -d' ' - - | \
+                            sed 's/name=//;s/ address=/ → /' | \
+                            tr '\n' ', ' | sed 's/, $//')
+        echo "DNS Static: $static_count entries ($static_list)"
+    else
+        echo "DNS Static: 0 entries"
+    fi
+}
+
+# Example usage:
+# mikrotik_status "bridge-attic"
+```
+
+**Example Output** (Success Case):
+```
+=== Mikrotik Status: bridge-attic ===
+Switch    : CRS326-24G-2S+ | v7.16.1 | Up 3d 4h
+Bridge    : bridge-attic | 8 ports | VLAN: no
+Ports     : ether1,ether2,ether3,ether4,ether5,ether6,ether7,ether8 ✓
+IP        : 10.0.0.1/24 (10.0.0.0)
+DHCP Pool : pool-attic | 10.0.0.100-10.0.0.200
+DHCP Srv  : dhcp-attic | bridge-attic | Enabled
+DHCP Net  : 10.0.0.0/24 | GW: 10.0.0.1 | DNS: 10.0.0.1 | attic.local
+DHCP Lease: 1 static (10.0.0.10 → AA:BB:CC:DD:EE:FF)
+DNS       : 1.1.1.1,8.8.8.8 | remote: yes
+DNS Static: 2 entries (nux.attic.local → 10.0.0.10, attic.local → 10.0.0.10)
+======================================
+```
+
+**Example Output** (Partial Failure - Missing DHCP):
+```
+=== Mikrotik Status: bridge-attic ===
+Switch    : CRS326-24G-2S+ | v7.16.1 | Up 3d 4h
+Bridge    : bridge-attic | 8 ports | VLAN: no
+Ports     : ether1,ether2,ether3,ether4,ether5,ether6,ether7,ether8 ✓
+IP        : 10.0.0.1/24 (10.0.0.0)
+DHCP Pool : [NOT CONFIGURED]
+DHCP Srv  : [NOT CONFIGURED on bridge-attic]
+DHCP Net  : [NOT CONFIGURED]
+DHCP Lease: [NOT CONFIGURED]
+DNS       : 1.1.1.1,8.8.8.8 | remote: yes
+DNS Static: 0 entries
+======================================
+```
+
+**Design Notes**:
+1. **Graceful Degradation**: Each helper function handles errors independently, returning error markers but allowing status to continue
+2. **Clear Error Markers**: `[NOT FOUND]`, `[NOT CONFIGURED]`, `[ERROR: ...]` make issues immediately visible
+3. **Compact Output**: Single line per resource type, ~10-12 lines total
+4. **Information Density**: Key details (counts, states, identifiers) packed efficiently
+5. **Visual Indicators**: Checkmarks (✓) for positive confirmation, brackets for issues
+
+---
 
 ### Rollback Workflow - Restore from Backup
 
