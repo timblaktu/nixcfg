@@ -1,27 +1,35 @@
 # Mikrotik RouterOS Configuration Management Skill
 
-**Version**: 1.0.0 (Phase 1)
+**Version**: 2.0.0 (Phase 1 Complete + DHCP/DNS)
 **Target**: Mikrotik CRS326-24G-2S+ Switch
 **RouterOS Version**: 7.x
 **Connection**: SSH to 192.168.88.1 (admin with blank password)
+**Last Updated**: 2026-01-27
 
 ---
 
 ## Overview
 
-This skill manages Mikrotik RouterOS switch configuration via SSH CLI commands. It provides structured operations for configuring bridges, VLANs, ports, and IP addresses with safety features including dry-run mode, idempotency checks, and configuration backups.
+This skill manages Mikrotik RouterOS switch configuration via SSH CLI commands. It provides structured operations for configuring bridges, VLANs, ports, IP addresses, DHCP servers, and DNS with safety features including dry-run mode, idempotency checks, and configuration backups.
 
-**Phase 1 Capabilities** (Current):
+**Phase 1 Capabilities** (Current - v2.0.0):
 - Interface validation (read-only)
 - Bridge management (full CRUD)
 - Bridge port assignment (full CRUD)
 - IP address management (full CRUD)
 - VLAN interface creation (basic)
-- L1.0 complete workflow (Attic network setup)
+- **DHCP server management (full)** - NEW in v2.0.0
+  - IP pool creation
+  - DHCP server configuration
+  - DHCP network parameters
+  - Static lease assignment
+- **DNS configuration (full)** - NEW in v2.0.0
+  - Upstream DNS servers
+  - Static DNS entries
+  - DNS cache management
+- L1.0 complete workflow (8-port bridge + DHCP + DNS)
 
 **Phase 2+ Capabilities** (Future):
-- DHCP server configuration
-- DNS configuration
 - Advanced VLAN filtering
 - Firewall rules
 
@@ -603,13 +611,14 @@ validate_vlan "vlan-attic" "10" "bridge-attic"
 
 ## Configuration Workflows
 
-### L1.0 Complete Workflow - Attic Network Setup
+### L1.0 Complete Workflow - Attic Network Setup (Updated 2026-01-27)
 
-This workflow implements the complete L1.0 configuration:
-- Bridge: bridge-attic (no VLAN filtering)
-- Ports: ether1, ether2
-- IP: 10.0.0.1/24
-- VLAN: vlan-attic (VLAN ID 10)
+This workflow implements the complete L1.0 configuration per user requirements:
+- Bridge: bridge-attic (flat bridge, no VLAN tagging)
+- Ports: ether1-ether8 (8 ports for multiple devices)
+- IP: 10.0.0.1/24 (gateway)
+- DHCP: Pool 10.0.0.100-200 with static lease for NUC (10.0.0.10)
+- DNS: Upstream 1.1.1.1,8.8.8.8 with static entries for nux.attic.local
 
 **Complete Script**:
 ```bash
@@ -618,11 +627,38 @@ set -euo pipefail
 
 # Configuration target state
 BRIDGE_NAME="bridge-attic"
-VLAN_NAME="vlan-attic"
-VLAN_ID="10"
 IP_ADDRESS="10.0.0.1/24"
-PORT1="ether1"
-PORT2="ether2"
+PORTS=("ether1" "ether2" "ether3" "ether4" "ether5" "ether6" "ether7" "ether8")
+PORT_COMMENTS=(
+    "NUC NIC 1 (management)"
+    "NUC NIC 2 (data)"
+    "Port 3 (available)"
+    "Port 4 (available)"
+    "Port 5 (available)"
+    "Port 6 (available)"
+    "Port 7 (available)"
+    "Port 8 (available)"
+)
+
+# DHCP configuration
+DHCP_POOL_NAME="pool-attic"
+DHCP_POOL_RANGE="10.0.0.100-10.0.0.200"
+DHCP_SERVER_NAME="dhcp-attic"
+DHCP_NETWORK="10.0.0.0/24"
+DHCP_GATEWAY="10.0.0.1"
+DHCP_DNS="10.0.0.1"
+DHCP_DOMAIN="attic.local"
+
+# NUC static lease (REPLACE MAC ADDRESS!)
+NUC_IP="10.0.0.10"
+NUC_MAC="XX:XX:XX:XX:XX:XX"  # TODO: Replace with actual NUC MAC address
+
+# DNS configuration
+DNS_UPSTREAM="1.1.1.1,8.8.8.8"
+DNS_ENTRIES=(
+    "nux.attic.local:10.0.0.10:Attic server"
+    "attic.local:10.0.0.10:Attic server alias"
+)
 
 # Enable dry-run mode if desired
 # export DRY_RUN=1
@@ -650,38 +686,77 @@ echo ""
 
 # Step 2: Validate interfaces
 echo "[STEP 2] Validating interfaces..."
-validate_interface "$PORT1"
-validate_interface "$PORT2"
+for PORT in "${PORTS[@]}"; do
+    validate_interface "$PORT"
+done
 echo ""
 
 # Step 3: Create bridge
 echo "[STEP 3] Creating bridge..."
-bridge_create "$BRIDGE_NAME" "no" "Attic server isolated network"
+bridge_create "$BRIDGE_NAME" "no" "Attic server isolated network - 8 port flat bridge"
 echo ""
 
 # Step 4: Add ports to bridge
 echo "[STEP 4] Adding ports to bridge..."
-bridge_port_add "$BRIDGE_NAME" "$PORT1" "NUC NIC 1"
-bridge_port_add "$BRIDGE_NAME" "$PORT2" "NUC NIC 2"
+for i in "${!PORTS[@]}"; do
+    PORT="${PORTS[$i]}"
+    COMMENT="${PORT_COMMENTS[$i]}"
+    bridge_port_add "$BRIDGE_NAME" "$PORT" "$COMMENT"
+done
 echo ""
 
 # Step 5: Add IP address to bridge
 echo "[STEP 5] Adding IP address to bridge..."
-ip_address_add "$IP_ADDRESS" "$BRIDGE_NAME" "Attic network gateway"
+ip_address_add "$IP_ADDRESS" "$BRIDGE_NAME" "Attic network gateway and DHCP server"
 echo ""
 
-# Step 6: Create VLAN interface
-echo "[STEP 6] Creating VLAN interface..."
-vlan_create "$VLAN_NAME" "$VLAN_ID" "$BRIDGE_NAME" "Attic VLAN 10"
+# Step 6: Create DHCP pool
+echo "[STEP 6] Creating DHCP pool..."
+dhcp_pool_create "$DHCP_POOL_NAME" "$DHCP_POOL_RANGE" "Attic DHCP pool"
 echo ""
 
-# Step 7: Validate complete configuration
-echo "[STEP 7] Validating complete configuration..."
+# Step 7: Create DHCP server
+echo "[STEP 7] Creating DHCP server..."
+dhcp_server_create "$DHCP_SERVER_NAME" "$BRIDGE_NAME" "$DHCP_POOL_NAME" "Attic DHCP server"
+echo ""
+
+# Step 8: Configure DHCP network
+echo "[STEP 8] Configuring DHCP network..."
+dhcp_network_add "$DHCP_NETWORK" "$DHCP_GATEWAY" "$DHCP_DNS" "$DHCP_DOMAIN" "Attic network DHCP config"
+echo ""
+
+# Step 9: Add static DHCP lease for NUC
+echo "[STEP 9] Adding static DHCP lease for NUC..."
+if [ "$NUC_MAC" = "XX:XX:XX:XX:XX:XX" ]; then
+    echo "[WARNING] NUC MAC address not configured. Skipping static lease."
+    echo "[WARNING] Update NUC_MAC variable in this script and re-run."
+else
+    dhcp_lease_add "$NUC_IP" "$NUC_MAC" "$DHCP_SERVER_NAME" "nux static lease"
+fi
+echo ""
+
+# Step 10: Configure DNS servers
+echo "[STEP 10] Configuring DNS servers..."
+dns_server_set "$DNS_UPSTREAM" "yes"
+echo ""
+
+# Step 11: Add static DNS entries
+echo "[STEP 11] Adding static DNS entries..."
+for ENTRY in "${DNS_ENTRIES[@]}"; do
+    IFS=':' read -r NAME ADDRESS COMMENT <<< "$ENTRY"
+    dns_static_add "$NAME" "$ADDRESS" "$COMMENT"
+done
+echo ""
+
+# Step 12: Validate complete configuration
+echo "[STEP 12] Validating complete configuration..."
 validate_bridge "$BRIDGE_NAME" "no"
-validate_bridge_port "$BRIDGE_NAME" "$PORT1"
-validate_bridge_port "$BRIDGE_NAME" "$PORT2"
+for PORT in "${PORTS[@]}"; do
+    validate_bridge_port "$BRIDGE_NAME" "$PORT"
+done
 validate_ip_address "$BRIDGE_NAME" "10.0.0"
-validate_vlan "$VLAN_NAME" "$VLAN_ID" "$BRIDGE_NAME"
+validate_dhcp "$DHCP_SERVER_NAME" "$BRIDGE_NAME" "$DHCP_POOL_NAME"
+validate_dns "$DNS_UPSTREAM"
 echo ""
 
 echo "=========================================="
@@ -690,15 +765,24 @@ echo "=========================================="
 echo ""
 echo "Summary:"
 echo "  Bridge: $BRIDGE_NAME"
-echo "  Ports: $PORT1, $PORT2"
+echo "  Ports: ${PORTS[*]}"
 echo "  IP: $IP_ADDRESS"
-echo "  VLAN: $VLAN_NAME (ID $VLAN_ID)"
+echo "  DHCP Pool: $DHCP_POOL_RANGE"
+echo "  DHCP Server: $DHCP_SERVER_NAME on $BRIDGE_NAME"
+echo "  DHCP Domain: $DHCP_DOMAIN"
+echo "  DNS Upstream: $DNS_UPSTREAM"
+echo "  Static Lease: $NUC_IP → $NUC_MAC (nux)"
+echo "  DNS Entries: nux.attic.local, attic.local → $NUC_IP"
 echo "  Backup: $BACKUP_FILE.rsc"
 echo ""
+echo "Testing:"
+echo "  1. Connect laptop to ether3-ether8"
+echo "  2. Should receive IP in range $DHCP_POOL_RANGE via DHCP"
+echo "  3. Test DNS: nslookup nux.attic.local $DHCP_DNS"
+echo "  4. NUC should receive $NUC_IP via DHCP (MAC-based static lease)"
+echo ""
 echo "Next steps:"
-echo "  1. Configure NUC with static IP in 10.0.0.0/24 range"
-echo "  2. Test connectivity: ping 10.0.0.1"
-echo "  3. Proceed to L1.1 (Infrastructure Survey)"
+echo "  1. Proceed to L1.1 (Infrastructure Survey)"
 ```
 
 ### Validation Workflow - Verify Expected State
@@ -723,8 +807,28 @@ echo "IP Addresses:"
 ssh_exec "/ip address print"
 echo ""
 
-echo "VLAN Interfaces:"
-ssh_exec "/interface vlan print"
+echo "DHCP Pools:"
+ssh_exec "/ip pool print"
+echo ""
+
+echo "DHCP Servers:"
+ssh_exec "/ip dhcp-server print"
+echo ""
+
+echo "DHCP Networks:"
+ssh_exec "/ip dhcp-server network print"
+echo ""
+
+echo "DHCP Leases:"
+ssh_exec "/ip dhcp-server lease print"
+echo ""
+
+echo "DNS Configuration:"
+ssh_exec "/ip dns print"
+echo ""
+
+echo "DNS Static Entries:"
+ssh_exec "/ip dns static print"
 echo ""
 
 echo "=================================="
@@ -879,19 +983,427 @@ validate_vlan "vlan-attic" "10" "bridge-attic"
 
 ---
 
-## Phase 2+ Extensions (Not Yet Implemented)
+## 6. DHCP Server Operations (Full)
+
+### dhcp-pool-list - List IP Pools
+
+**Command**:
+```bash
+ssh_exec "/ip pool print"
+```
+
+**Example Output**:
+```
+ 0    name="pool-attic" ranges=10.0.0.100-10.0.0.200
+```
+
+### dhcp-pool-create - Create IP Pool with Idempotency
+
+**Usage**:
+```bash
+dhcp_pool_create() {
+    local name="$1"
+    local ranges="$2"
+    local comment="${3:-}"
+
+    echo "[INFO] Creating DHCP pool: $name ($ranges)"
+
+    # Idempotency check
+    if idempotency_check "/ip pool print count-only where name=$name"; then
+        echo "[OK] DHCP pool $name already exists (idempotent)"
+        return 0
+    fi
+
+    # Build command
+    local cmd="/ip pool add name=$name ranges=$ranges"
+    [ -n "$comment" ] && cmd="$cmd comment=\"$comment\""
+
+    # Execute
+    execute_cmd "$cmd"
+
+    # Validate
+    if parse_exists "/ip pool print count-only where name=$name"; then
+        echo "[OK] DHCP pool $name created successfully"
+        return 0
+    else
+        echo "[ERROR] DHCP pool $name creation failed"
+        return 1
+    fi
+}
+
+# Example:
+dhcp_pool_create "pool-attic" "10.0.0.100-10.0.0.200" "Attic DHCP pool"
+```
+
+### dhcp-server-list - List DHCP Servers
+
+**Command**:
+```bash
+ssh_exec "/ip dhcp-server print"
+```
+
+**Example Output**:
+```
+ 0    name="dhcp-attic" interface=bridge-attic address-pool=pool-attic disabled=no
+```
+
+### dhcp-server-create - Create DHCP Server with Idempotency
+
+**Usage**:
+```bash
+dhcp_server_create() {
+    local name="$1"
+    local interface="$2"
+    local address_pool="$3"
+    local comment="${4:-}"
+
+    echo "[INFO] Creating DHCP server: $name on $interface"
+
+    # Idempotency check
+    if idempotency_check "/ip dhcp-server print count-only where name=$name"; then
+        echo "[OK] DHCP server $name already exists (idempotent)"
+        return 0
+    fi
+
+    # Build command
+    local cmd="/ip dhcp-server add name=$name interface=$interface address-pool=$address_pool disabled=no"
+    [ -n "$comment" ] && cmd="$cmd comment=\"$comment\""
+
+    # Execute
+    execute_cmd "$cmd"
+
+    # Validate
+    if parse_exists "/ip dhcp-server print count-only where name=$name"; then
+        echo "[OK] DHCP server $name created successfully"
+        return 0
+    else
+        echo "[ERROR] DHCP server $name creation failed"
+        return 1
+    fi
+}
+
+# Example:
+dhcp_server_create "dhcp-attic" "bridge-attic" "pool-attic" "Attic DHCP server"
+```
+
+### dhcp-network-list - List DHCP Networks
+
+**Command**:
+```bash
+ssh_exec "/ip dhcp-server network print"
+```
+
+**Example Output**:
+```
+ 0    address=10.0.0.0/24 gateway=10.0.0.1 dns-server=10.0.0.1 domain=attic.local
+```
+
+### dhcp-network-add - Add DHCP Network with Idempotency
+
+**Usage**:
+```bash
+dhcp_network_add() {
+    local address="$1"        # Format: 10.0.0.0/24
+    local gateway="$2"        # Format: 10.0.0.1
+    local dns_server="$3"     # Format: 10.0.0.1 or 1.1.1.1,8.8.8.8
+    local domain="${4:-}"     # Optional: attic.local
+    local comment="${5:-}"
+
+    echo "[INFO] Adding DHCP network: $address"
+
+    # Idempotency check
+    if idempotency_check "/ip dhcp-server network print count-only where address=$address"; then
+        echo "[OK] DHCP network $address already exists (idempotent)"
+        return 0
+    fi
+
+    # Build command
+    local cmd="/ip dhcp-server network add address=$address gateway=$gateway dns-server=$dns_server"
+    [ -n "$domain" ] && cmd="$cmd domain=$domain"
+    [ -n "$comment" ] && cmd="$cmd comment=\"$comment\""
+
+    # Execute
+    execute_cmd "$cmd"
+
+    # Validate
+    if parse_exists "/ip dhcp-server network print count-only where address=$address"; then
+        echo "[OK] DHCP network $address added successfully"
+        return 0
+    else
+        echo "[ERROR] DHCP network $address addition failed"
+        return 1
+    fi
+}
+
+# Example:
+dhcp_network_add "10.0.0.0/24" "10.0.0.1" "10.0.0.1" "attic.local" "Attic network DHCP config"
+```
+
+### dhcp-lease-list - List DHCP Leases
+
+**Command**:
+```bash
+# List all leases
+ssh_exec "/ip dhcp-server lease print"
+
+# List active leases only
+ssh_exec "/ip dhcp-server lease print where status=bound"
+```
+
+**Example Output**:
+```
+ 0    address=10.0.0.10 mac-address=AA:BB:CC:DD:EE:FF server=dhcp-attic status=bound host-name="nux"
+ 1    address=10.0.0.100 mac-address=11:22:33:44:55:66 server=dhcp-attic status=bound host-name="laptop"
+```
+
+### dhcp-lease-add - Add Static DHCP Lease with Idempotency
+
+**Usage**:
+```bash
+dhcp_lease_add() {
+    local address="$1"
+    local mac_address="$2"
+    local server="$3"
+    local comment="${4:-}"
+
+    echo "[INFO] Adding static DHCP lease: $address → $mac_address"
+
+    # Idempotency check (by address OR by MAC)
+    local exists_by_addr=$(ssh_exec "/ip dhcp-server lease print count-only where address=$address")
+    local exists_by_mac=$(ssh_exec "/ip dhcp-server lease print count-only where mac-address=$mac_address")
+
+    if [ "$exists_by_addr" != "0" ] || [ "$exists_by_mac" != "0" ]; then
+        echo "[OK] Static lease already exists (idempotent)"
+        return 0
+    fi
+
+    # Build command
+    local cmd="/ip dhcp-server lease add address=$address mac-address=$mac_address server=$server"
+    [ -n "$comment" ] && cmd="$cmd comment=\"$comment\""
+
+    # Execute
+    execute_cmd "$cmd"
+
+    # Validate
+    if parse_exists "/ip dhcp-server lease print count-only where address=$address"; then
+        echo "[OK] Static lease added successfully"
+        return 0
+    else
+        echo "[ERROR] Static lease addition failed"
+        return 1
+    fi
+}
+
+# Example:
+dhcp_lease_add "10.0.0.10" "AA:BB:CC:DD:EE:FF" "dhcp-attic" "nux static lease"
+```
+
+### dhcp-validate - Validate DHCP Configuration
+
+**Usage**:
+```bash
+validate_dhcp() {
+    local server_name="$1"
+    local expected_interface="$2"
+    local expected_pool="$3"
+
+    echo "[INFO] Validating DHCP server: $server_name"
+
+    # Check server exists
+    if ! parse_exists "/ip dhcp-server print count-only where name=$server_name"; then
+        echo "[ERROR] DHCP server $server_name not found"
+        return 1
+    fi
+
+    # Check server properties
+    local output=$(ssh_exec "/ip dhcp-server print detail where name=$server_name")
+    local actual_interface=$(parse_print_output "$output" "interface")
+    local actual_pool=$(parse_print_output "$output" "address-pool")
+
+    if [ "$actual_interface" != "$expected_interface" ]; then
+        echo "[ERROR] Interface mismatch: expected=$expected_interface, actual=$actual_interface"
+        return 1
+    fi
+
+    if [ "$actual_pool" != "$expected_pool" ]; then
+        echo "[ERROR] Pool mismatch: expected=$expected_pool, actual=$actual_pool"
+        return 1
+    fi
+
+    echo "[OK] DHCP server $server_name validated"
+    return 0
+}
+
+# Example:
+validate_dhcp "dhcp-attic" "bridge-attic" "pool-attic"
+```
+
+---
+
+## 7. DNS Configuration (Full)
+
+### dns-config-show - Show DNS Configuration
+
+**Command**:
+```bash
+ssh_exec "/ip dns print"
+```
+
+**Example Output**:
+```
+servers: 1.1.1.1,8.8.8.8
+allow-remote-requests: yes
+cache-size: 2048KiB
+cache-used: 45KiB
+```
+
+### dns-server-set - Configure DNS Servers with Idempotency
+
+**Usage**:
+```bash
+dns_server_set() {
+    local servers="$1"                  # Format: 1.1.1.1,8.8.8.8
+    local allow_remote_requests="${2:-yes}"
+
+    echo "[INFO] Configuring DNS servers: $servers"
+
+    # Query current settings
+    local current_servers=$(ssh_exec "/ip dns get servers" | tr -d '\n')
+    local current_allow=$(ssh_exec "/ip dns get allow-remote-requests" | tr -d '\n')
+
+    # Idempotency check
+    if [ "$current_servers" = "$servers" ] && [ "$current_allow" = "$allow_remote_requests" ]; then
+        echo "[OK] DNS already configured (idempotent)"
+        return 0
+    fi
+
+    # Execute
+    local cmd="/ip dns set servers=$servers allow-remote-requests=$allow_remote_requests"
+    execute_cmd "$cmd"
+
+    # Validate
+    local new_servers=$(ssh_exec "/ip dns get servers" | tr -d '\n')
+    if [ "$new_servers" = "$servers" ]; then
+        echo "[OK] DNS servers configured successfully"
+        return 0
+    else
+        echo "[ERROR] DNS server configuration failed"
+        return 1
+    fi
+}
+
+# Example:
+dns_server_set "1.1.1.1,8.8.8.8" "yes"
+```
+
+### dns-static-list - List Static DNS Entries
+
+**Command**:
+```bash
+ssh_exec "/ip dns static print"
+```
+
+**Example Output**:
+```
+ 0    name="nux.attic.local" address=10.0.0.10
+ 1    name="attic.local" address=10.0.0.10
+```
+
+### dns-static-add - Add Static DNS Entry with Idempotency
+
+**Usage**:
+```bash
+dns_static_add() {
+    local name="$1"
+    local address="$2"
+    local comment="${3:-}"
+
+    echo "[INFO] Adding static DNS entry: $name → $address"
+
+    # Idempotency check
+    if idempotency_check "/ip dns static print count-only where name=$name"; then
+        echo "[OK] DNS entry $name already exists (idempotent)"
+        return 0
+    fi
+
+    # Build command
+    local cmd="/ip dns static add name=$name address=$address"
+    [ -n "$comment" ] && cmd="$cmd comment=\"$comment\""
+
+    # Execute
+    execute_cmd "$cmd"
+
+    # Validate
+    if parse_exists "/ip dns static print count-only where name=$name"; then
+        echo "[OK] DNS entry $name added successfully"
+        return 0
+    else
+        echo "[ERROR] DNS entry $name addition failed"
+        return 1
+    fi
+}
+
+# Example:
+dns_static_add "nux.attic.local" "10.0.0.10" "Attic server"
+dns_static_add "attic.local" "10.0.0.10" "Attic server alias"
+```
+
+### dns-static-remove - Remove Static DNS Entry (Utility)
+
+**Command**:
+```bash
+ssh_exec "/ip dns static remove [find where name=nux.attic.local]"
+```
+
+### dns-cache-list - List DNS Cache Entries
+
+**Command**:
+```bash
+ssh_exec "/ip dns cache print"
+```
+
+**Example Output**:
+```
+ 0    name="example.com" address=93.184.216.34 ttl=5m
+ 1    name="nux.attic.local" address=10.0.0.10 static=yes
+```
+
+### dns-validate - Validate DNS Configuration
+
+**Usage**:
+```bash
+validate_dns() {
+    local expected_upstream="$1"  # Format: 1.1.1.1,8.8.8.8
+
+    echo "[INFO] Validating DNS configuration"
+
+    # Query DNS settings
+    local actual_servers=$(ssh_exec "/ip dns get servers" | tr -d '\n')
+    local allow_remote=$(ssh_exec "/ip dns get allow-remote-requests" | tr -d '\n')
+
+    # Check upstream servers
+    if [ "$actual_servers" != "$expected_upstream" ]; then
+        echo "[WARNING] DNS servers mismatch: expected=$expected_upstream, actual=$actual_servers"
+    fi
+
+    # Check remote requests enabled
+    if [ "$allow_remote" != "yes" ]; then
+        echo "[WARNING] DNS allow-remote-requests is disabled (should be yes for DHCP clients)"
+    fi
+
+    echo "[OK] DNS configuration validated"
+    return 0
+}
+
+# Example:
+validate_dns "1.1.1.1,8.8.8.8"
+```
+
+---
+
+## Phase 2+ Extensions (Future - Not Yet Implemented)
 
 The following operations are designed but not yet implemented:
-
-### DHCP Server Operations
-- `dhcp-server-create` - Create DHCP server with pool
-- `dhcp-server-list` - List DHCP servers
-- `dhcp-lease-add` - Add static lease
-
-### DNS Configuration
-- `dns-server-set` - Configure upstream DNS
-- `dns-static-add` - Add static DNS entry
-- `dns-cache-list` - List DNS cache
 
 ### Advanced Bridge Features
 - `bridge-vlan-filtering-enable` - Enable VLAN-aware bridge

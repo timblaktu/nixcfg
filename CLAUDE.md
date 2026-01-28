@@ -356,6 +356,74 @@ which opencodemax opencodepro opencodework
 - Workflow: `.github/workflows/*.yml` (TUR fork)
 - Artifacts: `dists/stable/main/binary-all/` (gh-pages branch)
 
+---
+
+### ✅ **Plan 013: Mikrotik Management Skill Enhancement** (COMPLETED - 2026-01-27)
+
+**Branch**: `opencode`
+**Status**: ✅ Skill v2.0.0 complete with DHCP/DNS operations, ready for hardware deployment
+
+**Objective**: Extend mikrotik-management skill to support complete L1.0 network configuration including DHCP server and DNS configuration.
+
+**Completed Work**:
+- ✅ Extended skill with DHCP server operations (6 functions):
+  - `dhcp_pool_create()` - IP pool management
+  - `dhcp_server_create()` - DHCP server instances
+  - `dhcp_network_add()` - Network parameters (gateway, DNS, domain)
+  - `dhcp_lease_add()` - Static MAC→IP bindings
+  - `validate_dhcp()` - Configuration validation
+- ✅ Extended skill with DNS configuration operations (6 functions):
+  - `dns_server_set()` - Upstream DNS servers with idempotency
+  - `dns_static_add()` - Hostname→IP static entries
+  - `dns_cache_list()` - Cache inspection
+  - `validate_dns()` - Configuration validation
+- ✅ Updated L1.0 complete workflow to match user requirements:
+  - 8-port bridge (ether1-ether8) vs original 2-port design
+  - DHCP pool 10.0.0.100-200 with domain `attic.local`
+  - DNS upstream 1.1.1.1, 8.8.8.8
+  - Static lease for NUC (10.0.0.10 via MAC)
+  - Static DNS entries: `nux.attic.local` → 10.0.0.10
+  - 12-step automated workflow with validation
+- ✅ Updated validation workflow to include DHCP/DNS status
+- ✅ Created comprehensive L1.0 implementation plan (`.claude/user-plans/013-L1.0-implementation-plan.md`)
+
+**Technical Details**:
+- All operations include idempotency checks (safe to re-run)
+- Configuration backup before changes
+- Validation after each step
+- Dry-run mode support
+- Consistent error handling and output parsing
+
+**Files Modified**:
+- `home/modules/claude-code/skills/mikrotik-management/SKILL.md` - Extended sections 6-7, updated workflow
+- `.claude/user-plans/013-distributed-nix-binary-caching.md` - Updated L1.0 status to READY
+- `.claude/user-plans/013-L1.0-implementation-plan.md` - Complete deployment guide (local, gitignored)
+
+**Network Configuration** (L1.0 ready to deploy):
+```yaml
+Bridge: bridge-attic (flat, no VLAN tagging)
+Ports: ether1-ether8
+Gateway: 10.0.0.1/24
+DHCP Pool: 10.0.0.100-200
+DHCP Domain: attic.local
+DNS Upstream: 1.1.1.1, 8.8.8.8
+NUC Static Lease: 10.0.0.10 (MAC-based)
+DNS Entries: nux.attic.local, attic.local → 10.0.0.10
+```
+
+**Skill Version**: 2.0.0 (Phase 1 complete - bridge, ports, IP, DHCP, DNS)
+
+**Next Steps**:
+- **Hardware Deployment**: Execute L1.0 workflow when Mikrotik switch is accessible
+- **Status Command**: Add compact status printing capability (slash command or skill function) - PENDING NEXT SESSION
+
+**Key Files**:
+- Skill: `home/modules/claude-code/skills/mikrotik-management/SKILL.md:606-778` (L1.0 complete workflow)
+- Plan: `.claude/user-plans/013-distributed-nix-binary-caching.md`
+- Implementation: `.claude/user-plans/013-L1.0-implementation-plan.md` (local only)
+
+---
+
 ### 🔧 **Pending Tasks**
 
 #### ✅ **OpenCode Vision Support Configuration** (COMPLETED - 2026-01-20)

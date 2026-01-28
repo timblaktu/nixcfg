@@ -455,13 +455,15 @@ Example reset note format:
   - Decision: Skip until network abstraction work provides clarity
 - **Test Baseline Philosophy**: Layer 4+ tests timeout/broken anyway - don't protect broken tests
 - **ISAR K3s test image**: Must use `kas/test-k3s-overlay.yml` (includes nixos-test-backdoor)
-- **ISAR k3s-service-starts SKIPPED (2026-01-26)**: Test fails due to systemd boot blocking
-  - Systemd boot has 41+ pending jobs even with `systemd-networkd-wait-online.service` masked
-  - k3s-server.service job gets CANCELED (not failed) - entire boot transaction blocked
-  - Image-level mask is in place (`/etc/systemd/system/systemd-networkd-wait-online.service -> /dev/null`)
-  - **Lesson learned**: Should have used test-level fixes (kernel cmdline, QEMU args) instead of modifying image
-  - **Files modified**: `isar-k3s-image.inc` (added `mask_systemd_wait_online_for_test()`), `nix/isar-artifacts.nix` (updated hash)
-  - **Proper fix (later)**: Use `systemd.mask=service-name` kernel parameter at test time, not image build time
+- **ISAR k3s-service-starts ROOT CAUSE IDENTIFIED (2026-01-27)**: fstab device naming mismatch
+  - **Symptom**: Systemd boot stuck with 44+ pending jobs, `dev-sda1.device` in "running" state forever
+  - **Root cause**: `/etc/fstab` contains `/dev/sda1 /boot vfat defaults 0 0` but QEMU virtio disk is `/dev/vda1`
+  - Device `dev-sda1.device` waits forever → blocks `boot.mount` → blocks `local-fs.target` → blocks entire boot
+  - Root partition already uses UUID correctly: `UUID=... / ext4 defaults 0 0`
+  - **Previous workaround was a red herring**: Masking `systemd-networkd-wait-online.service` had no effect
+  - **Fix required**: Change WIC/fstab generation to use `PARTUUID=` or `PARTLABEL=` instead of `/dev/sda1`
+  - **Location to fix**: ISAR WIC kickstart files or base-files recipe
+  - **Plan 013 task I2**: Identify WIC fstab source and apply PARTUUID fix
 - **NixOS k3s-cluster-* tests DEFERRED (2026-01-27)**: Firewall bug blocks multi-node cluster formation
   - Port 6443 works on localhost but blocked from eth1 (`refused connection: IN=eth1 ... DPT=6443`)
   - serverFirewall.allowedTCPPorts includes 6443 but traffic still blocked
