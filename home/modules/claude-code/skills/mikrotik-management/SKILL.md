@@ -5,36 +5,54 @@ description: Automate Mikrotik RouterOS configuration for VLANs, bridges, ports,
 
 # Mikrotik RouterOS Configuration Management Skill
 
-**Version**: 2.0.0 (Phase 1 Complete + DHCP/DNS)
+**Version**: 2.1.0 (Configuration Management Complete)
 **Target**: Mikrotik CRS326-24G-2S+ Switch
 **RouterOS Version**: 7.x
 **Connection**: SSH to 192.168.88.1 (admin with blank password)
-**Last Updated**: 2026-01-27
+**Last Updated**: 2026-01-28
 
 ## Overview
 
 This skill manages Mikrotik RouterOS switch configuration via SSH CLI commands. It provides structured operations for configuring bridges, VLANs, ports, IP addresses, DHCP servers, and DNS with safety features including dry-run mode, idempotency checks, and configuration backups.
 
-**Phase 1 Capabilities** (Current - v2.0.0):
+**Current Capabilities** (v2.1.0):
+
+**Infrastructure Operations**:
 - Interface validation (read-only)
 - Bridge management (full CRUD)
 - Bridge port assignment (full CRUD)
 - IP address management (full CRUD)
 - VLAN interface creation (basic)
-- **DHCP server management (full)** - NEW in v2.0.0
+
+**Service Configuration**:
+- DHCP server management (full)
   - IP pool creation
   - DHCP server configuration
   - DHCP network parameters
   - Static lease assignment
-- **DNS configuration (full)** - NEW in v2.0.0
+- DNS configuration (full)
   - Upstream DNS servers
   - Static DNS entries
   - DNS cache management
-- L1.0 complete workflow (8-port bridge + DHCP + DNS)
 
-**Phase 2+ Capabilities** (Future):
+**Configuration Management** - NEW in v2.1.0:
+- State inspection (detect L1.0 vs factory vs unknown)
+- Binary backups (device + local storage)
+- Text exports (version-controllable)
+- Factory reset with safety guardrails
+- Immutable deployment (reset → configure → validate)
+- Incremental changes (experimental mode)
+- Drift detection and validation
+
+**Deployment Workflows**:
+- L1.0 complete workflow (8-port bridge + DHCP + DNS)
+- Reset-and-configure automation
+- Configuration validation against specs
+
+**Future Capabilities** (Phase 2+):
 - Advanced VLAN filtering
 - Firewall rules
+- Partition management (dual-boot)
 
 ---
 
@@ -1628,6 +1646,397 @@ validate_dns() {
 
 # Example:
 validate_dns "1.1.1.1,8.8.8.8"
+```
+
+---
+
+## 8. Configuration State Management
+
+**Philosophy**: Treat configuration as ephemeral and version-controllable. RouterOS provides two mechanisms:
+- **Binary Backup** (`/system backup`): Device-specific, includes MAC addresses, fastest for recovery
+- **Text Export** (`/export`): Portable, human-readable, version-controllable, used for drift detection
+
+**Local Storage**: Backups/exports saved to `~/.config/mikrotik/<device-ip>/` for inspection and recovery.
+
+### config-backup - Create Binary Backup
+
+**Usage**:
+```bash
+config_backup() {
+    local backup_name="${1:-auto-$(date +%Y%m%d-%H%M%S)}"
+    local local_dir="$HOME/.config/mikrotik/192.168.88.1/backups"
+
+    echo "[INFO] Creating binary backup: $backup_name"
+
+    # Create backup on device
+    ssh_exec "/system backup save name=$backup_name"
+
+    # Wait for backup to complete
+    sleep 2
+
+    # Verify backup exists
+    local backup_file=$(ssh_exec "/file print where name~\"$backup_name.backup\"" | grep "$backup_name")
+    if [ -z "$backup_file" ]; then
+        echo "[ERROR] Backup creation failed"
+        return 1
+    fi
+
+    # Download to local storage
+    mkdir -p "$local_dir"
+    scp -o StrictHostKeyChecking=no "admin@192.168.88.1:$backup_name.backup" "$local_dir/"
+
+    echo "[OK] Backup saved to device flash and $local_dir/$backup_name.backup"
+    echo "[INFO] To restore: ssh admin@192.168.88.1 '/system backup load name=$backup_name'"
+    return 0
+}
+
+# Example:
+config_backup "pre-L1.0-deployment"
+```
+
+### config-export - Export Text Configuration
+
+**Usage**:
+```bash
+config_export() {
+    local export_name="${1:-config-$(date +%Y%m%d-%H%M%S)}"
+    local local_dir="$HOME/.config/mikrotik/192.168.88.1/exports"
+
+    echo "[INFO] Exporting configuration to text: $export_name"
+
+    # Export configuration (includes all /export output)
+    mkdir -p "$local_dir"
+    ssh_exec "/export" > "$local_dir/$export_name.rsc"
+
+    # Also export just the configuration we manage (for diff/validation)
+    {
+        echo "# Managed configuration export"
+        echo "# Bridge configuration"
+        ssh_exec "/interface bridge print detail"
+        echo -e "\n# Bridge ports"
+        ssh_exec "/interface bridge port print detail"
+        echo -e "\n# IP addresses"
+        ssh_exec "/ip address print detail"
+        echo -e "\n# DHCP pools"
+        ssh_exec "/ip pool print detail"
+        echo -e "\n# DHCP servers"
+        ssh_exec "/ip dhcp-server print detail"
+        echo -e "\n# DHCP networks"
+        ssh_exec "/ip dhcp-server network print detail"
+        echo -e "\n# DHCP leases"
+        ssh_exec "/ip dhcp-server lease print detail"
+        echo -e "\n# DNS settings"
+        ssh_exec "/ip dns print detail"
+        echo -e "\n# DNS static entries"
+        ssh_exec "/ip dns static print detail"
+    } > "$local_dir/$export_name.managed.txt"
+
+    echo "[OK] Full export: $local_dir/$export_name.rsc"
+    echo "[OK] Managed config: $local_dir/$export_name.managed.txt"
+    return 0
+}
+
+# Example:
+config_export "before-changes"
+```
+
+### config-inspect - Detect Current Configuration State
+
+**Usage**:
+```bash
+config_inspect() {
+    echo "[INFO] Inspecting current RouterOS configuration state"
+
+    # Check bridges
+    local bridges=$(ssh_exec "/interface bridge print count-only")
+    echo "[INFO] Bridges: $bridges"
+
+    # Check for L1.0 signature (bridge-attic on ether1-ether8)
+    local l10_bridge=$(ssh_exec "/interface bridge print where name=bridge-attic" | grep -c "bridge-attic")
+    local l10_ports=$(ssh_exec "/interface bridge port print where bridge=bridge-attic" | grep -c "ether")
+    local l10_dhcp=$(ssh_exec "/ip dhcp-server print where name=dhcp-attic" | grep -c "dhcp-attic")
+
+    if [ "$l10_bridge" -eq 1 ] && [ "$l10_ports" -eq 8 ] && [ "$l10_dhcp" -eq 1 ]; then
+        echo "[DETECTED] L1.0 configuration (bridge-attic + 8 ports + DHCP)"
+        return 0
+    fi
+
+    # Check for factory default (192.168.88.1 on ether1, no custom bridges)
+    local default_ip=$(ssh_exec "/ip address print where interface=ether1" | grep -c "192.168.88.1/24")
+    if [ "$bridges" -eq 0 ] && [ "$default_ip" -eq 1 ]; then
+        echo "[DETECTED] Factory default state"
+        return 1
+    fi
+
+    # Unknown configuration
+    echo "[DETECTED] Unknown/custom configuration"
+    echo "[INFO] Run config_export() to inspect current settings"
+    return 2
+}
+
+# Example:
+config_inspect
+```
+
+### config-restore - Restore from Binary Backup
+
+**Usage**:
+```bash
+config_restore() {
+    local backup_name="$1"
+
+    if [ -z "$backup_name" ]; then
+        echo "[ERROR] Usage: config_restore <backup_name>"
+        echo "[INFO] Available backups:"
+        ssh_exec "/file print where name~\".backup\""
+        return 1
+    fi
+
+    echo "[WARNING] This will OVERWRITE current configuration and REBOOT the device"
+    echo "[INFO] Restoring from: $backup_name.backup"
+
+    if [ "$DRY_RUN" = "1" ]; then
+        echo "[DRY-RUN] Would execute: /system backup load name=$backup_name"
+        return 0
+    fi
+
+    # Restore and reboot
+    ssh_exec "/system backup load name=$backup_name"
+
+    echo "[OK] Restore initiated - device will reboot"
+    echo "[INFO] Wait 30-60 seconds before reconnecting"
+    return 0
+}
+
+# Example:
+config_restore "pre-L1.0-deployment"
+```
+
+---
+
+## 9. Reset & Deploy Operations
+
+**Philosophy**: Immutable infrastructure - reset to known state, apply desired configuration, validate deployment.
+
+### reset-to-factory - Factory Reset with Options
+
+**Usage**:
+```bash
+reset_to_factory() {
+    local keep_users="${1:-no}"      # yes/no - keep user accounts
+    local no_defaults="${2:-no}"     # yes/no - blank config (no default)
+
+    echo "[WARNING] This will RESET configuration and REBOOT the device"
+    echo "[INFO] Options: keep-users=$keep_users, no-defaults=$no_defaults"
+
+    # Automatic backup before destructive operation
+    echo "[INFO] Creating safety backup..."
+    config_backup "pre-reset-$(date +%Y%m%d-%H%M%S)"
+
+    if [ "$DRY_RUN" = "1" ]; then
+        echo "[DRY-RUN] Would execute: /system reset-configuration keep-users=$keep_users no-defaults=$no_defaults"
+        return 0
+    fi
+
+    # Execute reset
+    ssh_exec "/system reset-configuration keep-users=$keep_users no-defaults=$no_defaults"
+
+    echo "[OK] Factory reset initiated - device will reboot"
+    echo "[INFO] Default credentials: admin / <blank password>"
+    echo "[INFO] Wait 30-60 seconds before reconnecting"
+    return 0
+}
+
+# Examples:
+reset_to_factory "no" "no"    # Full factory reset
+reset_to_factory "yes" "no"   # Factory reset, keep user accounts
+reset_to_factory "no" "yes"   # Blank slate (expert mode)
+```
+
+### reset-and-configure - Immutable Deployment Workflow
+
+**Usage**:
+```bash
+reset_and_configure() {
+    local spec="${1:-L1.0}"
+
+    echo "[INFO] Immutable deployment workflow for spec: $spec"
+
+    # Step 1: Inspect current state
+    echo -e "\n=== Step 1: Inspect Current State ==="
+    config_inspect
+
+    # Step 2: Backup current configuration
+    echo -e "\n=== Step 2: Safety Backup ==="
+    config_backup "pre-$spec-deploy-$(date +%Y%m%d-%H%M%S)"
+
+    # Step 3: Factory reset
+    echo -e "\n=== Step 3: Factory Reset ==="
+    reset_to_factory "no" "yes"  # Blank slate
+
+    echo "[INFO] Waiting 60 seconds for device to reboot..."
+    sleep 60
+
+    # Step 4: Apply configuration spec
+    echo -e "\n=== Step 4: Apply $spec Configuration ==="
+    case "$spec" in
+        "L1.0")
+            echo "[INFO] Applying L1.0 specification..."
+            # Call L1.0 workflow (section 6.7.1)
+            deploy_l10_complete
+            ;;
+        *)
+            echo "[ERROR] Unknown spec: $spec"
+            return 1
+            ;;
+    esac
+
+    # Step 5: Validate deployment
+    echo -e "\n=== Step 5: Validate Deployment ==="
+    validate_against_spec "$spec"
+
+    # Step 6: Final backup of deployed state
+    echo -e "\n=== Step 6: Final Backup ==="
+    config_backup "post-$spec-deploy-$(date +%Y%m%d-%H%M%S)"
+    config_export "$spec-deployed-$(date +%Y%m%d-%H%M%S)"
+
+    echo "[OK] Immutable deployment complete: $spec"
+    return 0
+}
+
+# Example:
+reset_and_configure "L1.0"
+```
+
+### apply-incremental-changes - Experimental Changes Without Reset
+
+**Usage**:
+```bash
+apply_incremental_changes() {
+    local description="$1"
+    shift
+    local commands=("$@")
+
+    echo "[INFO] Applying incremental changes: $description"
+    echo "[WARNING] This modifies existing configuration (not immutable)"
+
+    # Backup before changes
+    config_backup "pre-incremental-$(date +%Y%m%d-%H%M%S)"
+
+    if [ "$DRY_RUN" = "1" ]; then
+        echo "[DRY-RUN] Would execute ${#commands[@]} commands"
+        for cmd in "${commands[@]}"; do
+            echo "  - $cmd"
+        done
+        return 0
+    fi
+
+    # Execute commands
+    for cmd in "${commands[@]}"; do
+        echo "[EXEC] $cmd"
+        ssh_exec "$cmd"
+    done
+
+    echo "[OK] Incremental changes applied"
+    echo "[INFO] To roll back, use: config_restore <backup_name>"
+    return 0
+}
+
+# Example:
+apply_incremental_changes "add-static-route" \
+    "/ip route add dst-address=10.1.0.0/24 gateway=10.0.0.254"
+```
+
+---
+
+## 10. Validation & Drift Detection
+
+**Philosophy**: Continuously validate that deployed configuration matches specification.
+
+### validate-against-spec - Compare Actual vs Desired State
+
+**Usage**:
+```bash
+validate_against_spec() {
+    local spec="${1:-L1.0}"
+
+    echo "[INFO] Validating configuration against spec: $spec"
+
+    case "$spec" in
+        "L1.0")
+            echo "[INFO] Checking L1.0 specification compliance..."
+
+            # Bridge: bridge-attic exists
+            local bridge_exists=$(ssh_exec "/interface bridge print where name=bridge-attic" | grep -c "bridge-attic")
+            [ "$bridge_exists" -eq 1 ] || echo "[FAIL] Bridge 'bridge-attic' not found"
+
+            # Ports: ether1-ether8 assigned to bridge-attic
+            local port_count=$(ssh_exec "/interface bridge port print where bridge=bridge-attic" | grep -c "ether")
+            [ "$port_count" -eq 8 ] || echo "[FAIL] Expected 8 ports on bridge-attic, found $port_count"
+
+            # IP: 10.0.0.1/24 on bridge-attic
+            local ip_correct=$(ssh_exec "/ip address print where interface=bridge-attic" | grep -c "10.0.0.1/24")
+            [ "$ip_correct" -eq 1 ] || echo "[FAIL] IP address 10.0.0.1/24 not found on bridge-attic"
+
+            # DHCP pool: 10.0.0.100-200
+            validate_dhcp_pool "pool-attic" "10.0.0.100-10.0.0.200"
+
+            # DHCP server: dhcp-attic on bridge-attic
+            validate_dhcp_server "dhcp-attic" "bridge-attic" "pool-attic"
+
+            # DHCP network: gateway=10.0.0.1, domain=attic.local
+            validate_dhcp_network "10.0.0.0/24" "10.0.0.1" "attic.local"
+
+            # DNS: upstream 1.1.1.1, 8.8.8.8
+            validate_dns "1.1.1.1,8.8.8.8"
+
+            # DNS static: nux.attic.local → 10.0.0.10
+            local dns_static=$(ssh_exec "/ip dns static print where name=nux.attic.local" | grep -c "10.0.0.10")
+            [ "$dns_static" -eq 1 ] || echo "[FAIL] DNS static entry nux.attic.local → 10.0.0.10 not found"
+
+            echo "[OK] L1.0 specification validation complete"
+            return 0
+            ;;
+        *)
+            echo "[ERROR] Unknown spec: $spec"
+            return 1
+            ;;
+    esac
+}
+
+# Example:
+validate_against_spec "L1.0"
+```
+
+### config-drift-report - Detect Configuration Drift
+
+**Usage**:
+```bash
+config_drift_report() {
+    local reference_export="$1"  # Path to reference export file
+    local current_export="/tmp/current-config-$(date +%Y%m%d-%H%M%S).managed.txt"
+
+    echo "[INFO] Generating configuration drift report"
+
+    # Export current managed configuration
+    config_export "drift-check-$(date +%Y%m%d-%H%M%S)"
+
+    if [ ! -f "$reference_export" ]; then
+        echo "[ERROR] Reference export not found: $reference_export"
+        echo "[INFO] Create reference with: config_export <name>"
+        return 1
+    fi
+
+    # Compare configurations
+    echo "[INFO] Comparing current vs reference..."
+    diff -u "$reference_export" "$current_export" || true
+
+    echo "[INFO] Full drift report saved to: $current_export"
+    return 0
+}
+
+# Example:
+config_drift_report "$HOME/.config/mikrotik/192.168.88.1/exports/L1.0-deployed-baseline.managed.txt"
 ```
 
 ---
