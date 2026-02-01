@@ -53,6 +53,9 @@
     };
 
     nix-writers.url = "github:timblaktu/nix-writers";
+
+    # Documentation tooling
+    drawio-svg-sync.url = "github:timblaktu/drawio-svg-sync";
   };
 
   outputs = inputs@{ flake-parts, ... }:
@@ -74,7 +77,7 @@
       # Support these systems across all modules
       systems = [
         "x86_64-linux"
-        "aarch64-linux"  # For Termux on Android
+        "aarch64-linux" # For Termux on Android
       ];
 
       # Per-system configuration
