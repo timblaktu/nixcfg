@@ -434,7 +434,7 @@ DNS Entries: nux.attic.local, attic.local → 10.0.0.10
 **Commits**:
 - `4c02117` - Fix YAML frontmatter for skill registration
 - `94fcc2e` - Add configuration management (sections 8-10, +416 lines)
-- `[pending]` - Add local configuration design (section 11, +469 lines)
+- `4a3f1f9` - Add local configuration design (section 11, +469 lines)
 
 **Next Steps**:
 1. Run `home-manager switch` to deploy skill v2.2.0
