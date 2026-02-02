@@ -489,21 +489,27 @@ modalities = {
 
 ---
 
-### 🔧 **DrawIO/Diagram Skill WSL2 Fix** (ACTIVE - 2026-02-02)
+### ✅ **DrawIO/Diagram Skill WSL2 Fix** (RESOLVED - 2026-02-02)
 
-**Branch**: `opencode` (nixcfg), work in `~/src/drawio-svg-sync`
-**Status**: Root cause identified, fix planned
+**Branch**: `wsl2-fix` in `~/src/drawio-svg-sync`
+**Status**: COMPLETE - root cause was invalid test fixtures, NOT a drawio/WSL2/GPU issue
 
-**Problem**: `drawio-svg-sync` fails in WSL2 because `drawio-headless` unconditionally uses Xvfb, which can't create sockets in WSL2's `/tmp/.X11-unix`.
+**Root Cause**: Test fixtures contained invalid compressed data. Draw.io compression format is `URL encode → raw deflate → Base64`. The fixtures were created with invalid/corrupted compression.
 
-**Solution**: Bypass `drawio-headless`, use `drawio` directly with smart display detection:
-- If `DISPLAY` is set and xdpyinfo works → use drawio directly (works with WSLg)
-- If no display → fall back to xvfb-run
+**Resolution** (commit `2764f26`):
+- Regenerated all test fixtures with valid draw.io compression
+- Added `scripts/regenerate-fixtures.py` for future fixture creation
+- Smart display detection (commit `8cd5e88`) still provides WSLg optimization
 
-**Proof of Concept PASSED**: Direct `drawio -x -f svg` with `DISPLAY=:0` renders successfully.
+**Key Finding**: GPU/Vulkan warnings in WSL2 are **cosmetic** - exports succeed despite errors.
 
-**Plan**: `~/src/drawio-svg-sync/PLAN-WSL2-FIX.md`
-**Related**: nixcfg Plan 016 (diagram skill) blocked until this is fixed.
+**Future Work** (in drawio-svg-sync repo):
+- TASK:FUTURE-1: Add fixture validation in CI
+- TASK:FUTURE-2: Document compression format
+- TASK:FUTURE-3: Add real-file round-trip tests
+- TASK:FUTURE-4: Add compression validation function
+
+**Related**: nixcfg Plan 016 (diagram skill) is now UNBLOCKED.
 
 ---
 
