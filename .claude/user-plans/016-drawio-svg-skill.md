@@ -57,6 +57,8 @@ This skill enables Claude to work autonomously with diagrams using the appropria
 | D1 | Add skill to skills.nix builtinSkillDefs | `TASK:COMPLETE` | Skill registered as built-in |
 | D2 | Test skill deployment via home-manager | `TASK:COMPLETE` | Skill appears in Claude Code after switch |
 | D3 | Verify skill invocation works | `TASK:PENDING` | `/drawio-svg-editor` or similar triggers skill |
+| **D-WSL** | **WSL2 Compatibility (BLOCKING)** | | |
+| D-WSL.1 | Fix drawio-svg-sync for WSL2 | `TASK:IN_PROGRESS` | See `~/src/drawio-svg-sync/PLAN-WSL2-FIX.md` |
 | **E** | **Validation & Documentation** | | |
 | E1 | Test: Create diagram from scratch | `TASK:PENDING` | New diagram renders correctly |
 | E2 | Test: Edit existing diagram | `TASK:PENDING` | Modifications preserve integrity |
@@ -1931,3 +1933,42 @@ Per user protocol, each task is a natural stopping point:
 - **Plan 015**: drawio-svg-sync tooling (COMPLETE)
 - **n3x Plan 019 C0**: Diagram approach decision (COMPLETE)
 - **Existing Skills**: `adr-writer`, `mikrotik-management` (patterns to follow)
+
+---
+
+## WSL2 Compatibility Issue (2026-02-02)
+
+### Problem Discovery
+
+The diagram skill was tested in WSL2 (NixOS distro) and DrawIO rendering failed completely:
+- Error: `Rendering: diagram.drawio.svg ... failed`
+- Mermaid diagrams work correctly
+
+### Root Cause
+
+`drawio-svg-sync` uses `drawio-headless` which unconditionally invokes `xvfb-run`:
+1. Xvfb tries to create sockets in `/tmp/.X11-unix`
+2. WSL2 has permission issues with socket creation in that directory
+3. Xvfb fails, drawio never starts, rendering fails silently
+
+**The Irony**: WSLg already provides a working X server at `DISPLAY=:0`, but drawio-headless ignores it.
+
+### Solution
+
+Bypass `drawio-headless` entirely. Use `drawio` directly with smart display detection:
+- If `DISPLAY` is set and works → use drawio directly
+- If no display → fall back to xvfb-run
+
+### Proof of Concept
+
+Direct DrawIO with WSLg works:
+```bash
+DISPLAY=:0 XDG_CONFIG_HOME=$(mktemp -d) drawio -x -f svg -o out.svg in.drawio.svg
+# SUCCESS - GPU warnings are cosmetic, SVG renders correctly
+```
+
+### Implementation
+
+Work tracked in: `~/src/drawio-svg-sync/PLAN-WSL2-FIX.md`
+
+This is a BLOCKING issue for validation tasks E1-E4.

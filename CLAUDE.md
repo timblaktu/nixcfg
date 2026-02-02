@@ -489,6 +489,24 @@ modalities = {
 
 ---
 
+### 🔧 **DrawIO/Diagram Skill WSL2 Fix** (ACTIVE - 2026-02-02)
+
+**Branch**: `opencode` (nixcfg), work in `~/src/drawio-svg-sync`
+**Status**: Root cause identified, fix planned
+
+**Problem**: `drawio-svg-sync` fails in WSL2 because `drawio-headless` unconditionally uses Xvfb, which can't create sockets in WSL2's `/tmp/.X11-unix`.
+
+**Solution**: Bypass `drawio-headless`, use `drawio` directly with smart display detection:
+- If `DISPLAY` is set and xdpyinfo works → use drawio directly (works with WSLg)
+- If no display → fall back to xvfb-run
+
+**Proof of Concept PASSED**: Direct `drawio -x -f svg` with `DISPLAY=:0` renders successfully.
+
+**Plan**: `~/src/drawio-svg-sync/PLAN-WSL2-FIX.md`
+**Related**: nixcfg Plan 016 (diagram skill) blocked until this is fixed.
+
+---
+
 ### 🚧 **Deferred Tasks**
 
 #### **Fork Development Work** (DEFERRED)
