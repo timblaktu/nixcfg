@@ -47,6 +47,14 @@ let
         "commands/README.md" = ./skills/mikrotik-management/commands/README.md;
       };
     };
+    diagram = {
+      name = "diagram";
+      description = "Create, edit, and convert diagrams. Auto-selects format: Mermaid for simple flows/trees, DrawIO for complex architecture/comparisons. Supports .drawio, .drawio.svg, Mermaid, and ASCII input. Use for architecture diagrams, flowcharts, visualizations, or any diagram task.";
+      files = {
+        "SKILL.md" = ./skills/diagram/SKILL.md;
+        "REFERENCE.md" = ./skills/diagram/REFERENCE.md;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -150,6 +158,15 @@ in
         description = ''
           Enable the Mikrotik RouterOS management skill for network infrastructure configuration.
           Automates switch configuration including VLANs, bridges, ports, and IP addressing.
+        '';
+      };
+      diagram = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the diagram creation and editing skill.
+          Auto-selects Mermaid for simple diagrams, DrawIO for complex architecture.
+          Supports .drawio, .drawio.svg, Mermaid, and ASCII input formats.
         '';
       };
     };

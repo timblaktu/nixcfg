@@ -54,7 +54,7 @@ This skill enables Claude to work autonomously with diagrams using the appropria
 | C3 | Add rendering workflow integration | `TASK:COMPLETE` | drawio-svg-sync invocation, verification steps |
 | C4 | Create REFERENCE.md with XML details | `TASK:COMPLETE` | Deep mxGraphModel reference documentation |
 | **D** | **Nix Module Integration** | | |
-| D1 | Add skill to skills.nix builtinSkillDefs | `TASK:PENDING` | Skill registered as built-in |
+| D1 | Add skill to skills.nix builtinSkillDefs | `TASK:COMPLETE` | Skill registered as built-in |
 | D2 | Test skill deployment via home-manager | `TASK:PENDING` | Skill appears in Claude Code after switch |
 | D3 | Verify skill invocation works | `TASK:PENDING` | `/drawio-svg-editor` or similar triggers skill |
 | **E** | **Validation & Documentation** | | |
