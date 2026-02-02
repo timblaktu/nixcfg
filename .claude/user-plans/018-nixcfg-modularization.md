@@ -24,7 +24,7 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | 0.2 | Extraction priorities | `TASK:COMPLETE` | 2026-02-01 |
 | 0.3 | Architecture decision | `TASK:COMPLETE` | 2026-02-01 |
 | — | **SESSION BOUNDARY** | | |
-| 0.4 | Naming conventions | `TASK:PENDING` | |
+| 0.4 | Naming conventions | `TASK:COMPLETE` | 2026-02-01 |
 | 0.5 | Design sign-off | `TASK:PENDING` | |
 | — | **SESSION BOUNDARY** | | |
 | **1** | **Foundation** | | |
@@ -270,7 +270,7 @@ github.com/timblaktu/nix-ai-dev/
 
 ### Task 0.4: Establish Naming Conventions and Namespaces
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-01)
 
 **Purpose**: Define consistent naming for extracted components.
 
@@ -279,22 +279,120 @@ github.com/timblaktu/nix-ai-dev/
 - `programs.opencode.*` (shadows upstream)
 - `homeBase.*` (personal config options)
 
-**Questions**:
+**Decision Summary**:
 
-1. **Should extracted modules use different namespaces?**
-   - Keep `programs.claude-code` (requires disabledModules in consumer)?
-   - Use `programs.claude-code-enhanced` or `tim.claude-code`?
-   - Follow upstream conventions?
+#### Q1: Module Namespaces
 
-2. **Library function naming?**
-   - `lib.mkClaudeWrapper` vs `lib.claude.mkWrapper` vs `claude-lib.mkWrapper`?
+**Choice**: Keep `programs.claude-code` and `programs.opencode` (shadow upstream)
 
-3. **Flake output naming?**
-   - `homeManagerModules.claude-code`?
-   - `lib.claude-code`?
-   - `overlays.claude-code`?
+**Rationale**:
+- Upstream compatibility: consumers can switch between our module and upstream easily
+- Option familiarity: users already know `programs.claude-code.enable = true`
+- Superset design: our module provides ALL upstream options plus enhancements
+- Documentation: upstream docs still apply for basic usage
 
-**Deliverable**: Naming convention document
+**Trade-off Accepted**:
+- Consumers MUST use `disabledModules` to shadow upstream
+- Our module docs must explain this clearly
+- We commit to maintaining option compatibility with upstream
+
+**Consumer Pattern**:
+```nix
+# Consumer's home.nix
+{ ... }: {
+  disabledModules = [ "programs/claude-code.nix" ];
+  imports = [ inputs.ai-dev.homeManagerModules.claude-code ];
+
+  programs.claude-code = {
+    enable = true;
+    accounts.default = { ... };  # Our extension
+  };
+}
+```
+
+#### Q2: Library Function Naming
+
+**Choice**: `lib.ai-dev.*` namespace with descriptive function names
+
+**Structure**:
+```nix
+lib.ai-dev = {
+  # MCP server helpers
+  mkMcpServer = { ... }: { ... };
+  mcpServers = {
+    nixos = mkMcpServer { ... };
+    context7 = mkMcpServer { ... };
+    sequentialThinking = mkMcpServer { ... };
+    # ...
+  };
+
+  # Wrapper helpers
+  mkClaudeWrapper = { ... }: { ... };
+  mkOpenCodeWrapper = { ... }: { ... };
+
+  # Secrets helpers (P3)
+  secrets = {
+    mkRbwCommand = { ... }: { ... };
+    mkSopsSecret = { ... }: { ... };
+  };
+};
+```
+
+**Rationale**:
+- `ai-dev` matches repo name (nix-ai-dev)
+- Flat namespace is simpler than deeply nested (`lib.claude.mcp.mkServer`)
+- Descriptive function names (`mkClaudeWrapper` not just `mkWrapper`)
+- Grouped by concern (`mcpServers.*`, `secrets.*`)
+
+#### Q3: Flake Output Naming
+
+**Chosen Structure**:
+```nix
+{
+  # Follows home-manager convention
+  homeManagerModules = {
+    claude-code = ./modules/home-manager/claude-code;
+    opencode = ./modules/home-manager/opencode;
+    default = self.homeManagerModules.claude-code;
+  };
+
+  # Library under flake lib output
+  lib.ai-dev = { ... };  # NOT lib.claude-code
+
+  # Overlay for any custom packages
+  overlays.default = final: prev: { ... };
+
+  # Templates for beginners
+  templates = {
+    minimal = { path = ./templates/minimal; description = "Library-only usage"; };
+    home-manager = { path = ./templates/home-manager; description = "Full HM module"; };
+  };
+}
+```
+
+**Rationale**:
+- `homeManagerModules` matches home-manager flake convention
+- `lib.ai-dev` avoids conflict with `lib.claude-code` (could be confusing)
+- `overlays.default` is standard pattern
+- Templates provide copy-paste starting points
+
+#### Internal Naming Conventions
+
+**File Naming**:
+- Kebab-case for directories: `home-manager/`, `mcp-servers/`
+- Kebab-case for files: `claude-code.nix`, `mcp-server-defs.nix`
+- Exception: `lib.nix`, `default.nix` (Nix conventions)
+
+**Option Naming**:
+- camelCase for option names: `enableMcpIntegration`, `defaultModel`
+- Matches upstream home-manager patterns
+- Matches current nixcfg patterns
+
+**Internal Variable Naming**:
+- `cfg = config.programs.claude-code` (standard pattern)
+- Descriptive let bindings: `mcpServerConfig`, `wrapperScript`
+
+**Deliverable**: ✅ Naming convention document complete
 
 ---
 
@@ -305,11 +403,25 @@ github.com/timblaktu/nix-ai-dev/
 **Purpose**: Confirm design decisions before implementation.
 
 **Sign-off Checklist**:
-- [ ] Audience and scope defined (0.1)
-- [ ] Extraction priorities set (0.2)
-- [ ] Architecture chosen (0.3)
-- [ ] Naming conventions established (0.4)
+- [x] Audience and scope defined (0.1)
+- [x] Extraction priorities set (0.2)
+- [x] Architecture chosen (0.3)
+- [x] Naming conventions established (0.4)
 - [ ] User approves proceeding to Phase 1
+
+**Design Summary for Review**:
+
+| Decision | Choice |
+|----------|--------|
+| **Target Audience** | Work teammates (Nix beginners) + eventual open source |
+| **Repo Structure** | Single flake: `github.com/timblaktu/nix-ai-dev` |
+| **P0 Extraction** | MCP server defs + wrapper library |
+| **P1 Extraction** | Claude Code + OpenCode modules |
+| **Module Namespace** | `programs.claude-code` (shadow upstream with disabledModules) |
+| **Library Namespace** | `lib.ai-dev.*` |
+| **Flake Outputs** | `homeManagerModules.{claude-code,opencode}`, `lib.ai-dev`, `templates.*` |
+
+**User Action Required**: Review decisions above and confirm to proceed to Phase 1 (Foundation).
 
 ---
 
