@@ -585,7 +585,21 @@ When `parent="other-id"` (container): coordinates are **RELATIVE** to parent.
 
 ## Section 8: Rendering Workflow
 
-After creating or editing the mxGraphModel XML, you MUST render it:
+After creating or editing the mxGraphModel XML, you MUST render it to update the visible SVG body.
+
+### Pre-Render Validation Checklist
+
+Before running the renderer, verify your XML:
+
+- [ ] Cell 0 exists with no `parent` attribute
+- [ ] Cell 1 exists with `parent="0"`
+- [ ] All element IDs are unique
+- [ ] All edges have valid `source`/`target` IDs (or explicit sourcePoint/targetPoint)
+- [ ] All shapes have `vertex="1" parent="1"`
+- [ ] All edges have `edge="1" parent="1"`
+- [ ] All shapes have `<mxGeometry>` with x, y, width, height
+- [ ] The `content` attribute is properly HTML-entity-encoded
+- [ ] No unclosed XML tags
 
 ### Step 1: Create/Edit the .drawio.svg File
 
@@ -597,36 +611,241 @@ Write the complete SVG with encoded mxGraphModel in the `content` attribute.
 nix run 'github:timblaktu/drawio-svg-sync' -- path/to/diagram.drawio.svg
 ```
 
-This:
+**What drawio-svg-sync does**:
 1. Reads the mxGraphModel from `content` attribute
-2. Launches headless DrawIO to render the diagram
-3. Replaces the SVG body with rendered graphics
-4. Preserves the `content` attribute (keeps it editable)
+2. Launches headless DrawIO in a Docker container
+3. Renders the diagram to SVG elements
+4. Replaces the SVG body with rendered graphics
+5. Preserves the `content` attribute (keeps it editable in DrawIO)
 
-### Step 3: Verify Success
+**Expected success output**:
+```
+Processing: path/to/diagram.drawio.svg
+Rendering diagram...
+Successfully updated SVG body
+```
+
+**Expected runtime**: 5-15 seconds (Docker container startup + rendering)
+
+### Step 3: Verify Rendering Success
+
+#### Quick Verification
 
 ```bash
-# Check file was modified
+# Check file was modified (mtime should be recent)
 ls -la path/to/diagram.drawio.svg
 
-# View in browser (optional)
-xdg-open path/to/diagram.drawio.svg
+# Confirm SVG body was regenerated (should see actual shapes, not placeholder)
+rg '<rect |<path |<ellipse ' path/to/diagram.drawio.svg | head -5
 ```
 
-### Step 4: Commit
+**Success indicators**:
+- File modification time updated
+- SVG body contains `<rect>`, `<path>`, `<g>`, etc. (actual graphics)
+- Placeholder text ("Run drawio-svg-sync...") is gone
+
+#### Detailed Verification (Optional)
 
 ```bash
-git add path/to/diagram.drawio.svg
-git commit -m "Add/Update diagram: [description]"
+# View in browser to confirm visual correctness
+xdg-open path/to/diagram.drawio.svg
+
+# Check the file opens in DrawIO desktop (confirms content attribute valid)
+drawio path/to/diagram.drawio.svg
 ```
 
-### Error Handling
+### Post-Render Validation Checklist
 
-If drawio-svg-sync fails:
-- Check Docker is running (it uses containerized DrawIO)
-- Verify XML is valid (no unclosed tags)
-- Check cells 0 and 1 exist
-- Verify all IDs are unique
+After successful rendering:
+
+- [ ] File modification time updated
+- [ ] SVG body contains actual graphic elements (not placeholder)
+- [ ] Diagram displays correctly in browser
+- [ ] Diagram opens in DrawIO desktop without errors
+- [ ] Expected elements visible (shapes, connectors, labels)
+- [ ] Colors and styling match intent
+
+### Step 4: Git Workflow Integration
+
+#### Staging
+
+The `.drawio.svg` file is self-contained - it includes both:
+- The encoded mxGraphModel (source of truth, editable in DrawIO)
+- The rendered SVG body (visual representation)
+
+Stage the single file:
+```bash
+git add path/to/diagram.drawio.svg
+```
+
+**Important**: Never stage intermediate states. Only stage after successful rendering.
+
+#### Commit Message Conventions
+
+Follow this pattern for diagram commits:
+
+```bash
+# For new diagrams
+git commit -m "Add diagram: <what it shows>
+
+<Brief description of purpose/context>"
+
+# For diagram edits
+git commit -m "Update diagram: <what changed>
+
+<Why the change was made>"
+```
+
+**Examples**:
+```bash
+git commit -m "Add diagram: 3-tier architecture overview
+
+Shows Web, API, and Database layers with connectivity"
+
+git commit -m "Update diagram: rename 'Fetch' to 'Download' phase
+
+Aligns terminology with upstream documentation"
+
+git commit -m "Update diagram: add Cache component between API and Database
+
+Illustrates caching layer for performance discussion"
+```
+
+#### PR Description (if applicable)
+
+When diagram changes are part of a PR:
+1. Mention the diagram change in the PR summary
+2. Note what the diagram shows (GitHub/GitLab render .drawio.svg inline)
+3. If the change is visual-only, say so ("no functional changes")
+
+### Error Handling: Common Failures and Recovery
+
+#### Failure: Docker Not Running
+
+**Symptoms**:
+```
+Error: Cannot connect to Docker daemon
+Error: docker: command not found
+```
+
+**Recovery**:
+```bash
+# Start Docker
+sudo systemctl start docker
+
+# Or, if using Docker Desktop
+# Open Docker Desktop application
+
+# Retry
+nix run 'github:timblaktu/drawio-svg-sync' -- path/to/diagram.drawio.svg
+```
+
+#### Failure: Invalid XML in content Attribute
+
+**Symptoms**:
+```
+Error: Failed to parse mxGraphModel
+Error: XML parsing error at line X
+```
+
+**Recovery**:
+1. Decode the content attribute
+2. Validate XML (look for unclosed tags, mismatched quotes)
+3. Common issues:
+   - Unescaped `&` (should be `&amp;`)
+   - Unescaped `<` in label text (should be `&lt;`)
+   - Missing closing `</mxCell>`
+4. Fix the XML, re-encode, and retry
+
+#### Failure: Missing Required Cells
+
+**Symptoms**:
+```
+Error: Root cell not found
+Error: Default parent cell missing
+```
+
+**Recovery**:
+Ensure your mxGraphModel has the required structure:
+```xml
+<root>
+  <mxCell id="0"/>                    <!-- REQUIRED -->
+  <mxCell id="1" parent="0"/>         <!-- REQUIRED -->
+  <!-- Your shapes here -->
+</root>
+```
+
+#### Failure: Duplicate IDs
+
+**Symptoms**:
+- Diagram loads but elements overlap unexpectedly
+- Some elements don't appear
+- DrawIO shows warnings about duplicate IDs
+
+**Recovery**:
+```bash
+# Find duplicate IDs
+rg -o 'id="[^"]+"' path/to/diagram.drawio.svg | sort | uniq -d
+```
+Rename duplicates to unique values.
+
+#### Failure: Invalid Edge References
+
+**Symptoms**:
+- Edges don't appear
+- Edges appear disconnected (floating)
+
+**Recovery**:
+```bash
+# List all source/target references
+rg 'source="([^"]+)"|target="([^"]+)"' -o path/to/diagram.drawio.svg
+
+# List all shape IDs
+rg 'id="([^"]+)".*vertex="1"' -o path/to/diagram.drawio.svg
+```
+Ensure every `source` and `target` value matches an existing shape ID.
+
+#### Failure: Encoding Issues
+
+**Symptoms**:
+- File appears corrupted after editing
+- `content` attribute truncated
+- Special characters rendered incorrectly
+
+**Recovery**:
+Verify encoding is correct:
+- `<` → `&lt;`
+- `>` → `&gt;`
+- `"` → `&quot;`
+- `&` → `&amp;`
+- Newlines → `&#10;`
+
+Do NOT double-encode (e.g., `&amp;lt;` is wrong, should be `&lt;`).
+
+### Workflow Summary
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    RENDERING WORKFLOW                    │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  1. Edit mxGraphModel XML                               │
+│     └─► Pre-render checklist ✓                          │
+│                                                          │
+│  2. Re-encode content attribute                         │
+│     └─► HTML entities properly escaped                  │
+│                                                          │
+│  3. Run drawio-svg-sync                                 │
+│     └─► nix run 'github:timblaktu/drawio-svg-sync' -- FILE │
+│                                                          │
+│  4. Verify success                                      │
+│     └─► Post-render checklist ✓                         │
+│                                                          │
+│  5. Stage and commit                                    │
+│     └─► git add FILE && git commit -m "..."             │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
