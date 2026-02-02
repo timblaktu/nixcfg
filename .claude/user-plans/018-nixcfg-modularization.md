@@ -21,8 +21,8 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 |-------|------|--------|------|
 | **0** | **Design Discovery** | | |
 | 0.1 | Audience and scope | `TASK:COMPLETE` | 2026-02-01 |
-| 0.2 | Extraction priorities | `TASK:PENDING` | |
-| 0.3 | Architecture decision | `TASK:PENDING` | |
+| 0.2 | Extraction priorities | `TASK:COMPLETE` | 2026-02-01 |
+| 0.3 | Architecture decision | `TASK:COMPLETE` | 2026-02-01 |
 | — | **SESSION BOUNDARY** | | |
 | 0.4 | Naming conventions | `TASK:PENDING` | |
 | 0.5 | Design sign-off | `TASK:PENDING` | |
@@ -91,7 +91,7 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 
 ### Task 0.2: Catalog Extraction Candidates with Priorities
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-01)
 
 **Purpose**: Prioritize what to extract first based on Task 0.1 answers.
 
@@ -110,89 +110,161 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | AI instructions | `shared/ai-instructions.nix` | 3878 | LOW | LOW |
 | Skills | `claude-code/skills/` | ~5000 | LOW | MEDIUM |
 
-**Discussion Questions**:
+**Priority Decision** (based on Task 0.1: beginners, fresh start, want AI tools):
 
-1. **Which components have the highest teammate demand?**
-   - "I just want Claude Code working" → wrapper library + module
-   - "I want your dev shell" → dev-shells.nix
-   - "I want MCP servers" → mcp-server-defs.nix
+| Priority | Component | Rationale |
+|----------|-----------|-----------|
+| **P0** | MCP server definitions | Foundation for both Claude and OpenCode; teammates explicitly want this |
+| **P0** | Wrapper script library | Core building block; enables account switching without full module |
+| **P1** | Claude Code module | Primary AI tool; high teammate demand |
+| **P1** | OpenCode module | Alternative AI tool; shares MCP infrastructure |
+| **P2** | Dev shells | Nice-to-have; teammates can use simple `nix develop` without this |
+| **P3** | Secrets helpers | Only needed if using rbw/SOPS; beginners may use env vars instead |
+| **P3** | GitHub auth | Can be simplified; not core to AI workflow |
+| **SKIP** | AI instructions | Too personal; teammates should write their own CLAUDE.md |
+| **SKIP** | Skills | Too specialized (mikrotik, diagram); offer as opt-in examples |
+| **SKIP** | Test infrastructure | Internal; not needed by consumers |
 
-2. **What's the minimum viable extraction?**
-   - Could be just `lib.nix` functions exposed in a flake
-   - Or full modules with options
+**Minimum Viable Extraction (MVE)**:
+- P0 components only: MCP servers + wrapper library
+- Provides: `lib.mkMcpServer`, `lib.mkClaudeWrapper`, server definitions
+- Enables: basic Claude Code with MCP servers, without full module complexity
+- Complexity: LOW (library functions, no module options)
 
-3. **Are there components you explicitly DON'T want to share?**
-   - Personal CLAUDE.md content?
-   - Specific aliases/workflows?
+**Full Extraction Target**:
+- P0 + P1: MCP servers + wrapper library + Claude/OpenCode modules
+- Provides: `programs.claude-code.enable = true` experience
+- Enables: multi-account, hooks, statusline, all features
+- Complexity: MEDIUM (module options, but well-documented)
 
-**Deliverable**: Prioritized extraction list with rationale
+**Components NOT Shared**:
+- Personal CLAUDE.md content (ai-instructions.nix)
+- Custom skills (mikrotik-management, diagram)
+- hosts/* and secrets/* (obviously)
+- home/common/* (too personal: aliases, zsh config, etc.)
+
+**Deliverable**: ✅ Prioritized extraction list with rationale
 
 ---
 
 ### Task 0.3: Define Flake Architecture
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-01)
 
 **Purpose**: Decide HOW to organize extracted components.
 
-**Option A: Single Library Flake (Mono-Repo)**
+**Architecture Decision**: **Option A (Single Library Flake)** with modular internal structure
+
+**Rationale**:
+- Task 0.1 indicated Option C preference (public shared + private nixcfg)
+- However, splitting library vs modules into two repos adds coordination overhead
+- A single repo with good internal modularity achieves the same goals:
+  - Public shared repo for teammates
+  - Private nixcfg imports it as single flake input
+  - Beginners only need one import to learn
+
+**Chosen Structure**:
 
 ```
-github.com/timblaktu/nix-ai-tools/
-├── flake.nix
+github.com/timblaktu/nix-ai-dev/
+├── flake.nix                    # Main entry point
 ├── lib/
-│   ├── mcp-servers.nix
-│   ├── wrapper-scripts.nix
-│   └── secrets-helpers.nix
+│   ├── default.nix              # lib.ai-dev.* namespace
+│   ├── mcp-servers.nix          # mkMcpServer, server definitions
+│   └── wrappers.nix             # mkClaudeWrapper, account helpers
 ├── modules/
-│   ├── claude-code.nix
-│   └── opencode.nix
-└── templates/
-    └── minimal/
+│   ├── home-manager/
+│   │   ├── claude-code/         # programs.claude-code module
+│   │   └── opencode/            # programs.opencode module
+│   └── nixos/                   # Future: system-level modules
+├── templates/
+│   ├── minimal/                 # Just lib functions
+│   ├── home-manager/            # Full HM integration
+│   └── flake-parts/             # For existing flake-parts users
+├── examples/
+│   ├── simple-claude.nix        # Single account, basic config
+│   ├── multi-account.nix        # Max/Pro/Work pattern
+│   └── with-mcp-servers.nix     # Custom MCP server setup
+└── docs/
+    ├── getting-started.md
+    ├── customization.md
+    └── architecture.md
 ```
 
-**Pros**: Single import, versioned together, easier maintenance
-**Cons**: Monolithic, all-or-nothing adoption
+**Flake Outputs**:
 
-**Option B: Multiple Focused Flakes (Multi-Repo)**
+```nix
+{
+  # Library functions (no home-manager required)
+  lib.ai-dev = {
+    mkMcpServer = ...;
+    mkClaudeWrapper = ...;
+    mcpServers = { nixos = ...; context7 = ...; };
+  };
 
+  # Home Manager modules
+  homeManagerModules = {
+    claude-code = ./modules/home-manager/claude-code;
+    opencode = ./modules/home-manager/opencode;
+    default = { ... }: {
+      imports = [ self.homeManagerModules.claude-code ];
+    };
+  };
+
+  # Templates for new users
+  templates = {
+    minimal = { ... };
+    home-manager = { ... };
+    flake-parts = { ... };
+  };
+
+  # Overlay for custom packages
+  overlays.default = final: prev: { ... };
+}
 ```
-github.com/timblaktu/nix-mcp-servers/     # Just MCP definitions
-github.com/timblaktu/nix-claude-code/     # Claude module + lib
-github.com/timblaktu/nix-opencode/        # OpenCode module + lib
-github.com/timblaktu/nix-dev-shells/      # Dev shell templates
+
+**Consumer Usage Examples**:
+
+```nix
+# Minimal: just library functions
+{
+  inputs.ai-dev.url = "github:timblaktu/nix-ai-dev";
+  outputs = { ai-dev, ... }: {
+    # Use lib directly
+    myWrapper = ai-dev.lib.ai-dev.mkClaudeWrapper { ... };
+  };
+}
+
+# Full: Home Manager module
+{
+  inputs.ai-dev.url = "github:timblaktu/nix-ai-dev";
+  outputs = { ai-dev, home-manager, ... }: {
+    homeConfigurations.user = home-manager.lib.homeManagerConfiguration {
+      modules = [
+        ai-dev.homeManagerModules.claude-code
+        {
+          programs.claude-code.enable = true;
+          programs.claude-code.accounts.default = { ... };
+        }
+      ];
+    };
+  };
+}
 ```
 
-**Pros**: Pick-and-choose, independent versioning, smaller imports
-**Cons**: More repos to maintain, coordination overhead
+**Version Strategy**:
+- **Rolling** (always use main) for teammates during development
+- **Tags** for stable releases (v1.0.0, v1.1.0) when ready
+- **No nixpkgs coupling** - works with any nixpkgs version
 
-**Option C: Hybrid (Library + Modules Separate)**
+**Migration Path for nixcfg**:
+1. Create `github.com/timblaktu/nix-ai-dev` repo
+2. Extract P0 components (MCP servers, wrapper lib)
+3. Add as flake input to nixcfg: `ai-dev.url = "github:timblaktu/nix-ai-dev";`
+4. Refactor nixcfg to import from ai-dev instead of local paths
+5. Gradually move P1 components (modules)
 
-```
-github.com/timblaktu/nix-ai-lib/          # Shared library (MCP, secrets, helpers)
-github.com/timblaktu/nix-ai-modules/      # Home Manager modules (imports lib)
-```
-
-**Pros**: Lib can be used without home-manager, modules build on lib
-**Cons**: Two repos, version coordination
-
-**Discussion Questions**:
-
-1. **How do you prefer to manage shared code?**
-   - Single repo with everything?
-   - Multiple focused repos?
-   - Something else?
-
-2. **Do teammates need just library functions, or full modules?**
-   - Library: `lib.mkClaudeWrapper { ... }`
-   - Module: `programs.claude-code.enable = true;`
-
-3. **Version strategy?**
-   - Follow nixpkgs releases?
-   - Semantic versioning?
-   - Rolling (always use main)?
-
-**Deliverable**: Architecture decision with rationale
+**Deliverable**: ✅ Architecture decision with rationale
 
 ---
 
