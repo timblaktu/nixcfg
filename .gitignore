@@ -92,6 +92,7 @@ claude-runtime/.claude-*/commands/*/
 # Web session runtime (.claude/ in repo root)
 .claude/*
 !.claude/settings.json
+!.claude/user-plans/
 
 # Task automation runtime state
 .claude-task-logs/
