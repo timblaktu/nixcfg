@@ -58,7 +58,7 @@ This skill enables Claude to work autonomously with diagrams using the appropria
 | D2 | Test skill deployment via home-manager | `TASK:COMPLETE` | Skill appears in Claude Code after switch |
 | D3 | Verify skill invocation works | `TASK:PENDING` | `/drawio-svg-editor` or similar triggers skill |
 | **D-WSL** | **WSL2 Compatibility (BLOCKING)** | | |
-| D-WSL.1 | Fix drawio-svg-sync for WSL2 | `TASK:IN_PROGRESS` | See `~/src/drawio-svg-sync/PLAN-WSL2-FIX.md` |
+| D-WSL.1 | Fix drawio-svg-sync for WSL2 | `TASK:COMPLETE` | RESOLVED: Test fixtures had invalid compression, not a drawio/WSL2 issue |
 | **E** | **Validation & Documentation** | | |
 | E1 | Test: Create diagram from scratch | `TASK:PENDING` | New diagram renders correctly |
 | E2 | Test: Edit existing diagram | `TASK:PENDING` | Modifications preserve integrity |
@@ -1936,39 +1936,36 @@ Per user protocol, each task is a natural stopping point:
 
 ---
 
-## WSL2 Compatibility Issue (2026-02-02)
+## WSL2 Compatibility Issue (RESOLVED - 2026-02-02)
 
 ### Problem Discovery
 
 The diagram skill was tested in WSL2 (NixOS distro) and DrawIO rendering failed completely:
 - Error: `Rendering: diagram.drawio.svg ... failed`
-- Mermaid diagrams work correctly
 
-### Root Cause
+### Root Cause Analysis
 
-`drawio-svg-sync` uses `drawio-headless` which unconditionally invokes `xvfb-run`:
-1. Xvfb tries to create sockets in `/tmp/.X11-unix`
-2. WSL2 has permission issues with socket creation in that directory
-3. Xvfb fails, drawio never starts, rendering fails silently
+**Initial Hypothesis (INCORRECT)**: Xvfb socket issues, WSLg display detection, GPU/Vulkan failures.
 
-**The Irony**: WSLg already provides a working X server at `DISPLAY=:0`, but drawio-headless ignores it.
+**Actual Root Cause (CORRECT)**: Test fixtures in `drawio-svg-sync` contained **invalid compressed data**.
 
-### Solution
+Draw.io compression format is: `URL encode → raw deflate → Base64`
 
-Bypass `drawio-headless` entirely. Use `drawio` directly with smart display detection:
-- If `DISPLAY` is set and works → use drawio directly
-- If no display → fall back to xvfb-run
+The test fixtures were created with invalid/corrupted compression that drawio's export function could not parse.
 
-### Proof of Concept
+### Resolution (commit 2764f26 in drawio-svg-sync)
 
-Direct DrawIO with WSLg works:
-```bash
-DISPLAY=:0 XDG_CONFIG_HOME=$(mktemp -d) drawio -x -f svg -o out.svg in.drawio.svg
-# SUCCESS - GPU warnings are cosmetic, SVG renders correctly
+1. Regenerated all test fixtures with valid draw.io compression
+2. Added `scripts/regenerate-fixtures.py` for future fixture creation
+3. Smart display detection (commit 8cd5e88) still provides WSLg optimization
+
+### Key Finding
+
+**GPU/Vulkan warnings in WSL2 are COSMETIC** - exports succeed regardless of these errors:
+```
+[ERROR:viz_main_impl.cc:189] Exiting GPU process due to errors during initialization
 ```
 
-### Implementation
+### Status
 
-Work tracked in: `~/src/drawio-svg-sync/PLAN-WSL2-FIX.md`
-
-This is a BLOCKING issue for validation tasks E1-E4.
+**UNBLOCKED** - Validation tasks E1-E4 can now proceed.
