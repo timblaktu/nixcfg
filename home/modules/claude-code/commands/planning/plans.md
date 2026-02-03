@@ -9,16 +9,20 @@ Generate a high-level summary of all plans in this repository.
    - Status (look for `**Status**:` line)
    - Brief description (from title or first paragraph)
 
-3. Present as a concise markdown table with columns:
-   | Plan | Status | Description |
+3. **Detect terminal width**: `${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}`
 
-4. Use these status indicators:
-   - `Planning` or `Design` → show as-is
-   - `COMPLETE` or `TASK:COMPLETE` → show as "Complete"
-   - `PENDING` → show as "Pending"
-   - Partial completion → note which tasks done (e.g., "Tasks 1-2 done")
+4. Present as a markdown table that fits within the detected terminal width:
+   - Use abbreviated headers: `Plan | St | Desc`
+   - Truncate descriptions to fit (use `...`)
+   - If still too wide: drop Desc column, list descriptions below table
 
-5. After the table, briefly note:
+5. Use these status indicators (abbreviated):
+   - `Planning`/`Design` → `Plan`
+   - `COMPLETE`/`TASK:COMPLETE` → `Done`
+   - `PENDING` → `Pend`
+   - Partial → `1-2/5` (tasks done/total)
+
+6. After the table, briefly note:
    - Which plans are actively blocked or waiting
    - Any plans with remaining tasks that could be worked on
 

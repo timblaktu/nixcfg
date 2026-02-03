@@ -25,6 +25,42 @@
 - **Task summaries**: Be explicit about SCOPE, list ALL artifacts, state what was NOT done
 - **UPDATE MEMORY BEFORE SUMMARY** - update project memory first, then provide summary
 
+## Terminal-Width-Aware Output Formatting
+
+**CRITICAL: All markdown tables in chat responses MUST fit within the current terminal width.**
+
+**Width Detection** (check once per response needing tables):
+```bash
+${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}
+```
+
+**Decision Framework for Tables**:
+
+1. **Calculate available width**: `terminal_width - 2` (margin safety)
+2. **Estimate table width**: Count columns × avg content + separators (`|` = 1 char each)
+3. **If table fits**: Use table format
+4. **If table doesn't fit**: Apply compression strategies in order:
+
+**Compression Strategies** (apply in order until table fits):
+1. **Abbreviate headers**: Use acronyms, drop articles (`Description` → `Desc`, `Status` → `St`)
+2. **Truncate cell content**: Use `...` for content that can be inferred from context
+3. **Remove low-value columns**: Drop columns that don't add essential information
+4. **Split table**: Multiple narrower tables with shared key column
+
+**When to switch to vertical format** (key: value lists):
+- Content is **inherently detailed** (full sentences, paths, multi-line values)
+- Truncation would **destroy meaning** (UUIDs, checksums, URLs)
+- Only 2-3 items to display (table overhead not worth it)
+- Content requires **exact reproduction** (commands, code snippets)
+
+**When to keep table format** (even if tight):
+- Comparing multiple items across same attributes
+- Scanning/sorting is the primary use case
+- Content is **naturally terse** (statuses, counts, short names)
+- Pattern recognition benefits from alignment
+
+**File output**: May exceed terminal width since files are viewed in editors/renderers with horizontal scroll.
+
 ## CI/CD and Testing Philosophy
 
 CI/CD is just orchestration - everything must be reproducible everywhere.
