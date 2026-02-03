@@ -29,10 +29,11 @@
 
 **CRITICAL: All markdown tables in chat responses MUST fit within the current terminal width.**
 
-**Width Detection** (check once per response needing tables):
+**Width Detection** (use $CLAUDE_TERMINAL_WIDTH set by wrapper):
 ```bash
-${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}
+echo "$CLAUDE_TERMINAL_WIDTH"
 ```
+Note: The wrapper scripts (claudemax, claudepro, etc.) capture the real terminal width before launching Claude Code. Claude's subprocesses cannot detect terminal dimensions directly (no real PTY), so this environment variable is the authoritative source.
 
 **Decision Framework for Tables**:
 

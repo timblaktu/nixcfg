@@ -135,6 +135,9 @@
       # Setup environment variables
       setup_environment() {
         export CLAUDE_CONFIG_DIR="$config_dir"
+        # Capture terminal width from real TTY before launching Claude Code
+        # Claude's subprocesses cannot detect terminal dimensions (no real PTY)
+        export CLAUDE_TERMINAL_WIDTH="''${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
         ${envSetupBlock}
       }
 
@@ -231,6 +234,10 @@
       # ─── Config Directory ────────────────────────────────────────────
       export CLAUDE_CONFIG_DIR="$HOME/.claude-${account}"
       mkdir -p "$CLAUDE_CONFIG_DIR"
+
+      # ─── Terminal Width ────────────────────────────────────────────────
+      # Capture from real TTY before Claude launches (subprocesses can't detect)
+      export CLAUDE_TERMINAL_WIDTH="''${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
 
       # ─── Launch Claude ───────────────────────────────────────────────
       exec claude "$@"
