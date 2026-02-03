@@ -1,9 +1,10 @@
 # Plan 019: Dynamic Context Detection for AI Assistant Configuration
 
 **Created**: 2026-02-03
-**Status**: TASK:PENDING
+**Status**: TASK:COMPLETE (Tasks 1-2)
 **Priority**: Medium
-**Branch**: TBD
+**Branch**: `fix/dynamic-context-detection`
+**Commit**: `b592929`
 
 ## Problem Statement
 
@@ -119,10 +120,10 @@ Add to module README explaining the pattern for future context additions.
 
 ## Definition of Done
 
-- [ ] `ai-instructions.nix` includes runtime detection instructions
-- [ ] CLAUDE.md uses dynamic examples or explicit "replace with your hostname" notes
-- [ ] No AI confusion about current host in testing
-- [ ] Pattern documented for future additions
+- [x] `ai-instructions.nix` includes runtime detection instructions
+- [x] CLAUDE.md uses dynamic examples or explicit "replace with your hostname" notes
+- [ ] No AI confusion about current host in testing (needs verification in new session)
+- [ ] Pattern documented for future additions (deferred - Task 4 LOW priority)
 
 ## Related
 
