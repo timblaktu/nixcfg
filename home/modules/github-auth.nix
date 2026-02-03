@@ -7,50 +7,58 @@ with lib;
 let
   cfg = config.githubAuth;
 
-  # Helper function to construct rbw command based on configuration
+  # Import shared rbw helper library
+  rbwLib = import ./lib/rbw.nix { inherit pkgs lib; };
+
+  # Helper to resolve bitwarden config to item/field for rbwLib
   # Supports both old tokenName format and new item/field format
-  mkRbwCommand = bwCfg:
-    if bwCfg.field != null then
-      ''${pkgs.rbw}/bin/rbw get --field "${bwCfg.field}" "${bwCfg.item}"''
-    else if bwCfg.item != null then
-      ''${pkgs.rbw}/bin/rbw get "${bwCfg.item}"''
-    else
-    # Backward compatibility: use tokenName if item is not set
-      ''${pkgs.rbw}/bin/rbw get "${bwCfg.tokenName}"'';
+  resolveBwConfig = bwCfg:
+    if bwCfg.item != null then {
+      item = bwCfg.item;
+      field = bwCfg.field;
+    } else {
+      # Backward compatibility: use tokenName as item
+      item = bwCfg.tokenName;
+      field = null;
+    };
 
   # GitHub CLI wrapper with Bitwarden token injection
   # This wrapper fetches the token from Bitwarden and exports it as GH_TOKEN
   # Used for BOTH CLI operations and git credential helper operations
-  gh-with-auth = pkgs.writeShellScriptBin "gh" ''
-    # Only sync rbw vault and clear cache for auth-related operations
-    # This avoids unnecessary syncs for read-only operations
-    if [ "$1" = "auth" ] || [ "$1" = "repo" ] || [ "$1" = "pr" ] || [ "$1" = "issue" ] || [ "$1" = "release" ]; then
-      # Sync rbw to ensure we have the latest token from Bitwarden vault
-      ${pkgs.rbw}/bin/rbw sync 2>/dev/null || true
-      # Clear git credential cache to prevent stale token issues
-      ${pkgs.git}/bin/git credential-cache exit 2>/dev/null || true
-    fi
-
-    export GH_TOKEN="$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)"
-    exec ${pkgs.gh}/bin/gh "$@"
-  '';
+  #
+  # Uses time-based sync (default 5 minutes) to ensure fresh credentials
+  # without excessive network calls on every invocation.
+  gh-with-auth =
+    let
+      bwConfig = resolveBwConfig cfg.bitwarden;
+    in
+    pkgs.writeShellScriptBin "gh" ''
+      ${rbwLib.mkGitAuthSetup {
+        inherit (bwConfig) item field;
+        varName = "GH_TOKEN";
+        staleSeconds = cfg.rbwSyncInterval;
+      }}
+      exec ${pkgs.gh}/bin/gh "$@"
+    '';
 
   # GitLab CLI wrapper with Bitwarden token injection
   # This wrapper fetches the token from Bitwarden and exports it as GITLAB_TOKEN
   # Used for BOTH CLI operations and git credential helper operations
-  glab-with-auth = pkgs.writeShellScriptBin "glab" ''
-    # Only sync rbw vault and clear cache for auth-related operations
-    # This avoids unnecessary syncs for read-only operations
-    if [ "$1" = "auth" ] || [ "$1" = "repo" ] || [ "$1" = "project" ] || [ "$1" = "mr" ] || [ "$1" = "issue" ]; then
-      # Sync rbw to ensure we have the latest token from Bitwarden vault
-      ${pkgs.rbw}/bin/rbw sync 2>/dev/null || true
-      # Clear git credential cache to prevent stale token issues
-      ${pkgs.git}/bin/git credential-cache exit 2>/dev/null || true
-    fi
-
-    export GITLAB_TOKEN="$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)"
-    exec ${pkgs.glab}/bin/glab "$@"
-  '';
+  #
+  # Uses time-based sync (default 5 minutes) to ensure fresh credentials
+  # without excessive network calls on every invocation.
+  glab-with-auth =
+    let
+      bwConfig = resolveBwConfig cfg.gitlab.bitwarden;
+    in
+    pkgs.writeShellScriptBin "glab" ''
+      ${rbwLib.mkGitAuthSetup {
+        inherit (bwConfig) item field;
+        varName = "GITLAB_TOKEN";
+        staleSeconds = cfg.rbwSyncInterval;
+      }}
+      exec ${pkgs.glab}/bin/glab "$@"
+    '';
 
   # SOPS-based wrappers (for when mode == "sops")
   # GitHub CLI wrapper with SOPS token injection
@@ -94,6 +102,22 @@ in
       type = types.enum [ "https" "ssh" ];
       default = "https";
       description = "Git protocol for GitHub operations";
+    };
+
+    rbwSyncInterval = mkOption {
+      type = types.int;
+      default = 300;
+      description = ''
+        Time in seconds before rbw cache is considered stale and needs sync.
+        The sync happens automatically before credential retrieval if the
+        last sync was longer than this interval ago.
+
+        Set to 0 to sync on every command (slower but always fresh).
+        Set to a larger value (e.g., 3600) if you rarely rotate tokens.
+
+        Default: 300 (5 minutes)
+      '';
+      example = 600;
     };
 
     bitwarden = {
@@ -425,50 +449,56 @@ in
 
       # Setup GitHub token for nix access-tokens
       home.activation.setupNixGithubToken = mkIf cfg.nix.enableAccessToken
-        (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          TOKEN_DIR="$HOME/.config/nix"
-          TOKEN_FILE="$TOKEN_DIR/github-token"
+        (lib.hm.dag.entryAfter [ "writeBoundary" ] (
+          let
+            bwConfig = resolveBwConfig cfg.bitwarden;
+            rbwGetCmd = rbwLib.mkRbwGetCommand { inherit (bwConfig) item field; };
+          in
+          ''
+              TOKEN_DIR="$HOME/.config/nix"
+              TOKEN_FILE="$TOKEN_DIR/github-token"
 
-          # Create directory if it doesn't exist
-          mkdir -p "$TOKEN_DIR"
+              # Create directory if it doesn't exist
+              mkdir -p "$TOKEN_DIR"
 
-          # Try to fetch token from Bitwarden/SOPS and write to file
-          if [ "''${DRY_RUN:-0}" != "1" ]; then
-            if [ "${cfg.mode}" = "bitwarden" ]; then
-              # Try to get token from Bitwarden
-              TOKEN="$(${mkRbwCommand cfg.bitwarden} 2>/dev/null || true)"
-              if [ -n "$TOKEN" ]; then
-                echo "$TOKEN" > "$TOKEN_FILE"
-                chmod 600 "$TOKEN_FILE"
-                $DRY_RUN_CMD echo "✅ GitHub token for nix stored in ~/.config/nix/github-token"
-              else
-                if [ -f "$TOKEN_FILE" ]; then
-                  $DRY_RUN_CMD echo "ℹ️  Using existing GitHub token file for nix"
-                else
-                  $DRY_RUN_CMD echo "⚠️  No GitHub token found. Create one at https://github.com/settings/tokens"
-                  $DRY_RUN_CMD echo "    Store it in ~/.config/nix/github-token with permissions 600"
-                  $DRY_RUN_CMD echo "    Required scopes: read:packages (or just 'repo' for private repos)"
-                fi
+              # Try to fetch token from Bitwarden/SOPS and write to file
+              if [ "''${DRY_RUN:-0}" != "1" ]; then
+                if [ "${cfg.mode}" = "bitwarden" ]; then
+                  # Try to get token from Bitwarden (no sync needed during activation)
+                  TOKEN="$(${rbwGetCmd} 2>/dev/null || true)"
+                  if [ -n "$TOKEN" ]; then
+                    echo "$TOKEN" > "$TOKEN_FILE"
+                    chmod 600 "$TOKEN_FILE"
+                    $DRY_RUN_CMD echo "✅ GitHub token for nix stored in ~/.config/nix/github-token"
+                  else
+                    if [ -f "$TOKEN_FILE" ]; then
+                      $DRY_RUN_CMD echo "ℹ️  Using existing GitHub token file for nix"
+                    else
+                      $DRY_RUN_CMD echo "⚠️  No GitHub token found. Create one at https://github.com/settings/tokens"
+                      $DRY_RUN_CMD echo "    Store it in ~/.config/nix/github-token with permissions 600"
+                      $DRY_RUN_CMD echo "    Required scopes: read:packages (or just 'repo' for private repos)"
+                    fi
+                  fi
+                elif [ "${cfg.mode}" = "sops" ]; then
+                # SOPS mode - token should be in the decrypted secret file
+                ${optionalString (options ? sops) ''
+                  TOKEN_SRC="${config.sops.secrets."${cfg.sops.secretName}".path}"
+                  if [ -f "$TOKEN_SRC" ]; then
+                    cp "$TOKEN_SRC" "$TOKEN_FILE"
+                    chmod 600 "$TOKEN_FILE"
+                    $DRY_RUN_CMD echo "✅ GitHub token for nix copied from SOPS"
+                  else
+                    $DRY_RUN_CMD echo "⚠️  SOPS secret not available for GitHub token"
+                  fi
+                ''}
+                ${optionalString (!(options ? sops)) ''
+                  $DRY_RUN_CMD echo "⚠️  SOPS mode configured but SOPS module not available"
+                  $DRY_RUN_CMD echo "    Please configure SOPS or switch to bitwarden mode"
+                ''}
               fi
-            elif [ "${cfg.mode}" = "sops" ]; then
-              # SOPS mode - token should be in the decrypted secret file
-              ${optionalString (options ? sops) ''
-                TOKEN_SRC="${config.sops.secrets."${cfg.sops.secretName}".path}"
-                if [ -f "$TOKEN_SRC" ]; then
-                  cp "$TOKEN_SRC" "$TOKEN_FILE"
-                  chmod 600 "$TOKEN_FILE"
-                  $DRY_RUN_CMD echo "✅ GitHub token for nix copied from SOPS"
-                else
-                  $DRY_RUN_CMD echo "⚠️  SOPS secret not available for GitHub token"
-                fi
-              ''}
-              ${optionalString (!(options ? sops)) ''
-                $DRY_RUN_CMD echo "⚠️  SOPS mode configured but SOPS module not available"
-                $DRY_RUN_CMD echo "    Please configure SOPS or switch to bitwarden mode"
-              ''}
             fi
-          fi
-        '');
+          ''
+        ));
 
       # Configure nix to use the token file via extra-access-tokens
       # This reads the token at runtime instead of evaluation time

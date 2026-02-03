@@ -15,6 +15,9 @@ let
   sharedInstructions = import ./shared/ai-instructions.nix { inherit lib; };
   sharedMcpDefs = import ./shared/mcp-server-defs.nix { inherit lib; };
 
+  # Import shared rbw helper library for consistent credential handling
+  rbwLib = import ./lib/rbw.nix { inherit pkgs lib; };
+
   # Agent submodule type
   agentModule = types.submodule {
     options = {
@@ -528,37 +531,19 @@ in
             (mapAttrsToList (k: v: "export ${k}=${escapeShellArg v}") envVars);
 
           # Bitwarden token fetch logic (if configured)
+          # Uses shared rbw library with time-based sync (default 5 min staleness)
           hasBitwardenToken = accountCfg.secrets.bearerToken.bitwarden != null;
           bitwardenFetch = optionalString hasBitwardenToken (
             let
               bwItem = accountCfg.secrets.bearerToken.bitwarden.item;
               bwField = accountCfg.secrets.bearerToken.bitwarden.field;
-              # Build rbw command with --field if specified
-              rbwCmd =
-                if bwField != null && bwField != ""
-                then ''rbw get ${escapeShellArg bwItem} --field ${escapeShellArg bwField}''
-                else ''rbw get ${escapeShellArg bwItem}'';
-              fieldDesc =
-                if bwField != null && bwField != ""
-                then "Field: ${bwField}"
-                else "(default password)";
             in
-            ''
-              # Retrieve API key from Bitwarden via rbw
-              # Code-Companion proxy expects x-api-key header (sent when ANTHROPIC_API_KEY is set)
-              if command -v rbw >/dev/null 2>&1; then
-                ${accountCfg.api.apiKeyEnvVar}="$(${rbwCmd} </dev/null 2>/dev/null)" || {
-                  echo "Warning: Failed to retrieve API key from Bitwarden" >&2
-                  echo "   Item: ${bwItem}, ${fieldDesc}" >&2
-                }
-                export ${accountCfg.api.apiKeyEnvVar}
-              else
-                echo "Error: rbw (Bitwarden CLI) is required but not found" >&2
-                echo "   Install rbw and configure Bitwarden access to retrieve API keys" >&2
-                echo "   See: home/modules/secrets-management.nix for configuration" >&2
-                exit 1
-              fi
-            ''
+            rbwLib.mkRbwExportWithDiagnostics {
+              item = bwItem;
+              field = if bwField == "" then null else bwField;
+              varName = accountCfg.api.apiKeyEnvVar;
+              # Use default 300s staleness; could make configurable via account.rbwSyncInterval
+            }
           );
         in
         pkgs.writeShellScriptBin "opencode${accountName}" ''

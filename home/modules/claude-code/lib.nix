@@ -9,6 +9,10 @@
 
 { lib, pkgs, config }:
 
+let
+  # Import shared rbw helper library for consistent credential handling
+  rbwLib = import ../lib/rbw.nix { inherit pkgs lib; };
+in
 {
   # Generate a Claude Code wrapper script for an account
   # Handles API proxy configuration, authentication, environment setup,
@@ -51,38 +55,20 @@
         (lib.optionalString (baseUrl != null) ''
           export ANTHROPIC_BASE_URL="${baseUrl}"'')
 
-        # ANTHROPIC_AUTH_TOKEN - retrieve via rbw if bearer auth + bitwarden configured
-        # For third-party proxies (Code-Companion), use AUTH_TOKEN and blank out API_KEY
+        # ANTHROPIC_API_KEY - retrieve via rbw if bearer auth + bitwarden configured
+        # For third-party proxies (Code-Companion), use API_KEY for x-api-key header
+        # Uses shared rbw library with time-based sync (default 5 min staleness)
         (lib.optionalString (authMethod == "bearer" && bearerToken != null && bearerToken.bitwarden or null != null) (
           let
             bwItem = bearerToken.bitwarden.item;
             bwField = bearerToken.bitwarden.field or null;
-            # If field is null/empty, use just item name (gets default password)
-            # Otherwise, pass both item and field name
-            rbwCmd =
-              if bwField == null || bwField == ""
-              then ''rbw get "${bwItem}"''
-              else ''rbw get "${bwItem}" --field "${bwField}"'';
-            fieldDesc =
-              if bwField == null || bwField == ""
-              then "(default password)"
-              else "Field: ${bwField}";
           in
-          ''
-            # Retrieve API key from Bitwarden via rbw
-            # Code-Companion proxy expects x-api-key header (sent when ANTHROPIC_API_KEY is set)
-            if command -v rbw >/dev/null 2>&1; then
-              ANTHROPIC_API_KEY="$(${rbwCmd} </dev/null 2>/dev/null)" || {
-                echo "Warning: Failed to retrieve API key from Bitwarden" >&2
-                echo "   Item: ${bwItem}, ${fieldDesc}" >&2
-              }
-              export ANTHROPIC_API_KEY
-            else
-              echo "Error: rbw (Bitwarden CLI) is required but not found" >&2
-              echo "   Install rbw and configure Bitwarden access to retrieve API keys" >&2
-              echo "   See: home/modules/secrets-management.nix for configuration" >&2
-              exit 1
-            fi''
+          rbwLib.mkRbwExportWithDiagnostics {
+            item = bwItem;
+            field = if bwField == "" then null else bwField;
+            varName = "ANTHROPIC_API_KEY";
+            # Use default 300s staleness; could make configurable via secrets.rbwSyncInterval
+          }
         ))
 
         # ANTHROPIC_API_KEY - set to empty string only if disableApiKey is true AND no bearer auth
