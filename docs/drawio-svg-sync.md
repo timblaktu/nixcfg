@@ -69,6 +69,32 @@ nixpkgs.config.allowUnfree = true;
 - Source of truth: Embedded `mxGraphModel` XML
 - Alternative edit method: Open in Draw.io desktop app
 
+## Claude Code Integration
+
+Use the **diagram skill** (`/diagram`) to create and edit diagrams directly in Claude Code. The skill handles:
+- Choosing the right format (Mermaid vs DrawIO based on complexity)
+- Compression format for embedded XML (URL encode → raw deflate → Base64)
+- Rendering via drawio-svg-sync
+
+### Example Workflow
+
+```
+User: Create a 3-tier architecture diagram
+Claude: [Invokes diagram skill, creates .drawio.svg, renders]
+```
+
+## WSL2 Notes
+
+Draw.io exports work in WSL2 despite GPU/Vulkan warning messages:
+```
+WARNING: dzn is not a conformant Vulkan implementation
+ERROR: Exiting GPU process due to errors during initialization
+```
+
+These warnings are **cosmetic** - exports succeed regardless. The tool automatically uses:
+- WSLg's native X11 when `DISPLAY` is available
+- `xvfb-run` fallback for headless environments
+
 ## License Note
 
 `drawio` has an unfree license (`asl20 unfreeRedistributable`).
