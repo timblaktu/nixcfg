@@ -3,8 +3,9 @@
 **Goal**: Create a Claude Code skill for creating, editing, and converting diagrams with automatic format selection (Mermaid for simple, DrawIO for complex).
 
 **Created**: 2026-02-01
+**Completed**: 2026-02-02
 **Priority**: 2 (MEDIUM)
-**Status**: IN_PROGRESS
+**Status**: COMPLETE
 **Location**: `nixcfg/.claude/user-plans/016-drawio-svg-skill.md`
 **Depends On**: Plan 015 (COMPLETE - drawio-svg-sync tooling)
 **Branch**: `opencode`
@@ -56,14 +57,14 @@ This skill enables Claude to work autonomously with diagrams using the appropria
 | **D** | **Nix Module Integration** | | |
 | D1 | Add skill to skills.nix builtinSkillDefs | `TASK:COMPLETE` | Skill registered as built-in |
 | D2 | Test skill deployment via home-manager | `TASK:COMPLETE` | Skill appears in Claude Code after switch |
-| D3 | Verify skill invocation works | `TASK:PENDING` | `/drawio-svg-editor` or similar triggers skill |
+| D3 | Verify skill invocation works | `TASK:COMPLETE` | Skill loads via Skill tool - all 13 sections displayed |
 | **D-WSL** | **WSL2 Compatibility (BLOCKING)** | | |
 | D-WSL.1 | Fix drawio-svg-sync for WSL2 | `TASK:COMPLETE` | RESOLVED: Test fixtures had invalid compression, not a drawio/WSL2 issue |
 | **E** | **Validation & Documentation** | | |
-| E1 | Test: Create diagram from scratch | `TASK:PENDING` | New diagram renders correctly |
-| E2 | Test: Edit existing diagram | `TASK:PENDING` | Modifications preserve integrity |
-| E3 | Test: Full workflow (edit→render→commit) | `TASK:PENDING` | End-to-end workflow succeeds |
-| E4 | Document usage in docs/ | `TASK:PENDING` | User guide for invoking skill |
+| E1 | Test: Create diagram from scratch | `TASK:COMPLETE` | 3-tier diagram created and rendered (22KB output) |
+| E2 | Test: Edit existing diagram | `TASK:COMPLETE` | Added cache layer, re-rendered (32KB output) |
+| E3 | Test: Full workflow (edit→render→commit) | `TASK:COMPLETE` | Created docs/diagrams/, rendered, committed e42a685 |
+| E4 | Document usage in docs/ | `TASK:COMPLETE` | Updated docs/drawio-svg-sync.md with skill + WSL2 notes |
 
 ---
 
