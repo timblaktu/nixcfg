@@ -65,6 +65,30 @@ with lib;
     - ALWAYS stage relevant changed files (`git add --update` + `git add <relevant-untracked-files>`)
   '';
 
+  # Runtime environment detection - prevents AI from making incorrect host assumptions
+  runtimeContext = ''
+    ## Runtime Environment Detection
+
+    **CRITICAL**: Before making host-specific assumptions, detect the current environment:
+
+    ```bash
+    # Current hostname (ALWAYS verify - do not assume from examples)
+    hostname
+
+    # Current user
+    echo "$USER"
+
+    # WSL detection (empty if not WSL)
+    echo "$WSL_DISTRO_NAME"
+
+    # Available home-manager configurations in this flake
+    nix eval '.#homeConfigurations' --apply 'builtins.attrNames' --json 2>/dev/null | jq -r '.[]'
+    ```
+
+    **NEVER assume the host is a specific value** from documentation examples.
+    Examples in CLAUDE.md use placeholder hostnames - always verify with `hostname` first.
+  '';
+
   # MCP server status formatting function
   # Takes a list of { name, status, note } records and formats them for markdown
   formatMcpStatus = servers:
@@ -107,6 +131,8 @@ with lib;
       ${optionalString includeScreenshots self.screenshotRules}
 
       ${self.nixFlakeGitRules}
+
+      ${self.runtimeContext}
 
       ${optionalString (mcpServers != []) (self.formatMcpStatus mcpServers)}
 

@@ -57,8 +57,9 @@ nixcfg/
 nixpkgs-fmt <file>              # Format Nix files
 nix flake check                 # Validate entire flake (MANDATORY before commits)
 nix flake update                # Update flake inputs
-nix build .#homeConfigurations."tim@thinky-nixos".activationPackage
-home-manager switch --flake .#tim@thinky-nixos  # Test config switch
+# Use $(hostname) to get correct config - NEVER assume hostname from examples:
+nix build ".#homeConfigurations.\"${USER}@$(hostname)\".activationPackage"
+home-manager switch --flake ".#${USER}@$(hostname)"
 ```
 
 # 🔧 **IMPORTANT PATHS for LOCAL sessions**
