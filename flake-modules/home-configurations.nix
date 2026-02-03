@@ -33,7 +33,7 @@
               };
 
               # GitHub authentication
-              githubAuth = {
+              gitAuth.github = {
                 enable = true;
                 mode = "bitwarden";
                 bitwarden = {
@@ -77,7 +77,7 @@
               };
 
               # GitHub authentication
-              githubAuth = {
+              gitAuth.github = {
                 enable = true;
                 mode = "bitwarden";
                 bitwarden = {
@@ -127,23 +127,26 @@
                 rbw.email = "timblaktu@gmail.com";
               };
 
-              # GitHub and GitLab authentication (HOST-SPECIFIC)
-              githubAuth = {
+              # GitHub authentication (HOST-SPECIFIC)
+              gitAuth.github = {
                 enable = true;
                 mode = "bitwarden";
                 bitwarden = {
                   item = "github.com";
                   field = "PAT-timtam2026";
                 };
-                gitlab = {
-                  enable = true;
-                  host = "git.panasonic.aero";
-                  bitwarden = {
-                    item = "GitLab git.panasonic.aero";
-                    field = "lord (access token)";
-                  };
-                  glab.enable = true;
+              };
+
+              # GitLab authentication (HOST-SPECIFIC)
+              gitAuth.gitlab = {
+                enable = true;
+                mode = "bitwarden";
+                host = "git.panasonic.aero";
+                bitwarden = {
+                  item = "GitLab git.panasonic.aero";
+                  field = "lord (access token)";
                 };
+                cli.enable = true;
               };
 
               # Windows Terminal settings management (HOST-SPECIFIC)
@@ -194,8 +197,8 @@
                 rbw.email = "timblaktu@gmail.com";
               };
 
-              # GitHub and GitLab authentication
-              githubAuth = {
+              # GitHub authentication
+              gitAuth.github = {
                 enable = true;
                 mode = "bitwarden";
                 bitwarden = {
@@ -283,7 +286,7 @@
               };
 
               # GitHub authentication
-              githubAuth = {
+              gitAuth.github = {
                 enable = true;
                 mode = "bitwarden";
                 bitwarden = {

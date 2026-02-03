@@ -42,7 +42,9 @@ in
     ./claude-code.nix # Claude Code - enhanced multi-account module (upstream disabled via disabledModules)
     ./opencode.nix # OpenCode - enhanced multi-account module (upstream disabled via disabledModules)
     ./secrets-management.nix # RBW and SOPS configuration
-    ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
+    ./github-auth.nix # GitHub authentication (Bitwarden/SOPS)
+    ./gitlab-auth.nix # GitLab authentication (Bitwarden/SOPS)
+    ./git-auth-helpers.nix # Combined git auth helpers (refresh-git-creds)
     ./podman-tools.nix # Container tools configuration
     # Enhanced nix-writers based script management (migrated to unified files)
     # Import ESP-IDF development module

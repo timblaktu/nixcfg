@@ -135,8 +135,9 @@
     };
   };
 
-  # GitHub CLI configuration is managed by github-auth.nix module
-  # See home/modules/github-auth.nix for the complete setup with Bitwarden integration
+  # Git forge CLI configuration is managed by separate modules:
+  # - GitHub: home/modules/github-auth.nix (gitAuth.github.*)
+  # - GitLab: home/modules/gitlab-auth.nix (gitAuth.gitlab.*)
 
   # Install additional Git-related tools
   home.packages = with pkgs; [
