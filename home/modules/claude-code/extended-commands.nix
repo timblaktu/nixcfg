@@ -1,5 +1,5 @@
 # Extended Claude Code slash commands
-# Migrates user-managed commands from claude-runtime/.claude-max/commands/ to Nix-managed deployment
+# Source files are co-located with this module in ./commands/
 { config, lib, ... }:
 
 with lib;
@@ -7,10 +7,10 @@ with lib;
 let
   cfg = config.programs.claude-code;
 
-  # Base path to command content files (relative to this module file)
+  # Base path to command content files (co-located with this module)
   # This module is at: home/modules/claude-code/extended-commands.nix
-  # Commands are at: claude-runtime/.claude-max/commands/
-  commandsBasePath = ../../../claude-runtime/.claude-max/commands;
+  # Commands are at: home/modules/claude-code/commands/
+  commandsBasePath = ./commands;
 
 in
 {
