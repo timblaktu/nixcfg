@@ -43,11 +43,19 @@ with lib;
     - If running in WSL, access other instances' rootfs at `/mnt/wsl/$WSL_DISTRO_NAME/`
   '';
 
-  # Screenshot/image handling (shared path configuration)
-  mkScreenshotRules = screenshotDir: ''
-    ## Screenshots
+  # Screenshot/image handling (dynamic detection for WSL)
+  screenshotRules = ''
+    ## Screenshots (WSL Dynamic Detection)
 
-    - When asked to "read", "view", "refer to", or "look at" screenshots, read the most recent N image files from: ${screenshotDir}
+    When asked to view, read, or refer to screenshots, find the most recent one(s) dynamically:
+
+    ```bash
+    # Find most recent screenshot (~0.2s) - works across Windows usernames and OneDrive variants
+    fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-
+    ```
+
+    - Adjust `head -1` to `head -N` for multiple screenshots
+    - Then use the Read tool on the returned file path(s)
   '';
 
   # Git staging rules for Nix flake projects
@@ -85,7 +93,8 @@ with lib;
   #   toolName: "Claude Code" or "OpenCode"
   #   config: tool configuration (for MCP status, etc.)
   #   extraContent: tool-specific additional content
-  mkMemoryContent = self: { toolName, screenshotDir ? null, mcpServers ? [ ], extraContent ? "" }:
+  #   includeScreenshots: whether to include screenshot detection rules (default: true for WSL)
+  mkMemoryContent = self: { toolName, includeScreenshots ? true, mcpServers ? [ ], extraContent ? "" }:
     ''
       # ${toolName} Configuration for User
 
@@ -95,7 +104,7 @@ with lib;
 
       ${self.wslRules}
 
-      ${optionalString (screenshotDir != null) (self.mkScreenshotRules screenshotDir)}
+      ${optionalString includeScreenshots self.screenshotRules}
 
       ${self.nixFlakeGitRules}
 

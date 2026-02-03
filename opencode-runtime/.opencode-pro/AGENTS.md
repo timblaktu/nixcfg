@@ -31,9 +31,17 @@
 - If running in WSL, access other instances' rootfs at `/mnt/wsl/$WSL_DISTRO_NAME/`
 
 
-## Screenshots
+## Screenshots (WSL Dynamic Detection)
 
-- When asked to "read", "view", "refer to", or "look at" screenshots, read the most recent N image files from: /mnt/c/Users/tblack/OneDrive/Pictures/Screenshots 1
+When asked to view, read, or refer to screenshots, find the most recent one(s) dynamically:
+
+```bash
+# Find most recent screenshot (~0.2s) - works across Windows usernames and OneDrive variants
+fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-
+```
+
+- Adjust `head -1` to `head -N` for multiple screenshots
+- Then use the Read tool on the returned file path(s)
 
 
 ## Nix Flake Projects

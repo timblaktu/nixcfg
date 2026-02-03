@@ -9,7 +9,7 @@
 - ALWAYS use rg and fd for file searching (never grep/find or Search/Find tools)
 - ALWAYS ensure shell commands support both bash AND zsh
 - ALWAYS properly escape or quote special shell characters
-- SCREENSHOTS folder: `/mnt/c/Users/tblack/OneDrive/Pictures/Screenshots 1`
+- **Screenshots (WSL)**: Find dynamically with `fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-`
 - NEVER create files unless absolutely necessary - prefer editing existing files
 - ALWAYS add documentation to existing markdown files - ASK where if ambiguous
 - **ALWAYS ASK FOR HELP WITH AUTHENTICATION ISSUES** - GitHub, GitLab, Bitwarden, SOPS, SSH, etc.

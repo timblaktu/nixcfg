@@ -66,24 +66,27 @@ let
       echo "🔄 Forcing OneDrive sync..."
       echo "=========================="
       
-      # Method 1: Touch OneDrive directory to trigger sync
-      if [[ -d "/mnt/c/Users/tblack/OneDrive" ]]; then
+      # Dynamically find OneDrive directory (works across Windows usernames and OneDrive variants)
+      ONEDRIVE_DIR=$(find /mnt/c/Users/*/OneDrive* -maxdepth 0 -type d 2>/dev/null | head -1)
+
+      if [[ -n "$ONEDRIVE_DIR" && -d "$ONEDRIVE_DIR" ]]; then
+        echo "📁 Found OneDrive at: $ONEDRIVE_DIR"
         echo "📁 Touching OneDrive directory..."
-        touch "/mnt/c/Users/tblack/OneDrive"
-        
+        touch "$ONEDRIVE_DIR"
+
         # Method 2: Create and remove a sync trigger file
         echo "📝 Creating sync trigger file..."
-        trigger_file="/mnt/c/Users/tblack/OneDrive/.sync_trigger_$(date +%s)"
+        trigger_file="$ONEDRIVE_DIR/.sync_trigger_$(date +%s)"
         touch "$trigger_file"
         sleep 1
         rm -f "$trigger_file"
-        
+
         echo "✅ Sync triggered successfully"
         echo ""
         echo "💡 Note: OneDrive may take a few moments to sync"
         echo "   Run 'onedrive-status' to check sync status"
       else
-        echo "❌ OneDrive directory not found at /mnt/c/Users/tblack/OneDrive"
+        echo "❌ OneDrive directory not found in /mnt/c/Users/*/OneDrive*"
         exit 1
       fi
     '';

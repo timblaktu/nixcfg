@@ -20,28 +20,25 @@
 
 ## AI Guidance
 
-### ESSENTIAL PATHS
-- SCREENSHOT_DIR: `/mnt/wsl/tblack-t14-nixos/mnt/c/Users/tblack/OneDrive/Pictures/Screenshots 1`
-
 ### RULES
 
 - ALWAYS Do what has been asked; nothing more, nothing less
 - NEVER create files unless necessary to do what was asked of you
 - ALWAYS prefer editing existing files to creating new ones
-- ALWAYS add documentation to existing markdown files instead of creating new files 
+- ALWAYS add documentation to existing markdown files instead of creating new files
 - ALWAYS think deeply about WHERE to write content when performing documentation tasks
 - ALWAYS ASK where to add documentation if there is significant ambiguity or uncertainty
 - ALWAYS use fd to find files and ripgrep (rg) to search files.
 - NEVER include claude's identity when generating git commit messages
 - ALWAYS OMIT claude's identity when generating git commit messages
-- ALWAYS ensure shell commands generated for the user to run support the syntax and features of the user's $SHELL 
+- ALWAYS ensure shell commands generated for the user to run support the syntax and features of the user's $SHELL
 - ALWAYS ensure shell commands generated for the user to run are concise, use minimal comments and empty lines, and are composed into minimal number of logically-grouped compound command blocks
 - ALWAYS After receiving tool results, carefully reflect on their quality and determine optimal next steps
 - ALWAYS invoke multiple independent tools simultaneously, using sub-agents when available, rather than sequentially
 - Before finishing, verify your solution addresses all requirements
 - ALWAYS use `echo "$WSL_DISTRO_NAME"` to determine if you're running in WSL, and what WSL instance you and/or your MCP servers are running in.
 - If running in WSL, you can access other WSL instances' rootfs mounted at `/mnt/wsl/$WSL_DISTRO_NAME/`
-- When I ask you to "read", "view", "refer to", or "look at" screenshots, you read that most recent N image files from SCREENSHOT_DIR
+- **Screenshots (WSL)**: Find dynamically with `fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-`
 - ALWAYS stage relevant changed files when in projects using nix flakes (`git add --update` + `git add <relevant-untracked-files>`)
 
 ## CLEANUP RULE - Added 2025-09-16

@@ -8,7 +8,7 @@
 - ALWAYS use rg and fd commands with Bash tool for file searching (never grep/find or Search/Find tools)
 - ALWAYS ensure any generated shell commands support both bash AND zsh syntaxes
 - ALWAYS properly escape or quote special shell characters when generating commands
-- SCREENSHOTS folder is `/mnt/c/Users/tblack/OneDrive/Pictures/Screenshots 1`
+- **Screenshots (WSL)**: Find dynamically with `fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-`
 - NEVER create files unless absolutely necessary
 - ALWAYS prefer editing existing files to creating new ones
 - ALWAYS add documentation to existing markdown files instead of creating new files 

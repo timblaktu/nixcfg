@@ -499,7 +499,6 @@ in
         in
         sharedInstructions.mkMemoryContent sharedInstructions {
           toolName = "OpenCode";
-          screenshotDir = "/mnt/c/Users/tblack/OneDrive/Pictures/Screenshots 1";
           mcpServers = mcpServerStatus;
           extraContent = cfg.instructions.extraContent;
         };
