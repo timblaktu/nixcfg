@@ -5,10 +5,19 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.2.0
+**Version**: 1.3.0
 **Last Updated**: 2026-02-03
 
 ## Changelog
+
+### v1.3.0 (2026-02-03)
+- Added Section 19: Integrated Edge Labels (prefer over separate text boxes)
+- Added Section 20: Edge Label Styling Rules (no background, match line color)
+- Added Section 21: Explicit Anchor Points (always use exitDx/exitDy/entryDx/entryDy=0)
+- Added Section 22: Preserving User Content (never overwrite manual edits)
+- Added Section 23: Network Connection Arrow Conventions (no arrows for physical links)
+- Added Section 24: PDU Positioning (compact, near powered devices)
+- Added Section 25: Cloud Shape Sizing (accommodate internal elements)
 
 ### v1.2.0 (2026-02-03)
 - Added Section 18: Rounded Container Label Positioning (arcSize formula, visual offset calculation, implementation examples)
@@ -2215,3 +2224,275 @@ This accounts for visual perception and potential stroke width.
 | Large (min dim > 400px) | 35px |
 | Medium (min dim 150-400px) | 20px |
 | Small (min dim < 150px) | 15px |
+
+---
+
+## Section 19: Integrated Edge Labels
+
+When labeling edges, use the `value` attribute on the edge cell directly rather than separate text boxes. This ensures labels move with their edges.
+
+### Problem: Separate Text Box Labels
+
+Using separate text boxes requires manual repositioning when edges move:
+
+```xml
+<!-- BAD: Separate text box -->
+<mxCell id="conn-1" style="..." edge="1" source="a" target="b">...</mxCell>
+<mxCell id="conn-1-label" value="Label" style="text;..." vertex="1">
+  <mxGeometry x="150" y="200" .../>
+</mxCell>
+```
+
+### Solution: Integrated Labels
+
+```xml
+<!-- GOOD: Integrated label -->
+<mxCell id="conn-1" value="Label"
+        style="...;labelBackgroundColor=none;fontColor=#0050ef;"
+        edge="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+### Key Style Attributes for Edge Labels
+
+| Attribute | Value | Purpose |
+|-----------|-------|---------|
+| `labelBackgroundColor` | `none` | No background (critical for visual consistency) |
+| `fontColor` | `#RRGGBB` | Match edge color for visual cohesion |
+| `fontSize` | `9` or `10` | Smaller font often works better |
+
+### Multiline Labels
+
+Use `<br>` for vertical formatting when horizontal space is tight:
+
+```xml
+value="USB&lt;br&gt;serial+&lt;br&gt;debug"
+value="lock/&lt;br&gt;unlock"
+```
+
+---
+
+## Section 20: Edge Label Styling Rules
+
+### Core Rules
+
+1. **NO background color**: Always use `labelBackgroundColor=none`
+2. **Match line color**: `fontColor` should match `strokeColor` of the edge
+3. **Consider vertical formatting**: Long labels can use `<br>` to stack vertically
+4. **Contrast**: Choose foreground color that contrasts with underlying objects
+
+### Color Matching Reference
+
+| Line Type | strokeColor | fontColor |
+|-----------|-------------|-----------|
+| Ethernet | `#0050ef` | `#0050ef` |
+| USB (green) | `#82b366` | `#82b366` |
+| USB (orange) | `#d79b00` | `#d79b00` |
+| Power | `#9673a6` | `#9673a6` |
+| Remote/VPN | `#666666` | `#666666` |
+
+### Example: Styled Edge with Label
+
+```xml
+<mxCell id="eth-conn" value="1 Gbps"
+        style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#0050ef;strokeWidth=2;labelBackgroundColor=none;fontColor=#0050ef;fontSize=9;"
+        edge="1" parent="1" source="switch" target="server">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+---
+
+## Section 21: Explicit Anchor Points
+
+ALWAYS specify exit and entry points with Dx/Dy set to 0. Edges without explicit anchors create "dangling lines" when shapes are moved or resized.
+
+### Required Attributes
+
+```xml
+<mxCell id="conn-1"
+        style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;..."
+        edge="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+### Anchor Point Reference
+
+```
+exitX/entryX: 0=left, 0.5=center, 1=right
+exitY/entryY: 0=top, 0.5=center, 1=bottom
+exitDx/exitDy/entryDx/entryDy: ALWAYS set to 0
+```
+
+### Common Anchor Combinations
+
+| Flow Direction | Exit | Entry |
+|----------------|------|-------|
+| Left → Right | `exitX=1;exitY=0.5` | `entryX=0;entryY=0.5` |
+| Top → Bottom | `exitX=0.5;exitY=1` | `entryX=0.5;entryY=0` |
+| Right → Left | `exitX=0;exitY=0.5` | `entryX=1;entryY=0.5` |
+| Bottom → Top | `exitX=0.5;exitY=0` | `entryX=0.5;entryY=1` |
+
+### Complete Example
+
+```xml
+<mxCell id="flow-1"
+        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=classic;html=1;"
+        edge="1" parent="1" source="box-a" target="box-b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+---
+
+## Section 22: Preserving User Content
+
+**CRITICAL**: When a user mentions they "manually edited" content, NEVER overwrite it.
+
+### Rules
+
+1. **Extract before regenerating**: Before regenerating any part of a diagram, extract and preserve user-modified `value` attributes
+2. **Ask when uncertain**: If uncertain about content origin, ASK before changing
+3. **Diff your changes**: Read the existing diagram first; compare your proposed changes against it
+4. **Minimal modifications**: Only modify what was explicitly requested
+
+### Anti-Pattern Example
+
+**User**: "I manually edited the devlock box"
+
+**BAD**:
+```
+Regenerate entire diagram with simplified devlock text
+```
+
+**GOOD**:
+```
+Preserve exact devlock value, only change the elements explicitly requested
+```
+
+### Pre-Edit Workflow
+
+1. Read existing diagram content
+2. Note any user-mentioned manual edits
+3. Extract those specific values
+4. Make only requested changes
+5. Verify preserved content is unchanged in output
+
+---
+
+## Section 23: Network Connection Arrow Conventions
+
+For physical network diagrams, switch/device connections typically don't need directional arrows.
+
+### Physical Layer Connections (No Arrows)
+
+```xml
+<!-- Ethernet cable - bidirectional by nature -->
+<mxCell id="eth-1" value="1 Gbps"
+        style="endArrow=none;startArrow=none;strokeColor=#0050ef;..."
+        edge="1" source="switch" target="server">
+```
+
+### When TO Use Arrows
+
+| Connection Type | Use Arrows? | Example |
+|-----------------|-------------|---------|
+| Ethernet cable | NO | Switch ↔ Server |
+| USB cable | NO | Host ↔ Device |
+| Power cable | NO | PDU ↔ Device |
+| Data flow | YES | Request → Response |
+| Control flow | YES | Lock command → Device |
+| Remote access | YES | User → System |
+
+### Arrow Style by Semantic
+
+```xml
+<!-- Data request/response -->
+style="endArrow=classic;startArrow=none;..."
+
+<!-- Bidirectional data flow (when shown as single arrow) -->
+style="endArrow=classic;startArrow=classic;..."
+
+<!-- Control signal -->
+style="endArrow=block;endFill=1;startArrow=none;..."
+```
+
+---
+
+## Section 24: PDU Positioning
+
+Power Distribution Units (PDUs) should be positioned near the devices they power with compact representation.
+
+### Sizing Guidelines
+
+| PDU Type | Recommended Size |
+|----------|-----------------|
+| Single device | 60×30 px |
+| Multiple devices | 80×40 px |
+| Rack PDU | 40×120 px (vertical) |
+
+### Position Guidelines
+
+- **Preferred**: Bottom-right or right side near target devices
+- **Alternative**: Bottom of diagram in power section
+- **Avoid**: Center of diagram or between logical groups
+
+### Power Connection Style
+
+```xml
+<!-- Power connection: dashed purple -->
+<mxCell id="power-1" value="Power"
+        style="endArrow=none;startArrow=none;dashed=1;dashPattern=4 4;strokeColor=#9673a6;fontColor=#9673a6;labelBackgroundColor=none;"
+        edge="1" source="pdu" target="device">
+```
+
+### Example PDU Element
+
+```xml
+<mxCell id="pdu-1" value="PDU"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="500" y="400" width="60" height="30" as="geometry"/>
+</mxCell>
+```
+
+---
+
+## Section 25: Cloud Shape Sizing
+
+When placing elements inside cloud shapes (e.g., Internet icons, external services), expand the cloud to accommodate internal elements comfortably.
+
+### Sizing Rules
+
+1. **Minimum padding**: 30px on all sides from internal elements
+2. **Label space**: Reserve top 30-40px for cloud label
+3. **Icon space**: Account for any icons placed inside
+
+### Example Cloud with Internal Element
+
+```xml
+<!-- Cloud container -->
+<mxCell id="cloud-internet" value="Internet"
+        style="ellipse;shape=cloud;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;"
+        vertex="1" parent="1">
+  <mxGeometry x="600" y="50" width="180" height="120" as="geometry"/>
+</mxCell>
+
+<!-- Icon inside cloud (positioned with padding) -->
+<mxCell id="gitlab-icon" value="GitLab"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="640" y="90" width="60" height="40" as="geometry"/>
+</mxCell>
+```
+
+### Adjusting Related Elements
+
+When expanding a cloud, check for overlaps with:
+- Nearby labels
+- Connection endpoints
+- Adjacent shapes (e.g., "Remote User" icons)
+
+Move related external elements to maintain consistent spacing (typically 50px minimum gap).
