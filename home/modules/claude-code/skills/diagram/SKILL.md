@@ -5,10 +5,13 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.1.0
-**Last Updated**: 2026-02-02
+**Version**: 1.2.0
+**Last Updated**: 2026-02-03
 
 ## Changelog
+
+### v1.2.0 (2026-02-03)
+- Added Section 18: Rounded Container Label Positioning (arcSize formula, visual offset calculation, implementation examples)
 
 ### v1.1.0 (2026-02-02)
 - Added Section 14: Multi-Page DrawIO Support (page structure, ID namespacing, cross-page referencing)
@@ -2107,3 +2110,108 @@ This produces a clean diagram with:
 - 3 representative boxes (WS-1, WS-2, ..., WS-6)
 - Single connection labeled "6x 1Gbps"
 - No visual clutter from 6 individual arrows
+
+---
+
+## Section 18: Rounded Container Label Positioning
+
+When placing corner labels inside rounded containers (e.g., "Lab Bench", "Network Zone"), the label must be offset from the container corner to avoid overlapping the curved edge.
+
+### The arcSize Formula
+
+DrawIO's `rounded=1` style uses a formula to calculate corner radius:
+
+```
+corner_radius = 0.15 × min(container_width, container_height)
+```
+
+This is the **default arcSize** (15%). The corner radius adapts to container size.
+
+### Visual Offset Formula (Validated)
+
+To position a label inside a rounded corner without overlapping the curve:
+
+```
+offset = max(corner_radius × 0.35, 15)
+```
+
+Where:
+- `corner_radius` = calculated from arcSize formula above
+- Minimum offset is 15px to ensure labels don't touch small corners
+- The 0.35 factor provides comfortable visual padding from the curve
+
+### Calculation Examples
+
+| Container Size | min(w,h) | corner_radius | offset |
+|----------------|----------|---------------|--------|
+| 800×680 | 680 | 102px | 35px |
+| 900×420 | 420 | 63px | 22px (or 35px visual override) |
+| 400×130 | 130 | 19.5px | 15px (minimum) |
+| 260×180 | 180 | 27px | 15px (minimum) |
+
+**Note**: For larger containers (corner_radius > 60px), a visual override of 35px often looks better than the calculated value.
+
+### Implementation Pattern
+
+#### Step 1: Calculate the offset
+
+```python
+# Example calculation
+container_width = 800
+container_height = 680
+corner_radius = 0.15 * min(container_width, container_height)  # = 102
+offset = max(corner_radius * 0.35, 15)  # = 35.7 → 35px
+```
+
+#### Step 2: Position the label
+
+```xml
+<!-- Container at x=280, y=50 -->
+<mxCell id="container" value=""
+        style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#999999;strokeWidth=2;"
+        vertex="1" parent="1">
+  <mxGeometry x="280" y="50" width="800" height="680" as="geometry"/>
+</mxCell>
+
+<!-- Label offset by 35px from container origin -->
+<mxCell id="container-label" value="&lt;b&gt;Container Label&lt;/b&gt;"
+        style="text;html=1;align=left;verticalAlign=top;fontSize=14;fontColor=#666666;"
+        vertex="1" parent="1">
+  <mxGeometry x="315" y="85" width="100" height="25" as="geometry"/>
+</mxCell>
+```
+
+The label position is:
+- `label_x = container_x + offset` (280 + 35 = 315)
+- `label_y = container_y + offset` (50 + 35 = 85)
+
+### Label Style for Corner Positioning
+
+```
+style="text;html=1;align=left;verticalAlign=top;fontSize=14;fontColor=#666666;"
+```
+
+Key attributes:
+- `align=left` - Text starts from the label's x position
+- `verticalAlign=top` - Text starts from the label's y position
+- No background color - label floats over container
+
+### Y-Offset Adjustment
+
+In practice, y-offset is often 5px larger than x-offset for visual balance:
+
+| Container Size | x-offset | y-offset |
+|----------------|----------|----------|
+| Large (800×680) | 35px | 35px |
+| Medium (400×130) | 15px | 20px |
+| Small (260×180) | 15px | 20px |
+
+This accounts for visual perception and potential stroke width.
+
+### Quick Reference
+
+| Container Size Category | Recommended Offset |
+|-------------------------|-------------------|
+| Large (min dim > 400px) | 35px |
+| Medium (min dim 150-400px) | 20px |
+| Small (min dim < 150px) | 15px |

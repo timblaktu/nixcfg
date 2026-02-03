@@ -108,6 +108,13 @@ in
             };
           }
 
+          # ===== PLANNING COMMANDS =====
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/planning/plans.md" = {
+              text = builtins.readFile "${commandsBasePath}/planning/plans.md";
+            };
+          }
+
           # ===== SECURITY TEST EXAMPLES =====
           {
             "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/security/test-examples/test-advanced-injection.md" = {
