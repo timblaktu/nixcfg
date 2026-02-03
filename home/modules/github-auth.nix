@@ -156,9 +156,13 @@ in
       };
 
       userName = mkOption {
-        type = types.str;
-        default = "token";
-        description = "Username for HTTPS authentication";
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Username for HTTPS authentication.
+          If null (recommended), the credential helper will provide the username.
+          Only set this if you need to override the default behavior.
+        '';
       };
     };
 
@@ -316,16 +320,20 @@ in
               # Use the wrapped gh command for GitHub credential operations
               # The wrapper injects the token from Bitwarden/SOPS, then calls
               # the official 'gh auth git-credential' subcommand
-              "https://github.com" = {
-                username = cfg.git.userName;
-                helper = mkForce
-                  (
-                    let
-                      ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
-                    in
-                    "!${ghWrapper}/bin/gh auth git-credential"
-                  );
-              };
+              "https://github.com" = mkMerge [
+                {
+                  helper = mkForce
+                    (
+                      let
+                        ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
+                      in
+                      "!${ghWrapper}/bin/gh auth git-credential"
+                    );
+                }
+                (mkIf (cfg.git.userName != null) {
+                  username = cfg.git.userName;
+                })
+              ];
               "https://gist.github.com" = {
                 helper = mkForce
                   (
