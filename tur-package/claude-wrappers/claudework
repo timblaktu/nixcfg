@@ -1,0 +1,50 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+# ═══════════════════════════════════════════════════════════════════
+# Work / Custom Proxy Account Wrapper
+# ═══════════════════════════════════════════════════════════════════
+# This script demonstrates how to configure Claude Code with a custom
+# third-party API proxy using bearer token authentication.
+#
+# ⚠️  TEMPLATE: Replace the values below with your actual proxy details!
+# Setup: Run 'claude-setup-work' to configure the bearer token
+
+# ─── API Configuration ───────────────────────────────────────────
+# TEMPLATE: Replace with your proxy URL (e.g., https://api.yourcompany.com/v1)
+export ANTHROPIC_BASE_URL="https://api.example.com/v1"
+
+# API key for third-party proxy - read from local secrets file on Termux
+# NOTE: Claude Code uses ANTHROPIC_API_KEY (not AUTH_TOKEN) for proxy endpoints
+TOKEN_FILE="$HOME/.secrets/claude-work-token"
+if [[ -f "$TOKEN_FILE" ]]; then
+  ANTHROPIC_API_KEY="$(cat "$TOKEN_FILE")"
+  export ANTHROPIC_API_KEY
+else
+  echo "Warning: API key not found at $TOKEN_FILE" >&2
+  echo "   Run 'claude-setup-work' to configure authentication" >&2
+fi
+
+# TEMPLATE: Replace with your proxy's model mappings
+# Example: Map Claude models to your proxy's available models
+export ANTHROPIC_DEFAULT_SONNET_MODEL="custom-model-large"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="custom-model-large"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="custom-model-small"
+
+# ─── Extra Environment Variables ─────────────────────────────────
+export DISABLE_TELEMETRY="1"
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+export DISABLE_ERROR_REPORTING="1"
+
+# ─── Config Directory ────────────────────────────────────────────
+export CLAUDE_CONFIG_DIR="$HOME/.claude-work"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+
+# ─── Launch Claude ───────────────────────────────────────────────
+if ! command -v claude &> /dev/null; then
+  echo "Error: claude command not found" >&2
+  echo "Install Claude Code with: npm install -g @anthropic/claude-code" >&2
+  exit 1
+fi
+
+exec claude "$@"

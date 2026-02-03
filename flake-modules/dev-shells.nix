@@ -10,19 +10,21 @@
           nixpkgs-fmt
           nil # Nix language server
           sops # For secrets
+          inputs.drawio-svg-sync.packages.${system}.default # For .drawio.svg rendering
         ];
-        
+
         shellHook = ''
-          echo "🚀 Nixcfg development environment"
+          echo "Nixcfg development environment"
           echo "Available commands:"
           echo "  nix build .#<package>     - Build a package"
           echo "  nix develop               - Enter development shell"
           echo "  nix flake check           - Check flake validity"
           echo "  nixos-rebuild switch --flake .#<hostname> - Apply NixOS config"
           echo "  home-manager switch --flake .#<user@hostname> - Apply home config"
+          echo "  nix run .#drawio-svg-sync - Re-render .drawio.svg files"
         '';
       };
-      
+
       # ESP32-C5 development shell from upstream nixpkgs-esp-dev, with mods/additions
       # Temporarily disabled due to invalid derivation path
       # esp32c5 = let
@@ -54,7 +56,7 @@
       #   '';
       # };
     };
-    
+
     # Convenient shell aliases for development
     apps = {
       # Quick development commands
@@ -74,11 +76,11 @@
           category = "development";
         };
       };
-      
+
       update = {
         type = "app";
         program = toString (pkgs.writeShellScript "update" ''
-          echo "📦 Updating flake inputs..."
+          echo "Updating flake inputs..."
           nix flake update
         '');
         meta = {
@@ -91,6 +93,10 @@
           category = "development";
         };
       };
+
+      # Draw.io SVG rendering - re-renders SVG body from embedded mxGraphModel XML
+      # Using external flake: github:timblaktu/drawio-svg-sync
+      drawio-svg-sync = inputs.drawio-svg-sync.apps.${system}.default;
     };
   };
 }

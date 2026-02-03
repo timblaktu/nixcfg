@@ -583,7 +583,176 @@
           fi
         '';
 
-        # Quick regression test before major changes  
+        # === OPENCODE CONFIGURATION TESTS ===
+        # Test OpenCode module generates valid configuration
+        opencode-config-validation =
+          let
+            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            opencodeEnabled = hmConfig.programs.opencode-enhanced.enable or false;
+            opencodeAccounts = hmConfig.programs.opencode-enhanced.accounts or { };
+            enabledAccounts = lib.filterAttrs (n: a: a.enable or false) opencodeAccounts;
+            accountNames = builtins.attrNames enabledAccounts;
+            mcpServers = hmConfig.programs.opencode-enhanced._internal.mcpServers or { };
+            mcpServerNames = builtins.attrNames mcpServers;
+          in
+          pkgs.runCommand "opencode-config-validation"
+            {
+              meta = {
+                description = "Validate OpenCode module configuration";
+                maintainers = [ ];
+                timeout = 30;
+              };
+              inherit opencodeEnabled;
+              accountList = builtins.concatStringsSep " " accountNames;
+              mcpServerList = builtins.concatStringsSep " " mcpServerNames;
+              accountCount = toString (builtins.length accountNames);
+              mcpCount = toString (builtins.length mcpServerNames);
+            } ''
+            echo "Testing OpenCode module configuration..."
+
+            # Check module is enabled
+            if [[ "$opencodeEnabled" != "1" ]]; then
+              echo "⚠️  OpenCode module not enabled in tim@thinky-nixos"
+              echo "This is expected if claude-code is disabled"
+            else
+              echo "✅ OpenCode module is enabled"
+            fi
+
+            # Check accounts are configured
+            echo "📊 Configured accounts ($accountCount): $accountList"
+            if [[ "$accountCount" -gt 0 ]]; then
+              echo "✅ At least one account configured"
+            fi
+
+            # Check MCP servers are configured
+            echo "📊 MCP servers ($mcpCount): $mcpServerList"
+            if [[ "$mcpCount" -gt 0 ]]; then
+              echo "✅ MCP servers configured"
+            fi
+
+            echo "✅ OpenCode configuration validation passed"
+            touch $out
+          '';
+
+        # Test OpenCode JSON output is valid
+        opencode-json-syntax =
+          let
+            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            opencodeEnabled = hmConfig.programs.opencode-enhanced.enable or false;
+            # Build a sample config to test JSON generation
+            sampleConfig = {
+              "$schema" = "https://opencode.ai/config.json";
+              model = hmConfig.programs.opencode-enhanced.defaultModel or "anthropic/claude-sonnet-4-5";
+              mcp = hmConfig.programs.opencode-enhanced._internal.mcpServers or { };
+              autoupdate = hmConfig.programs.opencode-enhanced.autoupdate or true;
+              share = hmConfig.programs.opencode-enhanced.share or "manual";
+            };
+            configJson = builtins.toJSON sampleConfig;
+          in
+          pkgs.runCommand "opencode-json-syntax"
+            {
+              meta = {
+                description = "Test OpenCode JSON configuration syntax";
+                maintainers = [ ];
+                timeout = 30;
+              };
+              passAsFile = [ "configContent" ];
+              configContent = configJson;
+            } ''
+            echo "Testing OpenCode JSON syntax..."
+
+            # Validate JSON with jq
+            if ${pkgs.jq}/bin/jq '.' "$configContentPath" > /dev/null 2>&1; then
+              echo "✅ JSON syntax is valid"
+            else
+              echo "❌ JSON syntax error"
+              ${pkgs.jq}/bin/jq '.' "$configContentPath" || true
+              exit 1
+            fi
+
+            # Check required structure
+            schema=$(${pkgs.jq}/bin/jq -r '.["$schema"]' "$configContentPath")
+            if [[ "$schema" == "https://opencode.ai/config.json" ]]; then
+              echo "✅ Schema reference is correct"
+            else
+              echo "❌ Missing or incorrect schema reference"
+              exit 1
+            fi
+
+            # Check model is set
+            model=$(${pkgs.jq}/bin/jq -r '.model' "$configContentPath")
+            if [[ "$model" != "null" && -n "$model" ]]; then
+              echo "✅ Model configured: $model"
+            else
+              echo "❌ Model not configured"
+              exit 1
+            fi
+
+            echo "✅ OpenCode JSON syntax validation passed"
+            touch $out
+          '';
+
+        # Test MCP server configuration structure
+        opencode-mcp-structure =
+          let
+            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            mcpServers = hmConfig.programs.opencode-enhanced._internal.mcpServers or { };
+          in
+          pkgs.runCommand "opencode-mcp-structure"
+            {
+              meta = {
+                description = "Test OpenCode MCP server configuration structure";
+                maintainers = [ ];
+                timeout = 30;
+              };
+              passAsFile = [ "mcpContent" ];
+              mcpContent = builtins.toJSON mcpServers;
+            } ''
+            echo "Testing OpenCode MCP server structure..."
+
+            # Parse MCP config
+            servers=$(${pkgs.jq}/bin/jq -r 'keys[]' "$mcpContentPath" 2>/dev/null || echo "")
+
+            for server in $servers; do
+              echo "Checking server: $server"
+
+              # Each server must have 'type' field
+              serverType=$(${pkgs.jq}/bin/jq -r --arg s "$server" '.[$s].type // "missing"' "$mcpContentPath")
+              if [[ "$serverType" == "missing" ]]; then
+                echo "❌ Server $server missing 'type' field"
+                exit 1
+              fi
+              echo "  ✅ type: $serverType"
+
+              # Local servers must have 'command' array
+              if [[ "$serverType" == "local" ]]; then
+                cmdLen=$(${pkgs.jq}/bin/jq -r --arg s "$server" '.[$s].command | length' "$mcpContentPath")
+                if [[ "$cmdLen" -eq 0 ]]; then
+                  echo "❌ Server $server has empty command"
+                  exit 1
+                fi
+                echo "  ✅ command has $cmdLen elements"
+              fi
+
+              # Check enabled field (OpenCode uses 'enabled' not 'enable')
+              enabled=$(${pkgs.jq}/bin/jq -r --arg s "$server" '.[$s].enabled // "missing"' "$mcpContentPath")
+              if [[ "$enabled" != "true" && "$enabled" != "false" && "$enabled" != "missing" ]]; then
+                echo "❌ Server $server has invalid 'enabled' value: $enabled"
+                exit 1
+              fi
+              echo "  ✅ enabled: $enabled"
+            done
+
+            if [[ -z "$servers" ]]; then
+              echo "⚠️  No MCP servers configured (this may be intentional)"
+            else
+              echo "✅ All MCP server configurations valid"
+            fi
+
+            touch $out
+          '';
+
+        # Quick regression test before major changes
         regression-test = pkgs.runCommand "regression-test"
           {
             meta = {

@@ -5,6 +5,9 @@ with lib;
 
 let
   cfg = config.homeBase;
+
+  # Import shared Claude Code wrapper library
+  claudeLib = import ../modules/claude-code/lib.nix { inherit lib pkgs config; };
 in
 {
   config = mkIf cfg.enableDevelopment {
@@ -79,338 +82,71 @@ in
         runtimeInputs = with pkgs; [ jq coreutils ];
       })
 
-      # Claude Code account wrapper scripts
-      (pkgs.writeShellApplication {
-        name = "claude";
-        text =
-          let
-            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-              account="${account}"
-              config_dir="${configDir}"
-              settings_file="$config_dir/settings.json"
-              pidfile="/tmp/claude-''${account}.pid"
-            
-              # V2.0 Coalescence: Merge Nix-managed config with runtime state
-              coalesce_config() {
-                if [[ -f "$config_dir/.claude.json" && -f "$settings_file" ]]; then
-                  # Preserve runtime fields while applying Nix settings
-                  ${pkgs.jq}/bin/jq -s '.[0] as $runtime | .[1] as $settings | 
-                    $runtime + {
-                      permissions: $settings.permissions,
-                      env: $settings.env,
-                      hooks: $settings.hooks,
-                      statusLine: $settings.statusLine
-                    }' "$config_dir/.claude.json" "$settings_file" > "$config_dir/.claude.json.tmp" && \
-                    mv "$config_dir/.claude.json.tmp" "$config_dir/.claude.json"
-                fi
-              }
-            
-              # Check for headless mode - bypass PID check for stateless operations
-              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                coalesce_config
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-              fi
-
-              # Production Claude detection logic (v2.0: check for --settings flag)
-              if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
-                coalesce_config
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-              fi
-
-              # PID-based single instance management
-              if [[ -f "$pidfile" ]]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                  echo "   Using existing instance..."
-                  coalesce_config
-                  export CLAUDE_CONFIG_DIR="$config_dir"
-                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-                else
-                  echo "🧹 Cleaning up stale PID file..."
-                  rm -f "$pidfile"
-                fi
-              fi
-
-              # Launch new instance with environment setup
-              echo "🚀 Launching Claude (${displayName})..."
-              export CLAUDE_CONFIG_DIR="$config_dir"
-              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-
-              # Create config directory if it doesn't exist
-              mkdir -p "$config_dir"
-
-              # Apply coalescence before launch
-              coalesce_config
-
-              # Store PID and execute
-              echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-            '';
-          in
-          mkClaudeWrapperScript {
-            account = "default";
-            displayName = "Claude Default Account";
-            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-default";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
-          };
-        runtimeInputs = with pkgs; [ procps coreutils claude-code ];
-        passthru.tests = {
-          syntax = pkgs.runCommand "test-claude-syntax" { } ''
-            echo "✅ Syntax validation passed at build time" > $out
-          '';
-          help_availability = pkgs.runCommand "test-claude-help"
-            {
-              nativeBuildInputs = [
-                (pkgs.writeShellApplication {
-                  name = "claude";
-                  text =
-                    let
-                      mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-                              account="${account}"
-                              config_dir="${configDir}"
-                              pidfile="/tmp/claude-''${account}.pid"
-                  
-                              # Check for headless mode - bypass PID check for stateless operations
-                              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                                export CLAUDE_CONFIG_DIR="$config_dir"
-                                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                                exec "${pkgs.claude-code}/bin/claude" "$@"
-                              fi
-
-                              # Production Claude detection logic  
-                              if pgrep -f "claude.*--config-dir.*$config_dir" > /dev/null 2>&1; then
-                                coalesce_config
-                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-                              fi
-
-                              # PID-based single instance management
-                              if [[ -f "$pidfile" ]]; then
-                                pid=$(cat "$pidfile")
-                                if kill -0 "$pid" 2>/dev/null; then
-                                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                                  echo "   Using existing instance..."
-                                  coalesce_config
-                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-                                else
-                                  echo "🧹 Cleaning up stale PID file..."
-                                  rm -f "$pidfile"
-                                fi
-                              fi
-
-                              # Launch new instance with environment setup
-                              echo "🚀 Launching Claude (${displayName})..."
-                              export CLAUDE_CONFIG_DIR="$config_dir"
-                              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                  
-                              # Create config directory if it doesn't exist
-                              mkdir -p "$config_dir"
-                  
-                              # Store PID and execute
-                              echo $$ > "$pidfile"
-                              coalesce_config
-                        exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-                      '';
-                    in
-                    mkClaudeWrapperScript {
-                      account = "default";
-                      displayName = "Claude Default Account";
-                      configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-default";
-                      extraEnvVars = {
-                        DISABLE_TELEMETRY = "1";
-                        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-                        DISABLE_ERROR_REPORTING = "1";
-                      };
-                    };
-                  runtimeInputs = with pkgs; [ procps coreutils claude-code ];
-                })
-              ];
-            } ''
-            output=$(claude --help 2>&1)
-            exit_code=$?
-            
-            if [[ $exit_code -eq 0 ]]; then
-              echo "✅ Help command works" > $out
-            else
-              echo "✅ Help command test completed (expected behavior)" > $out
-            fi
-          '';
-        };
-      })
+      # Claude Code account wrapper scripts - using shared library
+      # NOTE: There is intentionally NO bare "claude" wrapper - explicit account selection is required
+      # Use: claudemax, claudepro, or claudework
 
       (pkgs.writeShellApplication {
         name = "claudemax";
-        text =
-          let
-            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-              account="${account}"
-              config_dir="${configDir}"
-              settings_file="$config_dir/settings.json"
-              pidfile="/tmp/claude-''${account}.pid"
-            
-              # V2.0 Coalescence: Merge Nix-managed config with runtime state
-              coalesce_config() {
-                if [[ -f "$config_dir/.claude.json" && -f "$settings_file" ]]; then
-                  # Preserve runtime fields while applying Nix settings
-                  ${pkgs.jq}/bin/jq -s '.[0] as $runtime | .[1] as $settings | 
-                    $runtime + {
-                      permissions: $settings.permissions,
-                      env: $settings.env,
-                      hooks: $settings.hooks,
-                      statusLine: $settings.statusLine
-                    }' "$config_dir/.claude.json" "$settings_file" > "$config_dir/.claude.json.tmp" && \
-                    mv "$config_dir/.claude.json.tmp" "$config_dir/.claude.json"
-                fi
-              }
-            
-              # Check for headless mode - bypass PID check for stateless operations
-              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                coalesce_config
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-              fi
-
-              # Production Claude detection logic (v2.0: check for --settings flag)
-              if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
-                coalesce_config
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-              fi
-
-              # PID-based single instance management
-              if [[ -f "$pidfile" ]]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                  echo "   Using existing instance..."
-                  coalesce_config
-                  export CLAUDE_CONFIG_DIR="$config_dir"
-                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-                else
-                  echo "🧹 Cleaning up stale PID file..."
-                  rm -f "$pidfile"
-                fi
-              fi
-
-              # Launch new instance with environment setup
-              echo "🚀 Launching Claude (${displayName})..."
-              export CLAUDE_CONFIG_DIR="$config_dir"
-              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-
-              # Create config directory if it doesn't exist
-              mkdir -p "$config_dir"
-
-              # Apply coalescence before launch
-              coalesce_config
-
-              # Store PID and execute
-              echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-            '';
-          in
-          mkClaudeWrapperScript {
-            account = "max";
-            displayName = "Claude Max Account";
-            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
+        text = claudeLib.mkClaudeWrapperScript {
+          account = "max";
+          displayName = "Claude Max Account";
+          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-max";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
           };
-        runtimeInputs = with pkgs; [ procps coreutils claude-code ];
+        };
+        runtimeInputs = with pkgs; [ procps coreutils claude-code jq ];
       })
 
       (pkgs.writeShellApplication {
         name = "claudepro";
-        text =
-          let
-            mkClaudeWrapperScript = { account, displayName, configDir, extraEnvVars ? { } }: ''
-              account="${account}"
-              config_dir="${configDir}"
-              settings_file="$config_dir/settings.json"
-              pidfile="/tmp/claude-''${account}.pid"
-            
-              # V2.0 Coalescence: Merge Nix-managed config with runtime state
-              coalesce_config() {
-                if [[ -f "$config_dir/.claude.json" && -f "$settings_file" ]]; then
-                  # Preserve runtime fields while applying Nix settings
-                  ${pkgs.jq}/bin/jq -s '.[0] as $runtime | .[1] as $settings | 
-                    $runtime + {
-                      permissions: $settings.permissions,
-                      env: $settings.env,
-                      hooks: $settings.hooks,
-                      statusLine: $settings.statusLine
-                    }' "$config_dir/.claude.json" "$settings_file" > "$config_dir/.claude.json.tmp" && \
-                    mv "$config_dir/.claude.json.tmp" "$config_dir/.claude.json"
-                fi
-              }
-            
-              # Check for headless mode - bypass PID check for stateless operations
-              if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
-                coalesce_config
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-              fi
+        text = claudeLib.mkClaudeWrapperScript {
+          account = "pro";
+          displayName = "Claude Pro Account";
+          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-pro";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
+          };
+        };
+        runtimeInputs = with pkgs; [ procps coreutils claude-code jq ];
+      })
 
-              # Production Claude detection logic (v2.0: check for --settings flag)
-              if pgrep -f "claude.*--settings.*$settings_file" > /dev/null 2>&1; then
-                coalesce_config
-                export CLAUDE_CONFIG_DIR="$config_dir"
-                exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-              fi
-
-              # PID-based single instance management
-              if [[ -f "$pidfile" ]]; then
-                pid=$(cat "$pidfile")
-                if kill -0 "$pid" 2>/dev/null; then
-                  echo "🔄 Claude (${displayName}) is already running (PID: $pid)"
-                  echo "   Using existing instance..."
-                  coalesce_config
-                  export CLAUDE_CONFIG_DIR="$config_dir"
-                  exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-                else
-                  echo "🧹 Cleaning up stale PID file..."
-                  rm -f "$pidfile"
-                fi
-              fi
-
-              # Launch new instance with environment setup
-              echo "🚀 Launching Claude (${displayName})..."
-              export CLAUDE_CONFIG_DIR="$config_dir"
-              ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=\"${v}\"") extraEnvVars)}
-
-              # Create config directory if it doesn't exist
-              mkdir -p "$config_dir"
-
-              # Apply coalescence before launch
-              coalesce_config
-
-              # Store PID and execute
-              echo $$ > "$pidfile"
-              exec "${pkgs.claude-code}/bin/claude" --settings="$settings_file" --mcp-config="$config_dir/.mcp.json" "$@"
-            '';
-          in
-          mkClaudeWrapperScript {
-            account = "pro";
-            displayName = "Claude Pro Account";
-            configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-pro";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
+      (pkgs.writeShellApplication {
+        name = "claudework";
+        text = claudeLib.mkClaudeWrapperScript {
+          account = "work";
+          displayName = "Work Code-Companion";
+          configDir = "${config.home.homeDirectory}/src/nixcfg/claude-runtime/.claude-work";
+          api = {
+            baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+            authMethod = "bearer";
+            # Note: disableApiKey not needed - bearer auth sets ANTHROPIC_API_KEY from Bitwarden
+            modelMappings = {
+              opus = "devstral"; # Best reasoning (matches settings.json)
+              sonnet = "devstral"; # Default model (matches settings.json)
+              haiku = "qwen-a3b"; # Fast + images/OCR (250K context)
             };
           };
-        runtimeInputs = with pkgs; [ procps coreutils claude-code ];
+          secrets = {
+            bearerToken = {
+              bitwarden = {
+                item = "PAC Code Companion v2";
+                field = "API Key";
+              };
+            };
+          };
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
+          };
+        };
+        runtimeInputs = with pkgs; [ procps coreutils claude-code jq rbw ];
       })
 
       # Claude Code wrapper and update utilities
@@ -418,38 +154,38 @@ in
         name = "claude-code-wrapper";
         text = ''
           # Claude Code user-local installation wrapper
-          
+
           # Set up local installation directories
           mkdir -p "$HOME/.local/share/claude-code"
           mkdir -p "$HOME/.local/bin"
-          
+
           # Configure npm to use local prefix
           export NPM_CONFIG_PREFIX="$HOME/.local/share/claude-code/npm"
           export PATH="$HOME/.local/share/claude-code/npm/bin:$PATH"
-          
+
           # Install claude-code if not already present
           if [ ! -x "$HOME/.local/share/claude-code/npm/bin/claude" ]; then
             echo "Installing claude-code to user directory..."
             if command -v npm >/dev/null 2>&1; then
               npm install -g @anthropic-ai/claude-code
             else
-              echo "❌ Error: npm not available"
+              echo "Error: npm not available"
               echo "   Please ensure Node.js is installed and available in PATH"
               exit 1
             fi
           fi
-          
+
           # Execute claude with all arguments
           exec "$HOME/.local/share/claude-code/npm/bin/claude" "$@"
         '';
         runtimeInputs = with pkgs; [ nodejs_22 coreutils ];
         passthru.tests = {
           syntax = pkgs.runCommand "test-claude-code-wrapper-syntax" { } ''
-            echo "✅ Syntax validation passed at build time" > $out
+            echo "Syntax validation passed at build time" > $out
           '';
           directory_setup = pkgs.runCommand "test-claude-code-wrapper-dirs" { } ''
             # Test that script sets up proper directory structure - placeholder
-            echo "✅ Directory setup test passed (placeholder)" > $out
+            echo "Directory setup test passed (placeholder)" > $out
           '';
         };
       })
@@ -458,15 +194,15 @@ in
         name = "claude-code-update";
         text = ''
           # Update claude-code installation
-          
+
           export NPM_CONFIG_PREFIX="$HOME/.local/share/claude-code/npm"
           echo "Updating claude-code..."
-          
+
           if command -v npm >/dev/null 2>&1; then
             npm update -g @anthropic-ai/claude-code
             echo "Update complete!"
           else
-            echo "❌ Error: npm not available"
+            echo "Error: npm not available"
             echo "   Please ensure Node.js is installed and available in PATH"
             exit 1
           fi
@@ -474,13 +210,71 @@ in
         runtimeInputs = with pkgs; [ nodejs_22 coreutils ];
         passthru.tests = {
           syntax = pkgs.runCommand "test-claude-code-update-syntax" { } ''
-            echo "✅ Syntax validation passed at build time" > $out
+            echo "Syntax validation passed at build time" > $out
           '';
           npm_check = pkgs.runCommand "test-claude-code-update-npm" { } ''
             # Test npm availability check - placeholder
-            echo "✅ NPM check test passed (placeholder)" > $out
+            echo "NPM check test passed (placeholder)" > $out
           '';
         };
+      })
+
+      # Show Claude Code model mappings for current session
+      (pkgs.writeShellApplication {
+        name = "claude-models";
+        text = ''
+          # Display current Claude Code model mappings
+
+          echo "Claude Code Model Mappings"
+          echo "=========================="
+          echo ""
+
+          # Check if we're in a Claude session by looking for the model env vars
+          if [[ -z "''${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]] && \
+             [[ -z "''${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" ]] && \
+             [[ -z "''${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" ]]; then
+            echo "No model mappings found in environment."
+            echo "This command should be run from within a Claude Code session."
+            echo ""
+            echo "Launch Claude Code with one of these wrappers:"
+            echo "  - claudemax   (Anthropic Max account)"
+            echo "  - claudepro   (Anthropic Pro account)"
+            echo "  - claudework  (PAC Code-Companion)"
+            exit 1
+          fi
+
+          # Show API base URL if set
+          if [[ -n "''${ANTHROPIC_BASE_URL:-}" ]]; then
+            echo "API Base URL: ''${ANTHROPIC_BASE_URL}"
+            echo ""
+          fi
+
+          # Display model mappings
+          echo "Model Alias Mappings:"
+          echo "--------------------"
+
+          if [[ -n "''${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]]; then
+            echo "  opus   → ''${ANTHROPIC_DEFAULT_OPUS_MODEL}"
+          fi
+
+          if [[ -n "''${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" ]]; then
+            echo "  sonnet → ''${ANTHROPIC_DEFAULT_SONNET_MODEL}"
+          fi
+
+          if [[ -n "''${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" ]]; then
+            echo "  haiku  → ''${ANTHROPIC_DEFAULT_HAIKU_MODEL}"
+          fi
+
+          echo ""
+          echo "Usage:"
+          echo "  /model opus   - Switch to opus model"
+          echo "  /model sonnet - Switch to sonnet model"
+          echo "  /model haiku  - Switch to haiku model"
+          echo ""
+          echo "Or use full model names directly:"
+          echo "  --model <full-model-name>"
+        '';
+        runtimeInputs = with pkgs; [ coreutils ];
       })
     ];
   };

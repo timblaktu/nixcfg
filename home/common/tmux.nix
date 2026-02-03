@@ -126,7 +126,7 @@ in
     historyLimit = 100000; # Large history (matching your old config)
     # terminal setting moved to extraConfig for better Microsoft Terminal compatibility
     aggressiveResize = true; # From old config
-    focusEvents = true; # Enable focus events
+    focusEvents = false; # Disable focus events - causes control chars in apps that don't handle them (claude-code, etc)
 
     # Shell configuration - use zsh if available, otherwise system default
     shell = if config.programs.zsh.enable then "${config.programs.zsh.package}/bin/zsh" else "${pkgs.bash}/bin/bash";
@@ -164,6 +164,8 @@ in
       set -ga terminal-overrides ",*:dim=\\E[2m"
       set -ga terminal-overrides ",*:smul=\\E[4m"
       set -ga terminal-overrides ",*:sitm=\\E[3m"
+      # Disable focus event reporting at terminal features level (in addition to focus-events=false)
+      set -ga terminal-features ",*:focus:0"
       set-hook -g client-resized 'refresh-client -S'
 
       # ---- PANE VISUAL INDICATORS ----

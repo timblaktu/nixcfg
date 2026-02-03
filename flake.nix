@@ -53,6 +53,9 @@
     };
 
     nix-writers.url = "github:timblaktu/nix-writers";
+
+    # Documentation tooling
+    drawio-svg-sync.url = "github:timblaktu/drawio-svg-sync";
   };
 
   outputs = inputs@{ flake-parts, ... }:
@@ -68,6 +71,7 @@
         ./flake-modules/home-configurations.nix
         ./flake-modules/shared-modules.nix # Exports for sharing with colleagues
         ./flake-modules/templates.nix # Flake templates for easy onboarding
+        ./flake-modules/termux-outputs.nix # Termux Claude Code wrapper scripts
         ./flake-modules/tests.nix # All checks and tests consolidated here
         ./flake-modules/github-actions.nix # Configurable GitHub Actions validation
       ];
@@ -75,6 +79,7 @@
       # Support these systems across all modules
       systems = [
         "x86_64-linux"
+        "aarch64-linux" # For Termux on Android
       ];
 
       # Per-system configuration

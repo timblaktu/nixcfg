@@ -3,11 +3,11 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced;
+  cfg = config.programs.claude-code;
 
 in
 {
-  options.programs.claude-code-enhanced.slashCommands = {
+  options.programs.claude-code.slashCommands = {
     documentation = {
       enable = mkOption {
         type = types.bool;
@@ -105,7 +105,7 @@ in
     };
   };
 
-  config.programs.claude-code-enhanced._internal.slashCommandDefs = {
+  config.programs.claude-code._internal.slashCommandDefs = {
     documentation = mkIf cfg.slashCommands.documentation.enable {
       "generate-readme" = {
         name = "generate-readme";

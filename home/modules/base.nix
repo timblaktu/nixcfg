@@ -7,9 +7,25 @@ let
   cfg = config.homeBase;
 in
 {
+  # Disable upstream home-manager modules to avoid namespace conflicts.
+  # Our custom claude-code.nix and opencode.nix modules provide significantly
+  # more functionality (multi-account support, categorized hooks, statusline
+  # variants, MCP server helpers, WSL integration, etc.) than the basic upstream
+  # versions. By disabling the upstream modules, we can use the standard
+  # programs.claude-code and programs.opencode namespaces instead of requiring
+  # awkward -enhanced suffixes.
+  #
+  # Feature comparison: See docs/claude-code-module-comparison.md
+  # Upstream contribution plan: See home/modules/claude-code/UPSTREAM-CONTRIBUTION-PLAN.md
+  disabledModules = [
+    "programs/claude-code.nix" # Upstream: 441 lines, basic features
+    "programs/opencode.nix" # Upstream: 262 lines, basic features
+  ];
+
   imports = [
     ../common/git.nix
     ../common/tmux.nix
+    ./tmux-auto-reload.nix # Auto-reload tmux config on HM generation change
     ../common/nixvim.nix
     ../common/zsh.nix
     ../common/environment.nix
@@ -23,7 +39,8 @@ in
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
-    ./claude-code.nix # Claude Code Enhanced - renamed to avoid upstream conflict
+    ./claude-code.nix # Claude Code - enhanced multi-account module (upstream disabled via disabledModules)
+    ./opencode.nix # OpenCode - enhanced multi-account module (upstream disabled via disabledModules)
     ./secrets-management.nix # RBW and SOPS configuration
     ./github-auth.nix # GitHub and GitLab authentication (Bitwarden/SOPS)
     ./podman-tools.nix # Container tools configuration
@@ -341,6 +358,7 @@ in
       # Enable/disable modules based on configuration
       programs.git.enable = cfg.enableGit;
       programs.tmux.enable = cfg.enableTmux;
+      programs.tmux.autoReload.enable = cfg.enableTmux; # Auto-reload on HM generation change
 
       # Pass terminal verification configuration to the module
       terminalVerification = {
@@ -351,8 +369,11 @@ in
 
       # Validated scripts configuration removed - migrated to unified files
 
-      # Claude Code Enhanced - renamed to avoid conflict with upstream programs.claude-code
-      programs.claude-code-enhanced = {
+      # ─────────────────────────────────────────────────────────────────────────
+      # Claude Code - enhanced multi-account implementation
+      # Upstream home-manager module disabled via disabledModules (see top of file)
+      # ─────────────────────────────────────────────────────────────────────────
+      programs.claude-code = {
         enable = cfg.enableClaudeCode;
         defaultModel = "opus";
         defaultAccount = "max";
@@ -360,11 +381,62 @@ in
           max = {
             enable = true;
             displayName = "Claude Max Account";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
           };
           pro = {
             enable = true;
             displayName = "Claude Pro Account";
             model = "sonnet";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
+          };
+          work = {
+            enable = true;
+            displayName = "Work Code-Companion";
+            model = "sonnet";
+            api = {
+              baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+              authMethod = "bearer";
+              disableApiKey = true;
+              modelMappings = {
+                haiku = "devstral";
+                sonnet = "qwen-a3b";
+                opus = "claude-sonnet-4-5-20250929";
+              };
+            };
+            secrets.bearerToken.bitwarden = {
+              item = "PAC Code Companion v2";
+              field = "API Key";
+            };
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+              ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
+              ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
+              # ANTHROPIC_DEFAULT_OPUS_MODEL = "kimi-linear-reap-a3b";
+              ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
+              # From https://git.panasonic.aero/platform/sandbox/pac-claude-proxy/-/blob/main/anthropic_proxy.py?ref_type=heads#L29
+              # MODEL_MAP = {
+              #     "claude-sonnet-4-5-20250929": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+              #     "claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+              #     "claude-opus-4-5-20251101": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+              #     "claude-opus-4-20250514": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+              #     "claude-opus-4-20250514-v3:0": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+              #     "claude-sonnet-4-20250514": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+              #     "claude-3-7-sonnet-20250219": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+              #     "claude-3-5-sonnet-20241022": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+              #     # Haiku - map to Sonnet (Haiku not available)
+              #     "claude-haiku-4-5-20251001": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+              # }
+            };
           };
         };
         statusline = {
@@ -379,6 +451,169 @@ in
           nixos.enable = true; # Using uvx to run mcp-nixos Python package
           # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
           # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
+        };
+        # Task automation - provides run-tasks script and /next-task command
+        taskAutomation.enable = true;
+        # Skills - provides ADR-writer and custom skills
+        skills.enable = true;
+        # Custom sub-agents
+        subAgents.custom = {
+          pdf-indexer = {
+            description = "Extract TOC, metadata, and key content from PDF documents. Uses pdftotext via Bash to bypass Read tool token limits. Handles PDFs of any size.";
+            tools = [ "Bash" "Glob" ];
+            capabilities = [
+              "Extract metadata (title, pages, size) using pdfinfo"
+              "Extract text content using pdftotext with page range control"
+              "Size-based routing: full extraction for small PDFs, TOC-only for large"
+              "Structured markdown output with page references"
+            ];
+            instructions = ''
+              ## Why This Agent Exists
+
+              The Read tool has a 25,000 token limit for PDFs, which fails on documents > ~30 pages.
+              This agent uses `pdftotext` via Bash to extract text content, bypassing that limitation.
+
+              ## Required Tools
+
+              Use `poppler-utils` via nix-shell:
+
+              ```bash
+              nix-shell -p poppler-utils --run 'pdfinfo "file.pdf"'
+              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 10 "file.pdf" -'
+              ```
+
+              ## Size-Based Extraction Strategy
+
+              **Small PDFs (≤50 pages):** Extract all pages
+              ```bash
+              nix-shell -p poppler-utils --run 'pdftotext "PATH" -' 2>/dev/null | head -500
+              ```
+
+              **Medium PDFs (51-200 pages):** Extract first 15 pages (usually contains TOC)
+              ```bash
+              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 15 "PATH" -' 2>/dev/null
+              ```
+
+              **Large PDFs (>200 pages):** Extract first 20 pages only
+              ```bash
+              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 20 "PATH" -' 2>/dev/null
+              ```
+
+              ## Output Format
+
+              Return structured markdown with:
+              - Document title and revision
+              - Page count and file size
+              - Table of contents with page numbers
+              - Document type classification
+
+              ## Handling Multiple PDFs
+
+              Use `fd` to list PDFs first:
+              ```bash
+              fd -t f -e pdf -e PDF . "DIRECTORY_PATH"
+              ```
+              Then process each individually.
+            '';
+            examples = [
+              "Index this PDF: /path/to/document.pdf"
+              "Index all PDFs in /path/to/docs/ and return a markdown table"
+              "Extract the TOC from /path/to/large-manual.pdf"
+            ];
+          };
+        };
+      };
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # OpenCode - enhanced multi-account implementation
+      # Upstream home-manager module disabled via disabledModules (see top of file)
+      # Uses shared MCP server definitions for DRY configuration
+      # ─────────────────────────────────────────────────────────────────────────
+      programs.opencode = {
+        enable = cfg.enableClaudeCode; # Enable alongside claude-code
+        defaultModel = "anthropic/claude-sonnet-4-5";
+        defaultAccount = "max";
+        # Provider configuration - API key via environment variable
+        provider = {
+          anthropic = {
+            options = {
+              apiKey = "{env:ANTHROPIC_API_KEY}";
+            };
+          };
+          # Custom Code-Companion provider using OpenAI-compatible API
+          codecompanion = {
+            npm = "@ai-sdk/openai-compatible";
+            name = "Code Companion V2";
+            options = {
+              baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
+              apiKey = "{env:ANTHROPIC_API_KEY}";
+            };
+            models = {
+              "qwen-a3b" = {
+                name = "Qwen A3B";
+                modalities = {
+                  input = [ "text" "image" ];
+                  output = [ "text" ];
+                };
+              };
+              "devstral" = { name = "Devstral"; };
+              "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
+              "glm-47" = { name = "GLM 47"; };
+            };
+          };
+        };
+        accounts = {
+          max = {
+            enable = true;
+            displayName = "OpenCode Max Account";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+            };
+          };
+          pro = {
+            enable = true;
+            displayName = "OpenCode Pro Account";
+            model = "anthropic/claude-sonnet-4-5";
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+            };
+          };
+          work = {
+            enable = true;
+            displayName = "OpenCode Work Code-Companion";
+            provider = "custom";
+            model = "codecompanion/qwen-a3b";
+            # API config is in the top-level codecompanion provider block
+            # We still need the env var name for the wrapper script
+            api = {
+              apiKeyEnvVar = "ANTHROPIC_API_KEY";
+            };
+            secrets.bearerToken.bitwarden = {
+              item = "PAC Code Companion v2";
+              field = "API Key";
+            };
+            extraEnvVars = {
+              DISABLE_TELEMETRY = "1";
+            };
+          };
+        };
+        permissions = {
+          Bash = "allow";
+          Read = "allow";
+          Write = "allow";
+          Edit = "allow";
+          WebFetch = "allow";
+          "mcp__context7" = "allow";
+          "mcp__mcp-nixos" = "allow";
+          "mcp__sequential-thinking" = "allow";
+          Search = "deny";
+          Find = "deny";
+          "Bash(rm -rf /*)" = "deny";
+        };
+        mcpServers = {
+          context7.enable = true;
+          sequentialThinking.enable = true;
+          nixos.enable = true;
         };
       };
 

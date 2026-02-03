@@ -4,7 +4,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced;
+  cfg = config.programs.claude-code;
 
   # Create the nixmemory command as a proper package
   claudeNixmemoryCmd = pkgs.writeShellApplication {
@@ -135,7 +135,7 @@ let
 
 in
 {
-  options.programs.claude-code-enhanced.staticCommands = {
+  options.programs.claude-code.staticCommands = {
     enable = mkOption {
       type = types.bool;
       default = false; # Start with false to test alongside existing implementation

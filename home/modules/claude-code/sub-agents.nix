@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced;
+  cfg = config.programs.claude-code;
 
   mkSubAgent =
     { name
@@ -12,28 +12,30 @@ let
     , instructions
     , examples ? [ ]
     , constraints ? [ ]
+    , tools ? [ ]
     }: {
       text = ''
         ---
         name: ${lib.toLower (lib.replaceStrings [" "] ["-"] name)}
         description: ${description}
+        ${optionalString (tools != []) "tools: ${concatStringsSep ", " tools}"}
         ---
-      
+
         # ${name}
-      
+
         ${description}
-      
+
         ## Capabilities
         ${concatStringsSep "\n" (map (cap: "- ${cap}") capabilities)}
-      
+
         ## Instructions
         ${instructions}
-      
+
         ${optionalString (examples != []) ''
           ## Examples
           ${concatStringsSep "\n\n" examples}
         ''}
-      
+
         ${optionalString (constraints != []) ''
           ## Constraints
           ${concatStringsSep "\n" (map (c: "- ${c}") constraints)}
@@ -43,7 +45,7 @@ let
 
 in
 {
-  options.programs.claude-code-enhanced.subAgents = {
+  options.programs.claude-code.subAgents = {
     codeSearcher = {
       enable = mkOption {
         type = types.bool;
@@ -120,6 +122,11 @@ in
             default = [ ];
             description = "Agent constraints";
           };
+          tools = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Tools available to this agent (e.g., Bash, Glob, Read)";
+          };
         };
       });
       default = { };
@@ -127,7 +134,7 @@ in
     };
   };
 
-  config.programs.claude-code-enhanced._internal.subAgentFiles = mkMerge [
+  config.programs.claude-code._internal.subAgentFiles = mkMerge [
     (mkIf cfg.subAgents.codeSearcher.enable {
       ".claude/agents/code-searcher.md" = mkSubAgent {
         name = "Code Searcher";

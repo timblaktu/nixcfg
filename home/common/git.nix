@@ -135,21 +135,8 @@
     };
   };
 
-  # GitHub CLI (settings from existing ~/.config/gh/config.yml)
-  programs.gh = {
-    enable = true;
-    settings = {
-      git_protocol = "https"; # From existing config (not ssh)
-      editor = ""; # Blank in existing config - will refer to environment
-      prompt = "enabled";
-      prefer_editor_prompt = "disabled"; # From existing config
-      pager = ""; # Blank - will refer to environment
-      # Custom aliases from existing config
-      aliases = {
-        co = "pr checkout";
-      };
-    };
-  };
+  # GitHub CLI configuration is managed by github-auth.nix module
+  # See home/modules/github-auth.nix for the complete setup with Bitwarden integration
 
   # Install additional Git-related tools
   home.packages = with pkgs; [

@@ -1,0 +1,63 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+# ═══════════════════════════════════════════════════════════════════
+# Work/Proxy Account Setup Helper
+# ═══════════════════════════════════════════════════════════════════
+# Interactive script to configure bearer token for custom API proxy
+
+echo ""
+echo "╔════════════════════════════════════════════════════════════════╗"
+echo "║  Claude Work/Proxy Account Setup                               ║"
+echo "╚════════════════════════════════════════════════════════════════╝"
+echo ""
+echo "This will configure bearer token authentication for a custom"
+echo "third-party API proxy."
+echo ""
+echo "⚠️  NOTE: You must edit the claudework script to set your actual"
+echo "    proxy URL and model mappings before using this wrapper."
+echo "    See: \$PREFIX/bin/claudework"
+echo ""
+
+# Check if token already exists
+TOKEN_FILE="$HOME/.secrets/claude-work-token"
+if [[ -f "$TOKEN_FILE" ]]; then
+  echo "⚠️  Warning: Token file already exists at:"
+  echo "    $TOKEN_FILE"
+  echo ""
+  read -p "Overwrite existing token? [y/N] " -n 1 -r
+  echo ""
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Setup cancelled."
+    exit 0
+  fi
+fi
+
+# Create secrets directory
+mkdir -p "$HOME/.secrets"
+chmod 700 "$HOME/.secrets"
+
+# Prompt for token
+echo ""
+echo "Enter your API proxy bearer token:"
+echo "(Input will be hidden for security)"
+read -s -r TOKEN
+
+if [[ -z "$TOKEN" ]]; then
+  echo ""
+  echo "Error: Token cannot be empty" >&2
+  exit 1
+fi
+
+# Save token
+echo "$TOKEN" > "$TOKEN_FILE"
+chmod 600 "$TOKEN_FILE"
+
+echo ""
+echo "✅ Token saved to: $TOKEN_FILE"
+echo ""
+echo "You can now use: claudework"
+echo ""
+echo "Test the connection:"
+echo "  claudework --version"
+echo ""

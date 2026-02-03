@@ -10,13 +10,17 @@ with lib;
     ./claude-code/slash-commands.nix
     ./claude-code/memory-commands.nix
     ./claude-code/memory-commands-static.nix
+    ./claude-code/task-automation.nix
+    ./claude-code/skills.nix
+    ./claude-code/git-commands.nix
+    ./claude-code/extended-commands.nix
     ./claude-code-statusline.nix
   ];
 
-  # NOTE: Renamed from programs.claude-code to programs.claude-code-enhanced
+  # NOTE: Renamed from programs.claude-code to programs.claude-code
   # to avoid conflict with upstream home-manager's programs.claude-code module.
   # See docs/claude-code-upstream-contribution-plan.md for migration strategy.
-  options.programs.claude-code-enhanced = {
+  options.programs.claude-code = {
     enable = mkEnableOption "Claude Code Enhanced - feature-rich multi-account Claude Code management";
 
     debug = mkEnableOption "debug output for all components";
@@ -139,10 +143,11 @@ with lib;
       example = "/home/user/projects/my-nixos-config";
     };
 
-    # Simplified accounts support (max and pro only)
+    # Account profiles with API proxy and secrets support
     accounts = mkOption {
       type = types.attrsOf (types.submodule {
         options = {
+          # ─── Existing Options (preserved) ─────────────────────────
           enable = mkEnableOption "this Claude Code account profile";
 
           displayName = mkOption {
@@ -156,10 +161,111 @@ with lib;
             default = null;
             description = "Default model for this account (null means use global default)";
           };
+
+          # ─── NEW: API Configuration ───────────────────────────────
+          api = {
+            baseUrl = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Custom API base URL for this account.
+                Set to null (default) to use the standard Anthropic API.
+                Example: "https://codecompanionv2.d-dp.nextcloud.aero"
+              '';
+              example = "https://api.example.com/v1";
+            };
+
+            authMethod = mkOption {
+              type = types.enum [ "api-key" "bearer" "bedrock" ];
+              default = "api-key";
+              description = ''
+                Authentication method for this account:
+                - "api-key": Standard Anthropic API key (ANTHROPIC_API_KEY)
+                - "bearer": Bearer token authentication (ANTHROPIC_AUTH_TOKEN)
+                - "bedrock": AWS Bedrock authentication
+              '';
+            };
+
+            disableApiKey = mkOption {
+              type = types.bool;
+              default = false;
+              description = ''
+                Set ANTHROPIC_API_KEY to an empty string.
+                Required by some proxy servers that reject requests with API keys.
+              '';
+            };
+
+            modelMappings = mkOption {
+              type = types.attrsOf types.str;
+              default = { };
+              description = ''
+                Map Claude model names to proxy-specific model names.
+                Keys are Claude model names (sonnet, opus, haiku).
+                Values are the proxy model identifiers.
+              '';
+              example = {
+                sonnet = "devstral";
+                opus = "devstral";
+                haiku = "qwen-a3b";
+              };
+            };
+          };
+
+          # ─── NEW: Secrets Configuration ───────────────────────────
+          secrets = {
+            bearerToken = mkOption {
+              type = types.nullOr (types.submodule {
+                options = {
+                  bitwarden = mkOption {
+                    type = types.submodule {
+                      options = {
+                        item = mkOption {
+                          type = types.str;
+                          description = "Bitwarden item name containing the token";
+                          example = "Code-Companion";
+                        };
+                        field = mkOption {
+                          type = types.str;
+                          description = "Field name within the Bitwarden item";
+                          example = "bearer_token";
+                        };
+                      };
+                    };
+                    description = "Bitwarden reference for retrieving the bearer token via rbw";
+                  };
+                };
+              });
+              default = null;
+              description = ''
+                Secret management for bearer token authentication.
+                On Nix-managed hosts, tokens are retrieved via rbw (Bitwarden CLI).
+                On Termux, tokens are read from ~/.secrets/claude-<account>-token files.
+              '';
+            };
+          };
+
+          # ─── NEW: Extra Environment Variables ─────────────────────
+          extraEnvVars = mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            description = ''
+              Additional environment variables to set for this account.
+              These are exported before launching Claude Code.
+            '';
+            example = {
+              DISABLE_TELEMETRY = "1";
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+              DISABLE_ERROR_REPORTING = "1";
+            };
+          };
         };
       });
       default = { };
-      description = "Claude Code account profiles (max and pro supported)";
+      description = ''
+        Claude Code account profiles.
+        Each account can have its own API configuration, secrets, and environment.
+        Common accounts: max, pro, work
+      '';
     };
 
     defaultAccount = mkOption {
@@ -196,7 +302,7 @@ with lib;
 
   config =
     let
-      cfg = config.programs.claude-code-enhanced;
+      cfg = config.programs.claude-code;
 
       # Use the configurable nixcfg path
       nixcfgPath = cfg.nixcfgPath;
@@ -267,7 +373,8 @@ with lib;
       claudeCodeMcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
 
       # Base settings configuration
-      mkSettingsTemplate = model: pkgs.writeText "claude-settings.json" (builtins.toJSON (
+      # accountApi: optional { baseUrl, modelMappings, extraEnvVars } for account-specific env
+      mkSettingsTemplate = { model, accountApi ? null }: pkgs.writeText "claude-settings.json" (builtins.toJSON (
         let
           hasHooks = cfg._internal.hooks.PreToolUse != null || cfg._internal.hooks.PostToolUse != null ||
             cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
@@ -282,12 +389,28 @@ with lib;
             defaultMode = cfg.permissions.defaultMode;
             additionalDirectories = cfg.permissions.additionalDirectories;
           };
+
+          # Build account-specific env vars for settings.json
+          # Claude Code v2.0+ reads API config from settings.json "env", not shell env vars
+          accountEnvVars =
+            if accountApi == null then { }
+            else
+              (optionalAttrs (accountApi.baseUrl or null != null) {
+                ANTHROPIC_BASE_URL = accountApi.baseUrl;
+              })
+              // (lib.mapAttrs'
+                (model: mapping: lib.nameValuePair "ANTHROPIC_DEFAULT_${lib.toUpper model}_MODEL" mapping)
+                (accountApi.modelMappings or { }))
+              // (accountApi.extraEnvVars or { });
+
+          # Merge global env vars with account-specific ones (account takes precedence)
+          mergedEnvVars = cfg.environmentVariables // accountEnvVars;
         in
         {
           model = model;
           permissions = permissionsV2;
         }
-        // optionalAttrs (cfg.environmentVariables != { }) { env = cfg.environmentVariables; }
+        // optionalAttrs (mergedEnvVars != { }) { env = mergedEnvVars; }
         // optionalAttrs hasHooks { hooks = cleanHooks; }
         // optionalAttrs (cfg.experimental != { }) { experimental = cfg.experimental; }
         // optionalAttrs hasStatusline cfg._internal.statuslineSettings
@@ -299,8 +422,8 @@ with lib;
         }
       ));
 
-      # Default settings template
-      settingsTemplate = mkSettingsTemplate cfg.defaultModel;
+      # Default settings template (no account-specific API config)
+      settingsTemplate = mkSettingsTemplate { model = cfg.defaultModel; };
 
       # MCP configuration template
       mcpTemplate = pkgs.writeText "claude-mcp.json" (builtins.toJSON {
@@ -309,6 +432,13 @@ with lib;
 
       # CLAUDE.md template
       claudeMdTemplate = pkgs.writeText "claude-memory.md" userGlobalMemoryContent;
+
+      # Sub-agent file templates (from sub-agents.nix)
+      agentTemplates = mapAttrs
+        (name: agent:
+          pkgs.writeText "claude-agent-${builtins.baseNameOf name}" agent.text
+        )
+        cfg._internal.subAgentFiles;
 
       # Enterprise Settings template (top-precedence configuration)
       enterpriseSettingsTemplate = pkgs.writeText "enterprise-managed-settings.json" (builtins.toJSON (
@@ -397,6 +527,7 @@ with lib;
         (mkIf (cfg._internal.mcpServers != { }) {
           "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
         })
+
       ];
 
       # Activation script to populate runtime directories with templates
@@ -446,8 +577,15 @@ with lib;
             # RUNTIME-ONLY: Create directories for session data
             $DRY_RUN_CMD mkdir -p "$accountDir"/{logs,projects,shell-snapshots,statsig,todos,commands}
           
-            # SETTINGS: Always deploy v2.0 schema settings (migration-safe)
-            copy_template "${mkSettingsTemplate (if account.model != null then account.model else cfg.defaultModel)}" "$accountDir/settings.json"
+            # SETTINGS: Always deploy v2.0 schema settings with account-specific API config
+            copy_template "${mkSettingsTemplate {
+              model = if account.model != null then account.model else cfg.defaultModel;
+              accountApi = {
+                baseUrl = account.api.baseUrl;
+                modelMappings = account.api.modelMappings;
+                extraEnvVars = account.extraEnvVars;
+              };
+            }}" "$accountDir/settings.json"
             echo "🔧 Updated settings to v2.0 schema: $accountDir/settings.json"
           
             # MCP SERVERS: Always deploy separate .mcp.json file (v2.0 schema)
@@ -498,7 +636,16 @@ with lib;
               $DRY_RUN_CMD chmod 644 "$accountDir/.claude.json"
               echo "🆕 Created minimal runtime config: $accountDir/.claude.json"
             fi
-          
+
+            # SUB-AGENTS: Deploy agent files to agents directory
+            ${optionalString (cfg._internal.subAgentFiles != {}) ''
+            $DRY_RUN_CMD mkdir -p "$accountDir/agents"
+            ${concatStringsSep "\n" (mapAttrsToList (path: template: ''
+            copy_template "${template}" "$accountDir/agents/${builtins.baseNameOf path}"
+            '') agentTemplates)}
+            echo "🤖 Deployed ${toString (length (attrNames cfg._internal.subAgentFiles))} sub-agent(s)"
+            ''}
+
             echo "✅ Account ${name} configured with statusline support"
           fi
         '') cfg.accounts)}
@@ -562,7 +709,16 @@ with lib;
           $DRY_RUN_CMD chmod 644 "$baseDir/.claude.json"
           echo "🆕 Created minimal runtime config: $baseDir/.claude.json"
         fi
-      
+
+        # SUB-AGENTS: Deploy agent files to agents directory
+        ${optionalString (cfg._internal.subAgentFiles != {}) ''
+        $DRY_RUN_CMD mkdir -p "$baseDir/agents"
+        ${concatStringsSep "\n" (mapAttrsToList (path: template: ''
+        copy_template "${template}" "$baseDir/agents/${builtins.baseNameOf path}"
+        '') agentTemplates)}
+        echo "🤖 Deployed ${toString (length (attrNames cfg._internal.subAgentFiles))} sub-agent(s)"
+        ''}
+
         echo "✅ Base directory configured with statusline support"
         ''}
       '';

@@ -1,0 +1,320 @@
+name: Build opencode
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - dev
+    paths:
+      - 'tur/opencode/**'
+      - '.github/workflows/build-opencode.yml'
+  pull_request:
+    paths:
+      - 'tur/opencode/**'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if no changes'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write  # Needed for GitHub Pages deployment and releases
+
+jobs:
+  build:
+    name: Build opencode package
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Platform-independent package (npm handles platform details)
+        arch: [all]
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1000
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'  # LTS version
+
+      - name: Set up build environment
+        run: |
+          # Install Debian packaging tools
+          sudo apt-get update
+          sudo apt-get install -y \
+            dpkg-dev \
+            debhelper \
+            build-essential
+
+      - name: Build package
+        id: build
+        run: |
+          cd tur/opencode
+
+          # Extract version info from build.sh
+          PKG_NAME="opencode"
+          VERSION=$(grep '^TERMUX_PKG_VERSION=' build.sh | cut -d= -f2)
+          REVISION=$(grep '^TERMUX_PKG_REVISION=' build.sh | cut -d= -f2)
+          ARCH="all"
+          PKG_DIR="${PKG_NAME}_${VERSION}-${REVISION}"
+
+          echo "Building ${PKG_NAME} version ${VERSION}-${REVISION}"
+
+          # Create package directory structure
+          mkdir -p "${PKG_DIR}/DEBIAN"
+          mkdir -p "${PKG_DIR}/data/data/com.termux/files/usr/bin"
+          mkdir -p "${PKG_DIR}/data/data/com.termux/files/usr/lib/node_modules"
+          mkdir -p "${PKG_DIR}/data/data/com.termux/files/usr/share/doc/opencode"
+
+          # Install OpenCode via npm to temporary location
+          TEMP_NPM_PREFIX="$(pwd)/npm-temp"
+          mkdir -p "$TEMP_NPM_PREFIX"
+
+          echo "Installing @opencode-ai/sdk from npm..."
+          npm install -g --prefix "$TEMP_NPM_PREFIX" @opencode-ai/sdk
+
+          # Verify installation succeeded
+          if [ ! -d "$TEMP_NPM_PREFIX/lib/node_modules/@opencode-ai/sdk" ]; then
+            echo "ERROR: npm installation failed"
+            exit 1
+          fi
+
+          # Copy node_modules to package
+          echo "Copying installed files to package..."
+          cp -r "$TEMP_NPM_PREFIX/lib/node_modules/@opencode-ai" \
+                "${PKG_DIR}/data/data/com.termux/files/usr/lib/node_modules/"
+
+          # Create symlink for the binary
+          # Note: In the actual .deb, this will be a relative symlink
+          OPENCODE_BIN="${PKG_DIR}/data/data/com.termux/files/usr/bin/opencode"
+          OPENCODE_TARGET="../lib/node_modules/@opencode-ai/sdk/bin/opencode.js"
+
+          # Create the symlink (relative path)
+          ln -sf "$OPENCODE_TARGET" "$OPENCODE_BIN"
+
+          # Copy README
+          install -m644 README.md "${PKG_DIR}/data/data/com.termux/files/usr/share/doc/opencode/"
+
+          # Generate control file
+          cat > "${PKG_DIR}/DEBIAN/control" << EOF
+          Package: opencode
+          Version: ${VERSION}-${REVISION}
+          Architecture: ${ARCH}
+          Maintainer: Tim Blaktu <timblaktu@users.noreply.github.com>
+          Depends: nodejs-lts
+          Suggests: opencode-wrappers
+          Description: Open source AI coding agent
+           OpenCode is an open source AI coding agent for the terminal.
+           This package installs OpenCode via npm and provides the 'opencode'
+           command for Termux.
+           .
+           Features:
+           - Interactive and single-prompt modes
+           - File and pipe input support
+           - Multi-account support via opencode-wrappers package
+           .
+           Install opencode-wrappers for multi-account management.
+          Homepage: https://opencode.ai
+          EOF
+
+          # Create postinst script
+          cat > "${PKG_DIR}/DEBIAN/postinst" << 'POSTINST_EOF'
+          #!/data/data/com.termux/files/usr/bin/sh
+          echo ""
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║  OpenCode Installed                                            ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "OpenCode is now available via the 'opencode' command."
+          echo ""
+          echo "Quick start:"
+          echo "  opencode              - Interactive mode"
+          echo "  opencode \"help me\"    - Single prompt"
+          echo "  opencode --help       - Show all options"
+          echo ""
+          echo "Configuration:"
+          echo "  OpenCode stores config in ~/.opencode/ directory"
+          echo ""
+          echo "Multi-account setup:"
+          echo "  Install opencode-wrappers for account switching:"
+          echo "  pkg install opencode-wrappers"
+          echo ""
+          echo "Documentation:"
+          echo "  \$PREFIX/share/doc/opencode/README.md"
+          echo "  https://opencode.ai/docs"
+          echo ""
+          POSTINST_EOF
+
+          chmod 755 "${PKG_DIR}/DEBIAN/postinst"
+
+          # Create prerm script (warn about opencode-wrappers dependency)
+          cat > "${PKG_DIR}/DEBIAN/prerm" << 'PRERM_EOF'
+          #!/data/data/com.termux/files/usr/bin/sh
+          # Check if opencode-wrappers is installed
+          if dpkg -l opencode-wrappers 2>/dev/null | grep -q '^ii'; then
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════════╗"
+            echo "║  WARNING: opencode-wrappers installed                         ║"
+            echo "╚════════════════════════════════════════════════════════════════╝"
+            echo ""
+            echo "The opencode-wrappers package depends on opencode."
+            echo "Removing opencode will break opencodemax, opencodepro, opencodework."
+            echo ""
+            echo "Consider removing opencode-wrappers first:"
+            echo "  pkg remove opencode-wrappers"
+            echo ""
+            read -p "Continue removing opencode? [y/N] " -n 1 -r
+            echo
+            if [[ ! \$REPLY =~ ^[Yy]\$ ]]; then
+              exit 1
+            fi
+          fi
+          exit 0
+          PRERM_EOF
+
+          chmod 755 "${PKG_DIR}/DEBIAN/prerm"
+
+          # Build .deb package
+          echo "Building .deb package..."
+          dpkg-deb --build "${PKG_DIR}"
+
+          # Get actual OpenCode version from npm
+          OPENCODE_VERSION=$(npm view @opencode-ai/sdk version)
+          echo "Package version: ${VERSION}-${REVISION}"
+          echo "OpenCode npm version: ${OPENCODE_VERSION}"
+
+          # Save output info
+          echo "package_file=${PKG_DIR}.deb" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}-${REVISION}" >> $GITHUB_OUTPUT
+          echo "opencode_version=${OPENCODE_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-all
+          path: tur/opencode/*.deb
+          retention-days: 30
+
+  publish:
+    name: Publish to APT repository
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout gh-pages (if exists)
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: repo
+        continue-on-error: true  # First deployment won't have gh-pages yet
+
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create/Update repository structure
+        run: |
+          # Create repository directory structure
+          mkdir -p repo/dists/stable/main/binary-all
+
+          # Copy new package
+          cp artifacts/opencode-all/*.deb repo/dists/stable/main/binary-all/ || true
+
+          cd repo
+
+          # Generate Packages file
+          dpkg-scanpackages dists/stable/main/binary-all /dev/null | \
+            gzip -9c > dists/stable/main/binary-all/Packages.gz
+
+          # Generate Release file
+          cat > dists/stable/Release << EOF
+          Origin: timblaktu-tur
+          Label: Tim's TUR Packages
+          Suite: stable
+          Codename: stable
+          Architectures: all aarch64 arm i686 x86_64
+          Components: main
+          Description: Personal Termux packages (OpenCode and wrappers)
+          Date: $(date -R)
+          EOF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./repo
+          keep_files: true  # Keep existing packages (opencode-wrappers, claude-*)
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: opencode-${{ needs.build.outputs.version }}
+          name: OpenCode ${{ needs.build.outputs.version }}
+          body: |
+            ## OpenCode for Termux
+
+            Open source AI coding agent, packaged for Termux.
+
+            **Package version**: ${{ needs.build.outputs.version }}
+            **OpenCode version**: ${{ needs.build.outputs.opencode_version }}
+
+            ## Installation
+
+            ```bash
+            # Add repository (if not already added)
+            echo "deb [trusted=yes] https://timblaktu.github.io/tur stable main" | \
+              tee $PREFIX/etc/apt/sources.list.d/timblaktu-tur.list
+
+            # Update and install
+            pkg update
+            pkg install opencode
+
+            # Verify installation
+            opencode --version
+            ```
+
+            ## Quick Start
+
+            ```bash
+            # Interactive mode
+            opencode
+
+            # Single prompt
+            opencode "help me with bash scripting"
+
+            # Show help
+            opencode --help
+            ```
+
+            ## Multi-Account Support
+
+            For managing multiple OpenCode accounts (Max, Pro, Work), install the companion package:
+
+            ```bash
+            pkg install opencode-wrappers
+            ```
+
+            See the [README](https://github.com/timblaktu/nixcfg/tree/main/tur-package/opencode/README.md) for full documentation.
+
+            ## What's New
+
+            - npm-based installation of OpenCode
+            - Automatic dependency on nodejs-lts
+            - Integration with opencode-wrappers package
+            - Comprehensive documentation
+          files: artifacts/opencode-all/*.deb
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

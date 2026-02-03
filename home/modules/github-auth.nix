@@ -22,6 +22,15 @@ let
   # This wrapper fetches the token from Bitwarden and exports it as GH_TOKEN
   # Used for BOTH CLI operations and git credential helper operations
   gh-with-auth = pkgs.writeShellScriptBin "gh" ''
+    # Only sync rbw vault and clear cache for auth-related operations
+    # This avoids unnecessary syncs for read-only operations
+    if [ "$1" = "auth" ] || [ "$1" = "repo" ] || [ "$1" = "pr" ] || [ "$1" = "issue" ] || [ "$1" = "release" ]; then
+      # Sync rbw to ensure we have the latest token from Bitwarden vault
+      ${pkgs.rbw}/bin/rbw sync 2>/dev/null || true
+      # Clear git credential cache to prevent stale token issues
+      ${pkgs.git}/bin/git credential-cache exit 2>/dev/null || true
+    fi
+
     export GH_TOKEN="$(${mkRbwCommand cfg.bitwarden} 2>/dev/null)"
     exec ${pkgs.gh}/bin/gh "$@"
   '';
@@ -30,6 +39,15 @@ let
   # This wrapper fetches the token from Bitwarden and exports it as GITLAB_TOKEN
   # Used for BOTH CLI operations and git credential helper operations
   glab-with-auth = pkgs.writeShellScriptBin "glab" ''
+    # Only sync rbw vault and clear cache for auth-related operations
+    # This avoids unnecessary syncs for read-only operations
+    if [ "$1" = "auth" ] || [ "$1" = "repo" ] || [ "$1" = "project" ] || [ "$1" = "mr" ] || [ "$1" = "issue" ]; then
+      # Sync rbw to ensure we have the latest token from Bitwarden vault
+      ${pkgs.rbw}/bin/rbw sync 2>/dev/null || true
+      # Clear git credential cache to prevent stale token issues
+      ${pkgs.git}/bin/git credential-cache exit 2>/dev/null || true
+    fi
+
     export GITLAB_TOKEN="$(${mkRbwCommand cfg.gitlab.bitwarden} 2>/dev/null)"
     exec ${pkgs.glab}/bin/glab "$@"
   '';
@@ -138,9 +156,13 @@ in
       };
 
       userName = mkOption {
-        type = types.str;
-        default = "token";
-        description = "Username for HTTPS authentication";
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Username for HTTPS authentication.
+          If null (recommended), the credential helper will provide the username.
+          Only set this if you need to override the default behavior.
+        '';
       };
     };
 
@@ -261,13 +283,34 @@ in
 
   config = mkIf cfg.enable (mkMerge [
     {
-      # Install glab wrapper (gh wrapper is installed via programs.gh.package)
-      # These wrappers inject tokens from Bitwarden/SOPS and are used for:
-      # 1. CLI operations (when user types 'glab')
-      # 2. Git credential operations (via 'glab auth git-credential')
-      home.packages = mkIf (cfg.gitlab.enable && cfg.gitlab.glab.enable) [
+      # Install credential refresh helper
+      home.packages = [
+        # Helper script to refresh credentials from Bitwarden/SOPS
+        (pkgs.writeShellScriptBin "refresh-git-creds" ''
+          echo "🔄 Refreshing git credentials..."
+
+          ${if cfg.mode == "bitwarden" then ''
+            # Sync Bitwarden vault
+            echo "  → Syncing Bitwarden vault..."
+            ${pkgs.rbw}/bin/rbw sync 2>/dev/null || echo "    ⚠️  rbw sync failed (vault may be locked)"
+          '' else ''
+            echo "  → Using SOPS mode (no sync needed)"
+          ''}
+
+          # Clear git credential cache
+          echo "  → Clearing git credential cache..."
+          ${pkgs.git}/bin/git credential-cache exit 2>/dev/null || true
+
+          echo "✅ Credentials refreshed!"
+          ${optionalString cfg.gitlab.enable ''
+            echo ""
+            echo "Testing GitLab authentication..."
+            ${if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops}/bin/glab auth status || true
+          ''}
+        '')
+      ] ++ (optionals (cfg.gitlab.enable && cfg.gitlab.glab.enable) [
         (if cfg.mode == "bitwarden" then glab-with-auth else glab-with-auth-sops)
-      ];
+      ]);
 
       # Git credential configuration using wrapper scripts
       programs.git = {
@@ -277,16 +320,20 @@ in
               # Use the wrapped gh command for GitHub credential operations
               # The wrapper injects the token from Bitwarden/SOPS, then calls
               # the official 'gh auth git-credential' subcommand
-              "https://github.com" = {
-                username = cfg.git.userName;
-                helper = mkForce
-                  (
-                    let
-                      ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
-                    in
-                    "!${ghWrapper}/bin/gh auth git-credential"
-                  );
-              };
+              "https://github.com" = mkMerge [
+                {
+                  helper = mkForce
+                    (
+                      let
+                        ghWrapper = if cfg.mode == "bitwarden" then gh-with-auth else gh-with-auth-sops;
+                      in
+                      "!${ghWrapper}/bin/gh auth git-credential"
+                    );
+                }
+                (mkIf (cfg.git.userName != null) {
+                  username = cfg.git.userName;
+                })
+              ];
               "https://gist.github.com" = {
                 helper = mkForce
                   (

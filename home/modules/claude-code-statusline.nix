@@ -5,7 +5,7 @@
 with lib;
 
 let
-  cfg = config.programs.claude-code-enhanced.statusline;
+  cfg = config.programs.claude-code.statusline;
   writers = pkgs.writers;
 
   # CLI tool dependencies - leverage the rich nixcfg environment
@@ -571,7 +571,7 @@ let
 
 in
 {
-  options.programs.claude-code-enhanced.statusline = {
+  options.programs.claude-code.statusline = {
     enable = mkOption {
       type = types.bool;
       default = false;
@@ -605,7 +605,7 @@ in
   };
 
   # Add statusline configuration to the internal settings system
-  options.programs.claude-code-enhanced._internal.statuslineSettings = mkOption {
+  options.programs.claude-code._internal.statuslineSettings = mkOption {
     type = types.attrs;
     internal = true;
     default = { };
@@ -614,7 +614,7 @@ in
   config = mkIf cfg.enable {
     # Configure Claude Code statusline through the internal settings system
     # Use stable command name instead of absolute paths to avoid breakage on rebuilds
-    programs.claude-code-enhanced._internal.statuslineSettings = {
+    programs.claude-code._internal.statuslineSettings = {
       statusLine = {
         type = "command";
         command = "claude-statusline-${cfg.style}";
