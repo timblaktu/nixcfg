@@ -25,11 +25,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1769972325,
-        "narHash": "sha256-zVJ8emhb1QJZizSxm85IFCa62KNXES1hrmj4FHhc1uc=",
+        "lastModified": 1770083148,
+        "narHash": "sha256-LKGpq935DJV2mEJaFle91OwJqmknmZB1tjTM4j0pYHM=",
         "owner": "timblaktu",
         "repo": "drawio-svg-sync",
-        "rev": "8085c82e64c822fe8f6c374477454d3cda86f098",
+        "rev": "c38e7f74f714cf790d6585b6cbb69ab61f183a29",
         "type": "github"
       },
       "original": {

@@ -613,10 +613,10 @@ nix run 'github:timblaktu/drawio-svg-sync' -- path/to/diagram.drawio.svg
 
 **What drawio-svg-sync does**:
 1. Reads the mxGraphModel from `content` attribute
-2. Launches headless DrawIO in a Docker container
-3. Renders the diagram to SVG elements
-4. Replaces the SVG body with rendered graphics
-5. Preserves the `content` attribute (keeps it editable in DrawIO)
+2. Launches DrawIO CLI (using native X11 or xvfb-run fallback)
+3. Exports the diagram to SVG using `drawio -x`
+4. Re-injects the `content` attribute to preserve editability
+5. Replaces the file with the updated SVG
 
 **Expected success output**:
 ```
