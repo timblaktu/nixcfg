@@ -5,8 +5,16 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.0.0
-**Last Updated**: 2026-02-01
+**Version**: 1.1.0
+**Last Updated**: 2026-02-02
+
+## Changelog
+
+### v1.1.0 (2026-02-02)
+- Added Section 14: Multi-Page DrawIO Support (page structure, ID namespacing, cross-page referencing)
+- Added Section 15: Post-Render Critical Analysis (mandatory QA workflow, visual quality checklist)
+- Added Section 16: Large File Handling (extraction methods for 400KB+ files)
+- Added Section 17: Grouping Pattern for Similar Elements (container + single connection pattern)
 
 ## Overview
 
@@ -1392,3 +1400,710 @@ style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;h
 ```
 
 Then run drawio-svg-sync to regenerate routing.
+
+---
+
+## Section 14: Multi-Page DrawIO Support
+
+DrawIO supports multiple pages (tabs) within a single file. Use this for complex diagrams that benefit from separate views.
+
+### When to Use Multiple Pages
+
+| Use Case | Page Structure |
+|----------|---------------|
+| Physical vs Logical views | Page 1: Physical topology, Page 2: Logical connections |
+| Overview vs Detail | Page 1: High-level architecture, Page 2+: Component details |
+| Before/After states | Page 1: Current state, Page 2: Target state |
+| Layered architecture | Page 1: Network layer, Page 2: Application layer, Page 3: Data layer |
+| Deployment variants | Page 1: Dev environment, Page 2: Staging, Page 3: Production |
+
+### Multi-Page XML Structure
+
+Multiple pages are represented as multiple `<diagram>` elements inside `<mxfile>`:
+
+```xml
+<mxfile host="Claude" modified="2026-02-02">
+  <diagram name="Physical Network" id="phys">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="600">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- Physical network elements here -->
+        <mxCell id="phys-switch-1" value="Core Switch" ... />
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="Logical Network" id="logic">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="600">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- Logical network elements here -->
+        <mxCell id="logic-vlan-10" value="VLAN 10" ... />
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+```
+
+### ID Namespacing Strategy (CRITICAL)
+
+**Problem**: Cell IDs must be unique across the ENTIRE file, not just per page.
+
+**Solution**: Use page-specific prefixes for all IDs:
+
+| Page | ID Prefix | Example IDs |
+|------|-----------|-------------|
+| Physical Network | `phys-` | `phys-switch-1`, `phys-server-rack`, `phys-conn-1` |
+| Logical Network | `logic-` | `logic-vlan-10`, `logic-subnet-a`, `logic-conn-1` |
+| Overview | `ov-` | `ov-cloud`, `ov-datacenter`, `ov-conn-1` |
+| Detail | `det-` | `det-service-1`, `det-database`, `det-conn-1` |
+
+**Exception**: Cells 0 and 1 are special:
+- Each page has its OWN cell 0 and cell 1 with id="0" and id="1"
+- These are scoped to the `<root>` within each `<diagram>`
+- This is the ONLY case where IDs can repeat across pages
+
+### Page Naming Conventions
+
+| Pattern | Example Names | Use Case |
+|---------|---------------|----------|
+| View-based | "Physical View", "Logical View" | Different perspectives |
+| Layer-based | "Network Layer", "Application Layer" | Architecture layers |
+| State-based | "Current State", "Target State" | Before/after |
+| Scope-based | "Overview", "Component A Detail" | Zoom levels |
+| Environment-based | "Development", "Production" | Deployment variants |
+
+**Guidelines**:
+- Keep names short (< 20 characters) for tab display
+- Use Title Case for consistency
+- Make names self-descriptive (avoid "Page 1", "Page 2")
+
+### Creating Multi-Page Diagrams
+
+**Step 1**: Define the page structure and ID prefixes:
+
+```
+Diagram: Network Architecture
+├── Page 1: "Physical Topology" (prefix: pt-)
+│   └── Shows: racks, cables, physical ports
+├── Page 2: "Logical Topology" (prefix: lt-)
+│   └── Shows: VLANs, subnets, routing
+└── Page 3: "Service Map" (prefix: sm-)
+    └── Shows: applications, dependencies
+```
+
+**Step 2**: Build each page with namespaced IDs:
+
+```xml
+<!-- Page 1 content -->
+<mxCell id="pt-rack-1" value="Rack A" ... />
+<mxCell id="pt-server-1" value="Web Server" ... />
+<mxCell id="pt-conn-1" ... source="pt-rack-1" target="pt-server-1" />
+
+<!-- Page 2 content -->
+<mxCell id="lt-vlan-10" value="VLAN 10 (Users)" ... />
+<mxCell id="lt-subnet-1" value="10.0.10.0/24" ... />
+<mxCell id="lt-conn-1" ... source="lt-vlan-10" target="lt-subnet-1" />
+```
+
+**Step 3**: Encode all pages into single content attribute
+
+### Multi-Page Boilerplate Template
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     version="1.1" width="850px" height="600px"
+     viewBox="-0.5 -0.5 850 600"
+     content="&lt;mxfile host=&quot;Claude&quot; modified=&quot;2026-02-02&quot;&gt;&lt;diagram name=&quot;Page 1&quot; id=&quot;p1&quot;&gt;&lt;mxGraphModel dx=&quot;800&quot; dy=&quot;600&quot; grid=&quot;1&quot; gridSize=&quot;10&quot; guides=&quot;1&quot; tooltips=&quot;1&quot; connect=&quot;1&quot; arrows=&quot;1&quot; fold=&quot;1&quot; page=&quot;1&quot; pageScale=&quot;1&quot; pageWidth=&quot;850&quot; pageHeight=&quot;600&quot;&gt;&lt;root&gt;&lt;mxCell id=&quot;0&quot;/&gt;&lt;mxCell id=&quot;1&quot; parent=&quot;0&quot;/&gt;&lt;mxCell id=&quot;p1-example&quot; value=&quot;Page 1 Content&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;100&quot; y=&quot;100&quot; width=&quot;120&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;&lt;/diagram&gt;&lt;diagram name=&quot;Page 2&quot; id=&quot;p2&quot;&gt;&lt;mxGraphModel dx=&quot;800&quot; dy=&quot;600&quot; grid=&quot;1&quot; gridSize=&quot;10&quot; guides=&quot;1&quot; tooltips=&quot;1&quot; connect=&quot;1&quot; arrows=&quot;1&quot; fold=&quot;1&quot; page=&quot;1&quot; pageScale=&quot;1&quot; pageWidth=&quot;850&quot; pageHeight=&quot;600&quot;&gt;&lt;root&gt;&lt;mxCell id=&quot;0&quot;/&gt;&lt;mxCell id=&quot;1&quot; parent=&quot;0&quot;/&gt;&lt;mxCell id=&quot;p2-example&quot; value=&quot;Page 2 Content&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;100&quot; y=&quot;100&quot; width=&quot;120&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;&lt;/diagram&gt;&lt;/mxfile&gt;"
+     style="background-color: rgb(255, 255, 255);">
+  <defs/>
+  <g>
+    <text x="400" y="300" text-anchor="middle" font-size="14">
+      Run drawio-svg-sync to render this diagram
+    </text>
+  </g>
+</svg>
+```
+
+### Cross-Page Referencing
+
+Elements CANNOT reference IDs across pages (edges cannot span pages). Instead:
+
+1. **Use consistent element naming**: If "Database Server" appears on multiple pages, use recognizable names:
+   - Physical: `phys-db-server` with value "DB Server (Physical)"
+   - Logical: `logic-db-server` with value "DB Server (Logical)"
+
+2. **Visual linking**: Add annotation text like "See Logical View for VLAN details"
+
+3. **Color coding**: Use consistent colors for the same concept across pages
+
+### Editing Multi-Page Diagrams
+
+When editing, first identify which page contains the target element:
+
+```bash
+# Find which page contains an element
+python3 -c "
+import html, re
+with open('diagram.drawio.svg') as f:
+    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
+# Search in decoded content for element and its surrounding <diagram> tag
+"
+```
+
+**Common mistakes to avoid**:
+- Adding element with ID `foo` when `foo` exists on another page
+- Forgetting to namespace new IDs
+- Referencing cross-page IDs in edge source/target
+
+### Multi-Page Rendering Notes
+
+When running drawio-svg-sync:
+- Only the **first page** is rendered to the SVG body by default
+- The content attribute preserves ALL pages
+- DrawIO desktop can switch between pages when opening the file
+- GitHub/GitLab preview shows only the first page
+
+---
+
+## Section 15: Post-Render Critical Analysis
+
+After rendering a diagram with drawio-svg-sync, you MUST perform visual quality analysis before considering the task complete.
+
+### Mandatory Analysis Workflow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                POST-RENDER ANALYSIS WORKFLOW                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. Run drawio-svg-sync                                     │
+│     └─► Rendering complete                                  │
+│                                                              │
+│  2. Request visual verification                             │
+│     └─► "Please share a screenshot of the rendered diagram" │
+│     └─► OR: View file directly if in web context            │
+│                                                              │
+│  3. Analyze for common issues (see checklist below)         │
+│     └─► Identify ALL visual problems                        │
+│                                                              │
+│  4. Propose specific fixes                                  │
+│     └─► Describe exact changes needed                       │
+│     └─► Offer to implement fixes                            │
+│                                                              │
+│  5. Iterate until quality acceptable                        │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Visual Quality Checklist
+
+After viewing the rendered diagram, systematically check for:
+
+#### Label Issues
+
+| Issue | Symptom | Typical Fix |
+|-------|---------|-------------|
+| **Label overlap** | Text overlaps connectors or other labels | Move labels, adjust element positions, or use shorter text |
+| **Stacked labels** | Multiple labels pile on same spot | Offset labels with mxGeometry adjustments |
+| **Truncated text** | Words cut off or "..." shown | Increase element width/height |
+| **Illegible text** | Font too small or poor contrast | Increase fontSize, adjust colors |
+
+#### Connector Issues
+
+| Issue | Symptom | Typical Fix |
+|-------|---------|-------------|
+| **Messy bundles** | Multiple connectors overlap creating visual noise | Adjust exit/entry points, add waypoints, or reposition elements |
+| **Redundant labels** | Same label (e.g., "1x Eth") on every connector | Use one label for the group, or remove individual labels |
+| **Awkward routing** | Connectors route through unrelated element groups | Add explicit waypoints or reposition elements |
+| **Crossing connectors** | Connectors cross unnecessarily | Reorder elements or adjust anchor points |
+
+#### Layout Issues
+
+| Issue | Symptom | Typical Fix |
+|-------|---------|-------------|
+| **Insufficient spacing** | Elements too close together | Increase gaps to 50-100px minimum |
+| **Uneven alignment** | Elements not on grid | Snap to grid (multiples of 10) |
+| **Poor grouping** | Related elements not visually clustered | Use containers or adjust positioning |
+| **Legend interference** | Legend overlaps diagram content | Move legend to corner or separate area |
+| **Asymmetric layout** | Diagram feels unbalanced | Center elements, equalize spacing |
+
+#### Content Issues
+
+| Issue | Symptom | Typical Fix |
+|-------|---------|-------------|
+| **Missing elements** | Expected components not visible | Check mxGraphModel for missing cells |
+| **Wrong colors** | Colors don't match semantic meaning | Update fillColor/strokeColor |
+| **Incorrect connections** | Edges connect wrong elements | Fix source/target IDs |
+
+### Analysis Response Template
+
+When reporting analysis results, use this format:
+
+```
+**Visual Analysis Results**
+
+✓ **Good**:
+- [What works well]
+- [Successful aspects]
+
+✗ **Issues Found**:
+1. **[Issue Type]**: [Description]
+   - Location: [Where in diagram]
+   - Fix: [Specific remedy]
+
+2. **[Issue Type]**: [Description]
+   - Location: [Where in diagram]
+   - Fix: [Specific remedy]
+
+**Recommended Actions**:
+- [ ] [Action 1]
+- [ ] [Action 2]
+
+Shall I implement these fixes?
+```
+
+### Example Analysis
+
+**Input**: User shares screenshot of network diagram
+
+**Analysis**:
+
+```
+**Visual Analysis Results**
+
+✓ **Good**:
+- Color scheme clearly distinguishes network zones
+- Overall left-to-right flow is correct
+- Element labels are readable
+
+✗ **Issues Found**:
+1. **Connector bundle**: Three Ethernet connections between switch and server rack create visual clutter
+   - Location: Center of diagram, switch-to-rack area
+   - Fix: Use grouping pattern (single labeled connection to container)
+
+2. **Redundant labels**: Every connection labeled "1x Eth" - redundant information
+   - Location: All 12 connection arrows
+   - Fix: Remove individual labels, add single legend entry or group label
+
+3. **Insufficient spacing**: Dev boards row too close to server row
+   - Location: Bottom third of diagram
+   - Fix: Increase y-coordinate of dev board elements by 60px
+
+4. **Legend overlap**: Legend box overlaps the rightmost server icon
+   - Location: Bottom-right corner
+   - Fix: Move legend 80px left or reposition to top-right
+
+**Recommended Actions**:
+- [ ] Replace individual connections with grouped container pattern
+- [ ] Remove redundant "1x Eth" labels
+- [ ] Add 60px vertical spacing between server and dev board rows
+- [ ] Reposition legend to avoid overlap
+
+Shall I implement these fixes?
+```
+
+### When to Skip Analysis
+
+Analysis can be abbreviated (not skipped entirely) when:
+- Diagram is very simple (< 5 elements)
+- User explicitly says "quick draft, don't polish"
+- Iterating on specific element (user already verified rest of diagram)
+
+Even in these cases, do a quick scan for obvious issues.
+
+---
+
+## Section 16: Large File Handling
+
+After rendering, `.drawio.svg` files can become very large (400KB+) due to embedded SVG graphics in the body. This section covers strategies for working with these files.
+
+### Why Files Become Large
+
+| Component | Typical Size | Notes |
+|-----------|--------------|-------|
+| `content` attribute | 5-50 KB | The mxGraphModel (your editable source) |
+| SVG body | 50-500+ KB | Rendered graphics (paths, shapes, text) |
+| Embedded images | Variable | Icons, logos add significant size |
+
+The **content attribute is what you edit**. The SVG body is regenerated by drawio-svg-sync.
+
+### Problem: Read Tool Limits
+
+The Read tool has token limits. A 400KB+ file will:
+- Exceed read limits
+- Consume excessive context
+- Potentially truncate the content attribute
+
+### Solution: Targeted Extraction
+
+Instead of reading the entire file, extract only the mxGraphModel content:
+
+#### Method 1: Extract Content Attribute with Python
+
+```bash
+python3 -c "
+import html, re
+with open('diagram.drawio.svg') as f:
+    content = f.read()
+match = re.search(r'content=\"([^\"]+)\"', content)
+if match:
+    decoded = html.unescape(match.group(1))
+    print(decoded)
+else:
+    print('ERROR: No content attribute found')
+"
+```
+
+This extracts and decodes just the mxGraphModel (~5-50KB), ignoring the large SVG body.
+
+#### Method 2: Read SVG Header Only
+
+```bash
+# Get first 100 lines (usually includes content attribute)
+head -100 diagram.drawio.svg
+```
+
+Useful for quick inspection of attributes and start of content.
+
+#### Method 3: Search for Specific Elements
+
+```bash
+# Find all cell IDs in the content
+python3 -c "
+import html, re
+with open('diagram.drawio.svg') as f:
+    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
+for match in re.finditer(r'id=\"([^\"]+)\"', content):
+    print(match.group(1))
+"
+```
+
+#### Method 4: Extract and Pretty-Print
+
+```bash
+python3 -c "
+import html, re
+import xml.dom.minidom
+with open('diagram.drawio.svg') as f:
+    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
+dom = xml.dom.minidom.parseString(content)
+print(dom.toprettyxml(indent='  '))
+" | head -200
+```
+
+### Reading Strategy by Task
+
+| Task | Approach |
+|------|----------|
+| **Find element by label** | Extract content, search for `value="..."` |
+| **List all IDs** | Extract content, regex for `id="..."` |
+| **Understand structure** | Extract + pretty-print, read first 200 lines |
+| **Edit specific element** | Extract content, find element, make change |
+| **Full diagram review** | Request screenshot from user |
+| **Verify rendering** | Check file exists and mtime updated |
+
+### Writing Large Files
+
+When writing updates to large files:
+
+1. **Extract** the current content attribute
+2. **Modify** the mxGraphModel XML as needed
+3. **Re-encode** with HTML entities
+4. **Use Edit tool** to replace ONLY the content attribute value
+5. **Run drawio-svg-sync** to regenerate SVG body
+
+**Never attempt to write the entire file** including SVG body - the sync tool handles that.
+
+### File Size Guidelines
+
+| File Size | Handling |
+|-----------|----------|
+| < 50 KB | Safe to Read directly |
+| 50-200 KB | Extract content attribute preferred |
+| 200-500 KB | Must extract content attribute |
+| > 500 KB | Extract + consider if diagram is too complex |
+
+**If a diagram exceeds 500KB**, consider:
+- Splitting into multiple pages
+- Simplifying (use grouping patterns)
+- Removing embedded images
+- Using external image references
+
+### Example: Edit Large File Workflow
+
+**Task**: Change "Database" to "PostgreSQL" in a 350KB diagram
+
+**Step 1**: Extract and find element
+```bash
+python3 -c "
+import html, re
+with open('big-diagram.drawio.svg') as f:
+    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
+# Find the element
+for line in content.split('\\n'):
+    if 'Database' in line:
+        print(line)
+"
+```
+
+**Step 2**: Extract full content for editing
+```bash
+python3 -c "
+import html, re
+with open('big-diagram.drawio.svg') as f:
+    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
+print(content)
+" > /tmp/content.xml
+```
+
+**Step 3**: Edit the extracted XML (change value="Database" to value="PostgreSQL")
+
+**Step 4**: Re-encode and update file
+```bash
+python3 -c "
+import html
+with open('/tmp/content.xml') as f:
+    content = f.read()
+encoded = html.escape(content, quote=True)
+print(encoded)
+" > /tmp/encoded.txt
+```
+
+**Step 5**: Use Edit tool to replace content attribute value in the .drawio.svg
+
+**Step 6**: Run drawio-svg-sync to regenerate SVG body
+
+---
+
+## Section 17: Grouping Pattern for Similar Elements
+
+When a diagram has N similar elements (e.g., multiple servers, dev boards, or workstations), connecting to each individually creates visual clutter. Use the grouping pattern instead.
+
+### Problem: N-to-1 Connection Clutter
+
+**Bad Example**: 8 dev boards each with individual connection to switch
+
+```
+┌─────────┐     ┌─────────┐
+│ Board 1 │─────│         │
+├─────────┤     │         │
+│ Board 2 │─────│         │
+├─────────┤     │         │
+│ Board 3 │─────│  Switch │  ← 8 overlapping arrows!
+├─────────┤     │         │
+│ Board 4 │─────│         │
+├─────────┤     │         │
+│  ...    │─────│         │
+└─────────┘     └─────────┘
+```
+
+**Issues**:
+- 8 connector lines overlap, creating visual noise
+- Labels on each line (e.g., "1x Eth") are redundant
+- Hard to trace individual connections
+- Diagram scales poorly (what if 20 boards?)
+
+### Solution: Container + Single Connection
+
+**Good Example**: Dashed container around group with single labeled connection
+
+```
+┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+│  Dev Boards (8x)       │     ┌─────────┐
+│  ┌───┐ ┌───┐ ┌───┐    │────►│         │
+│  │ 1 │ │ 2 │ │...│    │     │  Switch │
+│  └───┘ └───┘ └───┘    │     │         │
+│       ┌───┐            │     └─────────┘
+│       │ N │            │
+│       └───┘            │        8x Gigabit Ethernet
+└ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
+```
+
+**Benefits**:
+- Single clean connection
+- Label describes the group ("8x Gigabit Ethernet")
+- Scales to any N
+- Clear visual hierarchy
+
+### Implementation Pattern
+
+#### Step 1: Create the Dashed Container
+
+```xml
+<mxCell id="group-devboards" value="Dev Boards (8x)"
+        style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#00CC66;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;"
+        vertex="1" parent="1">
+  <mxGeometry x="50" y="200" width="300" height="150" as="geometry"/>
+</mxCell>
+```
+
+**Key style attributes**:
+- `dashed=1;dashPattern=8 8;` - Creates dashed border
+- `fillColor=none;` - Transparent background
+- `strokeWidth=2;` - Visible but not heavy
+- `verticalAlign=top;align=left;` - Label in top-left corner
+
+#### Step 2: Add Representative Elements Inside
+
+Show 2-3 actual instances plus ellipsis to indicate more:
+
+```xml
+<!-- Board 1 -->
+<mxCell id="board-1" value="Board 1"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="70" y="250" width="60" height="40" as="geometry"/>
+</mxCell>
+
+<!-- Board 2 -->
+<mxCell id="board-2" value="Board 2"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="140" y="250" width="60" height="40" as="geometry"/>
+</mxCell>
+
+<!-- Ellipsis indicator -->
+<mxCell id="board-ellipsis" value="..."
+        style="text;html=1;align=center;verticalAlign=middle;fontSize=14;fontStyle=1;"
+        vertex="1" parent="1">
+  <mxGeometry x="210" y="250" width="30" height="40" as="geometry"/>
+</mxCell>
+
+<!-- Board N -->
+<mxCell id="board-n" value="Board N"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="250" y="250" width="60" height="40" as="geometry"/>
+</mxCell>
+```
+
+#### Step 3: Single Connector to Container
+
+Connect to the container, not individual elements:
+
+```xml
+<mxCell id="conn-group-switch" value="8x Gigabit Ethernet"
+        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;strokeWidth=2;"
+        edge="1" parent="1" source="group-devboards" target="switch">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+**Key points**:
+- `source="group-devboards"` - Connects FROM the container
+- `strokeWidth=2;` - Thicker line for group connection
+- Label describes the aggregate ("8x Gigabit Ethernet")
+
+### When to Use Grouping
+
+| Scenario | Use Grouping? | Notes |
+|----------|---------------|-------|
+| 3+ identical elements to same target | YES | Always group when N ≥ 3 |
+| 2 elements | MAYBE | Judgment call based on complexity |
+| Elements with different connection types | NO | Can't aggregate different things |
+| Need to show routing details | NO | Individual connections may be needed |
+| Conceptual/logical diagrams | YES | Focus on relationships, not wiring |
+| Physical topology diagrams | MAYBE | May need to show actual ports |
+
+### Group Label Conventions
+
+| Pattern | Example |
+|---------|---------|
+| Count + Type | "8x Gigabit Ethernet" |
+| Name + Count | "Dev Boards (8)" |
+| Range | "Servers 1-10" |
+| Category | "Test Equipment" |
+
+### Nested Grouping
+
+For complex hierarchies, groups can nest:
+
+```xml
+<!-- Outer group: All test equipment -->
+<mxCell id="group-test-equipment" value="Test Equipment"
+        style="rounded=1;dashed=1;dashPattern=12 12;fillColor=none;strokeColor=#666666;"
+        vertex="1" parent="1">
+  <mxGeometry x="50" y="100" width="400" height="300" as="geometry"/>
+</mxCell>
+
+<!-- Inner group: Dev boards -->
+<mxCell id="group-devboards" value="Dev Boards (8)"
+        style="rounded=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#00CC66;"
+        vertex="1" parent="1">
+  <mxGeometry x="70" y="140" width="150" height="100" as="geometry"/>
+</mxCell>
+
+<!-- Inner group: Analyzers -->
+<mxCell id="group-analyzers" value="Analyzers (3)"
+        style="rounded=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#FF9900;"
+        vertex="1" parent="1">
+  <mxGeometry x="250" y="140" width="150" height="100" as="geometry"/>
+</mxCell>
+```
+
+**Visual hierarchy**:
+- Outer container: Larger dash pattern, neutral color
+- Inner containers: Smaller dash pattern, distinct colors
+- Connections to outer container represent combined traffic
+
+### Complete Grouping Example
+
+**Request**: "Show 6 workstations connected to a switch"
+
+**Result**:
+
+```xml
+<!-- Container for workstations -->
+<mxCell id="group-ws" value="Workstations (6)"
+        style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#9673a6;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;fontSize=12;"
+        vertex="1" parent="1">
+  <mxGeometry x="50" y="100" width="250" height="120" as="geometry"/>
+</mxCell>
+
+<!-- Representative workstations -->
+<mxCell id="ws-1" value="WS-1"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="70" y="140" width="50" height="35" as="geometry"/>
+</mxCell>
+
+<mxCell id="ws-2" value="WS-2"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="130" y="140" width="50" height="35" as="geometry"/>
+</mxCell>
+
+<mxCell id="ws-dots" value="..."
+        style="text;html=1;align=center;verticalAlign=middle;fontSize=14;fontStyle=1;"
+        vertex="1" parent="1">
+  <mxGeometry x="190" y="140" width="30" height="35" as="geometry"/>
+</mxCell>
+
+<mxCell id="ws-6" value="WS-6"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
+        vertex="1" parent="1">
+  <mxGeometry x="230" y="140" width="50" height="35" as="geometry"/>
+</mxCell>
+
+<!-- Switch -->
+<mxCell id="switch" value="Core Switch"
+        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;"
+        vertex="1" parent="1">
+  <mxGeometry x="400" y="130" width="100" height="60" as="geometry"/>
+</mxCell>
+
+<!-- Single grouped connection -->
+<mxCell id="conn-ws-switch" value="6x 1Gbps"
+        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;strokeWidth=2;fontSize=11;"
+        edge="1" parent="1" source="group-ws" target="switch">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+This produces a clean diagram with:
+- Dashed container labeled "Workstations (6)"
+- 3 representative boxes (WS-1, WS-2, ..., WS-6)
+- Single connection labeled "6x 1Gbps"
+- No visual clutter from 6 individual arrows
