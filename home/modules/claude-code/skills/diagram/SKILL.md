@@ -2564,6 +2564,22 @@ To bring an element to front, move its `<mxCell>` definition to appear **after**
 
 When editing existing diagrams, search for the element ID and move the entire `<mxCell>` block to the appropriate position in the XML sequence.
 
+### CRITICAL: Fix ALL Annotations, Not Just Visible Problems
+
+**When fixing z-order issues, move ALL annotation elements to the end, not just the ones currently showing problems.**
+
+Reactive fixing (moving only visibly-occluded elements) leaves other annotations vulnerable to future occlusion when new elements are added or existing elements are repositioned.
+
+**Correct approach**:
+1. Identify ALL annotation elements in the page (flow numbers, callouts, legends)
+2. Move ALL of them to the end of the cell list
+3. Maintain their relative order among annotations
+
+**Why this matters**: An annotation that renders correctly today may become occluded after:
+- Adding new elements (which render after existing elements by default)
+- Repositioning existing elements to overlap the annotation
+- Changing element sizes or styles
+
 ---
 
 ## Section 27: Edge Label Positioning (Offset from Line)
