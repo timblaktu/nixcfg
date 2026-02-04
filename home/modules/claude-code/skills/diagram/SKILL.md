@@ -2810,3 +2810,108 @@ Before running drawio-svg-sync on a new diagram, verify:
   <mxGeometry x="100" y="85" width="30" height="30" as="geometry"/>
 </mxCell>
 ```
+
+---
+
+## Section 30: .drawio.svg File Format and Safe Editing
+
+**.drawio.svg files have a DUAL STRUCTURE** that must be preserved:
+
+1. **`content` attribute**: URL-encoded mxFile XML (the editable source)
+2. **SVG body**: Rendered visual output
+
+### File Structure
+
+**VALID .drawio.svg file** (editable in Draw.io app):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg content="&lt;mxfile host=&quot;Electron&quot; ..." xmlns="http://www.w3.org/2000/svg" ...>
+  <!-- Rendered SVG content follows -->
+</svg>
+```
+
+**INVALID/CORRUPTED file** (view-only, NOT editable):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" style="background:...">
+  <!-- Pure SVG - NO content attribute = Draw.io source LOST -->
+</svg>
+```
+
+### Pre-Edit Verification
+
+**ALWAYS check before editing a .drawio.svg file**:
+
+```bash
+# Quick check - should show content="&lt;mxfile
+head -c 300 diagram.drawio.svg | grep -o 'content="[^"]*' | head -c 50
+
+# If this returns empty or no match, file is ALREADY corrupted
+```
+
+### Safe Editing Methods
+
+**Method 1: Edit embedded mxFile XML directly** (preferred for small fixes)
+1. Decode the `content` attribute (URL-decode the value)
+2. Parse the mxFile XML to find the mxGraphModel and mxCell elements
+3. Make targeted changes to specific mxCell attributes
+4. Re-encode and update the `content` attribute
+5. Re-render the SVG body (or use drawio-svg-sync)
+
+**Method 2: Use Draw.io application**
+1. Open file in Draw.io desktop app or draw.io website
+2. Make visual changes
+3. Save - Draw.io preserves the dual structure automatically
+
+**Method 3: Use drawio-svg-sync tool** (for Mermaid→DrawIO conversion)
+- Only for creating NEW diagrams from Mermaid source
+- Does NOT help with editing existing .drawio.svg files
+
+### CRITICAL: Never Do This
+
+**NEVER replace the entire file with rendered SVG output**:
+
+```bash
+# WRONG - Destroys embedded source!
+drawio --export --format svg diagram.drawio.svg -o diagram.drawio.svg
+
+# WRONG - Writing pure SVG destroys content attribute
+echo '<svg xmlns="...">' > diagram.drawio.svg
+```
+
+### Recovery
+
+If a .drawio.svg file has been corrupted (content attribute lost):
+
+```bash
+# Check git history for last good version
+git log --oneline -- diagram.drawio.svg
+
+# Restore from specific commit
+git checkout <commit-hash> -- diagram.drawio.svg
+```
+
+### Detection Script
+
+```bash
+#!/bin/bash
+# Check if .drawio.svg file is valid (has embedded source)
+check_drawio_svg() {
+    local file="$1"
+    if head -c 500 "$file" | grep -q 'content="&lt;mxfile'; then
+        echo "✓ VALID: $file has embedded Draw.io source"
+        return 0
+    else
+        echo "✗ INVALID: $file is missing embedded source (view-only)"
+        return 1
+    fi
+}
+```
+
+### Why This Matters
+
+- **Editable**: File with `content` attribute can be opened and modified in Draw.io
+- **View-only**: File without `content` attribute is just an image - no editing possible
+- **Version control**: Changes to the embedded mxFile XML are what you want to track
+- **Collaboration**: Other users need the embedded source to continue editing
