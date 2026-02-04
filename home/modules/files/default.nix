@@ -274,8 +274,45 @@ let
       complete -F ${funcName} ${name}
     '';
 
-  # Static list of scripts managed by validated-scripts module
-  # This prevents circular dependency issues while ensuring exclusion works
+  # ============================================================================
+  # SCRIPT EXCLUSION LIST - Scripts Installed Elsewhere
+  # ============================================================================
+  #
+  # PURPOSE: Scripts listed here are EXCLUDED from:
+  #   1. Simple symlink installation to ~/bin/ (they're installed via home.packages instead)
+  #   2. Auto-generated bash/zsh completions (they handle completions differently)
+  #
+  # WHY EXCLUDE? These scripts need special handling that simple symlinks can't provide:
+  #   - Runtime dependency injection via wrapProgram (e.g., tmux-session-picker needs fzf, parallel)
+  #   - String substitution at build time (e.g., injecting nix store paths)
+  #   - Custom derivation wrapping (e.g., symlinkJoin with makeWrapper)
+  #   - Module-specific configuration injection
+  #
+  # WHERE ARE THEY INSTALLED?
+  #   - tmux-session-picker → tmux.nix via home.packages (needs fzf, parallel, library inlining)
+  #   - claude-code-* → claude-code module (needs API key injection)
+  #   - esp-idf-* → ESP-IDF module (needs FHS environment)
+  #   - Others → Various specialized modules
+  #
+  # INSTALLATION FLOW:
+  #   home/files/bin/script-name (source)
+  #           │
+  #           ├─ NOT in list ──► files/default.nix ──► ~/bin/script-name (symlink)
+  #           │                   Simple copy, chmod +x
+  #           │
+  #           └─ IN this list ──► Specialized module ──► home.packages ──► ~/.nix-profile/bin/
+  #                               wrapProgram, string substitution, deps injection
+  #
+  # TO ADD A SCRIPT HERE:
+  #   1. Script must be installed via home.packages in another module
+  #   2. That module must handle the script's special requirements
+  #   3. Add the script name to this list to prevent duplicate installation
+  #
+  # TO REMOVE A SCRIPT:
+  #   1. Ensure the script doesn't need special handling (no deps, no substitutions)
+  #   2. Remove from this list - it will then be installed as a simple symlink
+  #   3. Example: tmux-auto-attach was removed because it's just sourced, no special needs
+  # ============================================================================
   validatedScriptNames = [
     "simple-test"
     "hello-validated"
