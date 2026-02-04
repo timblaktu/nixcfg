@@ -5,10 +5,23 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.3.0
+**Version**: 1.5.0
 **Last Updated**: 2026-02-03
 
 ## Changelog
+
+### v1.5.0 (2026-02-03)
+- Added Section 29: Proactive Best Practices (consolidates defaults to apply when CREATING diagrams)
+  - Annotation element ordering (z-order by default)
+  - Edge label offset as default style
+  - Creation checklist
+  - Anti-patterns to avoid
+  - Quick reference templates
+
+### v1.4.0 (2026-02-03)
+- Added Section 26: Z-Order and Layer Management (use z-order vs repositioning for overlaps)
+- Added Section 27: Edge Label Positioning (offset labels from lines for readability)
+- Added Section 28: Arrowhead Sizing (smaller arrowheads via strokeWidth or endSize)
 
 ### v1.3.0 (2026-02-03)
 - Added Section 19: Integrated Edge Labels (prefer over separate text boxes)
@@ -2496,3 +2509,304 @@ When expanding a cloud, check for overlaps with:
 - Adjacent shapes (e.g., "Remote User" icons)
 
 Move related external elements to maintain consistent spacing (typically 50px minimum gap).
+
+---
+
+## Section 26: Z-Order and Layer Management
+
+When elements overlap, control visual presentation through **z-order** (render order) rather than always repositioning. Sometimes intentional overlap with correct layering looks more natural than avoiding overlap entirely.
+
+### Z-Order Concept
+
+DrawIO renders elements in the order they appear in the XML. Elements defined later appear **on top** of elements defined earlier.
+
+```
+Earlier in XML → Renders first → Appears behind
+Later in XML   → Renders last  → Appears in front
+```
+
+### Bring to Front Pattern
+
+To bring an element to front, move its `<mxCell>` definition to appear **after** the elements it should overlap:
+
+```xml
+<!-- Background elements first -->
+<mxCell id="container-1" ... />
+<mxCell id="arrow-1" ... />
+
+<!-- Flow number on top - defined LAST so it renders in front -->
+<mxCell id="step-1" value="①"
+        style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;"
+        vertex="1" parent="1">
+  <mxGeometry x="95" y="85" width="30" height="30" as="geometry"/>
+</mxCell>
+```
+
+### When to Use Z-Order vs Repositioning
+
+| Situation | Approach | Rationale |
+|-----------|----------|-----------|
+| Flow numbers overlapping boxes | **Z-order** (bring to front) | Numbers as annotations look natural overlapping edges |
+| Labels overlapping arrows | **Z-order** (bring label to front) | Label must be readable |
+| Two content boxes overlapping | **Reposition** | Both need full visibility |
+| Connector crossing another connector | **Z-order** or waypoints | Depends on visual clarity |
+| Annotation callout overlapping diagram | **Z-order** (callout on top) | Annotations should overlay content |
+
+### Decision Framework
+
+1. **Is one element an annotation/callout?** → Z-order (annotation on top)
+2. **Is one element decorative/supporting?** → Z-order (main content on top)
+3. **Are both elements primary content?** → Reposition to avoid overlap
+4. **Would overlap look intentional/natural?** → Z-order
+5. **Would overlap look like an error?** → Reposition
+
+### Implementation Note
+
+When editing existing diagrams, search for the element ID and move the entire `<mxCell>` block to the appropriate position in the XML sequence.
+
+---
+
+## Section 27: Edge Label Positioning (Offset from Line)
+
+**User Preference**: Edge labels should be positioned **offset from the line**, not directly on top of it. This dramatically improves readability without requiring background colors.
+
+### Default vs Preferred Positioning
+
+```
+DEFAULT (hard to read):        PREFERRED (offset):
+
+    ──────label──────              label
+                                  ────────────
+
+```
+
+### Implementation with labelPosition
+
+Use `verticalLabelPosition` and `labelPosition` to offset labels:
+
+```xml
+<!-- Label above the line -->
+<mxCell id="conn-1" value="lock request"
+        style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;
+               verticalLabelPosition=top;labelPosition=center;
+               align=center;verticalAlign=bottom;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<!-- Label below the line -->
+<mxCell id="conn-2" value="response"
+        style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;
+               verticalLabelPosition=bottom;labelPosition=center;
+               align=center;verticalAlign=top;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+### Label Position Reference
+
+| Attribute | Value | Effect |
+|-----------|-------|--------|
+| `verticalLabelPosition` | `top` | Label above line |
+| `verticalLabelPosition` | `bottom` | Label below line |
+| `labelPosition` | `left` | Label left of center point |
+| `labelPosition` | `right` | Label right of center point |
+| `verticalAlign` | `top`/`middle`/`bottom` | Fine-tune within position |
+| `align` | `left`/`center`/`right` | Horizontal alignment |
+
+### Alternative: Manual Offset via mxPoint
+
+For precise control, add an offset to the label position:
+
+```xml
+<mxCell id="conn-3" value="manages"
+        style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry">
+    <mxPoint as="offset" x="0" y="-15"/>  <!-- 15px above line -->
+  </mxGeometry>
+</mxCell>
+```
+
+### When Labels Must Be On Line
+
+Some cases where on-line labels are acceptable:
+- Very short labels (1-2 characters)
+- Labels with opaque background explicitly requested
+- Diagram style where on-line is the convention
+
+---
+
+## Section 28: Arrowhead Sizing
+
+**User Preference**: Smaller arrowheads generally look cleaner and more professional. Large arrowheads can dominate the diagram and distract from content.
+
+### Controlling Arrowhead Size
+
+Two approaches to smaller arrowheads:
+
+#### 1. Reduce strokeWidth (Proportional Scaling)
+
+Arrowhead size scales with `strokeWidth`. Thinner lines = smaller arrowheads:
+
+```xml
+<!-- Thinner line = smaller arrowhead -->
+<mxCell id="conn-1" value=""
+        style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeWidth=1;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+| strokeWidth | Arrowhead Size | Use Case |
+|-------------|----------------|----------|
+| 1 (default) | Small | Clean, minimal diagrams |
+| 2 | Medium | Emphasis, important flows |
+| 3+ | Large | High visibility requirements |
+
+#### 2. Explicit endSize/startSize
+
+For independent control of arrowhead size:
+
+```xml
+<!-- Explicit small arrowhead -->
+<mxCell id="conn-2" value=""
+        style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;endSize=6;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<!-- Bidirectional with small arrows -->
+<mxCell id="conn-3" value=""
+        style="html=1;startArrow=classic;endArrow=classic;startSize=4;endSize=4;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+| Attribute | Default | Recommended | Effect |
+|-----------|---------|-------------|--------|
+| `endSize` | ~8 | 4-6 | Smaller endpoint arrow |
+| `startSize` | ~8 | 4-6 | Smaller start arrow |
+
+### Recommended Defaults
+
+For most diagrams, use these connector defaults:
+
+```xml
+style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;strokeWidth=1;endSize=6;"
+```
+
+This produces clean, proportionate arrows that don't overwhelm the diagram.
+
+---
+
+## Section 29: Proactive Best Practices (Apply By Default)
+
+This section consolidates patterns that should be applied **when creating diagrams**, not just when fixing problems. Following these from the start prevents common visual issues.
+
+### Annotation Element Ordering (Z-Order)
+
+**ALWAYS define annotation elements LAST in the XML** so they render on top:
+
+```xml
+<!-- 1. Containers and background elements FIRST -->
+<mxCell id="container-1" ... />
+
+<!-- 2. Shapes (boxes, icons) -->
+<mxCell id="box-1" ... />
+<mxCell id="box-2" ... />
+
+<!-- 3. Connectors/edges -->
+<mxCell id="conn-1" ... edge="1" ... />
+<mxCell id="conn-2" ... edge="1" ... />
+
+<!-- 4. Annotation elements LAST (render on top) -->
+<mxCell id="step-1" value="①" ... />  <!-- Flow numbers -->
+<mxCell id="step-2" value="②" ... />
+<mxCell id="callout-1" value="Note: ..." ... />  <!-- Callouts -->
+<mxCell id="legend" ... />  <!-- Legend if overlapping content -->
+```
+
+**Annotation elements include**:
+- Flow/step numbers (①②③④)
+- Callout boxes
+- Floating labels not attached to shapes
+- Legend boxes (when positioned over diagram content)
+
+### Edge Label Offset (Default Style)
+
+**ALWAYS include label offset** in edge styles when the edge has a label:
+
+```xml
+<!-- CORRECT: Label offset from line -->
+<mxCell id="conn-1" value="lock"
+        style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;
+               labelBackgroundColor=none;fontColor=#996600;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry">
+    <mxPoint as="offset" x="0" y="-15"/>
+  </mxGeometry>
+</mxCell>
+
+<!-- WRONG: Label sits on line (hard to read) -->
+<mxCell id="conn-2" value="lock"
+        style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=classic;"
+        edge="1" parent="1" source="a" target="b">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>
+```
+
+**Standard offsets**:
+- `y="-15"` - Label above horizontal line
+- `y="15"` - Label below horizontal line
+- `x="-15"` - Label left of vertical line
+- `x="15"` - Label right of vertical line
+
+### Creation Checklist
+
+Before running drawio-svg-sync on a new diagram, verify:
+
+| Check | How to Verify |
+|-------|---------------|
+| ☐ Annotations at end of XML | Search for ①②③④ or "callout" - should be in last 10 cells |
+| ☐ Edge labels have offset | All `<mxCell ... edge="1" ... value="...">` have `<mxPoint as="offset">` |
+| ☐ No labelBackgroundColor | Edge labels use `labelBackgroundColor=none` |
+| ☐ Explicit anchor points | All edges have `exitX/exitY/entryX/entryY` with `Dx=0;Dy=0` |
+| ☐ Consistent spacing | Elements aligned to grid (multiples of 10px) |
+
+### Anti-Patterns to Avoid
+
+| Anti-Pattern | Problem | Solution |
+|--------------|---------|----------|
+| Flow numbers defined early in XML | Render behind edges | Move to end of mxCell list |
+| Edge labels without offset | Hard to read over line | Add `<mxPoint as="offset" y="-15"/>` |
+| Separate text boxes for edge labels | Don't move with edge | Use `value` attribute on edge |
+| Missing anchor points | Edges detach on resize | Always specify exit/entry X/Y/Dx/Dy |
+| Large strokeWidth on edges | Oversized arrowheads | Use strokeWidth=1 or 2 max |
+
+### Quick Reference: Recommended Defaults
+
+**Connector with label**:
+```xml
+<mxCell id="conn-1" value="label text"
+        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;
+               entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=classic;html=1;
+               strokeWidth=2;labelBackgroundColor=none;fontColor=#996600;fontSize=12;"
+        edge="1" parent="1" source="box-a" target="box-b">
+  <mxGeometry relative="1" as="geometry">
+    <mxPoint as="offset" x="0" y="-15"/>
+  </mxGeometry>
+</mxCell>
+```
+
+**Flow number annotation**:
+```xml
+<!-- Define LAST in the XML -->
+<mxCell id="flow-1" value="①"
+        style="text;html=1;align=center;verticalAlign=middle;fontSize=18;fontColor=#E24329;fontStyle=1;"
+        vertex="1" parent="1">
+  <mxGeometry x="100" y="85" width="30" height="30" as="geometry"/>
+</mxCell>
+```
