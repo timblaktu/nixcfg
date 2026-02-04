@@ -13,6 +13,14 @@
 #     };
 #   };
 #
+# Subcommand-specific token overrides (e.g., classic PAT for cross-fork PRs):
+#   gitAuth.github.cli.tokenOverrides = {
+#     pr = {
+#       item = "github.com";
+#       field = "PAT-classic";
+#     };
+#   };
+#
 # Migration from old githubAuth namespace:
 #   OLD: githubAuth.enable = true;
 #   NEW: gitAuth.github.enable = true;
@@ -31,17 +39,43 @@ let
   gitForgeLib = import ./lib/git-forge-auth.nix { inherit pkgs lib config options; };
   inherit (gitForgeLib) rbwLib resolveBwConfig;
 
-  # GitHub CLI wrapper with Bitwarden token injection
+  # GitHub CLI wrapper with Bitwarden token injection and subcommand overrides
   gh-with-auth =
     let
       bwConfig = resolveBwConfig cfg.bitwarden;
+
+      # Generate shell case branches for each override
+      # Returns: string of case patterns like "pr) ... ;;"
+      overrideCases = concatStringsSep "\n      " (mapAttrsToList
+        (subcommand: override: ''
+          ${subcommand})
+            GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (override) item field; }} 2>/dev/null)"
+            ;;'')
+        cfg.cli.tokenOverrides);
+
+      # Default case uses the main bitwarden config
+      defaultCase = ''
+        *)
+            GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwConfig) item field; }} 2>/dev/null)"
+            ;;'';
+
+      # Build the complete case statement (only if overrides exist)
+      tokenSelection =
+        if cfg.cli.tokenOverrides == { } then ''
+          # No overrides configured, use default token
+          GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwConfig) item field; }} 2>/dev/null)"''
+        else ''
+          # Select token based on subcommand
+          case "''${1:-}" in
+            ${overrideCases}
+            ${defaultCase}
+          esac'';
     in
     pkgs.writeShellScriptBin "gh" ''
-      ${rbwLib.mkGitAuthSetup {
-        inherit (bwConfig) item field;
-        varName = "GH_TOKEN";
-        staleSeconds = cfg.rbwSyncInterval;
-      }}
+      ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
+      ${rbwLib.mkClearGitCredentialCache}
+      ${tokenSelection}
+      export GH_TOKEN
       exec ${pkgs.gh}/bin/gh "$@"
     '';
 
@@ -95,6 +129,42 @@ in
         type = types.bool;
         default = true;
         description = "Enable useful gh aliases";
+      };
+
+      tokenOverrides = mkOption {
+        type = types.attrsOf (types.submodule {
+          options = {
+            item = mkOption {
+              type = types.str;
+              description = "Bitwarden item name for this subcommand";
+            };
+            field = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Bitwarden field name (null for password)";
+            };
+          };
+        });
+        default = { };
+        description = ''
+          Subcommand-specific token overrides. Maps gh subcommand names to
+          alternative Bitwarden credentials.
+
+          Use case: Fine-grained PATs work for most operations, but cross-fork
+          PR creation to upstream repos (e.g., NixOS/nixpkgs) requires a
+          classic PAT with broader permissions.
+
+          The wrapper checks the first argument (subcommand) against these
+          overrides and uses the matching credentials if found.
+        '';
+        example = literalExpression ''
+          {
+            pr = {
+              item = "github.com";
+              field = "PAT-classic";
+            };
+          }
+        '';
       };
     };
 

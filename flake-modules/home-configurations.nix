@@ -40,6 +40,10 @@
                   item = "github.com";
                   field = "PAT-timtam2026";
                 };
+                cli.tokenOverrides.pr = {
+                  item = "github.com";
+                  field = "PAT-pubclassic";
+                };
               };
             }
             # ../home/migration/darwin-home-files.nix # macOS-specific unified files configuration - DISABLED after module-based migration
@@ -83,6 +87,10 @@
                 bitwarden = {
                   item = "github.com";
                   field = "PAT-timtam2026";
+                };
+                cli.tokenOverrides.pr = {
+                  item = "github.com";
+                  field = "PAT-pubclassic";
                 };
               };
 
@@ -134,6 +142,10 @@
                 bitwarden = {
                   item = "github.com";
                   field = "PAT-timtam2026";
+                };
+                cli.tokenOverrides.pr = {
+                  item = "github.com";
+                  field = "PAT-pubclassic";
                 };
               };
 
@@ -204,6 +216,10 @@
                 bitwarden = {
                   item = "github.com";
                   field = "PAT-timtam2026";
+                };
+                cli.tokenOverrides.pr = {
+                  item = "github.com";
+                  field = "PAT-pubclassic";
                 };
               };
 
@@ -292,6 +308,10 @@
                 bitwarden = {
                   item = "github.com";
                   field = "PAT-timtam2026";
+                };
+                cli.tokenOverrides.pr = {
+                  item = "github.com";
+                  field = "PAT-pubclassic";
                 };
               };
             }
