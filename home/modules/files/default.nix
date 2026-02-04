@@ -294,7 +294,7 @@ let
     "claude-code-wrapper"
     "claude-code-update"
     "onedrive-force-sync"
-    "tmux-auto-attach"
+    # "tmux-auto-attach" - now installed normally, sourced by zsh.nix
     "colorfuncs"
     "mergejson"
     "onedrive-status"

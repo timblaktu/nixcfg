@@ -352,11 +352,18 @@ in
       
             DIRSTACKSIZE=20
       
-            # Aliases for directory stack  
+            # Aliases for directory stack
             alias dirs='dirs -v'
             for i in {1..19}; do
               alias "$i"="cd -$i"
             done
+
+            # Tmux auto-attach: automatically attach to existing session or create new one
+            # This allows tmux-continuum to restore sessions properly
+            # The script handles SSH detection and nested session prevention
+            if [[ -x "$HOME/bin/tmux-auto-attach" ]]; then
+              source "$HOME/bin/tmux-auto-attach"
+            fi
     '';
 
     plugins = [
