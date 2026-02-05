@@ -46,6 +46,16 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | 3.1 | Getting-started guide | `TASK:PENDING` | |
 | 3.2 | Customization docs | `TASK:PENDING` | |
 | 3.3 | Example flake | `TASK:PENDING` | |
+| — | **SESSION BOUNDARY** | | |
+| **4** | **WSL Image Distribution** | | |
+| 4.1 | Create nix-wsl-builder repo | `TASK:PENDING` | |
+| 4.2 | Extract wsl-common module | `TASK:PENDING` | |
+| — | **SESSION BOUNDARY** | | |
+| 4.3 | Extract wsl-tarball-checks | `TASK:PENDING` | |
+| 4.4 | Add CI/CD for tarball builds | `TASK:PENDING` | |
+| — | **SESSION BOUNDARY** | | |
+| 4.5 | Create dev-team configuration | `TASK:PENDING` | |
+| 4.6 | WSL onboarding documentation | `TASK:PENDING` | | |
 
 ---
 
@@ -494,6 +504,201 @@ lib.ai-dev = {
 
 ---
 
+## Phase 4: WSL Image Distribution Infrastructure
+
+**Purpose**: Enable automated building and distribution of pre-configured NixOS-WSL tarballs for team onboarding.
+
+**Architecture Decision**: Separate `nix-wsl-builder` repository (not bundled with nix-ai-dev)
+
+**Rationale**:
+- Clear separation between AI tooling and infrastructure
+- Focused scope for WSL-specific concerns
+- Independent release cycle for WSL images
+- Teammates who want WSL images may not want AI tooling (and vice versa)
+
+### Task 4.1: Create nix-wsl-builder Repository
+
+**Status**: `TASK:PENDING`
+
+**Scope**: Initialize new repository with flake structure
+
+**Target Structure**:
+```
+github.com/timblaktu/nix-wsl-builder/
+├── flake.nix
+├── lib/
+│   ├── default.nix
+│   └── tarball.nix           # mkWslConfiguration helper
+├── modules/
+│   ├── wsl-common.nix        # Extracted from nixcfg
+│   ├── wsl-tarball-checks.nix
+│   └── wsl-cuda.nix          # Optional CUDA support
+├── configurations/
+│   ├── minimal.nix           # Generic distribution config
+│   └── dev-team.nix          # Team's opinionated config
+├── templates/
+│   └── basic/                # Simple WSL NixOS config
+└── docs/
+    └── getting-started.md
+```
+
+**Flake Outputs**:
+```nix
+{
+  nixosModules = {
+    wsl-common = ./modules/wsl-common.nix;
+    wsl-tarball-checks = ./modules/wsl-tarball-checks.nix;
+    wsl-cuda = ./modules/wsl-cuda.nix;
+  };
+
+  nixosConfigurations = {
+    minimal = ...;
+    dev-team = ...;
+  };
+
+  packages.x86_64-linux = {
+    tarball-minimal = ...;
+    tarball-dev-team = ...;
+  };
+
+  templates.basic = { ... };
+}
+```
+
+**Definition of Done**:
+- [ ] Repository created on GitHub
+- [ ] Basic flake.nix with nixos-wsl input
+- [ ] Empty module structure in place
+- [ ] `nix flake check` passes
+
+---
+
+### Task 4.2: Extract wsl-common Module
+
+**Status**: `TASK:PENDING`
+
+**Current Location**: `modules/wsl-common.nix` (143 LOC)
+
+**Extraction Notes**:
+- Parameterized options for hostname, defaultUser, interop settings
+- SSH configuration
+- Windows PATH integration
+- Runtime assertions for validation
+
+**Definition of Done**:
+- [ ] Module copied to nix-wsl-builder
+- [ ] Any nixcfg-specific references removed
+- [ ] Test configuration using extracted module
+- [ ] `nix flake check` passes
+
+---
+
+### Task 4.3: Extract wsl-tarball-checks Module
+
+**Status**: `TASK:PENDING`
+
+**Current Location**: `modules/wsl-tarball-checks.nix`
+
+**Extraction Notes**:
+- Security validation for distribution tarballs
+- Personal identifier detection
+- Sensitive environment variable checking
+- Bypass mechanism for development
+
+**Definition of Done**:
+- [ ] Module copied to nix-wsl-builder
+- [ ] Configurable personal identifiers (not hardcoded)
+- [ ] Test security check script generation
+- [ ] `nix flake check` passes
+
+---
+
+### Task 4.4: Add CI/CD for Tarball Builds
+
+**Status**: `TASK:PENDING`
+
+**Scope**: GitHub Actions workflow for automated tarball building
+
+**Workflow Design**:
+```yaml
+name: Build WSL Tarballs
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Configuration to build'
+        required: true
+        default: 'minimal'
+        type: choice
+        options: [minimal, dev-team]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: DeterminateSystems/nix-installer-action@v9
+      - uses: DeterminateSystems/magic-nix-cache-action@v2
+      - name: Build tarball
+        run: nix build .#tarball-${{ inputs.configuration }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nixos-wsl-${{ inputs.configuration }}
+          path: result/nixos.wsl
+```
+
+**Definition of Done**:
+- [ ] Workflow file created
+- [ ] Manual trigger works
+- [ ] Tag-based releases work
+- [ ] Artifacts downloadable from Actions
+
+---
+
+### Task 4.5: Create dev-team Configuration
+
+**Status**: `TASK:PENDING`
+
+**Scope**: Opinionated NixOS-WSL configuration for your team
+
+**Configuration Features**:
+- Standard dev tools (git, vim, curl, htop)
+- Nix flakes enabled
+- Optional: CUDA support
+- Optional: Import nix-ai-dev for Claude/OpenCode tooling
+- Generic user setup (teammates customize after import)
+
+**Definition of Done**:
+- [ ] Configuration builds successfully
+- [ ] Tarball imports into WSL
+- [ ] Basic functionality verified
+- [ ] Documentation for customization
+
+---
+
+### Task 4.6: WSL Onboarding Documentation
+
+**Status**: `TASK:PENDING`
+
+**Scope**: Getting-started guide for teammates
+
+**Content Outline**:
+1. Prerequisites (Windows 11, WSL2 enabled)
+2. Download tarball from GitHub releases
+3. Import into WSL: `wsl --import NixOS C:\wsl\NixOS .\nixos.wsl`
+4. First login and password change
+5. Customization options
+6. Upgrading to newer releases
+
+**Definition of Done**:
+- [ ] docs/getting-started.md complete
+- [ ] Tested by someone unfamiliar with NixOS
+- [ ] Screenshots/examples included
+
+---
+
 ## Design Session Log
 
 *(Record outcomes of each design discussion session here)*
@@ -530,6 +735,44 @@ nixcfg structure:
 | 3 (Low) | Personal configs (nixvim, tmux, zsh) | Too customized for generic use |
 
 **Next Session**: Answer Task 0.1 questions (audience, scope)
+
+---
+
+### Session 2 (2026-02-04): WSL Builder Research & Phase 4 Design
+
+**Topics**: NixOS WSL build capabilities research, Phase 4 task definition
+
+**Branch**: `research/nixos-wsl-build` (worktree: `/home/tim/src/nixcfg-wsl-research`)
+
+**Research Findings**:
+
+1. **NixOS-WSL is the primary mechanism** for building WSL tarballs
+   - `system.build.tarballBuilder` attribute
+   - Supports `--extra-files` and `--chown` options
+   - Requires sudo for tarball creation
+
+2. **nixos-generators does NOT support WSL format**
+   - 32 formats available, but no WSL
+   - WSL requires specific boot config that NixOS-WSL handles internally
+
+3. **Current nixcfg already has working infrastructure**
+   - `nixos-wsl-minimal` configuration for generic distribution
+   - `wsl-tarball-checks.nix` for security validation
+   - `wsl-common.nix` with parameterized options (143 LOC)
+
+**Architecture Decision**: Separate `nix-wsl-builder` repository
+
+**Rationale**:
+- Clear separation between AI tooling (nix-ai-dev) and infrastructure
+- Focused scope for WSL-specific concerns
+- Independent release cycle for WSL images
+- Teammates can use WSL images without AI tooling
+
+**Artifacts Created**:
+- `docs/NIXOS-WSL-BUILD-CAPABILITIES.md` - Comprehensive research documentation
+- Phase 4 tasks added to this plan (6 tasks with definitions of done)
+
+**Next Session**: Begin Task 4.1 (create nix-wsl-builder repo) or continue with Phase 0.5 sign-off
 
 ---
 
