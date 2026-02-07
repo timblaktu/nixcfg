@@ -1,9 +1,9 @@
 # Plan 018: Nixcfg Modularization for Team Sharing
 
 **Status**: DESIGN PHASE
-**Branch**: `opencode`
+**Branch**: `refactor/modularization`
 **Created**: 2026-02-01
-**Last Updated**: 2026-02-01
+**Last Updated**: 2026-02-05
 
 ---
 
@@ -773,6 +773,55 @@ nixcfg structure:
 - Phase 4 tasks added to this plan (6 tasks with definitions of done)
 
 **Next Session**: Begin Task 4.1 (create nix-wsl-builder repo) or continue with Phase 0.5 sign-off
+
+---
+
+### Session 3 (2026-02-05): Scope Revision & Structural Analysis
+
+**Topics**: Plan scope discussion, dead code cleanup, breadth-first structural analysis
+
+**Key Decision**: Pivot from "extract for sharing" to "internal cleanup first, then extraction"
+
+**Scope Clarification**:
+- Include shell environment (nvim, tmux, zsh) as shareable defaults
+- "Too personal" = only PII (not preferences)
+- Secrets management should be modularized with rbw as default but configurable
+- Focus on internal consistency to make extraction easier later
+
+**Dead Code Removed**:
+- `ROS_211025_0809_10218-markdown/` (empty)
+- `ROS_211025_0809_10218-md/` (empty)
+- `marker_output/` (empty)
+- `GIT-REPO-STATUS.md` (outdated snapshot)
+- `fix-systemd-user.sh` (redundant - fix automated in hosts/common/default.nix)
+
+**Files Moved**:
+- 2 git-worktree design docs → `~/src/git-worktree-superproject/`
+- `FLAKE-PARTS-QUICK-REFERENCE.md` → `docs/`
+
+**Pattern Noted for Future**: `github-actions.nix` at top level is an opt-in user config pattern
+- Module logic in `flake-modules/github-actions.nix` with defaults
+- User creates `github-actions.nix` at top level to override/enable
+- Useful pattern for new repos with optional CI validation
+
+**Structural Analysis Findings** (not yet addressed):
+
+*Top Naming Inconsistencies*:
+1. `hardware-configuration.nix` (mbp) vs `hardware-config.nix` (others)
+2. `modules/home/` vs `home/modules/` both have HM modules
+3. Mixed namespaces: `homeBase`, `programs.*`, `secretsManagement`
+
+*Top DRY Violations*:
+1. MCP server config 80% duplicated in claude-code + opencode (473 lines)
+2. `podman-tools.nix` exists in TWO places (58 lines each)
+3. TUR wrapper build.sh ~90% identical between claude and opencode
+
+*Top Structural Concerns*:
+1. `modules/` vs `home/` boundary unclear - which to copy for extraction?
+2. Custom options embedded in home-configurations.nix, not in reusable modules
+3. Runtime dirs (claude-runtime, opencode-runtime) not generated from Nix
+
+**Next Session**: Address structural issues, starting with quick wins or as prioritized by user
 
 ---
 
