@@ -24,6 +24,7 @@
 - **ALWAYS stage changes before nix commands** - Nix only sees staged/committed changes
 - **Task summaries**: Be explicit about SCOPE, list ALL artifacts, state what was NOT done
 - **UPDATE MEMORY BEFORE SUMMARY** - update project memory first, then provide summary
+- **COMMIT DIAGRAM CHANGES IMMEDIATELY** - `.drawio.svg` files with uncommitted pages can be lost if `git checkout` is used; commit after each significant diagram edit
 
 ## Terminal-Width-Aware Output Formatting
 
