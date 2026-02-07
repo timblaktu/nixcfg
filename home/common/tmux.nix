@@ -205,9 +205,9 @@ in
       bind-key -n M-h previous-window  # Alt+h => previous window
       bind-key -n M-l next-window      # Alt+l => next window
       
-      # Window reordering - M-C-h/l already used by MS Terminal for tab navigation
-      bind-key -n M-C-H swap-window -t -1\; select-window -t -1  # Alt+Ctrl+H => move window left
-      bind-key -n M-C-L swap-window -t +1\; select-window -t +1  # Alt+Ctrl+L => move window right
+      # Window reordering - use prefix-based bindings (more reliable in Windows Terminal)
+      bind-key < swap-window -t -1\; select-window -t -1  # Prefix+< => move window left
+      bind-key > swap-window -t +1\; select-window -t +1  # Prefix+> => move window right
       
       # Pane resizing with repeat capability
       bind-key -r j resize-pane -D
