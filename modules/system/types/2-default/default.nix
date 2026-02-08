@@ -1,9 +1,10 @@
 # modules/system/types/2-default/default.nix
-# Default system configuration layer [ND]
+# Default system configuration layer [NDnd]
 #
 # Provides:
 #   flake.modules.nixos.system-default - NixOS with user management + integrations
 #   flake.modules.darwin.system-default - Darwin with user management + integrations
+#   flake.modules.homeManager.home-default - Home Manager with standard packages + fonts
 #
 # This layer IMPORTS system-minimal and adds:
 #   - User creation with configurable options
@@ -351,6 +352,92 @@
 
           # NOTE: Home Manager and SOPS integration should be handled at the host level
         ];
+      };
+
+    # === Home Manager Default Module ===
+    homeManager.home-default = { config, lib, pkgs, ... }:
+      let
+        cfg = config.homeDefault;
+        minCfg = config.homeMinimal;
+      in
+      {
+        imports = [
+          # Import minimal layer
+          inputs.self.modules.homeManager.home-minimal
+        ];
+
+        options.homeDefault = {
+          # Default editor
+          defaultEditor = lib.mkOption {
+            type = lib.types.str;
+            default = "nvim";
+            description = "Default editor";
+          };
+
+          # Base packages
+          basePackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = with pkgs; [
+              # Core utilities
+              coreutils-full
+              curl
+              fd
+              file
+              fzf
+              htop
+              jq
+              ripgrep
+              tree
+              unzip
+              zoxide
+              p7zip
+
+              # Secrets and security
+              age
+              rbw
+              pinentry-curses
+              sops
+              openssl
+
+              # Fonts
+              nerd-fonts.caskaydia-mono
+              cascadia-code
+              noto-fonts-color-emoji
+            ];
+            description = "Base packages for all home environments";
+          };
+
+          # Additional packages
+          additionalPackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = [ ];
+            description = "Additional packages for this configuration";
+          };
+
+          # Environment variables
+          environmentVariables = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+            description = "Additional environment variables";
+          };
+        };
+
+        config = {
+          # Packages
+          home.packages = cfg.basePackages ++ cfg.additionalPackages;
+
+          # Environment variables
+          home.sessionVariables = {
+            EDITOR = cfg.defaultEditor;
+          } // cfg.environmentVariables;
+
+          # Font configuration
+          fonts.fontconfig.enable = lib.mkForce true;
+
+          # Disable input method to avoid fcitx5 package issues
+          i18n.inputMethod.enable = false;
+          i18n.inputMethod.type = null;
+        };
       };
   };
 }

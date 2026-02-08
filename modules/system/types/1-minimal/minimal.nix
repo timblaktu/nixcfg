@@ -1,9 +1,10 @@
 # modules/system/types/1-minimal/minimal.nix
-# Minimal system configuration layer [ND]
+# Minimal system configuration layer [NDnd]
 #
 # Provides:
 #   flake.modules.nixos.system-minimal - Absolute minimum NixOS configuration
 #   flake.modules.darwin.system-minimal - Absolute minimum Darwin configuration
+#   flake.modules.homeManager.home-minimal - Absolute minimum Home Manager configuration
 #
 # This is the base layer that ALL systems inherit from. It contains:
 #   - Nix flakes and experimental features
@@ -238,6 +239,85 @@
           # Darwin uses nix-darwin's stateVersion
           # Note: Darwin stateVersion format differs from NixOS
           system.stateVersion = lib.mkDefault 4; # nix-darwin state version
+        };
+      };
+
+    # === Home Manager Minimal Module ===
+    homeManager.home-minimal = { config, lib, pkgs, ... }:
+      let
+        cfg = config.homeMinimal;
+      in
+      {
+        options.homeMinimal = {
+          # User identity (required)
+          username = lib.mkOption {
+            type = lib.types.str;
+            description = "Username for Home Manager (required)";
+            example = "tim";
+          };
+
+          homeDirectory = lib.mkOption {
+            type = lib.types.str;
+            description = "Home directory path (required)";
+            example = "/home/tim";
+          };
+
+          # State version
+          stateVersion = lib.mkOption {
+            type = lib.types.str;
+            default = "24.11";
+            description = "Home Manager state version";
+          };
+
+          # Nix settings
+          nixMaxJobs = lib.mkOption {
+            type = lib.types.int;
+            default = 2;
+            description = "Maximum parallel nix jobs";
+          };
+        };
+
+        config = {
+          # Assertions
+          assertions = [
+            {
+              assertion = cfg.username != "";
+              message = "homeMinimal.username must be set";
+            }
+            {
+              assertion = cfg.homeDirectory != "";
+              message = "homeMinimal.homeDirectory must be set";
+            }
+          ];
+
+          # Core Home Manager identity
+          home = {
+            username = cfg.username;
+            homeDirectory = cfg.homeDirectory;
+            stateVersion = cfg.stateVersion;
+
+            # Add ~/bin to PATH
+            sessionPath = [ "$HOME/bin" ];
+          };
+
+          # Let Home Manager manage itself
+          programs.home-manager.enable = true;
+
+          # Disable version mismatch warnings (using HM master with nixos-unstable)
+          home.enableNixpkgsReleaseCheck = false;
+
+          # Enable standalone mode support
+          targets.genericLinux.enable = lib.mkDefault true;
+
+          # Nix configuration
+          nix = {
+            package = lib.mkDefault pkgs.nix;
+            settings = {
+              max-jobs = lib.mkDefault cfg.nixMaxJobs;
+              warn-dirty = false;
+              experimental-features = [ "nix-command" "flakes" ];
+            };
+          };
         };
       };
   };

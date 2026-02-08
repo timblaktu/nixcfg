@@ -1,9 +1,10 @@
 # modules/system/types/3-cli/cli.nix
-# CLI-focused system configuration layer [ND]
+# CLI-focused system configuration layer [NDnd]
 #
 # Provides:
 #   flake.modules.nixos.system-cli - NixOS with full CLI tooling
 #   flake.modules.darwin.system-cli - Darwin with full CLI tooling
+#   flake.modules.homeManager.home-cli - Home Manager with full CLI tooling
 #
 # This layer IMPORTS system-default and adds:
 #   - SSH authorized_keys management
@@ -435,6 +436,115 @@
               wget # Note: wget2 may have Darwin issues
               aria2 # Download manager
             ];
+          })
+        ];
+      };
+
+    # === Home Manager CLI Module ===
+    homeManager.home-cli = { config, lib, pkgs, ... }:
+      let
+        cfg = config.homeCli;
+        defaultCfg = config.homeDefault;
+      in
+      {
+        imports = [
+          # Import default layer
+          inputs.self.modules.homeManager.home-default
+        ];
+
+        options.homeCli = {
+          # Git configuration
+          enableGit = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable Git configuration";
+          };
+
+          # Tmux configuration
+          enableTmux = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable Tmux configuration";
+          };
+
+          # Neovim configuration
+          enableNeovim = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable Neovim (via nixvim)";
+          };
+
+          # Shell aliases
+          shellAliases = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+            description = "Additional shell aliases";
+          };
+
+          # CLI packages
+          cliPackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = with pkgs; [
+              # Modern CLI replacements (subset for HM)
+              dua # Disk usage analyzer
+              glow # Markdown renderer
+              nixfmt-rfc-style
+
+              # Media tools
+              ffmpeg
+              ffmpegthumbnailer
+              imagemagick
+              yt-dlp
+
+              # Development
+              act # GitHub Actions local runner
+              nix-diff
+
+              # Misc
+              inotify-tools
+              lbzip2
+              poppler
+              resvg
+              speedtest
+              stress-ng
+              ueberzugpp
+            ];
+            description = "CLI packages to install";
+          };
+
+          # Additional CLI packages
+          additionalCliPackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = [ ];
+            description = "Additional CLI packages";
+          };
+        };
+
+        config = lib.mkMerge [
+          # Core CLI configuration
+          {
+            # CLI packages
+            home.packages = cfg.cliPackages ++ cfg.additionalCliPackages;
+
+            # Shell aliases for bash and zsh
+            programs.bash.shellAliases = cfg.shellAliases;
+            programs.zsh.shellAliases = cfg.shellAliases;
+
+            # GNU Parallel with citation notice silenced
+            programs.parallel = {
+              enable = true;
+              will-cite = true;
+            };
+          }
+
+          # Git configuration
+          (lib.mkIf cfg.enableGit {
+            programs.git.enable = true;
+          })
+
+          # Tmux configuration
+          (lib.mkIf cfg.enableTmux {
+            programs.tmux.enable = true;
           })
         ];
       };

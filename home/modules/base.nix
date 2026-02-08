@@ -1,4 +1,20 @@
 # Parameterized Home Manager base module
+#
+# DEPRECATED: This module is being migrated to the dendritic system types pattern.
+# New configurations should use the layered system types instead:
+#   - homeManager.home-minimal (core HM setup)
+#   - homeManager.home-default (packages, fonts, environment)
+#   - homeManager.home-cli (git, tmux, shell tools)
+#   - homeManager.home-desktop (yazi, GUI applications)
+#
+# Migration path:
+#   1. Import the appropriate system type: inputs.self.modules.homeManager.home-cli
+#   2. Set options using the new namespaces: homeMinimal.*, homeDefault.*, homeCli.*
+#   3. For feature-specific config (claude-code, opencode), use dedicated feature modules
+#
+# This module will be removed in Phase 6 of Plan 019.
+# See: .claude/user-plans/019-dendritic-migration.md
+#
 { config, lib, pkgs, inputs ? null, ... }:
 
 with lib;

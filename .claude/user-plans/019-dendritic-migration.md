@@ -233,7 +233,7 @@ in
 | 2.3 | Create `modules/system/types/3-cli/` | COMPLETE |
 | 2.4 | Create `modules/system/types/4-desktop/` | COMPLETE |
 | 2.5 | Migrate `modules/base.nix` → system types | COMPLETE |
-| 2.6 | Migrate `home/modules/base.nix` → system types | PENDING |
+| 2.6 | Migrate `home/modules/base.nix` → system types | COMPLETE |
 
 **Definition of Done**:
 - Hosts import system-type, not individual modules

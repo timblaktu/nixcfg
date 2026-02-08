@@ -1,9 +1,10 @@
 # modules/system/types/4-desktop/desktop.nix
-# Desktop system configuration layer [ND]
+# Desktop system configuration layer [NDnd]
 #
 # Provides:
 #   flake.modules.nixos.system-desktop - NixOS with full desktop environment
 #   flake.modules.darwin.system-desktop - Darwin with UI preferences
+#   flake.modules.homeManager.home-desktop - Home Manager with GUI applications
 #
 # This layer IMPORTS system-cli and adds:
 #   - Desktop environment (GNOME, KDE Plasma, XFCE, etc.)
@@ -649,6 +650,56 @@
               # Common macOS GUI apps - users can add more in their config
               casks = [ ];
             };
+          }
+        ];
+      };
+
+    # === Home Manager Desktop Module ===
+    homeManager.home-desktop = { config, lib, pkgs, ... }:
+      let
+        cfg = config.homeDesktop;
+      in
+      {
+        imports = [
+          # Import CLI layer
+          inputs.self.modules.homeManager.home-cli
+        ];
+
+        options.homeDesktop = {
+          # Yazi file manager
+          enableYazi = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable Yazi file manager";
+          };
+
+          # Container tools
+          enableContainerSupport = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable container tools (podman-compose, podman-tui)";
+          };
+
+          # GUI packages
+          guiPackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = [ ];
+            description = "GUI application packages";
+          };
+        };
+
+        config = lib.mkMerge [
+          # Yazi file manager
+          (lib.mkIf cfg.enableYazi {
+            programs.yazi = {
+              enable = true;
+              enableZshIntegration = true;
+            };
+          })
+
+          # GUI packages
+          {
+            home.packages = cfg.guiPackages;
           }
         ];
       };
