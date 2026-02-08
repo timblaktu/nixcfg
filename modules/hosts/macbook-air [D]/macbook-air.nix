@@ -111,7 +111,9 @@ in
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.yazi
       inputs.self.modules.homeManager.shell-utils
-      # Note: No wsl-home module - this is macOS, not WSL
+      inputs.self.modules.homeManager.terminal
+      inputs.self.modules.homeManager.system-tools
+      # Note: No wsl-home, esp-idf, or onedrive - this is macOS, not WSL
     ];
 
     # Dendritic home-minimal options (required by system types)

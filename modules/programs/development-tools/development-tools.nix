@@ -7,11 +7,13 @@
 # Features:
 #   - Rust toolchain (rustc, cargo, rust-analyzer, clippy, rustfmt)
 #   - Node.js ecosystem (nodejs, yarn, npm)
-#   - Python with common packages (includes pyenv)
+#   - Python with common packages (includes pyenv, pymupdf4llm)
 #   - Go environment setup (GOPATH, bin paths)
 #   - C/C++ build tools (cmake, gcc, make, binutils)
 #   - Kubernetes tools (kubectl, k9s)
 #   - Build utilities (flex, bison, gperf)
+#   - Enhanced CLI tools (bat, eza, delta, bottom, miller)
+#   - Claude development utilities (claudevloop, restart_claude, etc.)
 #   - Development environment paths and variables
 #
 # Usage in host config:
@@ -22,6 +24,8 @@
 #     enableNode = true;
 #     enablePython = true;
 #     enableGo = true;
+#     enableEnhancedCli = true;
+#     enableClaudeUtils = true;
 #   };
 { config, lib, inputs, ... }:
 {
@@ -65,7 +69,7 @@
 
           pythonPackages = lib.mkOption {
             type = lib.types.listOf lib.types.str;
-            default = [ "ipython" "pip" "setuptools" "pyserial" "cryptography" "pyparsing" ];
+            default = [ "ipython" "pip" "setuptools" "pyserial" "cryptography" "pyparsing" "pymupdf4llm" ];
             description = "Python packages to include";
             example = [ "ipython" "pip" "setuptools" "requests" "numpy" ];
           };
@@ -106,6 +110,26 @@
             type = lib.types.bool;
             default = false;
             description = "Enable Kubernetes tools (kubectl, k9s)";
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Enhanced CLI Tools
+          # ─────────────────────────────────────────────────────────────────────
+
+          enableEnhancedCli = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable enhanced CLI tools (bat, eza, delta, bottom, miller)";
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Claude Development Utilities
+          # ─────────────────────────────────────────────────────────────────────
+
+          enableClaudeUtils = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable Claude Code development utilities (claudevloop, restart_claude, etc.)";
           };
 
           # ─────────────────────────────────────────────────────────────────────
@@ -254,6 +278,109 @@
                 eval "$(pyenv init - zsh)"
               fi
             '';
+          })
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Enhanced CLI Tools
+          # ─────────────────────────────────────────────────────────────────────
+          (lib.mkIf cfg.enableEnhancedCli {
+            home.packages = with pkgs; [
+              bat # Better cat with syntax highlighting
+              eza # Modern ls replacement (formerly exa)
+              delta # Better git diff
+              bottom # System monitoring (btm)
+              miller # Command-line CSV/TSV/JSON processor
+            ];
+          })
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Claude Development Utilities
+          # ─────────────────────────────────────────────────────────────────────
+          (lib.mkIf cfg.enableClaudeUtils {
+            home.packages = with pkgs; [
+              # PDF to Markdown converter CLI using pymupdf4llm with parallel processing
+              (pkgs.writers.writePython3Bin "pdf2md"
+                { libraries = [ pkgs.python3Packages.pymupdf4llm ]; }
+                (builtins.readFile ../../../home/files/bin/pdf2md.py)
+              )
+
+              # Claude development workflow scripts
+              (pkgs.writeShellApplication {
+                name = "claudevloop";
+                text = builtins.readFile ../../../home/files/bin/claudevloop;
+                runtimeInputs = with pkgs; [ neovim ];
+              })
+
+              (pkgs.writeShellApplication {
+                name = "restart_claude";
+                text = builtins.readFile ../../../home/files/bin/restart_claude;
+                runtimeInputs = with pkgs; [ jq findutils coreutils ];
+              })
+
+              (pkgs.writeShellApplication {
+                name = "mkclaude_desktop_config";
+                text = builtins.readFile ../../../home/files/bin/mkclaude_desktop_config;
+                runtimeInputs = with pkgs; [ jq coreutils ];
+              })
+
+              # Show Claude Code model mappings for current session
+              (pkgs.writeShellApplication {
+                name = "claude-models";
+                text = ''
+                  # Display current Claude Code model mappings
+
+                  echo "Claude Code Model Mappings"
+                  echo "=========================="
+                  echo ""
+
+                  # Check if we're in a Claude session by looking for the model env vars
+                  if [[ -z "''${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]] && \
+                     [[ -z "''${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" ]] && \
+                     [[ -z "''${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" ]]; then
+                    echo "No model mappings found in environment."
+                    echo "This command should be run from within a Claude Code session."
+                    echo ""
+                    echo "Launch Claude Code with one of these wrappers:"
+                    echo "  - claudemax   (Anthropic Max account)"
+                    echo "  - claudepro   (Anthropic Pro account)"
+                    echo "  - claudework  (PAC Code-Companion)"
+                    exit 1
+                  fi
+
+                  # Show API base URL if set
+                  if [[ -n "''${ANTHROPIC_BASE_URL:-}" ]]; then
+                    echo "API Base URL: ''${ANTHROPIC_BASE_URL}"
+                    echo ""
+                  fi
+
+                  # Display model mappings
+                  echo "Model Alias Mappings:"
+                  echo "--------------------"
+
+                  if [[ -n "''${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]]; then
+                    echo "  opus   -> ''${ANTHROPIC_DEFAULT_OPUS_MODEL}"
+                  fi
+
+                  if [[ -n "''${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" ]]; then
+                    echo "  sonnet -> ''${ANTHROPIC_DEFAULT_SONNET_MODEL}"
+                  fi
+
+                  if [[ -n "''${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" ]]; then
+                    echo "  haiku  -> ''${ANTHROPIC_DEFAULT_HAIKU_MODEL}"
+                  fi
+
+                  echo ""
+                  echo "Usage:"
+                  echo "  /model opus   - Switch to opus model"
+                  echo "  /model sonnet - Switch to sonnet model"
+                  echo "  /model haiku  - Switch to haiku model"
+                  echo ""
+                  echo "Or use full model names directly:"
+                  echo "  --model <full-model-name>"
+                '';
+                runtimeInputs = with pkgs; [ coreutils ];
+              })
+            ];
           })
 
           # ─────────────────────────────────────────────────────────────────────

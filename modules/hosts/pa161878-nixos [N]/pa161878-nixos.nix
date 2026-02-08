@@ -71,6 +71,10 @@ in
       inputs.self.modules.homeManager.development-tools
       inputs.self.modules.homeManager.yazi
       inputs.self.modules.homeManager.shell-utils
+      inputs.self.modules.homeManager.terminal
+      inputs.self.modules.homeManager.system-tools
+      inputs.self.modules.homeManager.esp-idf
+      inputs.self.modules.homeManager.onedrive
     ];
 
     # Dendritic home-minimal options (required by system types)
@@ -82,6 +86,12 @@ in
     wsl-home-settings = {
       distroName = "nixos";
     };
+
+    # ESP-IDF development environment (WSL host)
+    espIdf.enable = true;
+
+    # OneDrive utilities (WSL host)
+    oneDriveUtils.enable = true;
 
     # Enable tmux auto-reload on home-manager generation change
     programs.tmux.autoReload.enable = true;

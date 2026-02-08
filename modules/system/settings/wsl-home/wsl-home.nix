@@ -56,35 +56,14 @@
           };
 
           # === Feature Toggles ===
-          enableDevelopment = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable development tools via homeBase";
-          };
-
-          enableEspIdf = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable ESP-IDF toolchain via homeBase";
-          };
-
-          enableOneDriveUtils = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable OneDrive utilities via homeBase";
-          };
-
-          enableShellUtils = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable shell utilities via homeBase";
-          };
-
-          enableTerminal = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable terminal tools via homeBase";
-          };
+          # NOTE: These options were removed in Task 6.4.9.
+          # Features are now enabled by importing dendritic modules directly:
+          #   - development-tools module (with developmentTools.enable)
+          #   - esp-idf module (with espIdf.enable)
+          #   - onedrive module (with oneDriveUtils.enable)
+          #   - shell-utils module (always enabled when imported)
+          #   - terminal module (always enabled when imported)
+          # See host files for import patterns.
 
           # === Windows Interop ===
           enableWindowsAliases = lib.mkOption {
@@ -138,31 +117,34 @@
         };
 
         config = lib.mkIf cfg.enable (lib.mkMerge [
-          # === homeBase Integration ===
+          # === Environment and Aliases ===
           {
-            homeBase = {
-              enableDevelopment = lib.mkDefault cfg.enableDevelopment;
-              enableEspIdf = lib.mkDefault cfg.enableEspIdf;
-              enableOneDriveUtils = lib.mkDefault cfg.enableOneDriveUtils;
-              enableShellUtils = lib.mkDefault cfg.enableShellUtils;
-              enableTerminal = lib.mkDefault cfg.enableTerminal;
+            home.sessionVariables = {
+              WSL_DISTRO = lib.mkDefault cfg.distroName;
+              EDITOR = lib.mkDefault cfg.editor;
+            } // cfg.extraEnvironmentVariables;
 
-              environmentVariables = {
-                WSL_DISTRO = lib.mkDefault cfg.distroName;
-                EDITOR = lib.mkDefault cfg.editor;
-              } // cfg.extraEnvironmentVariables;
+            programs.bash.shellAliases = lib.mkMerge [
+              # Windows aliases
+              (lib.mkIf cfg.enableWindowsAliases {
+                explorer = lib.mkDefault "explorer.exe .";
+                code = lib.mkDefault "code.exe";
+                code-insiders = lib.mkDefault "code-insiders.exe";
+                esp32c5 = lib.mkDefault "esp-idf-shell";
+              })
+              cfg.extraShellAliases
+            ];
 
-              shellAliases = lib.mkMerge [
-                # Windows aliases
-                (lib.mkIf cfg.enableWindowsAliases {
-                  explorer = lib.mkDefault "explorer.exe .";
-                  code = lib.mkDefault "code.exe";
-                  code-insiders = lib.mkDefault "code-insiders.exe";
-                  esp32c5 = lib.mkDefault "esp-idf-shell";
-                })
-                cfg.extraShellAliases
-              ];
-            };
+            programs.zsh.shellAliases = lib.mkMerge [
+              # Windows aliases
+              (lib.mkIf cfg.enableWindowsAliases {
+                explorer = lib.mkDefault "explorer.exe .";
+                code = lib.mkDefault "code.exe";
+                code-insiders = lib.mkDefault "code-insiders.exe";
+                esp32c5 = lib.mkDefault "esp-idf-shell";
+              })
+              cfg.extraShellAliases
+            ];
           }
 
           # === WSL Utilities ===

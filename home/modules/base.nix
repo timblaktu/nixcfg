@@ -55,9 +55,11 @@ in
     # Import both files modules - they will be conditionally enabled
     ./files
     ../files
-    ./legacy-common/development.nix
-    ./legacy-common/terminal.nix
-    ./legacy-common/system.nix
+    # development.nix migrated to modules/programs/development-tools/ (Task 6.4.9)
+    # - Claude utils (claudevloop, restart_claude, etc.) now in development-tools
+    # - Enhanced CLI tools (bat, eza, delta, etc.) now in development-tools
+    # terminal.nix migrated to modules/programs/terminal/ (Task 6.4.9)
+    # system.nix migrated to modules/programs/system-tools/ (Task 6.4.9)
     # shell-utils.nix migrated to modules/programs/shell-utils/ (Task 6.4.8)
     # - Shell utility scripts (mytree, vwatch, mergejson, etc.)
     # - Bash library files (~/.local/lib/*.bash)
@@ -71,10 +73,8 @@ in
     ./git-auth-helpers.nix # Combined git auth helpers (refresh-git-creds)
     ./podman-tools.nix # Container tools configuration
     # Enhanced nix-writers based script management (migrated to unified files)
-    # Import ESP-IDF development module
-    ./legacy-common/esp-idf.nix
-    # Import OneDrive utilities module (WSL-specific)
-    ./legacy-common/onedrive.nix
+    # esp-idf.nix migrated to modules/programs/esp-idf/ (Task 6.4.9)
+    # onedrive.nix migrated to modules/programs/onedrive/ (Task 6.4.9)
   ];
 
   options.homeBase = {
@@ -190,41 +190,17 @@ in
       description = "Enable Neovim configuration";
     };
 
-    enableDevelopment = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable development packages and tools";
-    };
-
-    enableTerminal = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Enable terminal configuration and font setup tools";
-    };
-
-    enableSystem = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Enable system administration and bootstrap tools";
-    };
-
-    enableShellUtils = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Enable shell utilities and library functions";
-    };
-
-    enableEspIdf = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable ESP-IDF development environment with FHS compatibility";
-    };
-
-    enableOneDriveUtils = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable OneDrive utilities for WSL environments";
-    };
+    # ─────────────────────────────────────────────────────────────────────────
+    # DEPRECATED OPTIONS - Migrated to dendritic modules (Task 6.4.9)
+    # These options are kept for backward compatibility during transition.
+    # Use the corresponding dendritic modules instead:
+    #   - enableDevelopment → import development-tools, set developmentTools.enable
+    #   - enableTerminal → import terminal module
+    #   - enableSystem → import system-tools module
+    #   - enableShellUtils → import shell-utils module
+    #   - enableEspIdf → import esp-idf, set espIdf.enable
+    #   - enableOneDriveUtils → import onedrive, set oneDriveUtils.enable
+    # ─────────────────────────────────────────────────────────────────────────
 
     # enableValidatedScripts option removed - all scripts migrated to unified files
 
@@ -331,18 +307,9 @@ in
       # (modules/system/types/1-minimal/minimal.nix)
 
       # Configure shell aliases
-      programs.bash.shellAliases = lib.mkDefault (cfg.shellAliases //
-        lib.optionalAttrs (config.targets.wsl.enable or false) {
-          "od-sync" = "onedrive-force-sync";
-          "od-status" = "onedrive-status";
-          "force-onedrive" = "onedrive-force-sync";
-        });
-      programs.zsh.shellAliases = lib.mkDefault (cfg.shellAliases //
-        lib.optionalAttrs (config.targets.wsl.enable or false) {
-          "od-sync" = "onedrive-force-sync";
-          "od-status" = "onedrive-status";
-          "force-onedrive" = "onedrive-force-sync";
-        });
+      # OneDrive aliases migrated to modules/programs/onedrive/ (Task 6.4.9)
+      programs.bash.shellAliases = lib.mkDefault cfg.shellAliases;
+      programs.zsh.shellAliases = lib.mkDefault cfg.shellAliases;
 
       # Let Home Manager install and manage itself
       programs.home-manager.enable = true;

@@ -218,7 +218,9 @@ in
       inputs.self.modules.homeManager.development-tools
       inputs.self.modules.homeManager.yazi
       inputs.self.modules.homeManager.shell-utils
-      # Note: NO wsl-home module - this is bare-metal NixOS, not WSL
+      inputs.self.modules.homeManager.terminal
+      inputs.self.modules.homeManager.system-tools
+      # Note: NO wsl-home, esp-idf, or onedrive - this is bare-metal NixOS, not WSL
     ];
 
     # Dendritic home-minimal options (required by system types)
