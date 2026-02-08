@@ -474,6 +474,13 @@
             description = "Enable Neovim (via nixvim)";
           };
 
+          # Yazi TUI file manager
+          enableYazi = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable Yazi terminal file manager";
+          };
+
           # Shell aliases
           shellAliases = lib.mkOption {
             type = lib.types.attrsOf lib.types.str;
@@ -545,6 +552,14 @@
           # Tmux configuration
           (lib.mkIf cfg.enableTmux {
             programs.tmux.enable = true;
+          })
+
+          # Yazi TUI file manager
+          (lib.mkIf cfg.enableYazi {
+            programs.yazi = {
+              enable = true;
+              enableZshIntegration = true;
+            };
           })
         ];
       };

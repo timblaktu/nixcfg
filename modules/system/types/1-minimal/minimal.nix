@@ -306,8 +306,8 @@
           # Disable version mismatch warnings (using HM master with nixos-unstable)
           home.enableNixpkgsReleaseCheck = false;
 
-          # Enable standalone mode support
-          targets.genericLinux.enable = lib.mkDefault true;
+          # Enable standalone mode support (Linux only)
+          targets.genericLinux.enable = lib.mkDefault pkgs.stdenv.isLinux;
 
           # Nix configuration
           nix = {

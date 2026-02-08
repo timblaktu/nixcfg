@@ -655,6 +655,7 @@
       };
 
     # === Home Manager Desktop Module ===
+    # Minimal for now - GUI-specific options to be added as needed
     homeManager.home-desktop = { config, lib, pkgs, ... }:
       let
         cfg = config.homeDesktop;
@@ -666,20 +667,6 @@
         ];
 
         options.homeDesktop = {
-          # Yazi file manager
-          enableYazi = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable Yazi file manager";
-          };
-
-          # Container tools
-          enableContainerSupport = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable container tools (podman-compose, podman-tui)";
-          };
-
           # GUI packages
           guiPackages = lib.mkOption {
             type = lib.types.listOf lib.types.package;
@@ -688,20 +675,9 @@
           };
         };
 
-        config = lib.mkMerge [
-          # Yazi file manager
-          (lib.mkIf cfg.enableYazi {
-            programs.yazi = {
-              enable = true;
-              enableZshIntegration = true;
-            };
-          })
-
-          # GUI packages
-          {
-            home.packages = cfg.guiPackages;
-          }
-        ];
+        config = {
+          home.packages = cfg.guiPackages;
+        };
       };
   };
 }

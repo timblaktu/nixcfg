@@ -45,13 +45,11 @@ in
           };
 
           shellAliases = {
-            # System maintenance
-            update = "sudo nixos-rebuild switch";
-            upgrade = "sudo nixos-rebuild switch --upgrade";
+            # Home Manager (cross-platform)
             rebuild = "home-manager switch --flake ~/src/nixcfg#${username}@$(hostname)";
             rebuild-s = "NIXPKGS_ALLOW_UNFREE=1 home-manager switch --impure --flake ~/src/nixcfg#${username}@$(hostname)";
             h-m = "NIXPKGS_ALLOW_UNFREE=1 home-manager switch --impure --flake ~/src/nixcfg#${username}@$(hostname)";
-            optimise = "sudo nix-store --optimise";
+            optimise = "nix-store --optimise";
 
             # Navigation
             ll = "ls -l";
@@ -86,8 +84,7 @@ in
             psg = "ps aux | grep -i";
 
             # Network
-            ports = "sudo netstat -tulpn";
-            myip = "curl ifconfig.me";
+            myip = "curl -s ifconfig.me";
 
             # System info
             df = "df -h";
@@ -119,7 +116,10 @@ in
             zstyle ':completion:*' format 'Completing %d'
             zstyle ':completion:*' group-name ""
             zstyle ':completion:*' menu select=2
-            eval "$(dircolors -b)"
+            # dircolors is GNU coreutils (Linux only); macOS uses different approach
+            if command -v dircolors &>/dev/null; then
+              eval "$(dircolors -b)"
+            fi
             zstyle ':completion:*:default' list-colors ''${(s.:.)LS_COLORS}
             zstyle ':completion:*' list-colors ""
             zstyle ':completion:*' list-prompt %SAt %p: Hit TAB for more, or the character to insert%s
@@ -150,7 +150,7 @@ in
             fi
 
             # Ensure WSL utilities and Windows paths are available in WSL
-            if [[ -n "$WSL_DISTRO" ]]; then
+            if [[ -n "$WSL_DISTRO_NAME" ]]; then
               # Add /bin for WSL utilities like wslpath, but avoid duplicates
               case ":$PATH:" in
                 *:/bin:*) ;;  # /bin already in PATH
@@ -405,6 +405,13 @@ in
 
       # Set zsh as default shell for the primary user
       users.users.${username}.shell = pkgs.zsh;
+
+      # NixOS-specific shell aliases
+      environment.shellAliases = {
+        update = "sudo nixos-rebuild switch";
+        upgrade = "sudo nixos-rebuild switch --upgrade";
+        ports = "sudo netstat -tulpn";
+      };
     };
 
     # === Darwin Module ===
