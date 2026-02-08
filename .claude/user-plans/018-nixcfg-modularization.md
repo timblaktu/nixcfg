@@ -29,7 +29,7 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | — | **SESSION BOUNDARY** | | |
 | **0.6** | **Internal Cleanup (Path B)** | | |
 | 0.6.1 | Consolidate podman-tools.nix | `TASK:COMPLETE` | 2026-02-07 |
-| 0.6.2 | Rename hardware-configuration.nix | `TASK:PENDING` | |
+| 0.6.2 | Rename hardware-configuration.nix | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.3 | Unify MCP server adapters | `TASK:PENDING` | |
 | 0.6.4 | Consolidate modules/home/ directory | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.5 | Document module boundaries | `TASK:PENDING` | |
@@ -474,15 +474,17 @@ lib.ai-dev = {
 
 ### Task 0.6.2: Rename hardware-configuration.nix
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-07)
 
-**Problem**: `hosts/mbp/hardware-configuration.nix` inconsistent with all other hosts using `hardware-config.nix`
+**Problem**: `hosts/mbp/hardware-configuration.nix` was inconsistent with all other hosts using `hardware-config.nix`
 
-**Solution**:
-1. Rename `hosts/mbp/hardware-configuration.nix` → `hardware-config.nix`
-2. Update import in `hosts/mbp/default.nix`
+**Resolution**:
+1. Renamed `hosts/mbp/hardware-configuration.nix` → `hardware-config.nix`
+2. Updated import in `hosts/mbp/default.nix`
 
-**Verification**: `nix flake check` passes
+**Verification**: `nix flake check --no-build` passed
+
+**Commit**: `f24558b` - "Rename mbp hardware-configuration.nix for consistency"
 
 ---
 
