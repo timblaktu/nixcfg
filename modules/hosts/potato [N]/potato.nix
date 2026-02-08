@@ -101,6 +101,7 @@ in
       inputs.self.modules.homeManager.opencode
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
+      inputs.self.modules.homeManager.yazi
       # Note: No wsl-home module - this is bare-metal NixOS, not WSL
     ];
 

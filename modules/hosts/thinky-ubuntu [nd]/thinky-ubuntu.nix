@@ -33,6 +33,7 @@ in
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.development-tools
+      inputs.self.modules.homeManager.yazi
     ];
 
     # Dendritic home-minimal options (required by system types)

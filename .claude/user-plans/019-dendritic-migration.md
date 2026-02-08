@@ -320,7 +320,7 @@ in
 | 6.4.2 | Replace `homeBase` options with dendritic system types | TASK:COMPLETE (2026-02-08) |
 | 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | TASK:COMPLETE (2026-02-08) |
 | 6.4.4 | Move opencode CONFIG to host files | TASK:COMPLETE (2026-02-08) |
-| 6.4.5 | Create dendritic yazi module | TASK:PENDING |
+| 6.4.5 | Create dendritic yazi module | TASK:COMPLETE (2026-02-08) |
 | 6.4.6 | Migrate legacy-common/environment.nix | TASK:PENDING |
 | 6.4.7 | Migrate legacy-common/aliases.nix | TASK:PENDING |
 | 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:PENDING |
@@ -466,12 +466,33 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 **Goal**: Move yazi config to `modules/programs/yazi/`.
 
-**Current state**: Yazi config is in `home/modules/base.nix` (basePackages) or legacy-common.
+**Implementation** (2026-02-08): Created full dendritic yazi module.
 
-**Files to create**:
-- `modules/programs/yazi/yazi.nix` - Define `flake.modules.homeManager.yazi`
+**What was done**:
+1. Created `modules/programs/yazi/yazi.nix` - Full yazi config with:
+   - Custom compact_meta linemode (size, mtime, permissions in 20 chars)
+   - Patched glow plugin for dynamic preview width
+   - WSL2 clipboard integration (clip.exe keybindings)
+   - Plugin ecosystem (toggle-pane, mediainfo, miller, ouch, chmod, git, smart-enter)
 
-**Validation**: `nix flake check --no-build` + verify yazi works
+2. Copied Lua files to `modules/programs/yazi/files/`:
+   - `yazi-init.lua` - Custom linemode function
+   - `yazi-glow-main.lua` - Patched glow plugin
+
+3. Removed yazi config block (~115 LOC) from `home/modules/base.nix`
+
+4. Updated all 6 host files to import `inputs.self.modules.homeManager.yazi`
+
+**Files created**:
+- `modules/programs/yazi/yazi.nix`
+- `modules/programs/yazi/files/yazi-init.lua`
+- `modules/programs/yazi/files/yazi-glow-main.lua`
+
+**Files modified**:
+- `home/modules/base.nix` - Removed yazi config block
+- `modules/hosts/*/` - All 6 host files updated
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 
