@@ -25,14 +25,14 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | 0.3 | Architecture decision | `TASK:COMPLETE` | 2026-02-01 |
 | — | **SESSION BOUNDARY** | | |
 | 0.4 | Naming conventions | `TASK:COMPLETE` | 2026-02-01 |
-| 0.5 | Design sign-off | `TASK:PENDING` | |
+| 0.5 | Design sign-off | `TASK:COMPLETE` | 2026-02-07 |
 | — | **SESSION BOUNDARY** | | |
 | **0.6** | **Internal Cleanup (Path B)** | | |
 | 0.6.1 | Consolidate podman-tools.nix | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.2 | Rename hardware-configuration.nix | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.3 | Unify MCP server adapters | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.4 | Consolidate modules/home/ directory | `TASK:COMPLETE` | 2026-02-07 |
-| 0.6.5 | Document module boundaries | `TASK:PENDING` | |
+| 0.6.5 | Document module boundaries | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.6 | Evaluate TUR wrapper consolidation | `TASK:PENDING` | |
 | — | **SESSION BOUNDARY** | | |
 | **1** | **Foundation** | | |
@@ -450,11 +450,11 @@ lib.ai-dev = {
 **Execution Order**: 0.6.1 → 0.6.4 → 0.6.2 → 0.6.3 → 0.6.5 (0.6.6 deferred)
 
 **Success Criteria** (all must pass before Phase 1):
-- [ ] No duplicate files between `modules/home/` and `home/modules/`
-- [ ] Consistent hardware config naming across all hosts
-- [ ] MCP adapter code exists in ONE place, consumed by both claude/opencode
-- [ ] `nix flake check` passes
-- [ ] `home-manager switch --dry-run` succeeds for at least one config
+- [x] No duplicate files between `modules/home/` and `home/modules/` (0.6.1/0.6.4: deleted)
+- [x] Consistent hardware config naming across all hosts (0.6.2: mbp renamed)
+- [x] MCP adapter code exists in ONE place, consumed by both claude/opencode (0.6.3: mcp-server-defs.nix)
+- [x] `nix flake check` passes (verified after each task)
+- [x] `home-manager switch --dry-run` succeeds (verified: tim@thinky-nixos)
 
 ### Task 0.6.1: Consolidate podman-tools.nix
 
@@ -538,16 +538,18 @@ abstraction would add complexity without clear benefit and violate "avoid over-e
 
 ### Task 0.6.5: Document Module Boundaries
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-07)
 
-**Problem**: `modules/` vs `home/` distinction unclear
+**Problem**: `modules/` vs `home/` distinction was unclear
 
-**Convention to Document**:
-- `modules/` = NixOS system modules (wsl-common, wsl-tarball-checks, base.nix)
-- `home/modules/` = Home Manager modules
-- `modules/nixos/` = Additional NixOS-specific modules
+**Resolution**: Added "Module Directory Conventions" section to `docs/ARCHITECTURE.md`:
+- `modules/` = NixOS system modules (base.nix, wsl-common.nix)
+- `modules/nixos/` = NixOS-specific features (sops-nix, wsl-cuda)
+- `home/modules/` = Home Manager modules (claude-code, opencode, etc.)
+- `home/common/` = Shared HM config fragments (git, zsh, tmux)
+- Documented flake output conventions for extraction
 
-**Files to Modify**: `docs/ARCHITECTURE.md` or `README.md`
+**Commit**: `b473926` - "Document module directory conventions in ARCHITECTURE.md"
 
 ---
 
