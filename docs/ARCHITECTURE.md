@@ -93,6 +93,27 @@ nixcfg/
 | **Shareable code** | ~8,300 LOC | 38% of codebase |
 | **Duplication** | ~1,230 LOC | 5.6% waste |
 
+### Module Directory Conventions
+
+The repository uses distinct directories for different module types:
+
+| Directory | Purpose | Module System |
+|-----------|---------|---------------|
+| `modules/` | NixOS system modules | NixOS |
+| `modules/nixos/` | NixOS-specific features | NixOS |
+| `home/modules/` | Home Manager modules | Home Manager |
+| `home/common/` | Shared home configs | Home Manager |
+
+**Key Distinctions**:
+
+- **`modules/`**: Contains NixOS system-level modules that configure the OS itself (base.nix, wsl-common.nix, wsl-tarball-checks.nix). These use `config.base.*`, `config.wsl.*` option namespaces.
+
+- **`home/modules/`**: Contains Home Manager modules for user-level configuration (claude-code, opencode, podman-tools, etc.). These use `programs.*` or `services.*` namespaces following HM conventions.
+
+- **`home/common/`**: Contains reusable Home Manager configuration fragments (git.nix, zsh.nix, tmux.nix) that are imported directly, not as option modules.
+
+**For Extraction**: When extracting shareable components, NixOS modules go to `nixosModules.*` flake outputs, Home Manager modules go to `homeManagerModules.*` outputs.
+
 ---
 
 ## Architecture Patterns
