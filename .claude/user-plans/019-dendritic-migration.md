@@ -273,7 +273,7 @@ in
 | 5.2 | pa161878-nixos (WSL work) | COMPLETE |
 | 5.3 | thinky-ubuntu (HM only) | COMPLETE |
 | 5.4 | mbp (Intel Mac running NixOS) | COMPLETE |
-| 5.5 | potato (ARM SBC) | PENDING |
+| 5.5 | potato (ARM SBC) | COMPLETE |
 | 5.6 | macbook-air (Apple Silicon) | PENDING |
 | 5.7 | nixos-wsl-minimal (template) | PENDING |
 

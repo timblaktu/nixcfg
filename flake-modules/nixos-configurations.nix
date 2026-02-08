@@ -18,10 +18,14 @@
         }
       );
 
+      # potato: Dendritic pattern - module defined in modules/hosts/potato [N]/
       potato = withSystem "aarch64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
-          modules = [ ../hosts/potato ];
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.potato
+          ];
           specialArgs = {
             inherit inputs;
             inherit (inputs) nixpkgs-stable mcp-servers-nix;
