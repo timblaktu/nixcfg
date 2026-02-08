@@ -71,6 +71,7 @@
         (import-tree [
           ./modules/flake-parts
           ./modules/meta
+          ./modules/programs
         ])
 
         # Existing flake-modules (to be migrated in Phase 6)
