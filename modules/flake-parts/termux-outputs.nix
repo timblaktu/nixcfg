@@ -1,4 +1,4 @@
-# flake-modules/termux-outputs.nix
+# modules/flake-parts/termux-outputs.nix
 # Generate Termux wrapper scripts for Claude Code accounts
 #
 # Produces portable shell scripts that can be copied to Termux without requiring
@@ -28,7 +28,7 @@
 
         # Import shared Claude Code library
         # Note: We pass a minimal config since Termux scripts don't need home-manager features
-        claudeLib = import ../home/modules/claude-code/lib.nix {
+        claudeLib = import ../../home/modules/claude-code/lib.nix {
           inherit lib pkgs;
           config = { }; # Minimal config for Termux (no home-manager)
         };

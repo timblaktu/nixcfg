@@ -1,4 +1,4 @@
-# flake-modules/dev-shells.nix
+# modules/flake-parts/dev-shells.nix
 # Development shells and environments
 { inputs, ... }: {
   perSystem = { config, self', inputs', pkgs, system, ... }: {
@@ -35,12 +35,12 @@
       #   };
       # in pkgs.mkShell {
       #   name = "esp32c5-wireless-development";
-      #   
+      #
       #   buildInputs = [
       #     esp-idf-c5-custom
       #     pkgs.tio
       #   ];
-      #   
+      #
       #   shellHook = ''
       #     echo "Forcing ESP-IDF to use its own Python environment.."
       #     export PATH="$IDF_PYTHON_ENV_PATH/bin:$PATH"

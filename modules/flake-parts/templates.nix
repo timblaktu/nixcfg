@@ -1,11 +1,11 @@
-# flake-modules/templates.nix
+# modules/flake-parts/templates.nix
 # Flake templates for easy colleague onboarding
 { ... }: {
   flake = {
     templates = {
       # WSL NixOS template - Full NixOS-WSL distribution
       wsl-nixos = {
-        path = ../templates/wsl-nixos;
+        path = ../../templates/wsl-nixos;
         description = "NixOS-WSL configuration using shared wsl-base module";
         welcomeText = ''
           # WSL NixOS Template
@@ -23,7 +23,7 @@
 
       # WSL Home Manager template - Works on ANY WSL distro
       wsl-home = {
-        path = ../templates/wsl-home;
+        path = ../../templates/wsl-home;
         description = "Portable home-manager configuration for any WSL distribution";
         welcomeText = ''
           # WSL Home Manager Template
@@ -41,7 +41,7 @@
 
       # macOS template - nix-darwin + home-manager
       darwin = {
-        path = ../templates/darwin;
+        path = ../../templates/darwin;
         description = "macOS configuration using nix-darwin and home-manager";
         welcomeText = ''
           # macOS (nix-darwin) Template

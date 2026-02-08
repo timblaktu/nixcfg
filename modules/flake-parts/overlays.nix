@@ -1,4 +1,4 @@
-# flake-modules/overlays.nix
+# modules/flake-parts/overlays.nix
 # Package overlays and customizations
 { inputs, ... }: {
   perSystem = { pkgs, ... }: {
@@ -9,7 +9,7 @@
   flake = {
     # Export overlays for other flakes to use
     overlays = {
-      default = import ../overlays { inherit inputs; };
+      default = import ../../overlays { inherit inputs; };
     };
   };
 }

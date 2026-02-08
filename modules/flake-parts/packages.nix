@@ -1,10 +1,10 @@
-# flake-modules/packages.nix
+# modules/flake-parts/packages.nix
 # Custom packages and package-related outputs
 { inputs, self, ... }: {
   perSystem = { config, self', inputs', pkgs, system, ... }: {
     packages =
       let
-        customPkgs = import ../pkgs { inherit pkgs; };
+        customPkgs = import ../../pkgs { inherit pkgs; };
       in
       {
         # Include all custom packages
