@@ -55,7 +55,7 @@ in
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
     # claude-code.nix migrated to modules/programs/claude-code/ (dendritic pattern)
     ./opencode.nix # OpenCode - enhanced multi-account module (upstream disabled via disabledModules)
-    ./secrets-management.nix # RBW and SOPS configuration
+    # secrets-management.nix migrated to modules/programs/secrets-management/ (dendritic pattern)
     ./github-auth.nix # GitHub authentication (Bitwarden/SOPS)
     ./gitlab-auth.nix # GitLab authentication (Bitwarden/SOPS)
     ./git-auth-helpers.nix # Combined git auth helpers (refresh-git-creds)
