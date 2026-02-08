@@ -321,7 +321,7 @@ in
 | 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | TASK:COMPLETE (2026-02-08) |
 | 6.4.4 | Move opencode CONFIG to host files | TASK:COMPLETE (2026-02-08) |
 | 6.4.5 | Create dendritic yazi module | TASK:COMPLETE (2026-02-08) |
-| 6.4.6 | Migrate legacy-common/environment.nix | TASK:PENDING |
+| 6.4.6 | Migrate legacy-common/environment.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.7 | Migrate legacy-common/aliases.nix | TASK:PENDING |
 | 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:PENDING |
 | 6.4.9 | Migrate remaining legacy-common/* | TASK:PENDING |
@@ -500,11 +500,38 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 **Goal**: Absorb environment variables and session config into appropriate dendritic module.
 
-**Current state**: `home/modules/legacy-common/environment.nix` sets XDG dirs, PATH, etc.
+**Implementation** (2026-02-08): Migrated useful parts to development-tools, removed legacy.
 
-**Target**: Content goes into `modules/system/types/2-default/home.nix` (environment is default-level).
+**Analysis**:
+- File had 294 lines of environment configuration
+- Most content was already handled by shell module (GPG_TTY, HM session vars sourcing)
+- Development paths (Go, Cargo, Pyenv) belonged in development-tools
+- Some variables were unused legacy (BUILD_DIR, TRIP, ANDROID_SDK)
 
-**Validation**: `nix flake check --no-build`
+**What was done**:
+1. Added to `modules/programs/development-tools/development-tools.nix`:
+   - `enableGo` option (default: true) with GOPATH, go/bin paths, activation script
+   - `enablePyenv` option (default: false) with PYENV_ROOT, shell init hooks
+   - Rust PATH addition ($HOME/.cargo/bin) when enableRust is true
+   - Common $HOME/.local/bin path
+
+2. Removed environment.nix import from base.nix with migration comment
+
+3. Deleted `home/modules/legacy-common/environment.nix` (294 lines)
+
+**Removed (unused legacy)**:
+- BUILD_DIR, TRIP (Yocto-specific, only referenced in environment.nix)
+- ANDROID_SDK_ROOT, ADB_PORT, ADB_SERVER_SOCKET (unused)
+- VIMRUNTIME hardcoded path (unnecessary with Nix)
+- Complex idempotent sourcing scripts (redundant with shell module)
+
+**Preserved (migrated to development-tools)**:
+- Go environment setup (GOPATH, paths, directory creation)
+- Pyenv setup (PYENV_ROOT, shell init)
+- Cargo bin path
+- Common local bin path
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 

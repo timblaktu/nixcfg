@@ -43,7 +43,10 @@ in
     # tmux.nix migrated to modules/programs/tmux/ (dendritic pattern)
     # nixvim.nix migrated to modules/programs/neovim/ (dendritic pattern)
     # Legacy common modules (moved from home/common/ - Plan 019 Task 6.3)
-    ./legacy-common/environment.nix
+    # environment.nix migrated to modules/programs/development-tools/ (Task 6.4.6)
+    # - Go, Rust, Pyenv environment setup now in development-tools module
+    # - Removed unused legacy vars (BUILD_DIR, TRIP, ANDROID_SDK)
+    # - Shell module already handles GPG_TTY, HM session vars sourcing
     ./legacy-common/aliases.nix
     # Import both files modules - they will be conditionally enabled
     ./files

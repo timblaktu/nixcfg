@@ -7,10 +7,12 @@
 # Features:
 #   - Rust toolchain (rustc, cargo, rust-analyzer, clippy, rustfmt)
 #   - Node.js ecosystem (nodejs, yarn, npm)
-#   - Python with common packages
+#   - Python with common packages (includes pyenv)
+#   - Go environment setup (GOPATH, bin paths)
 #   - C/C++ build tools (cmake, gcc, make, binutils)
 #   - Kubernetes tools (kubectl, k9s)
 #   - Build utilities (flex, bison, gperf)
+#   - Development environment paths and variables
 #
 # Usage in host config:
 #   imports = [ inputs.self.modules.homeManager.development-tools ];
@@ -19,6 +21,7 @@
 #     enableRust = true;
 #     enableNode = true;
 #     enablePython = true;
+#     enableGo = true;
 #   };
 { config, lib, inputs, ... }:
 {
@@ -65,6 +68,18 @@
             default = [ "ipython" "pip" "setuptools" "pyserial" "cryptography" "pyparsing" ];
             description = "Python packages to include";
             example = [ "ipython" "pip" "setuptools" "requests" "numpy" ];
+          };
+
+          enablePyenv = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enable pyenv for Python version management (adds PYENV_ROOT and paths)";
+          };
+
+          enableGo = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable Go environment (GOPATH, go/bin paths)";
           };
 
           # ─────────────────────────────────────────────────────────────────────
@@ -182,6 +197,73 @@
               k9s
             ];
           })
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Go Environment
+          # ─────────────────────────────────────────────────────────────────────
+          (lib.mkIf cfg.enableGo {
+            home.packages = with pkgs; [
+              go
+            ];
+
+            home.sessionVariables = {
+              GOPATH = "$HOME/go";
+            };
+
+            home.sessionPath = [
+              "$HOME/go/bin"
+              "/usr/local/go/bin"
+            ];
+
+            # Create Go directories
+            home.activation.createGoDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+              mkdir -p $HOME/go/{src,pkg,bin} 2>/dev/null || true
+            '';
+          })
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Rust Environment (paths)
+          # ─────────────────────────────────────────────────────────────────────
+          (lib.mkIf cfg.enableRust {
+            home.sessionPath = [
+              "$HOME/.cargo/bin"
+            ];
+          })
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Pyenv Environment
+          # ─────────────────────────────────────────────────────────────────────
+          (lib.mkIf cfg.enablePyenv {
+            home.sessionVariables = {
+              PYENV_ROOT = "$HOME/.pyenv";
+            };
+
+            home.sessionPath = [
+              "$HOME/.pyenv/bin"
+            ];
+
+            # Pyenv shell initialization (bash/zsh)
+            programs.bash.initExtra = lib.mkAfter ''
+              if [[ -d $PYENV_ROOT/bin ]] && command -v pyenv >/dev/null 2>&1; then
+                eval "$(pyenv init - bash)"
+              fi
+            '';
+
+            programs.zsh.initContent = lib.mkAfter ''
+              if [[ -d $PYENV_ROOT/bin ]] && command -v pyenv >/dev/null 2>&1; then
+                eval "$(pyenv init - zsh)"
+              fi
+            '';
+          })
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Common Development Paths
+          # ─────────────────────────────────────────────────────────────────────
+          {
+            home.sessionPath = [
+              "$HOME/.local/bin"
+            ];
+          }
 
           # ─────────────────────────────────────────────────────────────────────
           # Additional Packages
