@@ -322,7 +322,7 @@ in
 | 6.4.4 | Move opencode CONFIG to host files | TASK:COMPLETE (2026-02-08) |
 | 6.4.5 | Create dendritic yazi module | TASK:COMPLETE (2026-02-08) |
 | 6.4.6 | Migrate legacy-common/environment.nix | TASK:COMPLETE (2026-02-08) |
-| 6.4.7 | Migrate legacy-common/aliases.nix | TASK:PENDING |
+| 6.4.7 | Migrate legacy-common/aliases.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:PENDING |
 | 6.4.9 | Migrate remaining legacy-common/* | TASK:PENDING |
 | 6.4.10 | Migrate standalone modules | TASK:PENDING |
@@ -539,11 +539,39 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 **Goal**: Move shell aliases to shell module or host configs.
 
-**Current state**: `home/modules/legacy-common/aliases.nix` defines shell aliases.
+**Implementation** (2026-02-08): Migrated useful aliases and functions to shell module.
 
-**Target**: `modules/programs/shell/shell.nix` or host-specific if aliases vary.
+**What was done**:
+1. Added to `modules/programs/shell/shell.nix` shellAliases:
+   - `lsblk` - enhanced lsblk with vendor, model, label, etc.
+   - `lh` - ls -lath | head
+   - `gitit`, `dgit` - git workflow shortcuts
+   - `rbwl/rbwu/rbws/rbwg/rbwgn/rbwls/rbwlock/rbwstop` - Bitwarden (rbw) aliases
+   - `sopse/sopsd` - SOPS aliases
+   - `poetryshell` - Poetry virtual environment activation
 
-**Validation**: `nix flake check --no-build`
+2. Added shell functions to initContent:
+   - `better_less()` - pipe files through cat for better ANSI rendering
+   - `verbosecd()` - cd + ls -lath | head
+   - `SSHOPTS_LENIENT` - SSH options array for dev/testing
+
+3. Removed from base.nix imports with migration comment
+
+4. Deleted `home/modules/legacy-common/aliases.nix` (143 lines)
+
+**Removed (too personal/specific)**:
+- Project navigation aliases (cdtr, cdmx, nvtr, nvmx, cdddd)
+- Drive mount aliases (cdint, cdext1, cdext2, cdc, cdg, cdx, cdy, cdz)
+- These were user-specific project paths, not universally useful
+
+**Files modified**:
+- `modules/programs/shell/shell.nix` - Added aliases and functions
+- `home/modules/base.nix` - Removed import, added migration comment
+
+**Files deleted**:
+- `home/modules/legacy-common/aliases.nix` (143 lines)
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 

@@ -47,7 +47,11 @@ in
     # - Go, Rust, Pyenv environment setup now in development-tools module
     # - Removed unused legacy vars (BUILD_DIR, TRIP, ANDROID_SDK)
     # - Shell module already handles GPG_TTY, HM session vars sourcing
-    ./legacy-common/aliases.nix
+    # aliases.nix migrated to modules/programs/shell/ (Task 6.4.7)
+    # - Useful aliases (lsblk, dgit, rbw*, sops*, poetryshell, lh, gitit) → shell module
+    # - Shell functions (better_less, verbosecd, SSHOPTS_LENIENT) → shell module
+    # - Removed personal project aliases (cdtr, cdmx, nvtr, nvmx, cdddd) - too specific
+    # - Removed drive aliases (cdint, cdext1-2, cdc/g/x/y/z) - WSL mount-specific
     # Import both files modules - they will be conditionally enabled
     ./files
     ../files

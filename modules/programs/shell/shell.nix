@@ -57,6 +57,10 @@ in
             l = "ls -CF";
             ".." = "cd ..";
             "..." = "cd ../..";
+            lh = "ls -lath | head";
+
+            # Enhanced system info
+            lsblk = "lsblk -po name,vendor,model,label,size,type,fstype,mountpoints";
 
             # Git
             g = "git";
@@ -72,6 +76,9 @@ in
             gl = "git log";
             gd = "git diff";
             gdu = "git diff --no-pager";
+            gitit = "git commit -av && git push";
+            # Debug git with verbose tracing
+            dgit = "GIT_TRACE=true GIT_CURL_VERBOSE=true GIT_SSH_COMMAND=\"ssh -vvv\" GIT_TRACE_PACK_ACCESS=true GIT_TRACE_PACKET=true GIT_TRACE_PACKFILE=true GIT_TRACE_PERFORMANCE=true GIT_TRACE_SETUP=true GIT_TRACE_SHALLOW=true git";
 
             # Convenience
             c = "clear";
@@ -95,6 +102,23 @@ in
             rm = "rm -i";
             cp = "cp -i";
             mv = "mv -i";
+
+            # RBW (Rust Bitwarden) for secrets management
+            rbwl = "rbw login";
+            rbwu = "rbw unlock";
+            rbws = "rbw sync";
+            rbwg = "rbw get";
+            rbwgn = "rbw get -f notes";
+            rbwls = "rbw list";
+            rbwlock = "rbw lock";
+            rbwstop = "rbw stop-agent";
+
+            # SOPS aliases for secrets management
+            sopse = "sops";
+            sopsd = "sops -d";
+
+            # Python Poetry
+            poetryshell = "eval $(poetry env activate)";
           } // lib.optionalAttrs (config.targets.wsl.enable or false) {
             # WSL-specific clipboard aliases
             clip = "clip.exe";
@@ -348,6 +372,23 @@ in
             if [[ -f "$HOME/.zshrc.local" ]]; then
               source "$HOME/.zshrc.local"
             fi
+
+            # Custom shell functions
+            better_less() {
+              # For viewing single files, pipe through cat first for better ANSI color rendering
+              if [[ -f "$1" ]] && [[ $# -eq 1 ]]; then
+                cat "$1" | less -r
+              else
+                command less "$@"
+              fi
+            }
+
+            verbosecd() {
+              cd "$1" && ls -lath | head
+            }
+
+            # SSH options for lenient connections (dev/testing environments)
+            SSHOPTS_LENIENT=( -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null )
 
             # Enable powerful pattern matching
             setopt EXTENDED_GLOB
