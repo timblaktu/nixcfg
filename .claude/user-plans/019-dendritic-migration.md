@@ -299,7 +299,7 @@ in
 | 6.1 | Remove `flake-modules/` (replaced by import-tree) | TASK:COMPLETE |
 | 6.2 | Remove `hosts/common/` | TASK:COMPLETE |
 | 6.3 | Remove `home/common/` (moved to `home/modules/legacy-common/`) | TASK:COMPLETE |
-| 6.4 | Remove `home/modules/` | TASK:IN_PROGRESS |
+| 6.4 | Remove `home/modules/` | TASK:COMPLETE (2026-02-08) |
 | 6.5 | Remove `modules/` (old NixOS modules) | TASK:PENDING |
 | 6.6 | Update ARCHITECTURE.md | TASK:PENDING |
 | 6.7 | Update CLAUDE.md with new patterns | TASK:PENDING |
