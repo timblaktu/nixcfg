@@ -13,6 +13,12 @@
 **Worktree**: `~/src/nixcfg-dendritic` (NOT ~/src/nixcfg!)
 **Replaces**: Plan 018 (modularization) - same goal, new approach
 
+### Review History
+
+| Date | Reviewer | Findings |
+|------|----------|----------|
+| 2026-02-08 | Claude (review task) | Reviewed against dendritic research (docs 01-10). Core pattern ✅, Phase 6 tasks correctly ordered. Added: Task 6.4.1 clarification (disabledModules placement), derivation diffing for 6.4.11, import-tree conventions (Decision 8), specialArgs bridge pattern (Decision 9), Future Work section (F1-F4), corrected Darwin module status. |
+
 ## Executive Summary
 
 Migrate nixcfg from host-centric organization to feature-centric dendritic pattern using flake-parts + import-tree. This unifies all Nix files as flake-parts modules, eliminates manual imports, and enables cross-platform feature definitions.
@@ -343,12 +349,35 @@ disabledModules = [
 ];
 ```
 
+**⚠️ CRITICAL - Correct Placement**:
+Per dendritic pattern research (doc 04/09), `disabledModules` MUST be placed **INSIDE** the
+deferredModule content block, not at the flake-parts module level. The reason: deferredModule
+content is evaluated by home-manager's evalModules, so `disabledModules` only works inside it.
+
+```nix
+# WRONG - at flake-parts level (won't work!)
+{ ... }:
+{
+  disabledModules = [ "programs/claude-code.nix" ];  # ❌
+  flake.modules.homeManager.claude-code = { ... };
+}
+
+# CORRECT - inside deferredModule content
+{ ... }:
+{
+  flake.modules.homeManager.claude-code = {
+    disabledModules = [ "programs/claude-code.nix" ];  # ✅
+    # ... rest of module options and config
+  };
+}
+```
+
 **Files to modify**:
-1. `modules/programs/claude-code/claude-code.nix` - Add after line 31 (inside `homeManager.claude-code`):
+1. `modules/programs/claude-code/claude-code.nix` - Add inside `homeManager.claude-code` block (after imports):
    ```nix
    disabledModules = [ "programs/claude-code.nix" ];
    ```
-2. `modules/programs/opencode/opencode.nix` - Add after line 27 (inside `homeManager.opencode`):
+2. `modules/programs/opencode/opencode.nix` - Add inside `homeManager.opencode` block (after imports):
    ```nix
    disabledModules = [ "programs/opencode.nix" ];
    ```
@@ -507,7 +536,20 @@ programs.claude-code = {
 - `modules/hosts/potato/home.nix`
 - `modules/hosts/macbook-air/home.nix`
 
-**Validation**: `nix flake check --no-build` + dry-run on ALL hosts
+**Validation**:
+1. `nix flake check --no-build` passes
+2. Dry-run on ALL hosts: `home-manager switch --flake '.#USER@HOST' --dry-run`
+3. **(Recommended)** Derivation diffing to verify functional equivalence:
+   ```bash
+   # Before making changes to a host
+   nix build '.#homeConfigurations."tim@thinky-nixos".activationPackage' -o result-before
+
+   # After making changes
+   nix build '.#homeConfigurations."tim@thinky-nixos".activationPackage' -o result-after
+
+   # Compare (empty diff = identical output)
+   nix run nixpkgs#dix result-before result-after
+   ```
 
 ---
 
@@ -580,25 +622,49 @@ programs.claude-code = {
 **Principle**: "Does this require a display server?" determines cli vs desktop
 
 ### 7. Darwin Architecture Support (2026-02-08)
-**Decision**: Home Manager modules are architecture-agnostic; Darwin system modules need separate implementation
+**Decision**: Home Manager modules are architecture-agnostic; Darwin system modules implemented per-layer
 
 **Architecture Matrix**:
 | System | Architecture | Home Manager | System Modules |
 |--------|--------------|--------------|----------------|
 | mbp | x86_64-linux (NixOS) | ✅ Uses HM modules | NixOS system-cli |
 | potato | aarch64-linux | ✅ Uses HM modules | NixOS system-cli |
-| macbook-air | aarch64-darwin | ✅ Uses HM modules | Needs darwin modules |
-| Future M4 Mac | aarch64-darwin | ✅ Uses HM modules | Needs darwin modules |
-| Future Intel Mac (darwin) | x86_64-darwin | ✅ Uses HM modules | Needs darwin modules |
+| macbook-air | aarch64-darwin | ✅ Uses HM modules | ✅ darwin.system-default |
+| Future M4 Mac | aarch64-darwin | ✅ Uses HM modules | ✅ darwin.system-default |
+| Future Intel Mac (darwin) | x86_64-darwin | ✅ Uses HM modules | ✅ darwin.system-default |
 
 **Key Insights**:
 - Home Manager modules (shell, git, tmux, neovim, claude-code, etc.) work on all architectures
 - `homeDirectory` difference handled by `homeBase` option: `/home/tim` (Linux) vs `/Users/tim` (Darwin)
-- Darwin system modules (`flake.modules.darwin.*`) are empty - need implementation for Task 5.6
-- No blockers for adding Apple Silicon hosts; existing HM modules work unchanged
-- Darwin-specific features (Touch ID, Homebrew, system.defaults) go in darwin system modules
+- Darwin system modules implemented: `system-minimal`, `system-default` (see `2-default/default.nix:211-322`)
+- Darwin-specific features (Touch ID, Homebrew, system.defaults) configured in host file
+- No blockers for adding Apple Silicon hosts; existing modules work unchanged
 
 **Note**: mbp runs NixOS on Intel Mac hardware (not nix-darwin), so it follows NixOS patterns.
+
+### 8. import-tree Conventions (2026-02-08)
+**Convention**: Use `/_` prefix to exclude files/directories from auto-import
+
+**Exclusion Rules** (from import-tree):
+- `/_hidden.nix` → excluded (underscore after slash)
+- `/dir/_local.nix` → excluded
+- `/a_b.nix` → INCLUDED (no slash before underscore)
+
+**Usage in this repo**:
+- `modules/programs/claude-code/_hm/` - helper modules not auto-imported, explicitly imported by parent
+- Use `_` prefix for work-in-progress during migration (remove when ready)
+
+### 9. specialArgs Bridge Pattern (2026-02-08)
+**Decision**: `specialArgs`/`extraSpecialArgs` acceptable in configuration creation helpers
+
+The dendritic pattern eliminates `specialArgs` chains in **module files**. However, the bridge
+code that creates configurations (in `lib.nix`, `home-configurations.nix`) still uses them
+to inject `inputs` into the module evaluation context. This is acceptable and follows the
+pattern used by mightyiam/infra and other dendritic implementations.
+
+**Key distinction**:
+- ❌ `specialArgs` in **host/feature modules** → anti-pattern, use top-level config access
+- ✅ `specialArgs` in **configuration creation helpers** → necessary bridge code
 
 ## Risk Assessment
 
@@ -630,6 +696,39 @@ programs.claude-code = {
 2. How to handle 70KB nixvim config? (Decided: Migrated as unit, extraConfigLua split to separate file)
 3. Keep existing flake-modules/ during transition? (Yes, remove in Phase 6)
 4. Factory pattern for WSL hosts? (TBD: evaluate after user factory works)
+
+## Future Work (Post-Phase 6)
+
+Tasks identified during plan review (2026-02-08) that are **out of scope** for Phase 6 cleanup
+but should be addressed in future sessions:
+
+### F1: Username Centralization
+**Status**: Low priority - pattern works, just not DRY
+**Issue**: `meta.username` option exists in `modules/meta/options.nix` but hosts still hardcode
+`username = "tim"` locally (found in 20+ files).
+**Action**: Update hosts to use `config.meta.username` instead of local variable.
+**Blocked by**: None, can be done anytime after Phase 6.
+
+### F2: Legacy NixOS Modules Cleanup
+**Status**: Medium priority - leftover from pre-dendritic structure
+**Issue**: `modules/nixos/` contains 12 legacy NixOS modules (bitwarden-*, sops-*, ssh-*, wsl-*).
+These are NOT flake-parts modules and are excluded from import-tree.
+**Action**: Evaluate each module:
+  - Migrate to dendritic pattern (`flake.modules.nixos.*`) if still needed
+  - Delete if superseded by dendritic modules
+  - Document if intentionally kept as traditional NixOS modules
+**Note**: These are currently imported via `hosts/*/default.nix` - migration requires coordination.
+
+### F3: darwin.system-cli and darwin.system-desktop
+**Status**: Low priority - macbook-air only uses system-default currently
+**Issue**: Only `darwin.system-minimal` and `darwin.system-default` are implemented.
+The higher layers (`system-cli`, `system-desktop`) exist for NixOS but not Darwin.
+**Action**: Implement Darwin equivalents when needed for additional Darwin hosts.
+
+### F4: User Factory Pattern
+**Status**: Future enhancement - per Open Question #4
+**Issue**: Currently each host defines user inline; factory would generate from single definition.
+**Action**: Evaluate after basic dendritic migration is complete.
 
 ## Notes
 
