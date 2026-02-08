@@ -423,110 +423,110 @@
         '';
 
         # === HYBRID UNIFIED FILES MODULE TEST ===
-        hybrid-files-module-test = pkgs.runCommand "hybrid-files-module-test"
-          {
-            meta = {
-              description = "Test hybrid unified files module (autoWriter + enhanced libraries)";
-              maintainers = [ ];
-              timeout = 30;
+        # Tests the homeFiles module with autoWriter integration
+        # Module location: modules/programs/files [nd]/_homefiles-module.nix
+        hybrid-files-module-test =
+          let
+            # Reference the module using path concatenation to handle special characters
+            homefilesModulePath = ../programs + "/files [nd]/_homefiles-module.nix";
+            moduleFile = import homefilesModulePath {
+              config = { homeFiles = { }; };
+              inherit lib pkgs;
             };
-          } ''
-          echo "Testing hybrid unified files module..."
-
-          # Test that the module file exists and can be imported
-          if [ -f "${../../home/files/default.nix}" ]; then
-            echo "✅ Hybrid module file exists"
-          else
-            echo "❌ Hybrid module file missing"
-            exit 1
-          fi
-
-          # Test autoWriter availability in current nixpkgs
-          ${if pkgs.writers ? autoWriter then ''
-            echo "✅ autoWriter available in nixpkgs"
-          '' else ''
-            echo "⚠️  autoWriter fallback will be used"
-          ''}
-
-          ${if pkgs.writers ? autoWriterBin then ''
-            echo "✅ autoWriterBin available in nixpkgs"
-          '' else ''
-            echo "⚠️  autoWriterBin fallback will be used"
-          ''}
-
-          # Test that basic writer functions work (the foundation of our hybrid module)
-          ${pkgs.writers.writeBashBin "test-basic-writer" ''
-            #!/bin/bash
-            echo "Basic writer test successful"
-          ''}/bin/test-basic-writer > writer-test.out
-
-          if grep -q "Basic writer test successful" writer-test.out; then
-            echo "✅ Basic writer functionality works"
-          else
-            echo "❌ Basic writer functionality failed"
-            exit 1
-          fi
-
-          # Test that the hybrid module can be imported (test as part of derivation evaluation)
-          ${
-            let
-              moduleFile = import (../../home/files/default.nix) {
-                config = { homeFiles = {}; };
-                inherit lib pkgs;
+            success = builtins.isAttrs moduleFile;
+            hasOptions = builtins.hasAttr "options" moduleFile;
+            hasConfig = builtins.hasAttr "config" moduleFile;
+          in
+          pkgs.runCommand "hybrid-files-module-test"
+            {
+              meta = {
+                description = "Test hybrid unified files module (autoWriter + enhanced libraries)";
+                maintainers = [ ];
+                timeout = 30;
               };
-              success = builtins.isAttrs moduleFile;
-              hasOptions = builtins.hasAttr "options" moduleFile;
-              hasConfig = builtins.hasAttr "config" moduleFile;
-            in
-            if success && hasOptions && hasConfig then ''
+            } ''
+            echo "Testing hybrid unified files module..."
+
+            # Module import validation (validated at Nix eval time)
+            ${if success && hasOptions && hasConfig then ''
               echo "✅ Hybrid module imports and evaluates correctly"
             '' else ''
               echo "❌ Hybrid module import failed"
               echo "  success: ${toString success}, hasOptions: ${toString hasOptions}, hasConfig: ${toString hasConfig}"
               exit 1
-            ''
-          }
+            ''}
 
-          echo "✅ Hybrid unified files module test passed"
-          touch $out
-        '';
+            # Test autoWriter availability in current nixpkgs
+            ${if pkgs.writers ? autoWriter then ''
+              echo "✅ autoWriter available in nixpkgs"
+            '' else ''
+              echo "⚠️  autoWriter fallback will be used"
+            ''}
+
+            ${if pkgs.writers ? autoWriterBin then ''
+              echo "✅ autoWriterBin available in nixpkgs"
+            '' else ''
+              echo "⚠️  autoWriterBin fallback will be used"
+            ''}
+
+            # Test that basic writer functions work (the foundation of our hybrid module)
+            ${pkgs.writers.writeBashBin "test-basic-writer" ''
+              #!/bin/bash
+              echo "Basic writer test successful"
+            ''}/bin/test-basic-writer > writer-test.out
+
+            if grep -q "Basic writer test successful" writer-test.out; then
+              echo "✅ Basic writer functionality works"
+            else
+              echo "❌ Basic writer functionality failed"
+              exit 1
+            fi
+
+            echo "✅ Hybrid unified files module test passed"
+            touch $out
+          '';
 
         # === VALIDATED SCRIPTS TESTS ===
         # Test that validates single source of truth implementation
-        tmux-picker-syntax = pkgs.runCommand "test-tmux-session-picker-syntax"
-          {
-            meta = {
-              description = "Test tmux-session-picker syntax and single source of truth";
-              maintainers = [ ];
-              timeout = 30;
-            };
-          } ''
-          echo "Testing tmux-session-picker single source of truth implementation..."
+        # Script location: modules/programs/files [nd]/files/bin/tmux-session-picker
+        tmux-picker-syntax =
+          let
+            tmuxPickerPath = ../programs + "/files [nd]/files/bin/tmux-session-picker";
+          in
+          pkgs.runCommand "test-tmux-session-picker-syntax"
+            {
+              meta = {
+                description = "Test tmux-session-picker syntax and single source of truth";
+                maintainers = [ ];
+                timeout = 30;
+              };
+            } ''
+            echo "Testing tmux-session-picker single source of truth implementation..."
 
-          # Test that the source file exists
-          source_file="${../../home/files/bin/tmux-session-picker}"
-          if [[ ! -f "$source_file" ]]; then
-            echo "❌ Source file not found: $source_file"
-            exit 1
-          fi
+            # Test that the source file exists
+            source_file="${tmuxPickerPath}"
+            if [[ ! -f "$source_file" ]]; then
+              echo "❌ Source file not found: $source_file"
+              exit 1
+            fi
 
-          # Test that file is a valid bash script
-          if ! head -n 1 "$source_file" | grep -q "#!/usr/bin/env bash"; then
-            echo "❌ Source file is not a valid bash script"
-            exit 1
-          fi
+            # Test that file is a valid bash script
+            if ! head -n 1 "$source_file" | grep -q "#!/usr/bin/env bash"; then
+              echo "❌ Source file is not a valid bash script"
+              exit 1
+            fi
 
-          # Test that the file has the expected content (check for key functions)
-          if ! grep -q "tmux-session-picker" "$source_file"; then
-            echo "❌ Source file does not contain expected tmux-session-picker content"
-            exit 1
-          fi
+            # Test that the file has the expected content (check for key functions)
+            if ! grep -q "tmux-session-picker" "$source_file"; then
+              echo "❌ Source file does not contain expected tmux-session-picker content"
+              exit 1
+            fi
 
-          echo "✅ tmux-session-picker single source of truth validation passed"
-          echo "✅ Source file exists and contains valid bash script"
-          echo "✅ No duplication - validated scripts reads from home/files/"
-          touch $out
-        '';
+            echo "✅ tmux-session-picker single source of truth validation passed"
+            echo "✅ Source file exists and contains valid bash script"
+            echo "✅ No duplication - scripts now in modules/programs/files [nd]/files/"
+            touch $out
+          '';
 
         # Run integration tests only
         test-integration = pkgs.runCommand "test-integration"

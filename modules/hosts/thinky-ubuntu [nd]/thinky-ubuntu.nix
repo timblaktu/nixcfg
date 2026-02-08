@@ -19,9 +19,8 @@ in
     imports = [
       # Dendritic system type - provides home-default layer (includes home-minimal)
       inputs.self.modules.homeManager.home-default
-      # Files modules (scripts, utilities)
-      ../../../home/modules/files
-      ../../../home/files
+      # Files module (scripts, utilities, completions)
+      inputs.self.modules.homeManager.files
       # Dendritic feature modules
       inputs.self.modules.homeManager.shell
       inputs.self.modules.homeManager.git
