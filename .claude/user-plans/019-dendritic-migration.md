@@ -282,7 +282,7 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 6.1 | Remove `flake-modules/` (replaced by import-tree) | IN_PROGRESS (7/12 files migrated) |
+| 6.1 | Remove `flake-modules/` (replaced by import-tree) | COMPLETE |
 | 6.2 | Remove `hosts/common/` | PENDING |
 | 6.3 | Remove `home/common/` | PENDING |
 | 6.4 | Remove `home/modules/` | PENDING |
