@@ -246,6 +246,14 @@ in
         field = "PAT-pubclassic";
       };
     };
+
+    # Claude Code configuration (using lib presets)
+    programs.claude-code = inputs.self.lib.claudeCode.baseConfig // {
+      accounts = inputs.self.lib.claudeCode.personalAccounts;
+      statusline = inputs.self.lib.claudeCode.defaultStatusline;
+      mcpServers = inputs.self.lib.claudeCode.defaultMcpServers;
+      subAgents.custom = inputs.self.lib.claudeCode.defaultSubAgents;
+    };
   };
 
   # === Configuration Registration ===

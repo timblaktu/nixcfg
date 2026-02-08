@@ -318,7 +318,7 @@ in
 |----------|-------------|--------|
 | 6.4.1 | Move `disabledModules` to dendritic modules | TASK:COMPLETE (2026-02-08) |
 | 6.4.2 | Replace `homeBase` options with dendritic system types | TASK:COMPLETE (2026-02-08) |
-| 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | TASK:PENDING |
+| 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | TASK:COMPLETE (2026-02-08) |
 | 6.4.4 | Move opencode CONFIG to host files | TASK:PENDING |
 | 6.4.5 | Create dendritic yazi module | TASK:PENDING |
 | 6.4.6 | Migrate legacy-common/environment.nix | TASK:PENDING |
@@ -409,27 +409,27 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 **Goal**: Each host defines its own claude-code accounts/MCP config inline.
 
-**Current state**: Config is in `home/modules/base.nix` (shared across all hosts).
+**Implementation** (2026-02-08): Used DRY approach with lib presets.
 
-**Files to modify**:
-- `modules/hosts/thinky-nixos/home.nix` - Add claude-code config block
-- `modules/hosts/pa161878-nixos/home.nix` - Add claude-code config block
-- `modules/hosts/thinky-ubuntu/home.nix` - Add claude-code config block
-- (etc. for other hosts that use claude-code)
+**What was done**:
+1. Added `flake.lib.claudeCode` presets to `modules/flake-parts/lib.nix`:
+   - `baseConfig` - enable, defaults, taskAutomation, skills
+   - `personalAccounts` - max + pro accounts
+   - `workAccount` - work (Code-Companion proxy) for work machines only
+   - `defaultStatusline`, `defaultMcpServers`, `defaultSubAgents`
 
-**Template**:
-```nix
-programs.claude-code = {
-  enable = true;
-  accounts = {
-    max = { enable = true; displayName = "Claude Max"; };
-    pro = { enable = true; displayName = "Claude Pro"; };
-  };
-  # ... MCP servers, hooks, etc.
-};
-```
+2. Updated all 6 host files to use presets (~8 lines each instead of ~150):
+   - Personal hosts: `accounts = inputs.self.lib.claudeCode.personalAccounts`
+   - Work host (pa161878-nixos): `accounts = personalAccounts // workAccount`
 
-**Validation**: `nix flake check --no-build` + dry-run on each modified host
+3. Removed ~150 LOC from `home/modules/base.nix`
+
+**Files modified**:
+- `modules/flake-parts/lib.nix` - Added claudeCode presets
+- `modules/hosts/*/` - All 6 host files updated
+- `home/modules/base.nix` - Removed claude-code config block
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 

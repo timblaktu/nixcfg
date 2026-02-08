@@ -182,5 +182,166 @@ in
     #
     # Returns: { <name> = <homeManagerConfiguration>; }
     mkHomeManagerWithArgs = mkHomeManagerImpl;
+
+    # === Claude Code Configuration Presets ===
+    #
+    # Reusable configuration blocks for claude-code. Hosts use these with
+    # attribute merging (//) to compose their config while staying DRY.
+    #
+    # Usage in host:
+    #   programs.claude-code = inputs.self.lib.claudeCode.baseConfig // {
+    #     accounts = inputs.self.lib.claudeCode.personalAccounts;
+    #   };
+    #
+    # For work machines:
+    #   accounts = inputs.self.lib.claudeCode.personalAccounts
+    #           // inputs.self.lib.claudeCode.workAccount;
+
+    claudeCode = {
+      # Base config (enable, defaults, common settings)
+      baseConfig = {
+        enable = true;
+        defaultModel = "opus";
+        defaultAccount = "max";
+        taskAutomation.enable = true;
+        skills.enable = true;
+      };
+
+      # Personal accounts (max + pro) - used on all personal machines
+      personalAccounts = {
+        max = {
+          enable = true;
+          displayName = "Claude Max Account";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
+          };
+        };
+        pro = {
+          enable = true;
+          displayName = "Claude Pro Account";
+          model = "sonnet";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
+          };
+        };
+      };
+
+      # Work account (Code-Companion proxy) - only for work machines with VPN access
+      workAccount = {
+        work = {
+          enable = true;
+          displayName = "Work Code-Companion";
+          model = "sonnet";
+          api = {
+            baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+            authMethod = "bearer";
+            disableApiKey = true;
+            modelMappings = {
+              haiku = "devstral";
+              sonnet = "qwen-a3b";
+              opus = "claude-sonnet-4-5-20250929";
+            };
+          };
+          secrets.bearerToken.bitwarden = {
+            item = "PAC Code Companion v2";
+            field = "API Key";
+          };
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+            DISABLE_ERROR_REPORTING = "1";
+            ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
+            ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
+            ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
+          };
+        };
+      };
+
+      # Default statusline config
+      defaultStatusline = {
+        enable = true;
+        style = "powerline";
+        enableAllStyles = true;
+        testMode = true;
+      };
+
+      # Default MCP servers
+      defaultMcpServers = {
+        context7.enable = true;
+        sequentialThinking.enable = true;
+        nixos.enable = true;
+      };
+
+      # Default sub-agents
+      defaultSubAgents = {
+        pdf-indexer = {
+          description = "Extract TOC, metadata, and key content from PDF documents. Uses pdftotext via Bash to bypass Read tool token limits. Handles PDFs of any size.";
+          tools = [ "Bash" "Glob" ];
+          capabilities = [
+            "Extract metadata (title, pages, size) using pdfinfo"
+            "Extract text content using pdftotext with page range control"
+            "Size-based routing: full extraction for small PDFs, TOC-only for large"
+            "Structured markdown output with page references"
+          ];
+          instructions = ''
+            ## Why This Agent Exists
+
+            The Read tool has a 25,000 token limit for PDFs, which fails on documents > ~30 pages.
+            This agent uses `pdftotext` via Bash to extract text content, bypassing that limitation.
+
+            ## Required Tools
+
+            Use `poppler-utils` via nix-shell:
+
+            ```bash
+            nix-shell -p poppler-utils --run 'pdfinfo "file.pdf"'
+            nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 10 "file.pdf" -'
+            ```
+
+            ## Size-Based Extraction Strategy
+
+            **Small PDFs (≤50 pages):** Extract all pages
+            ```bash
+            nix-shell -p poppler-utils --run 'pdftotext "PATH" -' 2>/dev/null | head -500
+            ```
+
+            **Medium PDFs (51-200 pages):** Extract first 15 pages (usually contains TOC)
+            ```bash
+            nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 15 "PATH" -' 2>/dev/null
+            ```
+
+            **Large PDFs (>200 pages):** Extract first 20 pages only
+            ```bash
+            nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 20 "PATH" -' 2>/dev/null
+            ```
+
+            ## Output Format
+
+            Return structured markdown with:
+            - Document title and revision
+            - Page count and file size
+            - Table of contents with page numbers
+            - Document type classification
+
+            ## Handling Multiple PDFs
+
+            Use `fd` to list PDFs first:
+            ```bash
+            fd -t f -e pdf -e PDF . "DIRECTORY_PATH"
+            ```
+            Then process each individually.
+          '';
+          examples = [
+            "Index this PDF: /path/to/document.pdf"
+            "Index all PDFs in /path/to/docs/ and return a markdown table"
+            "Extract the TOC from /path/to/large-manual.pdf"
+          ];
+        };
+      };
+    };
   };
 }

@@ -279,7 +279,7 @@ in
     {
       # Assertions - now handled by homeMinimal module
       # The homeMinimal module validates username and homeDirectory
-      assertions = [];
+      assertions = [ ];
 
       # Home Manager needs information about you and the paths it should manage
       home = {
@@ -373,159 +373,10 @@ in
       # Validated scripts configuration removed - migrated to unified files
 
       # ─────────────────────────────────────────────────────────────────────────
-      # Claude Code - enhanced multi-account implementation
-      # Upstream home-manager module disabled via disabledModules (see top of file)
+      # Claude Code - MIGRATED to host files (Task 6.4.3)
+      # Configuration now lives in each host's home.nix using lib.claudeCode presets
+      # See: modules/flake-parts/lib.nix for preset definitions
       # ─────────────────────────────────────────────────────────────────────────
-      programs.claude-code = {
-        enable = cfg.enableClaudeCode;
-        defaultModel = "opus";
-        defaultAccount = "max";
-        accounts = {
-          max = {
-            enable = true;
-            displayName = "Claude Max Account";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
-          };
-          pro = {
-            enable = true;
-            displayName = "Claude Pro Account";
-            model = "sonnet";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-            };
-          };
-          work = {
-            enable = true;
-            displayName = "Work Code-Companion";
-            model = "sonnet";
-            api = {
-              baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
-              authMethod = "bearer";
-              disableApiKey = true;
-              modelMappings = {
-                haiku = "devstral";
-                sonnet = "qwen-a3b";
-                opus = "claude-sonnet-4-5-20250929";
-              };
-            };
-            secrets.bearerToken.bitwarden = {
-              item = "PAC Code Companion v2";
-              field = "API Key";
-            };
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-              DISABLE_ERROR_REPORTING = "1";
-              ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
-              ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
-              # ANTHROPIC_DEFAULT_OPUS_MODEL = "kimi-linear-reap-a3b";
-              ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
-              # From https://git.panasonic.aero/platform/sandbox/pac-claude-proxy/-/blob/main/anthropic_proxy.py?ref_type=heads#L29
-              # MODEL_MAP = {
-              #     "claude-sonnet-4-5-20250929": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-              #     "claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-              #     "claude-opus-4-5-20251101": "us.anthropic.claude-opus-4-5-20251101-v1:0",
-              #     "claude-opus-4-20250514": "us.anthropic.claude-opus-4-5-20251101-v1:0",
-              #     "claude-opus-4-20250514-v3:0": "us.anthropic.claude-opus-4-5-20251101-v1:0",
-              #     "claude-sonnet-4-20250514": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-              #     "claude-3-7-sonnet-20250219": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-              #     "claude-3-5-sonnet-20241022": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-              #     # Haiku - map to Sonnet (Haiku not available)
-              #     "claude-haiku-4-5-20251001": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-              # }
-            };
-          };
-        };
-        statusline = {
-          enable = true;
-          style = "powerline"; # Enable colored statusline with powerline symbols
-          enableAllStyles = true; # Install all styles for testing
-          testMode = true; # Enable test mode for validation
-        };
-        mcpServers = {
-          context7.enable = true;
-          sequentialThinking.enable = true; # Now using TypeScript version via npx
-          nixos.enable = true; # Using uvx to run mcp-nixos Python package
-          # mcpFilesystem.enable = false;  # Disabled - requires fixing FastMCP/watchfiles issue
-          # cliMcpServer.enable = false;  # Claude Code has built-in CLI capability
-        };
-        # Task automation - provides run-tasks script and /next-task command
-        taskAutomation.enable = true;
-        # Skills - provides ADR-writer and custom skills
-        skills.enable = true;
-        # Custom sub-agents
-        subAgents.custom = {
-          pdf-indexer = {
-            description = "Extract TOC, metadata, and key content from PDF documents. Uses pdftotext via Bash to bypass Read tool token limits. Handles PDFs of any size.";
-            tools = [ "Bash" "Glob" ];
-            capabilities = [
-              "Extract metadata (title, pages, size) using pdfinfo"
-              "Extract text content using pdftotext with page range control"
-              "Size-based routing: full extraction for small PDFs, TOC-only for large"
-              "Structured markdown output with page references"
-            ];
-            instructions = ''
-              ## Why This Agent Exists
-
-              The Read tool has a 25,000 token limit for PDFs, which fails on documents > ~30 pages.
-              This agent uses `pdftotext` via Bash to extract text content, bypassing that limitation.
-
-              ## Required Tools
-
-              Use `poppler-utils` via nix-shell:
-
-              ```bash
-              nix-shell -p poppler-utils --run 'pdfinfo "file.pdf"'
-              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 10 "file.pdf" -'
-              ```
-
-              ## Size-Based Extraction Strategy
-
-              **Small PDFs (≤50 pages):** Extract all pages
-              ```bash
-              nix-shell -p poppler-utils --run 'pdftotext "PATH" -' 2>/dev/null | head -500
-              ```
-
-              **Medium PDFs (51-200 pages):** Extract first 15 pages (usually contains TOC)
-              ```bash
-              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 15 "PATH" -' 2>/dev/null
-              ```
-
-              **Large PDFs (>200 pages):** Extract first 20 pages only
-              ```bash
-              nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 20 "PATH" -' 2>/dev/null
-              ```
-
-              ## Output Format
-
-              Return structured markdown with:
-              - Document title and revision
-              - Page count and file size
-              - Table of contents with page numbers
-              - Document type classification
-
-              ## Handling Multiple PDFs
-
-              Use `fd` to list PDFs first:
-              ```bash
-              fd -t f -e pdf -e PDF . "DIRECTORY_PATH"
-              ```
-              Then process each individually.
-            '';
-            examples = [
-              "Index this PDF: /path/to/document.pdf"
-              "Index all PDFs in /path/to/docs/ and return a markdown table"
-              "Extract the TOC from /path/to/large-manual.pdf"
-            ];
-          };
-        };
-      };
 
       # ─────────────────────────────────────────────────────────────────────────
       # OpenCode - enhanced multi-account implementation
