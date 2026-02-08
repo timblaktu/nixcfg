@@ -51,7 +51,6 @@
   systemDefault = {
     # userName must be explicitly set in host configuration (no default)
     userGroups = lib.mkDefault [ "wheel" "dialout" ];
-    sshPasswordAuth = lib.mkDefault true;
     wheelNeedsPassword = lib.mkDefault false;
     extraShellAliases = lib.mkDefault {
       esp32c5 = "esp-idf-shell";
@@ -63,6 +62,8 @@
 
   # CLI layer configuration (3-cli)
   systemCli = {
+    # SSH daemon settings (moved from systemDefault)
+    sshPasswordAuth = lib.mkDefault true;
     enableClaudeCodeEnterprise = lib.mkDefault false;
     enablePodman = lib.mkDefault true;
   };

@@ -4,9 +4,9 @@
 {
   imports = [
     ./hardware-config.nix
-    # Dendritic system type - provides system-default layer (includes minimal)
-    # Note: Using system-default rather than system-cli as this is a more minimal headless setup
-    inputs.self.modules.nixos.system-default
+    # Dendritic system type - provides system-cli layer (includes default → minimal)
+    # Provides SSH daemon, CLI tools, and dev environment
+    inputs.self.modules.nixos.system-cli
     inputs.sops-nix.nixosModules.sops
   ];
 
@@ -16,7 +16,6 @@
   # Default layer configuration (2-default)
   systemDefault = {
     userName = "tim";
-    sshPasswordAuth = lib.mkDefault true;
     wheelNeedsPassword = lib.mkDefault false;
     userGroups = lib.mkDefault [ "wheel" "networkmanager" "audio" "video" ];
     consolePackages = lib.mkDefault (with pkgs; [
@@ -30,6 +29,11 @@
       powerline-fonts
     ]);
     extraShellAliases = lib.mkDefault { };
+  };
+
+  # CLI layer configuration (3-cli)
+  systemCli = {
+    sshPasswordAuth = lib.mkDefault true;
   };
 
   # Hostname

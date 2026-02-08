@@ -7,6 +7,7 @@
 #   flake.modules.homeManager.home-cli - Home Manager with full CLI tooling
 #
 # This layer IMPORTS system-default and adds:
+#   - SSH daemon with secure defaults
 #   - SSH authorized_keys management
 #   - Advanced CLI/development tools
 #   - Git configuration
@@ -41,7 +42,25 @@
         ];
 
         options.systemCli = {
-          # SSH key management
+          # SSH daemon configuration
+          sshEnable = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable SSH daemon";
+          };
+
+          sshPasswordAuth = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Allow SSH password authentication (not recommended)";
+          };
+
+          sshRootLogin = lib.mkOption {
+            type = lib.types.enum [ "no" "yes" "prohibit-password" "forced-commands-only" ];
+            default = "no";
+            description = "SSH root login policy";
+          };
+
           sshAuthorizedKeys = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];
@@ -151,6 +170,17 @@
               terminal = lib.mkDefault "screen-256color";
             };
           }
+
+          # SSH daemon configuration
+          (lib.mkIf cfg.sshEnable {
+            services.openssh = {
+              enable = true;
+              settings = {
+                PermitRootLogin = lib.mkDefault cfg.sshRootLogin;
+                PasswordAuthentication = lib.mkDefault cfg.sshPasswordAuth;
+              };
+            };
+          })
 
           # Development tools
           (lib.mkIf cfg.enableDevTools {

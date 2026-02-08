@@ -4,18 +4,18 @@
 # Provides:
 #   flake.modules.nixos.system-default - NixOS with user management + integrations
 #   flake.modules.darwin.system-default - Darwin with user management + integrations
-#   flake.modules.homeManager.home-default - Home Manager with standard packages + fonts
+#   flake.modules.homeManager.home-default - Home Manager with SSH client, packages, fonts
 #
 # This layer IMPORTS system-minimal and adds:
 #   - User creation with configurable options
 #   - Locale and timezone settings
 #   - Home Manager integration (optional)
 #   - SOPS-nix secrets management (optional)
-#   - SSH daemon configuration
 #   - Console configuration
 #
 # Does NOT include:
-#   - SSH keys or authorized_keys (managed per-host or via SOPS)
+#   - SSH daemon (3-cli)
+#   - SSH keys or authorized_keys (3-cli or per-host)
 #   - Desktop environments (4-desktop)
 #   - Advanced CLI tools (3-cli)
 #
@@ -100,25 +100,6 @@
             description = "Console-related packages (fonts, etc.)";
           };
 
-          # SSH configuration
-          sshEnable = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Enable SSH daemon";
-          };
-
-          sshPasswordAuth = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Allow SSH password authentication";
-          };
-
-          sshRootLogin = lib.mkOption {
-            type = lib.types.enum [ "no" "yes" "prohibit-password" "forced-commands-only" ];
-            default = "no";
-            description = "SSH root login policy";
-          };
-
           # Security
           wheelNeedsPassword = lib.mkOption {
             type = lib.types.bool;
@@ -191,22 +172,19 @@
             # Security
             security.sudo.wheelNeedsPassword = lib.mkDefault cfg.wheelNeedsPassword;
 
-            # System packages - common utilities
+            # System packages - basic troubleshooting utilities
+            # Power tools (tmux, ripgrep, fd) are in system-cli
             environment.systemPackages = with pkgs; [
               wget
               curl
               htop
-              tmux
-              ripgrep
-              fd
+              less
               home-manager
             ] ++ cfg.additionalPackages;
 
             # Shell aliases
             environment.shellAliases = {
               ll = "ls -la";
-              update = "sudo nixos-rebuild switch";
-              upgrade = "sudo nixos-rebuild switch --upgrade";
             } // cfg.extraShellAliases;
 
             # Environment variables
@@ -215,17 +193,6 @@
               cfg.extraEnvironment
             ];
           }
-
-          # SSH configuration
-          (lib.mkIf cfg.sshEnable {
-            services.openssh = {
-              enable = true;
-              settings = {
-                PermitRootLogin = lib.mkDefault cfg.sshRootLogin;
-                PasswordAuthentication = lib.mkDefault cfg.sshPasswordAuth;
-              };
-            };
-          })
 
           # NOTE: Home Manager and SOPS integration should be handled at the host level
           # by importing the appropriate modules directly. Conditional imports don't
@@ -374,6 +341,25 @@
             description = "Default editor";
           };
 
+          # SSH client configuration
+          enableSshClient = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable SSH client configuration";
+          };
+
+          sshAddKeysToAgent = lib.mkOption {
+            type = lib.types.enum [ "yes" "no" "confirm" "ask" ];
+            default = "yes";
+            description = "Add keys to ssh-agent automatically";
+          };
+
+          sshIdentityFiles = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ "~/.ssh/id_ed25519" "~/.ssh/id_rsa" ];
+            description = "Default SSH identity files";
+          };
+
           # Base packages
           basePackages = lib.mkOption {
             type = lib.types.listOf lib.types.package;
@@ -422,22 +408,67 @@
           };
         };
 
-        config = {
-          # Packages
-          home.packages = cfg.basePackages ++ cfg.additionalPackages;
+        config = lib.mkMerge [
+          {
+            # Packages
+            home.packages = cfg.basePackages ++ cfg.additionalPackages;
 
-          # Environment variables
-          home.sessionVariables = {
-            EDITOR = cfg.defaultEditor;
-          } // cfg.environmentVariables;
+            # Environment variables
+            home.sessionVariables = {
+              EDITOR = cfg.defaultEditor;
+            } // cfg.environmentVariables;
 
-          # Font configuration
-          fonts.fontconfig.enable = lib.mkForce true;
+            # Font configuration
+            fonts.fontconfig.enable = lib.mkForce true;
 
-          # Disable input method to avoid fcitx5 package issues
-          i18n.inputMethod.enable = false;
-          i18n.inputMethod.type = null;
-        };
+            # Disable input method to avoid fcitx5 package issues
+            i18n.inputMethod.enable = false;
+            i18n.inputMethod.type = null;
+          }
+
+          # SSH client configuration
+          (lib.mkIf cfg.enableSshClient {
+            programs.ssh = {
+              enable = true;
+              addKeysToAgent = cfg.sshAddKeysToAgent;
+
+              # Sensible defaults for SSH client
+              extraConfig = ''
+                # Use modern key exchange and ciphers
+                KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org
+
+                # Connection multiplexing for faster subsequent connections
+                ControlMaster auto
+                ControlPath ~/.ssh/sockets/%r@%h-%p
+                ControlPersist 600
+
+                # Keep connections alive
+                ServerAliveInterval 60
+                ServerAliveCountMax 3
+              '';
+
+              # Default match blocks
+              matchBlocks = {
+                # GitHub
+                "github.com" = {
+                  hostname = "github.com";
+                  user = "git";
+                  identityFile = cfg.sshIdentityFiles;
+                };
+
+                # GitLab
+                "gitlab.com" = {
+                  hostname = "gitlab.com";
+                  user = "git";
+                  identityFile = cfg.sshIdentityFiles;
+                };
+              };
+            };
+
+            # Ensure socket directory exists
+            home.file.".ssh/sockets/.keep".text = "";
+          })
+        ];
       };
   };
 }
