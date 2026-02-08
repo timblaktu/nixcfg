@@ -111,6 +111,10 @@
 
       in
       {
+        # Disable upstream home-manager opencode module to avoid conflicts
+        # Our enhanced module provides: multi-account, Bitwarden secrets, MCP integration
+        disabledModules = [ "programs/opencode.nix" ];
+
         imports = [
           ./_hm/mcp-servers.nix
         ];

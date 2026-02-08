@@ -29,6 +29,10 @@
     homeManager.claude-code = { config, lib, pkgs, nixmcp ? null, ... }:
       with lib;
       {
+        # Disable upstream home-manager claude-code module to avoid conflicts
+        # Our enhanced module provides: multi-account, categorized hooks, statusline, MCP, WSL integration
+        disabledModules = [ "programs/claude-code.nix" ];
+
         imports = [
           ./_hm/mcp-servers.nix
           ./_hm/hooks.nix
