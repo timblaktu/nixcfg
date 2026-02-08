@@ -328,7 +328,7 @@ in
 | 6.4.10 | Migrate standalone modules | TASK:COMPLETE (2026-02-08) |
 | 6.4.11 | Update all hosts to remove base.nix import | TASK:COMPLETE (2026-02-08) |
 | 6.4.12 | Move shared libs to dendritic structure | TASK:COMPLETE (2026-02-08) |
-| 6.4.13 | Migrate home/modules/files to dendritic | TASK:PENDING |
+| 6.4.13 | Migrate home/modules/files to dendritic | TASK:COMPLETE (2026-02-08) |
 | 6.4.14 | Delete remaining home/modules/ files | TASK:PENDING |
 | 6.4.15 | Delete home/modules/ directory | TASK:PENDING |
 
@@ -767,20 +767,37 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 **Goal**: Move `home/modules/files/` and `home/files/` to dendritic structure.
 
-**Current state**:
-- `home/modules/files/default.nix` - Drop-in file management module (~340 LOC)
-- `home/files/` - Source files (bin/, lib/, config, etc.)
-- Provides: automatic script installation, zsh completion generation
+**Implementation** (2026-02-08): Moved as-is to dendritic location, deferred refactoring to F5.
 
-**Options**:
-1. Create `modules/programs/files-manager [nd]/` dendritic module
-2. Distribute file ownership to feature modules (each module owns its scripts)
-3. Keep as-is but move to dendritic location
+**What was done**:
+1. Created `modules/programs/files [nd]/` dendritic structure:
+   - `files.nix` - Main dendritic wrapper exporting `homeManager.files`
+   - `_completion-generator.nix` - Auto-completion generation (from home/modules/files)
+   - `_homefiles-module.nix` - homeFiles module with autoWriter (from home/files/default.nix)
+   - `files/` - All source files (bin/, lib/, claude/, etc.)
 
-**Note**: This module has known anti-patterns (see Future Work F5). Migration is a good
-opportunity to refactor OR can defer refactoring to F5.
+2. Renamed `.nix` files in `files/` with `_` prefix to exclude from import-tree:
+   - `_default.nix`, `_example-config.nix`
+   - `lib/_domain-generators.nix`, `lib/_script-libraries.nix`
 
-**Validation**: `nix flake check --no-build` + `home-manager switch --dry-run`
+3. Updated all 6 host files:
+   - Changed from relative paths to `inputs.self.modules.homeManager.files`
+
+4. Updated tests in `modules/flake-parts/tests.nix`:
+   - Used path concatenation technique for special characters in directory names
+   - `../programs + "/files [nd]/_homefiles-module.nix"` pattern
+
+5. Deleted old directories: `home/modules/files/`, `home/files/`
+
+**Files created**:
+- `modules/programs/files [nd]/files.nix`
+- `modules/programs/files [nd]/_completion-generator.nix`
+- `modules/programs/files [nd]/_homefiles-module.nix`
+- `modules/programs/files [nd]/files/*` (all source files)
+
+**Note**: Anti-patterns documented in F5 remain - refactoring deferred.
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 
