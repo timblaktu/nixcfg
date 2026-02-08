@@ -20,6 +20,7 @@
           modules = [
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
+            self.modules.homeManager.shell # Dendritic pattern shell module
             {
               homeBase = {
                 username = "tim";
@@ -62,6 +63,7 @@
           modules = [
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
+            self.modules.homeManager.shell # Dendritic pattern shell module
             {
               homeBase = {
                 username = "tim";
@@ -121,6 +123,7 @@
           modules = [
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
+            self.modules.homeManager.shell # Dendritic pattern shell module
             ../home/common/wsl-home-base.nix # Common WSL user configuration
             {
               homeBase = {
@@ -193,6 +196,7 @@
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
             ../home/common/wsl-home-base.nix
+            self.modules.homeManager.shell # Dendritic pattern shell module
             {
               homeBase = {
                 username = "tim";
@@ -286,6 +290,7 @@
           modules = [
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
+            self.modules.homeManager.shell # Dendritic pattern shell module
             {
               homeBase = {
                 username = "tim";

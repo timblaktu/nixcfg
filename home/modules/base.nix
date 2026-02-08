@@ -27,7 +27,7 @@ in
     ../common/tmux.nix
     ./tmux-auto-reload.nix # Auto-reload tmux config on HM generation change
     ../common/nixvim.nix
-    ../common/zsh.nix
+    # ../common/zsh.nix  # Disabled: migrated to modules/programs/shell/shell.nix (dendritic pattern)
     ../common/environment.nix
     ../common/aliases.nix
     # Import both files modules - they will be conditionally enabled
