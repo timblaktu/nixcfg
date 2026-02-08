@@ -65,6 +65,7 @@
         # Dendritic pattern infrastructure (Plan 019)
         ./modules/flake-parts/modules.nix
         ./modules/flake-parts/lib.nix
+        ./modules/flake-parts/systems.nix
         ./modules/meta/options.nix
 
         # Existing flake-modules (to be migrated later)
@@ -82,11 +83,7 @@
         ./flake-modules/github-actions.nix # Configurable GitHub Actions validation
       ];
 
-      # Support these systems across all modules
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux" # For Termux on Android
-      ];
+      # systems defined in modules/flake-parts/systems.nix
 
       # Per-system configuration
       perSystem = { config, self', inputs', pkgs, system, ... }: {
