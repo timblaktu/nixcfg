@@ -3,7 +3,7 @@
 **Status**: DESIGN PHASE
 **Branch**: `refactor/modularization`
 **Created**: 2026-02-01
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-02-07
 
 ---
 
@@ -26,6 +26,14 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | — | **SESSION BOUNDARY** | | |
 | 0.4 | Naming conventions | `TASK:COMPLETE` | 2026-02-01 |
 | 0.5 | Design sign-off | `TASK:PENDING` | |
+| — | **SESSION BOUNDARY** | | |
+| **0.6** | **Internal Cleanup (Path B)** | | |
+| 0.6.1 | Consolidate podman-tools.nix | `TASK:PENDING` | |
+| 0.6.2 | Rename hardware-configuration.nix | `TASK:PENDING` | |
+| 0.6.3 | Unify MCP server adapters | `TASK:PENDING` | |
+| 0.6.4 | Consolidate modules/home/ directory | `TASK:PENDING` | |
+| 0.6.5 | Document module boundaries | `TASK:PENDING` | |
+| 0.6.6 | Evaluate TUR wrapper consolidation | `TASK:PENDING` | |
 | — | **SESSION BOUNDARY** | | |
 | **1** | **Foundation** | | |
 | 1.1 | Create shared flake | `TASK:PENDING` | |
@@ -431,7 +439,117 @@ lib.ai-dev = {
 | **Library Namespace** | `lib.ai-dev.*` |
 | **Flake Outputs** | `homeManagerModules.{claude-code,opencode}`, `lib.ai-dev`, `templates.*` |
 
-**User Action Required**: Review decisions above and confirm to proceed to Phase 1 (Foundation).
+**User Action Required**: Review decisions above and confirm to proceed to Phase 0.6 (Internal Cleanup).
+
+---
+
+## Phase 0.6: Internal Cleanup (Path B)
+
+**Decision**: Path B — Full internal cleanup before extraction. Ensures clean boundaries and no duplication before components are moved to a shared repo.
+
+**Execution Order**: 0.6.1 → 0.6.4 → 0.6.2 → 0.6.3 → 0.6.5 (0.6.6 deferred)
+
+**Success Criteria** (all must pass before Phase 1):
+- [ ] No duplicate files between `modules/home/` and `home/modules/`
+- [ ] Consistent hardware config naming across all hosts
+- [ ] MCP adapter code exists in ONE place, consumed by both claude/opencode
+- [ ] `nix flake check` passes
+- [ ] `home-manager switch --dry-run` succeeds for at least one config
+
+### Task 0.6.1: Consolidate podman-tools.nix
+
+**Status**: `TASK:PENDING`
+
+**Problem**: Two copies exist with minor differences:
+- `home/modules/podman-tools.nix` (52 LOC)
+- `modules/home/podman-tools.nix` (57 LOC) — has extra docker alias logic
+
+**Solution**:
+1. Merge docker alias logic into `home/modules/podman-tools.nix`
+2. Update any imports referencing `modules/home/podman-tools.nix`
+3. Delete `modules/home/podman-tools.nix`
+
+**Verification**: `nix flake check` passes
+
+---
+
+### Task 0.6.2: Rename hardware-configuration.nix
+
+**Status**: `TASK:PENDING`
+
+**Problem**: `hosts/mbp/hardware-configuration.nix` inconsistent with all other hosts using `hardware-config.nix`
+
+**Solution**:
+1. Rename `hosts/mbp/hardware-configuration.nix` → `hardware-config.nix`
+2. Update import in `hosts/mbp/default.nix`
+
+**Verification**: `nix flake check` passes
+
+---
+
+### Task 0.6.3: Unify MCP Server Adapters
+
+**Status**: `TASK:PENDING`
+
+**Problem**: Two nearly-identical MCP integration modules:
+- `home/modules/claude-code/mcp-servers.nix` (246 LOC)
+- `home/modules/opencode/mcp-servers.nix` (227 LOC)
+
+Both consume `home/modules/shared/mcp-server-defs.nix` but have separate adapter logic (~80% duplication).
+
+**Solution**:
+1. Create `home/modules/shared/mcp-integration.nix` with common adapter
+2. Parameterize for claude-code vs opencode differences
+3. Have both modules import and use shared adapter
+4. Remove duplicate code from individual modules
+
+**Verification**:
+- `nix flake check` passes
+- Both `claudemax` and `opencodemax` get identical MCP servers
+
+---
+
+### Task 0.6.4: Consolidate modules/home/ Directory
+
+**Status**: `TASK:PENDING`
+
+**Depends On**: 0.6.1 (podman-tools must be consolidated first)
+
+**Problem**: Home Manager modules exist in two places:
+- `home/modules/` (primary, 21+ files)
+- `modules/home/` (2 files: `podman-tools.nix`, `custom-tool.nix`)
+
+**Solution**:
+1. After 0.6.1, move remaining `modules/home/custom-tool.nix` to `home/modules/`
+2. Update all imports
+3. Delete `modules/home/` directory
+
+**Verification**: `nix flake check` passes
+
+---
+
+### Task 0.6.5: Document Module Boundaries
+
+**Status**: `TASK:PENDING`
+
+**Problem**: `modules/` vs `home/` distinction unclear
+
+**Convention to Document**:
+- `modules/` = NixOS system modules (wsl-common, wsl-tarball-checks, base.nix)
+- `home/modules/` = Home Manager modules
+- `modules/nixos/` = Additional NixOS-specific modules
+
+**Files to Modify**: `docs/ARCHITECTURE.md` or `README.md`
+
+---
+
+### Task 0.6.6: Evaluate TUR Wrapper Consolidation
+
+**Status**: `TASK:PENDING` (DEFERRED)
+
+**Problem**: TUR package wrappers ~90% identical between claude and opencode
+
+**Note**: External repo (`timblaktu/tur`), lower priority. Evaluate after internal cleanup.
 
 ---
 
@@ -822,6 +940,31 @@ nixcfg structure:
 3. Runtime dirs (claude-runtime, opencode-runtime) not generated from Nix
 
 **Next Session**: Address structural issues, starting with quick wins or as prioritized by user
+
+---
+
+### Session 4 (2026-02-07): Path B Decision & Cleanup Task Planning
+
+**Topics**: Cleanup approach decision, task definition for internal cleanup phase
+
+**Key Decision**: **Path B** — Full internal cleanup before extraction
+
+**Three Paths Evaluated**:
+- Path A: Skip cleanup, extract immediately → rejected (carries tech debt into shared repo)
+- Path B: Full internal cleanup first → **selected** (cleaner extraction, less refactoring later)
+- Path C: Hybrid quick wins + extract → not selected
+
+**Cleanup Tasks Defined** (Phase 0.6):
+1. Consolidate podman-tools.nix (2 files → 1)
+2. Rename hardware-configuration.nix (mbp naming consistency)
+3. Unify MCP server adapters (473 LOC duplication → shared module)
+4. Consolidate modules/home/ directory (eliminate split location)
+5. Document module boundaries (clarify modules/ vs home/ convention)
+6. Evaluate TUR wrapper consolidation (deferred — external repo)
+
+**Execution Order**: 0.6.1 → 0.6.4 → 0.6.2 → 0.6.3 → 0.6.5
+
+**Note**: Session conducted from Termux (no Nix available). Implementation to resume on laptop.
 
 ---
 
