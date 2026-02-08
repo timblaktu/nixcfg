@@ -324,7 +324,7 @@ in
 | 6.4.6 | Migrate legacy-common/environment.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.7 | Migrate legacy-common/aliases.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:COMPLETE (2026-02-08) |
-| 6.4.9 | Migrate remaining legacy-common/* | TASK:PENDING |
+| 6.4.9 | Migrate remaining legacy-common/* | TASK:COMPLETE (2026-02-08) |
 | 6.4.10 | Migrate standalone modules | TASK:PENDING |
 | 6.4.11 | Update all hosts to remove base.nix import | TASK:PENDING |
 | 6.4.12 | Delete `home/modules/` directory | TASK:PENDING |
@@ -620,14 +620,45 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 **Goal**: Clear out `home/modules/legacy-common/` directory.
 
-**Files to migrate**:
-- `esp-idf.nix` → `modules/programs/esp-idf/` (or host-specific if only used on one host)
-- `onedrive.nix` → `modules/programs/onedrive/` (WSL-specific)
-- `terminal.nix` → `modules/programs/terminal/`
-- `system.nix` → `modules/system/types/` (appropriate layer)
-- `development.nix` → `modules/system/types/3-cli/home.nix` or dedicated module
+**Implementation** (2026-02-08): Migrated all remaining files and deleted the directory.
 
-**Validation**: `nix flake check --no-build` after each file
+**What was done**:
+
+1. **Deleted orphaned files** (already migrated to dendritic modules):
+   - `nixvim.nix` (1600 LOC) - migrated to modules/programs/neovim/
+   - `tmux.nix` (350 LOC) - migrated to modules/programs/tmux/
+   - `wsl-home-base.nix` (75 LOC) - superseded by wsl-home module
+   - `nixvim-keybindings-fix.patch` - no longer needed
+
+2. **Created new dendritic modules**:
+   - `modules/programs/terminal/terminal.nix` - 4 terminal font setup scripts
+   - `modules/programs/system-tools/system-tools.nix` - 5 system admin scripts + PowerShell docs
+   - `modules/programs/esp-idf/esp-idf.nix` - Full FHS environment, 5 wrapper scripts
+   - `modules/programs/onedrive/onedrive.nix` - 2 OneDrive utilities with shell aliases
+
+3. **Updated development-tools module**:
+   - Added `enableEnhancedCli` option (bat, eza, delta, bottom, miller)
+   - Added `enableClaudeUtils` option (pdf2md, claudevloop, restart_claude, etc.)
+   - Added pymupdf4llm to default Python packages
+
+4. **Updated all 6 host files**:
+   - WSL hosts: Added terminal, system-tools, esp-idf (enabled), onedrive (enabled)
+   - Non-WSL hosts: Added terminal, system-tools only
+
+5. **Removed from base.nix**:
+   - Imports for development.nix, terminal.nix, system.nix, esp-idf.nix, onedrive.nix
+   - Options: enableDevelopment, enableTerminal, enableSystem, enableShellUtils, enableEspIdf, enableOneDriveUtils
+   - OneDrive shell aliases (now in onedrive module)
+
+6. **Fixed wsl-home.nix**:
+   - Removed references to deleted homeBase.enable* options
+   - Changed to use home.sessionVariables and programs.*.shellAliases directly
+
+7. **Deleted directory**: `home/modules/legacy-common/` (now empty)
+
+**Net change**: -3044 lines (deleted 3862, added 818)
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 
