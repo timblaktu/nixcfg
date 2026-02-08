@@ -40,8 +40,7 @@ in
 
   imports = [
     # git.nix migrated to modules/programs/git/ (dendritic pattern)
-    ../common/tmux.nix
-    ./tmux-auto-reload.nix # Auto-reload tmux config on HM generation change
+    # tmux.nix migrated to modules/programs/tmux/ (dendritic pattern)
     ../common/nixvim.nix
     ../common/environment.nix
     ../common/aliases.nix

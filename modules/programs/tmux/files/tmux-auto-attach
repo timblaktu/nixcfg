@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+# tmux-auto-attach: Shared tmux auto-attach logic with continuum support
+# This script is sourced by both bash and zsh initialization to ensure
+# consistent tmux behavior regardless of which shell is configured.
+
+# tmux auto-attach on interactive shell startup
+# Only attach if:
+# 1. We're in an interactive shell
+# 2. Not already in a tmux session
+# 3. Not in a nested SSH session to the same host
+# 4. Terminal supports it (not dumb terminal)
+tmux_auto_attach() {
+    if [[ $- == *i* && -z "$TMUX" && "$TERM" != "dumb" ]]; then
+        # Check if we're in a nested SSH session to the same host
+        if [[ -n "$SSH_CLIENT" || -n "$SSH_TTY" ]]; then
+            # Get the hostname we SSH'd from (first field of SSH_CLIENT)
+            local ssh_from_host
+            ssh_from_host=$(echo "$SSH_CLIENT" | awk '{print $1}')
+            # Only proceed if it's not a loopback connection
+            if [[ "$ssh_from_host" != "127.0.0.1" && "$ssh_from_host" != "::1" ]]; then
+                # Safe to attach - we're SSHing from a different host
+                _tmux_attach_or_create
+            fi
+        else
+            # Not in SSH at all, safe to attach
+            _tmux_attach_or_create
+        fi
+    fi
+}
+
+# Helper function that implements the improved attach logic
+# This allows continuum to auto-restore before we create new sessions
+_tmux_attach_or_create() {
+    # First try to attach to any existing session
+    # This allows tmux-continuum to auto-restore sessions if configured
+    if ! tmux attach 2>/dev/null; then
+        # No sessions exist - now it's safe to create our default "main" session
+        # At this point, continuum has had a chance to restore sessions
+        tmux new-session -A -s main
+    fi
+}
+
+# Call the function when this script is sourced
+tmux_auto_attach

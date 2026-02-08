@@ -22,11 +22,15 @@
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
+            self.modules.homeManager.tmux # Dendritic pattern tmux module
             {
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
               };
+
+              # Enable tmux auto-reload on home-manager generation change
+              programs.tmux.autoReload.enable = true;
 
               # Secrets management
               secretsManagement = {
@@ -66,6 +70,7 @@
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
+            self.modules.homeManager.tmux # Dendritic pattern tmux module
             {
               homeBase = {
                 username = "tim";
@@ -78,6 +83,10 @@
                   explorer = "explorer.exe .";
                 };
               };
+
+              # Enable tmux auto-reload on home-manager generation change
+              programs.tmux.autoReload.enable = true;
+
               # Secrets management
               secretsManagement = {
                 enable = true;
@@ -127,6 +136,7 @@
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
+            self.modules.homeManager.tmux # Dendritic pattern tmux module
             ../home/common/wsl-home-base.nix # Common WSL user configuration
             {
               homeBase = {
@@ -134,6 +144,9 @@
                 homeDirectory = "/home/tim";
                 # All other settings come from wsl-home-base.nix
               };
+
+              # Enable tmux auto-reload on home-manager generation change
+              programs.tmux.autoReload.enable = true;
 
               # Secrets management (HOST-SPECIFIC)
               secretsManagement = {
@@ -201,6 +214,7 @@
             ../home/common/wsl-home-base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
+            self.modules.homeManager.tmux # Dendritic pattern tmux module
             {
               homeBase = {
                 username = "tim";
@@ -210,6 +224,9 @@
               home.packages = with pkgs; [
                 wslu
               ];
+
+              # Enable tmux auto-reload on home-manager generation change
+              programs.tmux.autoReload.enable = true;
 
               # Secrets management
               secretsManagement = {
@@ -296,6 +313,7 @@
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
+            self.modules.homeManager.tmux # Dendritic pattern tmux module
             {
               homeBase = {
                 username = "tim";
@@ -304,6 +322,9 @@
                   EDITOR = "nvim";
                 };
               };
+
+              # Enable tmux auto-reload on home-manager generation change
+              programs.tmux.autoReload.enable = true;
 
               # Secrets management
               secretsManagement = {

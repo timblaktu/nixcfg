@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+
+# Tmux Session Test Data Generator
+# Creates valid tmux-resurrect files for testing purposes
+
+set -euo pipefail
+
+# Default configuration
+DEFAULT_WINDOW_COUNT=3
+DEFAULT_PANES_PER_WINDOW=2
+DEFAULT_OUTPUT_DIR="./test-resurrect-data"
+
+# Predefined test data templates
+declare -a SAMPLE_SESSIONS=(
+  "main:5:3"
+  "dev:4:2" 
+  "monitoring:2:4"
+  "ssh-tunnels:3:1"
+  "logs:1:6"
+)
+
+declare -a SAMPLE_PATHS=(
+  "/home/user"
+  "/home/user/projects/myapp"
+  "/home/user/src/nixcfg"
+  "/tmp"
+  "/var/log"
+  "/usr/local/bin"
+  "/home/user/Documents"
+  "/opt/project"
+)
+
+declare -a SAMPLE_COMMANDS=(
+  "bash"
+  "zsh"
+  "vim"
+  "nvim file.txt"
+  "npm run dev"
+  "python script.py"
+  "htop"
+  "tail -f app.log"
+  "ssh server"
+  "tmux"
+  "docker ps"
+  "git status"
+)
+
+declare -a WINDOW_NAMES=(
+  "editor"
+  "terminal"
+  "server"
+  "logs"
+  "monitor"
+  "ssh"
+  "build"
+  "test"
+  "docs"
+  "admin"
+)
+
+usage() {
+  cat << 'EOF'
+Usage: tmux-test-data-generator [OPTIONS]
+
+Generate valid tmux-resurrect files for testing purposes.
+
+OPTIONS:
+  -o, --output-dir DIR      Output directory (default: ./test-resurrect-data)
+  -c, --count N            Number of session files to generate (default: 5)
+  -s, --session NAME:W:P   Create specific session (name:windows:panes)
+  -t, --timestamp STAMP    Use specific timestamp (YYYYMMDDTHHMMSS)
+  -a, --active NAME        Mark session as active (creates 'last' symlink)
+  -v, --verbose            Verbose output
+  -h, --help               Show this help
+
+EXAMPLES:
+  # Generate 5 sample sessions
+  tmux-test-data-generator
+
+  # Generate 10 sessions in custom directory
+  tmux-test-data-generator -o /tmp/test-data -c 10
+
+  # Create specific session configuration
+  tmux-test-data-generator -s "development:4:3" -a development
+
+  # Generate with custom timestamp
+  tmux-test-data-generator -t 20250124T143022 -s "test:2:2"
+
+OUTPUT FORMAT:
+  Files follow tmux-resurrect naming: tmux_resurrect_YYYYMMDDTHHMMSS.txt
+  Content follows standard tmux-resurrect tab-delimited format.
+EOF
+}
+
+# Generate timestamp in tmux-resurrect format
+generate_timestamp() {
+  local base_time="${1:-}"
+
+  if [[ -n "$base_time" ]]; then
+    # Use provided timestamp
+    echo "$base_time"
+  else
+    # Generate based on current time with offset
+    date -d "+${RANDOM}%3600 seconds" +"%Y%m%dT%H%M%S"
+  fi
+}
+
+# Create a single tmux-resurrect file
+create_session_file() {
+  local output_file="$1"
+  local session_name="$2"
+  local window_count="${3:-$DEFAULT_WINDOW_COUNT}"
+  local panes_per_window="${4:-$DEFAULT_PANES_PER_WINDOW}"
+  local verbose="${5:-false}"
+
+  [[ "$verbose" == "true" ]] && echo "Creating session '$session_name' with $window_count windows, $panes_per_window panes each"
+
+  # Clear/create output file
+  true > "$output_file"
+
+  # Generate window and pane data
+  for ((w=1; w<=window_count; w++)); do
+    # Select window name
+    local window_name="${WINDOW_NAMES[$((w % ${#WINDOW_NAMES[@]}))]}"
+    [[ $w -gt 1 ]] && window_name="${window_name}${w}"
+  
+    # Window is active if it's the first one
+    local window_active=$((w == 1 ? 1 : 0))
+    local window_flags=""
+  
+    # Add some variety to window flags
+    case $((w % 4)) in
+      0) window_flags=":*Z" ;;  # Active and zoomed
+      1) window_flags=":*" ;;   # Active
+      2) window_flags=":-" ;;   # No special flags
+      3) window_flags="" ;;     # Empty flags
+    esac
+  
+    # Generate window layout (simplified)
+    local layout="$((RANDOM % 9999)),$((RANDOM % 200 + 50))x$((RANDOM % 100 + 20)),0,0"
+  
+    # Add window line
+    printf "window\t%s\t%d\t:%s\t%d\t%s\t%s\ton\n" \
+      "$session_name" "$w" "$window_name" "$window_active" "$window_flags" "$layout" >> "$output_file"
+  
+    # Generate panes for this window
+    for ((p=0; p<panes_per_window; p++)); do
+      # First pane is active in active window
+      local pane_active=$((window_active == 1 && p == 0 ? 1 : 0))
+    
+      # Select random path and command
+      local path="${SAMPLE_PATHS[$((RANDOM % ${#SAMPLE_PATHS[@]}))]}"
+      local command="${SAMPLE_COMMANDS[$((RANDOM % ${#SAMPLE_COMMANDS[@]}))]}"
+      local full_command="$command"
+    
+      # Add variety to commands
+      if [[ "$command" == "bash" || "$command" == "zsh" ]]; then
+        full_command=""  # Empty full command for shells
+      fi
+    
+      # Generate unique pane ID
+      # pane_id=$((10000 + w * 100 + p))  # Currently unused but may be needed for future features
+    
+      # Add pane line (11 fields as per spec)
+      printf "pane\t%s\t%d\t%d\t%s\t%d\ttitle\t:%s\t%d\t%s\t:%s\n" \
+        "$session_name" "$w" "$window_active" "$window_flags" "$p" \
+        "$path" "$pane_active" "$command" "$full_command" >> "$output_file"
+    done
+  done
+
+  # Add state line (current and last session)
+  printf "state\t%s\t%s\n" "$session_name" "$session_name" >> "$output_file"
+
+  [[ "$verbose" == "true" ]] && echo "✅ Created $output_file"
+}
+
+# Create multiple session files from templates
+create_sample_sessions() {
+  local output_dir="$1"
+  local count="$2"
+  local verbose="$3"
+
+  mkdir -p "$output_dir"
+
+  for ((i=0; i<count; i++)); do
+    # Use sample sessions or generate random ones
+    if [[ $i -lt ${#SAMPLE_SESSIONS[@]} ]]; then
+      local session_spec="${SAMPLE_SESSIONS[$i]}"
+      IFS=':' read -r name windows panes <<< "$session_spec"
+    else
+      # Generate random session
+      local name="session$((i + 1))"
+      local windows=$((RANDOM % 5 + 1))  # 1-5 windows
+      local panes=$((RANDOM % 4 + 1))     # 1-4 panes per window
+    fi
+  
+    # Generate unique timestamp
+    local timestamp
+    timestamp=$(generate_timestamp)
+    local filename="$output_dir/tmux_resurrect_${timestamp}.txt"
+  
+    create_session_file "$filename" "$name" "$windows" "$panes" "$verbose"
+  done
+}
+
+# Main function
+main() {
+  local output_dir="$DEFAULT_OUTPUT_DIR"
+  local count=5
+  local verbose=false
+  local custom_session=""
+  local custom_timestamp=""
+  local active_session=""
+
+  # Parse command line arguments
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -o|--output-dir)
+        output_dir="$2"
+        shift 2
+        ;;
+      -c|--count)
+        count="$2"
+        shift 2
+        ;;
+      -s|--session)
+        custom_session="$2"
+        shift 2
+        ;;
+      -t|--timestamp)
+        custom_timestamp="$2"
+        shift 2
+        ;;
+      -a|--active)
+        active_session="$2"
+        shift 2
+        ;;
+      -v|--verbose)
+        verbose=true
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  [[ "$verbose" == "true" ]] && echo "Generating tmux-resurrect test data in $output_dir"
+
+  # Create output directory
+  mkdir -p "$output_dir"
+
+  # Handle custom session creation
+  if [[ -n "$custom_session" ]]; then
+    IFS=':' read -r name windows panes <<< "$custom_session"
+  
+    local timestamp="${custom_timestamp:-$(generate_timestamp)}"
+    local filename="$output_dir/tmux_resurrect_${timestamp}.txt"
+  
+    create_session_file "$filename" "$name" "$windows" "$panes" "$verbose"
+  
+    # Create 'last' symlink if this should be active
+    if [[ "$active_session" == "$name" ]]; then
+      ln -sf "$(basename "$filename")" "$output_dir/last"
+      [[ "$verbose" == "true" ]] && echo "✅ Marked $name as active session"
+    fi
+  else
+    # Generate sample sessions
+    create_sample_sessions "$output_dir" "$count" "$verbose"
+  
+    # Mark first session as active if requested
+    if [[ -n "$active_session" ]]; then
+      local active_file
+      active_file=$(find "$output_dir" -name "*.txt" | head -1)
+      if [[ -n "$active_file" ]]; then
+        ln -sf "$(basename "$active_file")" "$output_dir/last"
+        [[ "$verbose" == "true" ]] && echo "✅ Marked $(basename "$active_file") as active session"
+      fi
+    fi
+  fi
+
+  # Summary
+  local file_count
+  file_count=$(find "$output_dir" -name "tmux_resurrect_*.txt" | wc -l)
+  echo "Generated $file_count tmux-resurrect test files in $output_dir"
+
+  if [[ "$verbose" == "true" ]]; then
+    echo
+    echo "Files created:"
+    ls -la "$output_dir"/tmux_resurrect_*.txt
+  
+    if [[ -L "$output_dir/last" ]]; then
+      echo
+      echo "Active session: $(readlink "$output_dir/last")"
+    fi
+  fi
+}
+
+# Execute main function with all arguments
+main "$@"
