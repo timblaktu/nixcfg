@@ -17,6 +17,9 @@
     # flake-parts for modular flake organization
     flake-parts.url = "github:hercules-ci/flake-parts";
 
+    # import-tree for automatic module loading (dendritic pattern)
+    import-tree.url = "github:vic/import-tree";
+
     nixvim = {
       url = "github:nix-community/nixvim";
       # Use nixpkgs-unstable which has postgres-lsp and other packages
