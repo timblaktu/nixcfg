@@ -62,6 +62,10 @@
     flake-parts.lib.mkFlake { inherit inputs; } {
       # Import our modular flake structure
       imports = [
+        # Dendritic pattern infrastructure (Plan 019)
+        ./modules/flake-parts/modules.nix
+
+        # Existing flake-modules (to be migrated later)
         ./flake-modules/systems.nix
         ./flake-modules/overlays.nix
         ./flake-modules/packages.nix
