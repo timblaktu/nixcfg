@@ -87,8 +87,10 @@ in
   # === Home Manager Module ===
   flake.modules.homeManager."tim@potato" = { config, lib, pkgs, ... }: {
     imports = [
+      # Dendritic system type - provides home-minimal layer (required first)
+      inputs.self.modules.homeManager.home-minimal
       # Legacy base module (will be removed in Phase 6)
-      # Provides: disabledModules, homeBase options, detailed program configs
+      # Provides: disabledModules, detailed program configs (no longer provides username/homeDirectory)
       ../../../home/modules/base.nix
       # Dendritic feature modules
       inputs.self.modules.homeManager.shell
@@ -102,12 +104,14 @@ in
       # Note: No wsl-home module - this is bare-metal NixOS, not WSL
     ];
 
-    # Legacy homeBase options (required by base.nix)
-    homeBase = {
+    # Dendritic home-minimal options (required by system types)
+    homeMinimal = {
       inherit username homeDirectory;
-      environmentVariables = {
-        EDITOR = "nvim";
-      };
+    };
+
+    # Legacy homeBase options for additional features
+    homeBase.environmentVariables = {
+      EDITOR = "nvim";
     };
 
     # Enable tmux auto-reload on home-manager generation change

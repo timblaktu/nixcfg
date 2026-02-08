@@ -7,7 +7,7 @@ let
   cfg = config.homeBase;
 
   # Import shared Claude Code wrapper library
-  claudeLib = import ../modules/claude-code/lib.nix { inherit lib pkgs config; };
+  claudeLib = import ../claude-code/lib.nix { inherit lib pkgs config; };
 in
 {
   config = mkIf cfg.enableDevelopment {

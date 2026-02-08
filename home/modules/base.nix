@@ -69,16 +69,22 @@ in
   ];
 
   options.homeBase = {
-    # User information
+    # User information - DEPRECATED: Use homeMinimal.username and homeMinimal.homeDirectory
+    # These options are now read-only aliases for backward compatibility.
+    # New configurations should use homeMinimal.* directly.
     username = mkOption {
       type = types.str;
-      description = "Username for Home Manager (required - must be explicitly set)";
+      default = config.homeMinimal.username;
+      defaultText = "config.homeMinimal.username";
+      description = "DEPRECATED: Use homeMinimal.username. Username for Home Manager.";
       example = "myuser";
     };
 
     homeDirectory = mkOption {
       type = types.str;
-      description = "Home directory path (required - must be explicitly set)";
+      default = config.homeMinimal.homeDirectory;
+      defaultText = "config.homeMinimal.homeDirectory";
+      description = "DEPRECATED: Use homeMinimal.homeDirectory. Home directory path.";
       example = "/home/myuser";
     };
 
@@ -271,23 +277,9 @@ in
   config = mkMerge [
     # Always apply these configs
     {
-      # Assertions for required options
-      assertions = [
-        {
-          assertion = cfg.username != "";
-          message = ''
-            homeBase.username must be explicitly set.
-            Example: homeBase.username = "myuser";
-          '';
-        }
-        {
-          assertion = cfg.homeDirectory != "";
-          message = ''
-            homeBase.homeDirectory must be explicitly set.
-            Example: homeBase.homeDirectory = "/home/myuser";
-          '';
-        }
-      ];
+      # Assertions - now handled by homeMinimal module
+      # The homeMinimal module validates username and homeDirectory
+      assertions = [];
 
       # Home Manager needs information about you and the paths it should manage
       home = {
@@ -326,14 +318,8 @@ in
         # '';
       };
 
-      nix = {
-        package = lib.mkDefault pkgs.nix;
-        settings = {
-          max-jobs = 2;
-          warn-dirty = false;
-          experimental-features = [ "nix-command" "flakes" ];
-        };
-      };
+      # Nix configuration moved to dendritic home-minimal module
+      # (modules/system/types/1-minimal/minimal.nix)
 
       # Configure shell aliases
       programs.bash.shellAliases = lib.mkDefault (cfg.shellAliases //

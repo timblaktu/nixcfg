@@ -77,8 +77,10 @@ in
   # === Home Manager Module ===
   flake.modules.homeManager."tim@thinky-nixos" = { config, lib, pkgs, ... }: {
     imports = [
+      # Dendritic system type - provides home-minimal layer (required first)
+      inputs.self.modules.homeManager.home-minimal
       # Legacy base module (will be removed in Phase 6)
-      # Provides: disabledModules, homeBase options, detailed program configs
+      # Provides: disabledModules, detailed program configs (no longer provides username/homeDirectory)
       ../../../home/modules/base.nix
       # Dendritic feature modules
       inputs.self.modules.homeManager.shell
@@ -93,8 +95,8 @@ in
       inputs.self.modules.homeManager.development-tools
     ];
 
-    # Legacy homeBase options (required by base.nix)
-    homeBase = {
+    # Dendritic home-minimal options (required by system types)
+    homeMinimal = {
       inherit username homeDirectory;
     };
 

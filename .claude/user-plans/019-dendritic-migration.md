@@ -317,7 +317,7 @@ in
 | Sub-task | Description | Status |
 |----------|-------------|--------|
 | 6.4.1 | Move `disabledModules` to dendritic modules | TASK:COMPLETE (2026-02-08) |
-| 6.4.2 | Replace `homeBase` options with dendritic system types | TASK:PENDING |
+| 6.4.2 | Replace `homeBase` options with dendritic system types | TASK:COMPLETE (2026-02-08) |
 | 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | TASK:PENDING |
 | 6.4.4 | Move opencode CONFIG to host files | TASK:PENDING |
 | 6.4.5 | Create dendritic yazi module | TASK:PENDING |
