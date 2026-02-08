@@ -56,9 +56,9 @@ nixcfg/
 │   ├── system/                       # System-level configuration
 │   │   ├── types/                   # Composition layers
 │   │   │   ├── 1-minimal [NDnd]/    # Base: nix settings, state version
-│   │   │   ├── 2-default [NDnd]/    # + home-manager, secrets
-│   │   │   ├── 3-cli [NDnd]/        # + ssh, tools
-│   │   │   └── 4-desktop [NDnd]/    # + printing, DE
+│   │   │   ├── 2-default [NDnd]/    # + user, locale, SSH client (HM)
+│   │   │   ├── 3-cli [NDnd]/        # + SSH daemon, dev tools
+│   │   │   └── 4-desktop [NDnd]/    # + printing, DE, GUI
 │   │   └── settings/
 │   │       ├── locale [NDnd]/       # Timezone, keyboard
 │   │       ├── networking [N]/      # NetworkManager, firewall
@@ -246,7 +246,7 @@ in
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
 | 3.1 | git [NDnd] | High | PENDING |
-| 3.2 | ssh [NDnd] | High | PENDING |
+| 3.2 | ssh [NDnd] | High | PARTIAL (integrated into system types) |
 | 3.3 | tmux [NDnd] | High | PENDING |
 | 3.4 | neovim [NDnd] (70KB!) | High | PENDING |
 | 3.5 | wsl [N] system settings | High | PENDING |
@@ -328,6 +328,25 @@ in
 - Self-documenting structure
 - Clear at-a-glance platform applicability
 - Matches dendritic community convention
+
+### 6. Layer Boundary Definitions (2026-02-07)
+**Decision**: Clear separation of concerns per layer
+
+| Layer | NixOS Content | Home Manager Content |
+|-------|---------------|---------------------|
+| **1-minimal** | Nix settings, GC, state version | HM basics, targets.genericLinux |
+| **2-default** | User creation, locale, console | SSH client, fonts, secrets tools |
+| **3-cli** | SSH daemon, dev tools, containers | Yazi, CLI packages, parallel |
+| **4-desktop** | DE, audio, bluetooth, printing | GUI packages only |
+
+**Key Decisions**:
+- SSH daemon in cli (not default): containers/CI/WSL don't need it
+- SSH client in home-default: symmetry with system layers
+- Power tools (tmux, ripgrep, fd) in cli, not default
+- Yazi in cli (TUI, not GUI)
+- Container tools in cli (CLI, not desktop)
+
+**Principle**: "Does this require a display server?" determines cli vs desktop
 
 ## Risk Assessment
 
