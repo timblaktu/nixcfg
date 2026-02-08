@@ -147,20 +147,20 @@
           '';
         };
 
-        module-wsl-common-integration = mkModuleTest {
-          name = "module-wsl-common-integration";
-          description = "Testing WSL common module integration";
+        module-wsl-settings-integration = mkModuleTest {
+          name = "module-wsl-settings-integration";
+          description = "Testing WSL settings module integration";
           hostName = "thinky-nixos";
           attributes = {
-            enable = if self.nixosConfigurations.thinky-nixos.config.wslCommon.enable then "1" else "0";
-            hostname = self.nixosConfigurations.thinky-nixos.config.wslCommon.hostname;
-            sshPort = toString self.nixosConfigurations.thinky-nixos.config.wslCommon.sshPort;
+            enable = if self.nixosConfigurations.thinky-nixos.config.wsl.enable then "1" else "0";
+            hostname = self.nixosConfigurations.thinky-nixos.config.wsl-settings.hostname;
+            sshPort = toString self.nixosConfigurations.thinky-nixos.config.wsl-settings.sshPort;
           };
           checks = ''
-            [[ "$enable" == "1" ]] || (echo "❌ WSL common not enabled" && exit 1)
+            [[ "$enable" == "1" ]] || (echo "❌ WSL not enabled" && exit 1)
             [[ "$hostname" == "thinky-nixos" ]] || (echo "❌ Hostname mismatch" && exit 1)
             [[ "$sshPort" == "2223" ]] || (echo "❌ SSH port mismatch" && exit 1)
-            echo "WSL Common enabled: $enable"
+            echo "WSL enabled: $enable"
             echo "Hostname: $hostname"
             echo "SSH Port: $sshPort"
           '';
@@ -260,17 +260,17 @@
             # Verify both modules' attributes are accessible and consistent
             userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
             wslUser = self.nixosConfigurations.thinky-nixos.config.wsl.defaultUser;
-            sshPort = toString self.nixosConfigurations.thinky-nixos.config.wslCommon.sshPort;
+            sshPort = toString self.nixosConfigurations.thinky-nixos.config.wsl-settings.sshPort;
             opensshPort = toString (builtins.head self.nixosConfigurations.thinky-nixos.config.services.openssh.ports);
           } ''
           echo "Testing cross-module integration between base and WSL modules..."
-        
+
           # Verify user consistency across modules
           [[ "$userName" == "$wslUser" ]] || (echo "❌ User mismatch between base and WSL" && exit 1)
           echo "✅ User consistency: $userName matches WSL default user"
-        
+
           # Verify SSH port consistency
-          [[ "$sshPort" == "$opensshPort" ]] || (echo "❌ SSH port mismatch between wslCommon and openssh" && exit 1)
+          [[ "$sshPort" == "$opensshPort" ]] || (echo "❌ SSH port mismatch between wsl-settings and openssh" && exit 1)
           echo "✅ SSH port consistency: $sshPort matches openssh configuration"
         
           echo "✅ Cross-module integration test passed"
@@ -285,19 +285,19 @@
               maintainers = [ ];
               timeout = 30;
             };
-            # Check if SOPS is enabled and user matches
-            sopsEnabled = if self.nixosConfigurations.thinky-nixos.config.sopsNix.enable then "1" else "0";
+            # Check if SOPS is enabled via wsl-settings and user matches
+            sopsEnabled = if self.nixosConfigurations.thinky-nixos.config.wsl-settings.sops.enable then "1" else "0";
             userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
             userExists = if (builtins.hasAttr "tim" self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
           } ''
           echo "Testing SOPS-NiX integration with base module..."
-        
+
           [[ "$sopsEnabled" == "1" ]] || (echo "❌ SOPS-NiX not enabled" && exit 1)
           echo "✅ SOPS-NiX is enabled"
-        
+
           [[ "$userExists" == "1" ]] || (echo "❌ User tim not configured" && exit 1)
           echo "✅ User $userName exists in system configuration"
-        
+
           echo "✅ SOPS-NiX and base module integration test passed"
           touch $out
         '';

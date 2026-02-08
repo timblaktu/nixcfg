@@ -7,28 +7,26 @@ in
 {
   imports = [
     ./hardware-config.nix
-    ../common/wsl-base.nix # Common WSL base configuration
-    ../../modules/nixos/wsl-cuda.nix # HOST-SPECIFIC: CUDA support
+    # Dendritic system type - provides system-cli layer (includes default and minimal)
+    inputs.self.modules.nixos.system-cli
+    # Dendritic WSL configuration
+    inputs.self.modules.nixos.wsl
   ];
 
   # System default layer configuration (required by system types)
   systemDefault.userName = "tim";
 
-  # Host-specific WSL common configuration
-  wslCommon = {
+  # WSL settings (dendritic module)
+  # GPU: NVIDIA RTX 2000 Ada (8GB VRAM) via WSL2 passthrough
+  wsl-settings = {
     hostname = "pa161878-nixos";
     defaultUser = "tim";
     sshPort = 2223;
     userGroups = [ "wheel" "dialout" ];
-    authorizedKeys = [ sshKeys.timblaktu ];
+    sshAuthorizedKeys = [ sshKeys.timblaktu ];
+    # Enable CUDA support for GPU passthrough
+    cuda.enable = true;
   };
-
-  # SSH service configuration
-  services.openssh.ports = [ 2223 ];
-
-  # WSL CUDA support - enables GPU passthrough for ML workloads
-  # GPU: NVIDIA RTX 2000 Ada (8GB VRAM) via WSL2 passthrough
-  wslCuda.enable = true;
 
   # User environment managed by standalone Home Manager
   # Deploy with: home-manager switch --flake '.#tim@pa161878-nixos'
