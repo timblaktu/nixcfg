@@ -195,7 +195,7 @@ in
 | 0.1 | Add import-tree to flake inputs | PENDING |
 | 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | COMPLETE |
 | 0.3 | Create `modules/flake-parts/lib.nix` (mkNixos, mkHomeManager helpers) | COMPLETE |
-| 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | PENDING |
+| 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | COMPLETE |
 | 0.5 | Create `modules/flake-parts/systems.nix` (supported architectures) | PENDING |
 | 0.6 | Verify `nix flake check` passes with new structure | PENDING |
 

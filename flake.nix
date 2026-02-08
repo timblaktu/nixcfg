@@ -65,6 +65,7 @@
         # Dendritic pattern infrastructure (Plan 019)
         ./modules/flake-parts/modules.nix
         ./modules/flake-parts/lib.nix
+        ./modules/meta/options.nix
 
         # Existing flake-modules (to be migrated later)
         ./flake-modules/systems.nix
