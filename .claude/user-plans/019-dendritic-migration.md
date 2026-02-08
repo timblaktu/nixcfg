@@ -272,7 +272,7 @@ in
 | 5.1 | thinky-nixos (WSL primary) | COMPLETE |
 | 5.2 | pa161878-nixos (WSL work) | COMPLETE |
 | 5.3 | thinky-ubuntu (HM only) | COMPLETE |
-| 5.4 | mbp (Intel Mac) | PENDING |
+| 5.4 | mbp (Intel Mac running NixOS) | COMPLETE |
 | 5.5 | potato (ARM SBC) | PENDING |
 | 5.6 | macbook-air (Apple Silicon) | PENDING |
 | 5.7 | nixos-wsl-minimal (template) | PENDING |
@@ -347,6 +347,27 @@ in
 - Container tools in cli (CLI, not desktop)
 
 **Principle**: "Does this require a display server?" determines cli vs desktop
+
+### 7. Darwin Architecture Support (2026-02-08)
+**Decision**: Home Manager modules are architecture-agnostic; Darwin system modules need separate implementation
+
+**Architecture Matrix**:
+| System | Architecture | Home Manager | System Modules |
+|--------|--------------|--------------|----------------|
+| mbp | x86_64-linux (NixOS) | ✅ Uses HM modules | NixOS system-cli |
+| potato | aarch64-linux | ✅ Uses HM modules | NixOS system-cli |
+| macbook-air | aarch64-darwin | ✅ Uses HM modules | Needs darwin modules |
+| Future M4 Mac | aarch64-darwin | ✅ Uses HM modules | Needs darwin modules |
+| Future Intel Mac (darwin) | x86_64-darwin | ✅ Uses HM modules | Needs darwin modules |
+
+**Key Insights**:
+- Home Manager modules (shell, git, tmux, neovim, claude-code, etc.) work on all architectures
+- `homeDirectory` difference handled by `homeBase` option: `/home/tim` (Linux) vs `/Users/tim` (Darwin)
+- Darwin system modules (`flake.modules.darwin.*`) are empty - need implementation for Task 5.6
+- No blockers for adding Apple Silicon hosts; existing HM modules work unchanged
+- Darwin-specific features (Touch ID, Homebrew, system.defaults) go in darwin system modules
+
+**Note**: mbp runs NixOS on Intel Mac hardware (not nix-darwin), so it follows NixOS patterns.
 
 ## Risk Assessment
 

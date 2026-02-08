@@ -3,10 +3,14 @@
 { inputs, self, withSystem, ... }: {
   flake = {
     nixosConfigurations = {
+      # mbp: Dendritic pattern - module defined in modules/hosts/mbp [N]/
       mbp = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
-          modules = [ ../hosts/mbp ];
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.mbp
+          ];
           specialArgs = {
             inherit inputs;
             inherit (inputs) nixpkgs-stable mcp-servers-nix;

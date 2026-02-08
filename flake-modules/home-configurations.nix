@@ -14,54 +14,18 @@
     # - Error isolation between system and user environments
     # - User autonomy (no root required for user changes)
     homeConfigurations = {
+      # tim@mbp: Dendritic pattern - module defined in modules/hosts/mbp [N]/
       "tim@mbp" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            ../home/modules/base.nix
-            self.modules.homeManager.shell # Dendritic pattern shell module
-            self.modules.homeManager.git # Dendritic pattern git module
-            self.modules.homeManager.tmux # Dendritic pattern tmux module
-            self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
-            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
-            self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
-            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
-            {
-              homeBase = {
-                username = "tim";
-                homeDirectory = "/home/tim";
-              };
-
-              # Enable tmux auto-reload on home-manager generation change
-              programs.tmux.autoReload.enable = true;
-
-              # Secrets management
-              secretsManagement = {
-                enable = true;
-                rbw.email = "timblaktu@gmail.com";
-              };
-
-              # GitHub authentication
-              gitAuth.github = {
-                enable = true;
-                mode = "bitwarden";
-                bitwarden = {
-                  item = "github.com";
-                  field = "PAT-timtam2026";
-                };
-                cli.tokenOverrides.pr = {
-                  item = "github.com";
-                  field = "PAT-pubclassic";
-                };
-              };
-            }
-            # ../home/migration/darwin-home-files.nix # macOS-specific unified files configuration - DISABLED after module-based migration
+            self.modules.homeManager."tim@mbp"
           ];
           extraSpecialArgs = {
             inherit inputs;
             inherit (inputs) nixpkgs-stable;
-            wslHostname = "mbp";
+            hostname = "mbp";
           };
         }
       );
