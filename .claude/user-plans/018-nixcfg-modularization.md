@@ -28,10 +28,10 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | 0.5 | Design sign-off | `TASK:PENDING` | |
 | — | **SESSION BOUNDARY** | | |
 | **0.6** | **Internal Cleanup (Path B)** | | |
-| 0.6.1 | Consolidate podman-tools.nix | `TASK:PENDING` | |
+| 0.6.1 | Consolidate podman-tools.nix | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.2 | Rename hardware-configuration.nix | `TASK:PENDING` | |
 | 0.6.3 | Unify MCP server adapters | `TASK:PENDING` | |
-| 0.6.4 | Consolidate modules/home/ directory | `TASK:PENDING` | |
+| 0.6.4 | Consolidate modules/home/ directory | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.5 | Document module boundaries | `TASK:PENDING` | |
 | 0.6.6 | Evaluate TUR wrapper consolidation | `TASK:PENDING` | |
 | — | **SESSION BOUNDARY** | | |
@@ -458,18 +458,17 @@ lib.ai-dev = {
 
 ### Task 0.6.1: Consolidate podman-tools.nix
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-07)
 
-**Problem**: Two copies exist with minor differences:
-- `home/modules/podman-tools.nix` (52 LOC)
-- `modules/home/podman-tools.nix` (57 LOC) — has extra docker alias logic
+**Problem**: Two copies existed with minor differences:
+- `home/modules/podman-tools.nix` (52 LOC) — actively imported in base.nix
+- `modules/home/podman-tools.nix` (57 LOC) — never imported (dead code)
 
-**Solution**:
-1. Merge docker alias logic into `home/modules/podman-tools.nix`
-2. Update any imports referencing `modules/home/podman-tools.nix`
-3. Delete `modules/home/podman-tools.nix`
+**Finding**: The `modules/home/` version was dead code. Its docker alias logic referenced `config.virtualisation.podman.dockerCompat` (a NixOS option) from a Home Manager context, which wouldn't work anyway.
 
-**Verification**: `nix flake check` passes
+**Resolution**: Deleted `modules/home/podman-tools.nix`. No merge needed since the file was never used.
+
+**Verification**: `nix flake check --no-build` passed
 
 ---
 
@@ -511,20 +510,23 @@ Both consume `home/modules/shared/mcp-server-defs.nix` but have separate adapter
 
 ### Task 0.6.4: Consolidate modules/home/ Directory
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-07)
 
-**Depends On**: 0.6.1 (podman-tools must be consolidated first)
+**Depends On**: 0.6.1 (completed in same session)
 
-**Problem**: Home Manager modules exist in two places:
-- `home/modules/` (primary, 21+ files)
-- `modules/home/` (2 files: `podman-tools.nix`, `custom-tool.nix`)
+**Problem**: Home Manager modules existed in two places:
+- `home/modules/` (primary, 21+ files) — actively used
+- `modules/home/` (2 files: `podman-tools.nix`, `custom-tool.nix`) — both dead code
 
-**Solution**:
-1. After 0.6.1, move remaining `modules/home/custom-tool.nix` to `home/modules/`
-2. Update all imports
-3. Delete `modules/home/` directory
+**Finding**: Both files in `modules/home/` were never imported anywhere:
+- `podman-tools.nix`: Dead duplicate (see 0.6.1)
+- `custom-tool.nix`: Example template wrapping `pkgs.hello`, never used
 
-**Verification**: `nix flake check` passes
+**Resolution**: Deleted entire `modules/home/` directory. No files needed to be moved since both were dead code.
+
+**Verification**: `nix flake check --no-build` passed
+
+**Commit**: `2ad5d0c` - "Remove dead modules/home directory"
 
 ---
 
