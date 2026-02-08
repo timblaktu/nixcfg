@@ -25,16 +25,16 @@ echo "Main branch sync complete!"
 if [ -n "$1" ]; then
     echo ""
     echo "=== Updating feature branch: $1 ==="
-    
+
     echo "Switching to feature branch: $1"
     git checkout "$1"
-    
+
     echo "Rebasing feature branch on updated main..."
     git rebase main
-    
+
     echo "Pushing updated feature branch to origin..."
     git push origin "$1" --force-with-lease
-    
+
     echo "Feature branch $1 updated!"
 fi
 

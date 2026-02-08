@@ -1,7 +1,7 @@
 # Add this to your ~/.zshrc or ~/.bashrc
 git_review() {
     local commits_back=${1:-1}
-    
+
     # Handle help argument
     if [[ "$1" == "-h" || "$1" == "--help" || "$1" == "help" ]]; then
         cat << 'EOF'
@@ -12,8 +12,8 @@ USAGE:
     git_review -h|--help|help
 
 PURPOSE:
-    Opens vimdiff for each file that changed between your current working 
-    directory and a previous commit, allowing you to selectively cherry-pick 
+    Opens vimdiff for each file that changed between your current working
+    directory and a previous commit, allowing you to selectively cherry-pick
     changes from the older version back into your current files.
 
 ARGUMENTS:
@@ -22,7 +22,7 @@ ARGUMENTS:
 
 VIMDIFF COMMANDS:
     do              Get (obtain) change from other pane to current pane
-    dp              Put change from current pane to other pane  
+    dp              Put change from current pane to other pane
     ]c              Jump to next difference
     [c              Jump to previous difference
     Ctrl+w w        Switch between panes
@@ -47,23 +47,23 @@ NOTE:
 EOF
         return 0
     fi
-    
+
     local base_commit="HEAD~$commits_back"
-    
+
     # Get list of changed files (portable method)
     local changed_files_list
     changed_files_list=$(git diff --name-only "$base_commit" HEAD)
-    
+
     if [[ -z "$changed_files_list" ]]; then
         echo "No files changed."
         return 0
     fi
-    
+
     # Count files
     local file_count
     file_count=$(echo "$changed_files_list" | wc -l)
     echo "Changed files: $file_count"
-    
+
     # Loop through each file
     while IFS= read -r file; do
         if [[ -n "$file" ]] && git show "$base_commit:$file" &>/dev/null && [[ -f "$file" ]]; then

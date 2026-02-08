@@ -21,6 +21,7 @@
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
+            self.modules.homeManager.git # Dendritic pattern git module
             {
               homeBase = {
                 username = "tim";
@@ -64,6 +65,7 @@
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
+            self.modules.homeManager.git # Dendritic pattern git module
             {
               homeBase = {
                 username = "tim";
@@ -124,6 +126,7 @@
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
+            self.modules.homeManager.git # Dendritic pattern git module
             ../home/common/wsl-home-base.nix # Common WSL user configuration
             {
               homeBase = {
@@ -197,6 +200,7 @@
             ../home/modules/base.nix
             ../home/common/wsl-home-base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
+            self.modules.homeManager.git # Dendritic pattern git module
             {
               homeBase = {
                 username = "tim";
@@ -291,6 +295,7 @@
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
+            self.modules.homeManager.git # Dendritic pattern git module
             {
               homeBase = {
                 username = "tim";

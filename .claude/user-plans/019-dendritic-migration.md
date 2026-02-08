@@ -245,7 +245,7 @@ in
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 3.1 | git [NDnd] | High | PENDING |
+| 3.1 | git [NDnd] | High | COMPLETE |
 | 3.2 | ssh [NDnd] | High | PARTIAL (integrated into system types) |
 | 3.3 | tmux [NDnd] | High | PENDING |
 | 3.4 | neovim [NDnd] (70KB!) | High | PENDING |
