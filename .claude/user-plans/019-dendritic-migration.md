@@ -192,7 +192,7 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 0.1 | Add import-tree to flake inputs | PENDING |
+| 0.1 | Add import-tree to flake inputs | COMPLETE |
 | 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | COMPLETE |
 | 0.3 | Create `modules/flake-parts/lib.nix` (mkNixos, mkHomeManager helpers) | COMPLETE |
 | 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | COMPLETE |

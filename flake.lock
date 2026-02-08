@@ -171,6 +171,21 @@
         "type": "github"
       }
     },
+    "import-tree": {
+      "locked": {
+        "lastModified": 1763762820,
+        "narHash": "sha256-ZvYKbFib3AEwiNMLsejb/CWs/OL/srFQ8AogkebEPF0=",
+        "owner": "vic",
+        "repo": "import-tree",
+        "rev": "3c23749d8013ec6daa1d7255057590e9ca726646",
+        "type": "github"
+      },
+      "original": {
+        "owner": "vic",
+        "repo": "import-tree",
+        "type": "github"
+      }
+    },
     "nix-writers": {
       "locked": {
         "lastModified": 1755636630,
@@ -371,6 +386,7 @@
         "flake-utils": "flake-utils",
         "home-manager": "home-manager",
         "home-manager-wsl": "home-manager-wsl",
+        "import-tree": "import-tree",
         "nix-writers": "nix-writers",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_2",

@@ -56,19 +56,24 @@
 
     # Documentation tooling
     drawio-svg-sync.url = "github:timblaktu/drawio-svg-sync";
+
+    # Dendritic pattern - auto-import all modules from a directory tree
+    import-tree.url = "github:vic/import-tree";
   };
 
-  outputs = inputs@{ flake-parts, ... }:
+  outputs = inputs@{ flake-parts, import-tree, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       # Import our modular flake structure
       imports = [
-        # Dendritic pattern infrastructure (Plan 019)
-        ./modules/flake-parts/modules.nix
-        ./modules/flake-parts/lib.nix
-        ./modules/flake-parts/systems.nix
-        ./modules/meta/options.nix
+        # Dendritic pattern: auto-import flake-parts modules
+        # Only import-tree the directories containing flake-parts modules
+        # (Legacy NixOS modules in modules/nixos/ are NOT flake-parts modules)
+        (import-tree [
+          ./modules/flake-parts
+          ./modules/meta
+        ])
 
-        # Existing flake-modules (to be migrated later)
+        # Existing flake-modules (to be migrated in Phase 6)
         ./flake-modules/systems.nix
         ./flake-modules/overlays.nix
         ./flake-modules/packages.nix
