@@ -271,7 +271,7 @@ in
 |------|-------------|--------|
 | 5.1 | thinky-nixos (WSL primary) | COMPLETE |
 | 5.2 | pa161878-nixos (WSL work) | COMPLETE |
-| 5.3 | thinky-ubuntu (HM only) | PENDING |
+| 5.3 | thinky-ubuntu (HM only) | COMPLETE |
 | 5.4 | mbp (Intel Mac) | PENDING |
 | 5.5 | potato (ARM SBC) | PENDING |
 | 5.6 | macbook-air (Apple Silicon) | PENDING |

@@ -1,0 +1,95 @@
+# modules/hosts/thinky-ubuntu [nd]/thinky-ubuntu.nix
+# Dendritic host composition for thinky-ubuntu (vanilla WSL Ubuntu with Home Manager only)
+#
+# This module defines only the Home Manager configuration (no NixOS)
+# following the dendritic pattern. Unlike NixOS-WSL hosts, this is
+# for a vanilla Ubuntu WSL instance with just Nix/Home Manager installed.
+#
+# Deploy HM: home-manager switch --flake '.#tim@thinky-ubuntu'
+{ config, lib, inputs, ... }:
+let
+  # Common user settings
+  username = "tim";
+  homeDirectory = "/home/${username}";
+in
+{
+  # === Home Manager Module ===
+  # Note: No NixOS module for this host - it's vanilla Ubuntu WSL
+  flake.modules.homeManager."tim@thinky-ubuntu" = { config, lib, pkgs, ... }: {
+    imports = [
+      # Legacy base module (will be removed in Phase 6)
+      # Provides: disabledModules, homeBase options, detailed program configs
+      ../../../home/modules/base.nix
+      # Dendritic feature modules
+      inputs.self.modules.homeManager.shell
+      inputs.self.modules.homeManager.git
+      inputs.self.modules.homeManager.tmux
+      inputs.self.modules.homeManager.neovim
+      inputs.self.modules.homeManager.wsl-home
+      inputs.self.modules.homeManager.claude-code
+      # opencode: imported via base.nix (home/modules/opencode.nix) - not dendritic yet
+      inputs.self.modules.homeManager.secrets-management
+      inputs.self.modules.homeManager.github-auth
+      inputs.self.modules.homeManager.development-tools
+    ];
+
+    # Legacy homeBase options (required by base.nix)
+    homeBase = {
+      inherit username homeDirectory;
+    };
+
+    # WSL home settings (dendritic module)
+    wsl-home-settings = {
+      distroName = "ubuntu";  # vanilla Ubuntu, not NixOS
+    };
+
+    # Enable tmux auto-reload on home-manager generation change
+    programs.tmux.autoReload.enable = true;
+
+    # Secrets management (dendritic module)
+    secretsManagement = {
+      enable = true;
+      rbw.email = "timblaktu@gmail.com";
+    };
+
+    # GitHub authentication (dendritic module)
+    gitAuth.github = {
+      enable = true;
+      mode = "bitwarden";
+      bitwarden = {
+        item = "github.com";
+        field = "PAT-timtam2026";
+      };
+      cli.tokenOverrides.pr = {
+        item = "github.com";
+        field = "PAT-pubclassic";
+      };
+    };
+
+    # HOST-SPECIFIC: Windows integration shell aliases
+    # Vanilla Ubuntu WSL uses .exe suffixes for Windows binaries
+    programs.bash.shellAliases = {
+      explorer = "explorer.exe .";
+      code = "code.exe";
+      code-insiders = "code-insiders.exe";
+    };
+
+    programs.zsh.shellAliases = {
+      explorer = "explorer.exe .";
+      code = "code.exe";
+      code-insiders = "code-insiders.exe";
+    };
+
+    # HOST-SPECIFIC: Environment variables
+    home.sessionVariables = {
+      WSL_DISTRO = lib.mkForce "Ubuntu";
+      HOSTNAME = "thinky-ubuntu";
+    };
+  };
+
+  # === Configuration Registration ===
+  # Note: Registration is done in flake-modules/home-configurations.nix
+  # The host module only defines flake.modules.homeManager.* content.
+  # This avoids circular dependencies that occur when trying to both define
+  # and register configurations in the same module.
+}
