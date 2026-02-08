@@ -319,7 +319,7 @@ in
 | 6.4.1 | Move `disabledModules` to dendritic modules | TASK:COMPLETE (2026-02-08) |
 | 6.4.2 | Replace `homeBase` options with dendritic system types | TASK:COMPLETE (2026-02-08) |
 | 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | TASK:COMPLETE (2026-02-08) |
-| 6.4.4 | Move opencode CONFIG to host files | TASK:PENDING |
+| 6.4.4 | Move opencode CONFIG to host files | TASK:COMPLETE (2026-02-08) |
 | 6.4.5 | Create dendritic yazi module | TASK:PENDING |
 | 6.4.6 | Migrate legacy-common/environment.nix | TASK:PENDING |
 | 6.4.7 | Migrate legacy-common/aliases.nix | TASK:PENDING |
@@ -437,11 +437,28 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 **Goal**: Each host defines its own opencode accounts inline.
 
-**Current state**: Config is in `home/modules/opencode.nix` (imported by base.nix).
+**Implementation** (2026-02-08): Used DRY approach with lib presets (parallel to claude-code).
 
-**Files to modify**: Same hosts as 6.4.3, add `programs.opencode` blocks.
+**What was done**:
+1. Added `flake.lib.openCode` presets to `modules/flake-parts/lib.nix`:
+   - `baseConfig` - enable, defaultModel, provider (anthropic), permissions
+   - `personalAccounts` - max + pro accounts
+   - `workAccount` - work (Code-Companion proxy) for work machines only
+   - `workProvider` - codecompanion provider config with qwen-a3b model
+   - `defaultMcpServers`, `defaultCommands`
 
-**Validation**: `nix flake check --no-build`
+2. Updated all 6 host files to use presets (~6 lines each instead of ~120):
+   - Personal hosts: `accounts = inputs.self.lib.openCode.personalAccounts`
+   - Work host (pa161878-nixos): `accounts = personalAccounts // workAccount`, `provider = baseConfig.provider // workProvider`
+
+3. Removed ~120 LOC from `home/modules/base.nix` (config block + import)
+
+**Files modified**:
+- `modules/flake-parts/lib.nix` - Added openCode presets
+- `modules/hosts/*/` - All 6 host files updated
+- `home/modules/base.nix` - Removed opencode config block and import
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 

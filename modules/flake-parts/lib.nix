@@ -197,6 +197,157 @@ in
     #   accounts = inputs.self.lib.claudeCode.personalAccounts
     #           // inputs.self.lib.claudeCode.workAccount;
 
+    # === OpenCode Configuration Presets ===
+    #
+    # Reusable configuration blocks for opencode. Hosts use these with
+    # attribute merging (//) to compose their config while staying DRY.
+    #
+    # Usage in host:
+    #   programs.opencode = inputs.self.lib.openCode.baseConfig // {
+    #     accounts = inputs.self.lib.openCode.personalAccounts;
+    #   };
+    #
+    # For work machines:
+    #   accounts = inputs.self.lib.openCode.personalAccounts
+    #           // inputs.self.lib.openCode.workAccount;
+
+    openCode = {
+      # Base config (enable, defaults, common settings)
+      baseConfig = {
+        enable = true;
+        defaultModel = "anthropic/claude-sonnet-4-5";
+        defaultAccount = "max";
+        # Provider configuration - API key via environment variable
+        provider = {
+          anthropic = {
+            options = {
+              apiKey = "{env:ANTHROPIC_API_KEY}";
+            };
+          };
+        };
+        permissions = {
+          Bash = "allow";
+          Read = "allow";
+          Write = "allow";
+          Edit = "allow";
+          WebFetch = "allow";
+          "mcp__context7" = "allow";
+          "mcp__mcp-nixos" = "allow";
+          "mcp__sequential-thinking" = "allow";
+          Search = "deny";
+          Find = "deny";
+          "Bash(rm -rf /*)" = "deny";
+        };
+      };
+
+      # Personal accounts (max + pro) - used on all personal machines
+      personalAccounts = {
+        max = {
+          enable = true;
+          displayName = "OpenCode Max Account";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+          };
+        };
+        pro = {
+          enable = true;
+          displayName = "OpenCode Pro Account";
+          model = "anthropic/claude-sonnet-4-5";
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+          };
+        };
+      };
+
+      # Work account (Code-Companion proxy) - only for work machines with VPN access
+      workAccount = {
+        work = {
+          enable = true;
+          displayName = "OpenCode Work Code-Companion";
+          provider = "custom";
+          model = "codecompanion/qwen-a3b";
+          # API config is in the top-level codecompanion provider block
+          # We still need the env var name for the wrapper script
+          api = {
+            apiKeyEnvVar = "ANTHROPIC_API_KEY";
+          };
+          secrets.bearerToken.bitwarden = {
+            item = "PAC Code Companion v2";
+            field = "API Key";
+          };
+          extraEnvVars = {
+            DISABLE_TELEMETRY = "1";
+          };
+        };
+      };
+
+      # Work provider config (Code-Companion via OpenAI-compatible API)
+      # Merge this into baseConfig.provider for work machines
+      workProvider = {
+        codecompanion = {
+          npm = "@ai-sdk/openai-compatible";
+          name = "Code Companion V2";
+          options = {
+            baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
+            apiKey = "{env:ANTHROPIC_API_KEY}";
+          };
+          models = {
+            "qwen-a3b" = {
+              name = "Qwen A3B";
+              modalities = {
+                input = [ "text" "image" ];
+                output = [ "text" ];
+              };
+            };
+            "devstral" = { name = "Devstral"; };
+            "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
+            "glm-47" = { name = "GLM 47"; };
+          };
+        };
+      };
+
+      # Default MCP servers (same as claude-code)
+      defaultMcpServers = {
+        context7.enable = true;
+        sequentialThinking.enable = true;
+        nixos.enable = true;
+      };
+
+      # Default slash commands
+      defaultCommands = {
+        plans = {
+          description = "Generate high-level summary table of all plans";
+          template = ''
+            Generate a high-level summary of all plans in this repository.
+
+            ## Instructions
+
+            1. Find all plan files in `.claude/user-plans/` using: `fd -t f -e md . .claude/user-plans/`
+
+            2. For each plan file, extract:
+               - Plan number/name (from filename)
+               - Status (look for `**Status**:` line)
+               - Brief description (from title or first paragraph)
+
+            3. Present as a concise markdown table with columns:
+               | Plan | Status | Description |
+
+            4. Use these status indicators:
+               - `Planning` or `Design` → show as-is
+               - `COMPLETE` or `TASK:COMPLETE` → show as "Complete"
+               - `PENDING` → show as "Pending"
+               - Partial completion → note which tasks done (e.g., "Tasks 1-2 done")
+
+            5. After the table, briefly note:
+               - Which plans are actively blocked or waiting
+               - Any plans with remaining tasks that could be worked on
+
+            Keep the output concise - this is meant to be a quick overview, not detailed analysis.
+          '';
+        };
+      };
+    };
+
     claudeCode = {
       # Base config (enable, defaults, common settings)
       baseConfig = {

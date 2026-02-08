@@ -55,7 +55,7 @@ in
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
     # claude-code.nix migrated to modules/programs/claude-code/ (dendritic pattern)
-    ./opencode.nix # OpenCode - enhanced multi-account module (upstream disabled via disabledModules)
+    # opencode.nix migrated to modules/programs/opencode/ (dendritic pattern)
     # secrets-management.nix migrated to modules/programs/secrets-management/ (dendritic pattern)
     # github-auth.nix migrated to modules/programs/github-auth/ (dendritic pattern)
     ./gitlab-auth.nix # GitLab authentication (Bitwarden/SOPS)
@@ -379,130 +379,10 @@ in
       # ─────────────────────────────────────────────────────────────────────────
 
       # ─────────────────────────────────────────────────────────────────────────
-      # OpenCode - enhanced multi-account implementation
-      # Upstream home-manager module disabled via disabledModules (see top of file)
-      # Uses shared MCP server definitions for DRY configuration
+      # OpenCode - MIGRATED to host files (Task 6.4.4)
+      # Configuration now lives in each host's home.nix using lib.openCode presets
+      # See: modules/flake-parts/lib.nix for preset definitions
       # ─────────────────────────────────────────────────────────────────────────
-      programs.opencode = {
-        enable = cfg.enableClaudeCode; # Enable alongside claude-code
-        defaultModel = "anthropic/claude-sonnet-4-5";
-        defaultAccount = "max";
-        # Provider configuration - API key via environment variable
-        provider = {
-          anthropic = {
-            options = {
-              apiKey = "{env:ANTHROPIC_API_KEY}";
-            };
-          };
-          # Custom Code-Companion provider using OpenAI-compatible API
-          codecompanion = {
-            npm = "@ai-sdk/openai-compatible";
-            name = "Code Companion V2";
-            options = {
-              baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
-              apiKey = "{env:ANTHROPIC_API_KEY}";
-            };
-            models = {
-              "qwen-a3b" = {
-                name = "Qwen A3B";
-                modalities = {
-                  input = [ "text" "image" ];
-                  output = [ "text" ];
-                };
-              };
-              "devstral" = { name = "Devstral"; };
-              "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
-              "glm-47" = { name = "GLM 47"; };
-            };
-          };
-        };
-        accounts = {
-          max = {
-            enable = true;
-            displayName = "OpenCode Max Account";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-            };
-          };
-          pro = {
-            enable = true;
-            displayName = "OpenCode Pro Account";
-            model = "anthropic/claude-sonnet-4-5";
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-            };
-          };
-          work = {
-            enable = true;
-            displayName = "OpenCode Work Code-Companion";
-            provider = "custom";
-            model = "codecompanion/qwen-a3b";
-            # API config is in the top-level codecompanion provider block
-            # We still need the env var name for the wrapper script
-            api = {
-              apiKeyEnvVar = "ANTHROPIC_API_KEY";
-            };
-            secrets.bearerToken.bitwarden = {
-              item = "PAC Code Companion v2";
-              field = "API Key";
-            };
-            extraEnvVars = {
-              DISABLE_TELEMETRY = "1";
-            };
-          };
-        };
-        permissions = {
-          Bash = "allow";
-          Read = "allow";
-          Write = "allow";
-          Edit = "allow";
-          WebFetch = "allow";
-          "mcp__context7" = "allow";
-          "mcp__mcp-nixos" = "allow";
-          "mcp__sequential-thinking" = "allow";
-          Search = "deny";
-          Find = "deny";
-          "Bash(rm -rf /*)" = "deny";
-        };
-        # Slash commands (shared across all OpenCode accounts)
-        commands = {
-          plans = {
-            description = "Generate high-level summary table of all plans";
-            template = ''
-              Generate a high-level summary of all plans in this repository.
-
-              ## Instructions
-
-              1. Find all plan files in `.claude/user-plans/` using: `fd -t f -e md . .claude/user-plans/`
-
-              2. For each plan file, extract:
-                 - Plan number/name (from filename)
-                 - Status (look for `**Status**:` line)
-                 - Brief description (from title or first paragraph)
-
-              3. Present as a concise markdown table with columns:
-                 | Plan | Status | Description |
-
-              4. Use these status indicators:
-                 - `Planning` or `Design` → show as-is
-                 - `COMPLETE` or `TASK:COMPLETE` → show as "Complete"
-                 - `PENDING` → show as "Pending"
-                 - Partial completion → note which tasks done (e.g., "Tasks 1-2 done")
-
-              5. After the table, briefly note:
-                 - Which plans are actively blocked or waiting
-                 - Any plans with remaining tasks that could be worked on
-
-              Keep the output concise - this is meant to be a quick overview, not detailed analysis.
-            '';
-          };
-        };
-        mcpServers = {
-          context7.enable = true;
-          sequentialThinking.enable = true;
-          nixos.enable = true;
-        };
-      };
 
       # Yazi file manager configuration
       programs.yazi = {

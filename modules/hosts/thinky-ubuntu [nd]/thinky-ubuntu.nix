@@ -29,7 +29,7 @@ in
       inputs.self.modules.homeManager.neovim
       inputs.self.modules.homeManager.wsl-home
       inputs.self.modules.homeManager.claude-code
-      # opencode: imported via base.nix (home/modules/opencode.nix) - not dendritic yet
+      inputs.self.modules.homeManager.opencode
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.development-tools
@@ -94,6 +94,13 @@ in
       statusline = inputs.self.lib.claudeCode.defaultStatusline;
       mcpServers = inputs.self.lib.claudeCode.defaultMcpServers;
       subAgents.custom = inputs.self.lib.claudeCode.defaultSubAgents;
+    };
+
+    # OpenCode configuration (using lib presets)
+    programs.opencode = inputs.self.lib.openCode.baseConfig // {
+      accounts = inputs.self.lib.openCode.personalAccounts;
+      mcpServers = inputs.self.lib.openCode.defaultMcpServers;
+      commands = inputs.self.lib.openCode.defaultCommands;
     };
   };
 
