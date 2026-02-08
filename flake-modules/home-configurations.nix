@@ -26,6 +26,7 @@
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
+            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
             {
               homeBase = {
                 username = "tim";
@@ -78,6 +79,7 @@
             self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
             self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
+            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
             {
               homeBase = {
                 username = "tim";
@@ -136,6 +138,7 @@
             self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
             self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
+            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
             {
               homeBase = {
                 username = "tim";
@@ -220,6 +223,7 @@
             self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
             self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
+            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
             {
               homeBase = {
                 username = "tim";
@@ -312,6 +316,7 @@
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
+            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
             {
               homeBase = {
                 username = "tim";
