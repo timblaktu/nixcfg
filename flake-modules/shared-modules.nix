@@ -18,12 +18,13 @@
 
     # Home Manager modules for user-level configuration
     homeManagerModules = {
-      # Common WSL home-manager configuration
+      # Common WSL home-manager configuration (dendritic pattern)
       # Platform: ANY WSL distro + Nix + home-manager ✅
       # Provides: User-level WSL tweaks (shell, Windows Terminal, wslu)
       # Works on: NixOS-WSL AND vanilla Ubuntu/Debian/Alpine WSL
       # Usage: Import in WSL home-manager configs
-      wsl-home-base = import ../home/common/wsl-home-base.nix;
+      # Options: wsl-home-settings.{distroName, enableWindowsAliases, ...}
+      wsl-home-base = self.modules.homeManager.wsl-home;
     };
   };
 }

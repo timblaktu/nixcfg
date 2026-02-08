@@ -73,17 +73,16 @@
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
+            self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
             {
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
-                environmentVariables = {
-                  WSL_DISTRO = "ubuntu";
-                  EDITOR = "nvim";
-                };
-                shellAliases = {
-                  explorer = "explorer.exe .";
-                };
+              };
+
+              # WSL home settings
+              wsl-home-settings = {
+                distroName = "ubuntu";
               };
 
               # Enable tmux auto-reload on home-manager generation change
@@ -108,16 +107,6 @@
                   field = "PAT-pubclassic";
                 };
               };
-
-              targets.wsl = {
-                enable = true;
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
-                };
-              };
             }
             ../hosts/thinky-ubuntu
             # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration
@@ -140,12 +129,16 @@
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
-            ../home/common/wsl-home-base.nix # Common WSL user configuration
+            self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
             {
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
-                # All other settings come from wsl-home-base.nix
+              };
+
+              # WSL home settings (defaults from wsl-home module)
+              wsl-home-settings = {
+                distroName = "nixos";
               };
 
               # Enable tmux auto-reload on home-manager generation change
@@ -214,20 +207,21 @@
           modules = [
             { nixpkgs.config.allowUnfree = true; }
             ../home/modules/base.nix
-            ../home/common/wsl-home-base.nix
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
+            self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
             {
               homeBase = {
                 username = "tim";
                 homeDirectory = "/home/tim";
               };
 
-              home.packages = with pkgs; [
-                wslu
-              ];
+              # WSL home settings (defaults from wsl-home module)
+              wsl-home-settings = {
+                distroName = "nixos";
+              };
 
               # Enable tmux auto-reload on home-manager generation change
               programs.tmux.autoReload.enable = true;
@@ -249,16 +243,6 @@
                 cli.tokenOverrides.pr = {
                   item = "github.com";
                   field = "PAT-pubclassic";
-                };
-              };
-
-              targets.wsl = {
-                enable = true;
-                windowsTools = {
-                  enablePowerShell = true;
-                  enableCmd = false;
-                  enableWslPath = true;
-                  wslPathPath = "/bin/wslpath";
                 };
               };
             }
