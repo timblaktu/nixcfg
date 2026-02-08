@@ -1,9 +1,27 @@
 # Plan 018: Nixcfg Modularization for Team Sharing
 
-**Status**: DESIGN PHASE
+**Status**: PAUSED - Pending Dendritic Pattern Refactoring
 **Branch**: `refactor/modularization`
 **Created**: 2026-02-01
 **Last Updated**: 2026-02-07
+
+---
+
+## Plan Status Summary
+
+**Phase 0 (Design + Cleanup)**: ✅ COMPLETE (5 of 6 tasks, 1 deferred)
+**Phases 1-4 (Extraction)**: ⏸️ BLOCKED - Superseded by dendritic pattern refactoring
+
+### Decision (2026-02-07)
+
+Before proceeding with component extraction, nixcfg will undergo a major architectural refactoring using the **dendritic pattern with flake-parts** (see `~/src/nix-flake-parts-dendritic-pattern/`). This pattern will:
+
+1. Unify all Nix files as flake-parts modules
+2. Shift from host-centric to feature-centric organization
+3. Use `import-tree` for automatic module loading
+4. Enable cleaner extraction after refactoring
+
+**Next Step**: Create new plan for dendritic pattern migration, which will supersede Phases 1-4 of this plan.
 
 ---
 
@@ -33,37 +51,29 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | 0.6.3 | Unify MCP server adapters | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.4 | Consolidate modules/home/ directory | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.5 | Document module boundaries | `TASK:COMPLETE` | 2026-02-07 |
-| 0.6.6 | Evaluate TUR wrapper consolidation | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| **1** | **Foundation** | | |
-| 1.1 | Create shared flake | `TASK:PENDING` | |
-| 1.2 | Extract MCP servers | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| 1.3 | Extract secrets helpers | `TASK:PENDING` | |
-| 1.4 | Validate: import into nixcfg | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| **2** | **Modules** | | |
-| 2.1 | Extract Claude Code | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| 2.2 | Extract OpenCode | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| 2.3 | Extract dev shells | `TASK:PENDING` | |
-| 2.4 | Validate: home-manager switch | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| **3** | **Documentation** | | |
-| 3.1 | Getting-started guide | `TASK:PENDING` | |
-| 3.2 | Customization docs | `TASK:PENDING` | |
-| 3.3 | Example flake | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| **4** | **WSL Image Distribution** | | |
-| 4.1 | Create nix-wsl-builder repo | `TASK:PENDING` | |
-| 4.2 | Extract wsl-common module | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| 4.3 | Extract wsl-tarball-checks | `TASK:PENDING` | |
-| 4.4 | Add CI/CD for tarball builds | `TASK:PENDING` | |
-| — | **SESSION BOUNDARY** | | |
-| 4.5 | Create dev-team configuration | `TASK:PENDING` | |
-| 4.6 | WSL onboarding documentation | `TASK:PENDING` | | |
+| 0.6.6 | Evaluate TUR wrapper consolidation | `TASK:DEFERRED` | 2026-02-07 |
+| — | **PLAN PAUSED** | | |
+| **1** | **Foundation** | `BLOCKED` | |
+| 1.1 | Create shared flake | `TASK:BLOCKED` | |
+| 1.2 | Extract MCP servers | `TASK:BLOCKED` | |
+| 1.3 | Extract secrets helpers | `TASK:BLOCKED` | |
+| 1.4 | Validate: import into nixcfg | `TASK:BLOCKED` | |
+| **2** | **Modules** | `BLOCKED` | |
+| 2.1 | Extract Claude Code | `TASK:BLOCKED` | |
+| 2.2 | Extract OpenCode | `TASK:BLOCKED` | |
+| 2.3 | Extract dev shells | `TASK:BLOCKED` | |
+| 2.4 | Validate: home-manager switch | `TASK:BLOCKED` | |
+| **3** | **Documentation** | `BLOCKED` | |
+| 3.1 | Getting-started guide | `TASK:BLOCKED` | |
+| 3.2 | Customization docs | `TASK:BLOCKED` | |
+| 3.3 | Example flake | `TASK:BLOCKED` | |
+| **4** | **WSL Image Distribution** | `BLOCKED` | |
+| 4.1 | Create nix-wsl-builder repo | `TASK:BLOCKED` | |
+| 4.2 | Extract wsl-common module | `TASK:BLOCKED` | |
+| 4.3 | Extract wsl-tarball-checks | `TASK:BLOCKED` | |
+| 4.4 | Add CI/CD for tarball builds | `TASK:BLOCKED` | |
+| 4.5 | Create dev-team configuration | `TASK:BLOCKED` | |
+| 4.6 | WSL onboarding documentation | `TASK:BLOCKED` | | |
 
 ---
 
@@ -555,11 +565,17 @@ abstraction would add complexity without clear benefit and violate "avoid over-e
 
 ### Task 0.6.6: Evaluate TUR Wrapper Consolidation
 
-**Status**: `TASK:PENDING` (DEFERRED)
+**Status**: `TASK:DEFERRED` (2026-02-07)
 
 **Problem**: TUR package wrappers ~90% identical between claude and opencode
+- `tur-package/claude-wrappers/` and `tur-package/opencode-wrappers/`
+- ~900 lines total, differing only by s/claude/opencode/ substitutions
 
-**Note**: External repo (`timblaktu/tur`), lower priority. Evaluate after internal cleanup.
+**Analysis Completed**: Three options identified (template generation, accept duplication, shared library)
+
+**Deferral Reason**: Will be revisited after dendritic pattern refactoring of nixcfg. The TUR packages may need restructuring based on the new architecture.
+
+**Location**: `~/src/nixcfg/tur-package/` (source files committed to TUR fork at `timblaktu/tur`)
 
 ---
 
