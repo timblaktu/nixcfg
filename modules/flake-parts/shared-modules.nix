@@ -4,14 +4,20 @@
   flake = {
     # NixOS modules for system-level configuration
     nixosModules = {
-      # Common WSL system configuration base
+      # Common WSL system configuration base (dendritic pattern)
       # Platform: NixOS-WSL distribution ONLY
-      # Provides: System-level WSL integration (wsl.conf, users, SSH daemon, SOPS)
+      # Provides: System-level WSL integration (wsl.conf, users, SSH daemon, SOPS, USBIP)
       # Usage: Import in WSL NixOS host configs
-      wsl-base = import ../nixos/wsl-base.nix;
-
-      # NOTE: SSH keys are available as data in modules/ssh-keys-data.nix
-      # (not a module, just an attribute set for use in host configurations)
+      # Options: wsl-settings.{hostname, defaultUser, sshPort, usbip, cuda, ...}
+      #
+      # Example:
+      #   imports = [ nixcfg.nixosModules.wsl-base ];
+      #   wsl-settings = {
+      #     hostname = "my-wsl";
+      #     defaultUser = "myuser";
+      #     sshPort = 2222;
+      #   };
+      wsl-base = self.modules.nixos.wsl;
     };
 
     # Home Manager modules for user-level configuration

@@ -20,7 +20,34 @@ in
 {
   # === NixOS System Module ===
   # Note: No Home Manager module - this is a minimal distribution template
-  flake.modules.nixos.nixos-wsl-minimal = { config, lib, pkgs, ... }: {
+  flake.modules.nixos.nixos-wsl-minimal = { config, lib, pkgs, ... }:
+    let
+      # Security check script for tarball builds
+      tarballSecurityCheck = pkgs.writers.writeBashBin "wsl-tarball-security-check" ''
+        echo "WSL Tarball Security Check"
+        echo "=========================="
+        echo ""
+        echo "Checking for personal information..."
+
+        # Check for common personal identifiers
+        for id in tim tblack timblack; do
+          if [[ "${defaultUser}" =~ $id ]]; then
+            echo "⚠ WARNING: Username contains personal identifier: $id"
+          fi
+        done
+
+        # Check for sensitive env vars
+        for pattern in TOKEN API_KEY SECRET PASSWORD PRIVATE_KEY; do
+          if env | grep -q "^$pattern"; then
+            echo "✗ ERROR: Sensitive env var detected: $pattern*"
+          fi
+        done
+
+        echo ""
+        echo "Check complete."
+      '';
+    in
+    {
     imports = [
       # Hardware configuration (WSL2-specific)
       ./_hardware-config.nix
@@ -28,9 +55,10 @@ in
       inputs.self.modules.nixos.system-minimal
       # NixOS-WSL module
       inputs.nixos-wsl.nixosModules.default
-      # Tarball security checks
-      ../../../modules/wsl-tarball-checks.nix
     ];
+
+    # Tarball security check available as: $out/bin/wsl-tarball-security-check
+    system.build.tarballSecurityCheck = tarballSecurityCheck;
 
     # Keep it free for distribution
     nixpkgs.config.allowUnfree = false;
