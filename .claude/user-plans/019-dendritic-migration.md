@@ -269,7 +269,7 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 5.1 | thinky-nixos (WSL primary) | PENDING |
+| 5.1 | thinky-nixos (WSL primary) | COMPLETE |
 | 5.2 | pa161878-nixos (WSL work) | PENDING |
 | 5.3 | thinky-ubuntu (HM only) | PENDING |
 | 5.4 | mbp (Intel Mac) | PENDING |
