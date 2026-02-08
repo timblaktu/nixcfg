@@ -25,13 +25,17 @@
         }
       );
 
+      # pa161878-nixos: Dendritic pattern - module defined in modules/hosts/pa161878-nixos/
       pa161878-nixos = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
-          modules = [ ../hosts/pa161878-nixos ];
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.pa161878-nixos
+          ];
           specialArgs = {
             inherit inputs;
-            inherit (inputs) nixpkgs-stable mcp-servers-nix;
+            inherit (inputs) nixpkgs-stable;
             wslHostname = "pa161878-nixos";
           };
         }

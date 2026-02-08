@@ -125,82 +125,13 @@
         }
       );
 
+      # tim@pa161878-nixos: Dendritic pattern - module defined in modules/hosts/pa161878-nixos/
       "tim@pa161878-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            ../home/modules/base.nix
-            self.modules.homeManager.shell # Dendritic pattern shell module
-            self.modules.homeManager.git # Dendritic pattern git module
-            self.modules.homeManager.tmux # Dendritic pattern tmux module
-            self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
-            self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
-            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
-            self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
-            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
-            {
-              homeBase = {
-                username = "tim";
-                homeDirectory = "/home/tim";
-              };
-
-              # WSL home settings (defaults from wsl-home module)
-              wsl-home-settings = {
-                distroName = "nixos";
-              };
-
-              # Enable tmux auto-reload on home-manager generation change
-              programs.tmux.autoReload.enable = true;
-
-              # Secrets management (HOST-SPECIFIC)
-              secretsManagement = {
-                enable = true;
-                rbw.email = "timblaktu@gmail.com";
-              };
-
-              # GitHub authentication (HOST-SPECIFIC)
-              gitAuth.github = {
-                enable = true;
-                mode = "bitwarden";
-                bitwarden = {
-                  item = "github.com";
-                  field = "PAT-timtam2026";
-                };
-                cli.tokenOverrides.pr = {
-                  item = "github.com";
-                  field = "PAT-pubclassic";
-                };
-              };
-
-              # GitLab authentication (HOST-SPECIFIC)
-              gitAuth.gitlab = {
-                enable = true;
-                mode = "bitwarden";
-                host = "git.panasonic.aero";
-                bitwarden = {
-                  item = "GitLab git.panasonic.aero";
-                  field = "lord (access token)";
-                };
-                cli.enable = true;
-              };
-
-              # Windows Terminal settings management (HOST-SPECIFIC)
-              windowsTerminal = {
-                enable = true;
-                font = {
-                  face = "CaskaydiaMono NFM, Noto Color Emoji";
-                  size = 12;
-                };
-                keybindings = [
-                  { id = "Terminal.CopyToClipboard"; keys = "ctrl+shift+c"; }
-                  { id = "Terminal.PasteFromClipboard"; keys = "ctrl+shift+v"; }
-                  { id = "Terminal.DuplicatePaneAuto"; keys = "alt+shift+d"; }
-                  { id = "Terminal.NextTab"; keys = "alt+ctrl+l"; }
-                  { id = "Terminal.PrevTab"; keys = "alt+ctrl+h"; }
-                ];
-              };
-            }
+            self.modules.homeManager."tim@pa161878-nixos"
           ];
           extraSpecialArgs = {
             inherit inputs;
