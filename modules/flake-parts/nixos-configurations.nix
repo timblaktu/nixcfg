@@ -1,4 +1,4 @@
-# flake-modules/nixos-configurations.nix
+# modules/flake-parts/nixos-configurations.nix
 # Simplified NixOS system configurations - all config in hosts/*/default.nix
 { inputs, self, withSystem, ... }: {
   flake = {
@@ -13,7 +13,7 @@
           ];
           specialArgs = {
             inherit inputs;
-            inherit (inputs) nixpkgs-stable mcp-servers-nix;
+            inherit (inputs) nixpkgs-stable;
           };
         }
       );
@@ -28,7 +28,7 @@
           ];
           specialArgs = {
             inherit inputs;
-            inherit (inputs) nixpkgs-stable mcp-servers-nix;
+            inherit (inputs) nixpkgs-stable;
           };
         }
       );

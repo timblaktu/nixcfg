@@ -1,4 +1,4 @@
-# flake-modules/tests.nix
+# modules/flake-parts/tests.nix
 # Comprehensive test suite for NixOS configurations
 { inputs, self, ... }: {
   perSystem = { config, self', inputs', pkgs, system, lib, ... }:
@@ -121,7 +121,7 @@
             echo "  - Current system uses unified files + autoWriter architecture"
             echo "  - No passthru.tests infrastructure needed - different approach used"
             echo "  - Architecture migration already completed successfully"
-            
+
             touch $out
           '';
 
@@ -226,7 +226,7 @@
           } ''
           echo "Generating and validating configuration snapshots..."
           mkdir -p $out
-        
+
           # Validate against baseline
           ${pkgs.lib.concatMapStringsSep "\n" (host: ''
             expected="${snapshotBaseline.${host}.stateVersion}"
@@ -236,7 +236,7 @@
               nixos-wsl-minimal) actual="$wslVersion" ;;
               mbp) actual="$mbpVersion" ;;
             esac
-          
+
             if [[ "$actual" != "$expected" ]]; then
               echo "❌ ${host}: State version mismatch! Expected $expected, got $actual"
               exit 1
@@ -244,7 +244,7 @@
             echo "✅ ${host}: State version $actual matches baseline"
             echo "{\"stateVersion\": \"$actual\", \"host\": \"${host}\"}" > $out/${host}.json
           '') (builtins.attrNames snapshotBaseline)}
-        
+
           echo "✅ All configuration snapshots validated"
         '';
 
@@ -272,7 +272,7 @@
           # Verify SSH port consistency
           [[ "$sshPort" == "$opensshPort" ]] || (echo "❌ SSH port mismatch between wsl-settings and openssh" && exit 1)
           echo "✅ SSH port consistency: $sshPort matches openssh configuration"
-        
+
           echo "✅ Cross-module integration test passed"
           touch $out
         '';
@@ -321,10 +321,10 @@
               hmUserExists = if (builtins.hasAttr hmConfigName self.homeConfigurations) then "1" else "0";
             } ''
             echo "Testing Home Manager integration..."
-        
+
             [[ "$hmUserExists" == "1" ]] || (echo "❌ Home Manager configuration '$hmConfigName' not found" && exit 1)
             echo "✅ Home Manager configuration exists for $hmConfigName"
-        
+
             echo "✅ Home Manager integration test passed"
             touch $out
           '';
@@ -339,10 +339,10 @@
             };
           } ''
           echo "Testing SSH public keys registry module..."
-        
-          # Test module file exists and is syntactically valid 
+
+          # Test module file exists and is syntactically valid
           echo "✅ Module file location: modules/nixos/ssh-public-keys.nix"
-        
+
           # Test key format validation regex
           # Valid SSH key should match the pattern
           test_key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITEST1 testuser@host1"
@@ -352,7 +352,7 @@
             echo "❌ SSH key format validation failed"
             exit 1
           fi
-        
+
           # Test invalid key should not match
           invalid_key="invalid-key-format"
           if ! [[ "$invalid_key" =~ ^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521)[[:space:]][A-Za-z0-9+/]+(=*)?([[:space:]].*)?$ ]]; then
@@ -361,7 +361,7 @@
             echo "❌ Invalid key incorrectly accepted"
             exit 1
           fi
-        
+
           # Test module structure expectations
           echo "✅ Module provides expected structure:"
           echo "  - Central key registry (users & hosts)"
@@ -369,7 +369,7 @@
           echo "  - Auto-distribution options"
           echo "  - Integration points for authorized_keys"
           echo "  - Restricted user configuration"
-        
+
           echo "✅ SSH public keys registry module test passed"
           touch $out
         '';
@@ -432,48 +432,47 @@
             };
           } ''
           echo "Testing hybrid unified files module..."
-          
+
           # Test that the module file exists and can be imported
-          if [ -f "${../home/files/default.nix}" ]; then
+          if [ -f "${../../home/files/default.nix}" ]; then
             echo "✅ Hybrid module file exists"
           else
             echo "❌ Hybrid module file missing"
             exit 1
           fi
-          
-          # Test autoWriter availability in current nixpkgs  
+
+          # Test autoWriter availability in current nixpkgs
           ${if pkgs.writers ? autoWriter then ''
             echo "✅ autoWriter available in nixpkgs"
           '' else ''
             echo "⚠️  autoWriter fallback will be used"
           ''}
-          
+
           ${if pkgs.writers ? autoWriterBin then ''
             echo "✅ autoWriterBin available in nixpkgs"
           '' else ''
             echo "⚠️  autoWriterBin fallback will be used"
           ''}
-          
+
           # Test that basic writer functions work (the foundation of our hybrid module)
           ${pkgs.writers.writeBashBin "test-basic-writer" ''
             #!/bin/bash
             echo "Basic writer test successful"
           ''}/bin/test-basic-writer > writer-test.out
-          
+
           if grep -q "Basic writer test successful" writer-test.out; then
             echo "✅ Basic writer functionality works"
           else
             echo "❌ Basic writer functionality failed"
             exit 1
           fi
-          
+
           # Test that the hybrid module can be imported (test as part of derivation evaluation)
           ${
             let
-              lib = pkgs.lib;
-              moduleFile = import (../home/files/default.nix) { 
-                config = { homeFiles = {}; }; 
-                inherit lib pkgs; 
+              moduleFile = import (../../home/files/default.nix) {
+                config = { homeFiles = {}; };
+                inherit lib pkgs;
               };
               success = builtins.isAttrs moduleFile;
               hasOptions = builtins.hasAttr "options" moduleFile;
@@ -487,7 +486,7 @@
               exit 1
             ''
           }
-          
+
           echo "✅ Hybrid unified files module test passed"
           touch $out
         '';
@@ -503,26 +502,26 @@
             };
           } ''
           echo "Testing tmux-session-picker single source of truth implementation..."
-          
+
           # Test that the source file exists
-          source_file="${../home/files/bin/tmux-session-picker}"
+          source_file="${../../home/files/bin/tmux-session-picker}"
           if [[ ! -f "$source_file" ]]; then
             echo "❌ Source file not found: $source_file"
             exit 1
           fi
-          
+
           # Test that file is a valid bash script
           if ! head -n 1 "$source_file" | grep -q "#!/usr/bin/env bash"; then
             echo "❌ Source file is not a valid bash script"
             exit 1
           fi
-          
+
           # Test that the file has the expected content (check for key functions)
           if ! grep -q "tmux-session-picker" "$source_file"; then
             echo "❌ Source file does not contain expected tmux-session-picker content"
             exit 1
           fi
-          
+
           echo "✅ tmux-session-picker single source of truth validation passed"
           echo "✅ Source file exists and contains valid bash script"
           echo "✅ No duplication - validated scripts reads from home/files/"
@@ -543,18 +542,18 @@
           echo ""
           echo "Note: These tests require KVM/virtualization support"
           echo ""
-          
+
           # Colors for output
           RED='\033[0;31m'
           GREEN='\033[0;32m'
           YELLOW='\033[1;33m'
           CYAN='\033[0;36m'
           NC='\033[0m' # No Color
-          
+
           TOTAL=0
           PASSED=0
           FAILED=0
-          
+
           # Test basic functionality (integration tests require VM access)
           for test in ssh-integration-test sops-integration-test; do
             TOTAL=$((TOTAL + 1))
@@ -564,14 +563,14 @@
             PASSED=$((PASSED + 1))
             echo ""
           done
-          
+
           echo "================================="
           echo "Integration Test Results:"
           echo "---------------------------------"
           echo -e "Total Tests: $TOTAL"
           echo -e "Passed: ''${GREEN}$PASSED''${NC}"
           echo -e "Failed: ''${RED}$FAILED''${NC}"
-          
+
           if [ $FAILED -eq 0 ]; then
             echo -e "\n''${GREEN}✅ All integration tests passed!''${NC}"
             touch $out
@@ -764,12 +763,12 @@
           echo "🔄 Running regression tests..."
           echo "This will test all configurations can still be evaluated and built."
           echo ""
-          
+
           # Basic shell test that configuration names are available
           echo "Testing configuration structure..."
           echo "Expected configurations: nixos-wsl-minimal, tim@thinky-nixos"
           echo "✅ Configuration structure test passed!"
-          
+
           echo "✅ All regression tests passed!"
           echo "Note: Full configuration evaluation requires flake evaluation context."
           touch $out

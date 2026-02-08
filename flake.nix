@@ -76,19 +76,10 @@
           ./modules/hosts
         ])
 
-        # Existing flake-modules (being migrated in Phase 6)
-        # systems.nix removed - migrated to modules/flake-parts/systems.nix
-        # overlays.nix removed - migrated to modules/flake-parts/overlays.nix
-        # packages.nix removed - migrated to modules/flake-parts/packages.nix
-        # dev-shells.nix removed - migrated to modules/flake-parts/dev-shells.nix
-        ./flake-modules/nixos-configurations.nix
-        ./flake-modules/darwin-configurations.nix
-        ./flake-modules/home-configurations.nix
-        # shared-modules.nix removed - migrated to modules/flake-parts/shared-modules.nix
-        # templates.nix removed - migrated to modules/flake-parts/templates.nix
-        # termux-outputs.nix removed - migrated to modules/flake-parts/termux-outputs.nix
-        ./flake-modules/tests.nix # All checks and tests consolidated here
-        ./flake-modules/github-actions.nix # Configurable GitHub Actions validation
+        # All flake-modules migrated to modules/flake-parts/ (Phase 6 complete)
+        # import-tree auto-loads: systems, overlays, packages, dev-shells,
+        # shared-modules, templates, termux-outputs, nixos-configurations,
+        # darwin-configurations, home-configurations, tests, github-actions
       ];
 
       # systems defined in modules/flake-parts/systems.nix

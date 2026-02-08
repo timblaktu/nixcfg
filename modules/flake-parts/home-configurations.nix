@@ -1,4 +1,4 @@
-# flake-modules/home-configurations.nix
+# modules/flake-parts/home-configurations.nix
 # Standalone-only home-manager configurations
 { inputs, self, withSystem, ... }: {
   flake = {
@@ -101,7 +101,7 @@
               programs.home-manager.enable = true;
               targets.genericLinux.enable = true;
             }
-            ../home/nixvim-minimal.nix
+            ../../home/nixvim-minimal.nix
           ];
           extraSpecialArgs = {
             inherit inputs;

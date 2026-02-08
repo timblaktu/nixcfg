@@ -1,4 +1,4 @@
-# flake-modules/darwin-configurations.nix
+# modules/flake-parts/darwin-configurations.nix
 # macOS system configurations using nix-darwin
 #
 # All Darwin hosts use the dendritic pattern:

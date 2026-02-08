@@ -1,4 +1,4 @@
-# flake-modules/github-actions.nix
+# modules/flake-parts/github-actions.nix
 # Configurable GitHub Actions local validation
 { inputs, self, ... }: {
   perSystem = { config, self', inputs', pkgs, system, ... }:
@@ -17,8 +17,8 @@
 
       # Override with user configuration if it exists
       userConfig =
-        if builtins.pathExists ./../github-actions.nix
-        then import ./../github-actions.nix
+        if builtins.pathExists ./../../github-actions.nix
+        then import ./../../github-actions.nix
         else { };
 
       finalConfig = pkgs.lib.recursiveUpdate githubActionsConfig userConfig;
@@ -39,7 +39,7 @@
           ];
         } ''
         echo "🚀 Running GitHub Actions validation..."
-      
+
         # Check dependencies
         if ! command -v act >/dev/null || ! command -v podman >/dev/null; then
           echo "⚠️  act or podman not available, skipping GitHub Actions validation"
@@ -47,7 +47,7 @@
           touch $out
           exit 0
         fi
-      
+
         export DOCKER_HOST="unix:///run/podman/podman.sock"
         if [ ! -S "''${DOCKER_HOST#unix://}" ]; then
           echo "⚠️  Podman socket not available at $DOCKER_HOST"
@@ -55,21 +55,21 @@
           touch $out
           exit 0
         fi
-      
+
         # Change to source directory (act needs .github/workflows/)
-        cd ${./../.}
-      
+        cd ${./../..}
+
         echo "📋 Available GitHub Actions jobs:"
         act -l || {
           echo "⚠️  No GitHub Actions workflows found, skipping"
           touch $out
           exit 0
         }
-      
+
         # Run enabled jobs
         failed=0
         total=0
-        ${pkgs.lib.concatMapStringsSep "\n" (jobName: 
+        ${pkgs.lib.concatMapStringsSep "\n" (jobName:
           let jobConfig = config.jobs.${jobName}; in
           pkgs.lib.optionalString jobConfig.enable ''
             total=$((total + 1))
@@ -82,12 +82,12 @@
             fi
           ''
         ) (builtins.attrNames config.jobs)}
-      
+
         echo ""
         echo "=== GitHub Actions Results ==="
         echo "Total jobs: $total"
         echo "Failed: $failed"
-      
+
         if [ $failed -eq 0 ]; then
           echo "🎉 All GitHub Actions validation passed!"
           touch $out
@@ -116,7 +116,7 @@
           echo "Enabled: ${if finalConfig.enable then "✅ YES" else "❌ NO"}"
           echo ""
           echo "Jobs configuration:"
-          ${pkgs.lib.concatMapStringsSep "\n" (jobName: 
+          ${pkgs.lib.concatMapStringsSep "\n" (jobName:
             let jobConfig = finalConfig.jobs.${jobName}; in
             ''echo "  ${jobName}: ${if jobConfig.enable then "✅" else "❌"} (timeout: ${toString jobConfig.timeout}s)"''
           ) (builtins.attrNames finalConfig.jobs)}
@@ -136,25 +136,25 @@
             echo "⚠️  github-actions.nix already exists"
             exit 1
           fi
-          
+
           cat > github-actions.nix << 'EOF'
 # GitHub Actions local validation configuration
 {
   enable = true; # Enable GitHub Actions validation in flake checks
-  
+
   jobs = {
     # Fast security checks (~30s each)
     verify-sops = { enable = true; timeout = 30; };
     audit-permissions = { enable = true; timeout = 30; };
-    
-    # Comprehensive security checks (~2min each)  
+
+    # Comprehensive security checks (~2min each)
     gitleaks = { enable = true; timeout = 120; };
     semgrep = { enable = true; timeout = 120; };
     trufflehog = { enable = true; timeout = 120; };
   };
 }
 EOF
-          
+
           echo "✅ Created github-actions.nix"
           echo ""
           echo "Next steps:"
