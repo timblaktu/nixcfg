@@ -29,12 +29,13 @@
         cfg = config.programs.opencode;
 
         # Import shared modules for DRY configuration
-        # Path updated for dendritic location: modules/programs/opencode/ -> home/modules/shared/
-        sharedInstructions = import ../../../home/modules/shared/ai-instructions.nix { inherit lib; };
-        sharedMcpDefs = import ../../../home/modules/shared/mcp-server-defs.nix { inherit lib; };
+        # Location: modules/lib/shared/ (dendritic structure)
+        sharedInstructions = import ../../lib/shared/ai-instructions.nix { inherit lib; };
+        sharedMcpDefs = import ../../lib/shared/mcp-server-defs.nix { inherit lib; };
 
         # Import shared rbw helper library for consistent credential handling
-        rbwLib = import ../../../home/modules/lib/rbw.nix { inherit pkgs lib; };
+        # Location: modules/lib/ (dendritic structure)
+        rbwLib = import ../../lib/rbw.nix { inherit pkgs lib; };
 
         # Agent submodule type
         agentModule = types.submodule {

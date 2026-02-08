@@ -9,8 +9,8 @@ let
   cfg = config.programs.claude-code;
 
   # Import shared MCP server definitions for DRY consistency with opencode
-  # Path updated for dendritic location: modules/programs/claude-code/_hm/ -> home/modules/shared/
-  sharedMcpDefs = import ../../../../home/modules/shared/mcp-server-defs.nix { inherit lib; };
+  # Location: modules/lib/shared/ (dendritic structure)
+  sharedMcpDefs = import ../../../lib/shared/mcp-server-defs.nix { inherit lib; };
 
   # Transform shared MCP server definition to Claude Code format
   # Claude Code uses: { command, args, env, timeout?, retries? }

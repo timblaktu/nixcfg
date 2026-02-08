@@ -327,9 +327,12 @@ in
 | 6.4.9 | Migrate remaining legacy-common/* | TASK:COMPLETE (2026-02-08) |
 | 6.4.10 | Migrate standalone modules | TASK:COMPLETE (2026-02-08) |
 | 6.4.11 | Update all hosts to remove base.nix import | TASK:COMPLETE (2026-02-08) |
-| 6.4.12 | Delete `home/modules/` directory | TASK:PENDING |
+| 6.4.12 | Move shared libs to dendritic structure | TASK:PENDING |
+| 6.4.13 | Migrate home/modules/files to dendritic | TASK:PENDING |
+| 6.4.14 | Delete remaining home/modules/ files | TASK:PENDING |
+| 6.4.15 | Delete home/modules/ directory | TASK:PENDING |
 
-**Execution Order**: 6.4.1-6.4.2 (infrastructure) → 6.4.3-6.4.5 (high-value) → 6.4.6-6.4.10 (legacy) → 6.4.11-6.4.12 (cleanup)
+**Execution Order**: 6.4.1-6.4.2 (infrastructure) → 6.4.3-6.4.5 (high-value) → 6.4.6-6.4.10 (legacy) → 6.4.11 (hosts) → 6.4.12-6.4.15 (final cleanup)
 
 **Per-task validation**: After each sub-task, run `nix flake check --no-build` and verify at least one host builds.
 
@@ -730,11 +733,69 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 ---
 
-#### 6.4.12: Delete `home/modules/` directory
+#### 6.4.12: Move shared libs to dendritic structure
+
+**Goal**: Move `home/modules/lib/` and `home/modules/shared/` into dendritic module structure.
+
+**Current state**:
+- `home/modules/lib/rbw.nix` - Used by claude-code and opencode for Bitwarden auth
+- `home/modules/shared/ai-instructions.nix` - Used by opencode
+- `home/modules/shared/mcp-server-defs.nix` - Used by claude-code and opencode MCP configs
+
+**Action**:
+1. Move `home/modules/lib/` → `modules/lib/` (shared utilities not tied to specific program)
+2. Move `home/modules/shared/` → `modules/lib/shared/` or inline into relevant modules
+3. Update import paths in dendritic modules
+
+**Validation**: `nix flake check --no-build` passes
+
+---
+
+#### 6.4.13: Migrate home/modules/files to dendritic
+
+**Goal**: Move `home/modules/files/` and `home/files/` to dendritic structure.
+
+**Current state**:
+- `home/modules/files/default.nix` - Drop-in file management module (~340 LOC)
+- `home/files/` - Source files (bin/, lib/, config, etc.)
+- Provides: automatic script installation, zsh completion generation
+
+**Options**:
+1. Create `modules/programs/files-manager [nd]/` dendritic module
+2. Distribute file ownership to feature modules (each module owns its scripts)
+3. Keep as-is but move to dendritic location
+
+**Note**: This module has known anti-patterns (see Future Work F5). Migration is a good
+opportunity to refactor OR can defer refactoring to F5.
+
+**Validation**: `nix flake check --no-build` + `home-manager switch --dry-run`
+
+---
+
+#### 6.4.14: Delete remaining home/modules/ files
+
+**Goal**: Clean up any remaining files in `home/modules/`.
+
+**Files to delete** (after dependencies migrated):
+- `home/modules/base.nix` - No longer imported by any host
+- `home/modules/claude-code.nix` - Superseded by dendritic module
+- `home/modules/claude-code-statusline.nix` - Superseded by dendritic module
+- `home/modules/opencode.nix` - Superseded by dendritic module
+- `home/modules/github-auth.nix` - Superseded by dendritic module
+- `home/modules/secrets-management.nix` - Superseded by dendritic module
+- `home/modules/claude-code/` directory - Superseded (check for any remaining deps)
+- `home/modules/opencode/` directory - Superseded
+- Markdown/doc files (*.md) - Move to docs/ or delete if outdated
+
+**Validation**: `nix flake check --no-build`
+
+---
+
+#### 6.4.15: Delete home/modules/ directory
 
 **Goal**: Remove the deprecated directory entirely.
 
-**Prerequisite**: All prior sub-tasks complete.
+**Prerequisite**: Tasks 6.4.12-6.4.14 complete, no remaining imports.
 
 **Command**: `rm -rf home/modules/`
 

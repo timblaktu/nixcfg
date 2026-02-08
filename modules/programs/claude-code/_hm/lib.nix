@@ -11,8 +11,8 @@
 
 let
   # Import shared rbw helper library for consistent credential handling
-  # Path updated for dendritic location: modules/programs/claude-code/_hm/ -> home/modules/lib/
-  rbwLib = import ../../../../home/modules/lib/rbw.nix { inherit pkgs lib; };
+  # Location: modules/lib/ (dendritic structure)
+  rbwLib = import ../../../lib/rbw.nix { inherit pkgs lib; };
 in
 {
   # Generate a Claude Code wrapper script for an account

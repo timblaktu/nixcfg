@@ -9,8 +9,8 @@ let
   cfg = config.programs.opencode;
 
   # Import shared MCP server definitions for DRY consistency with claude-code
-  # Path updated for dendritic location: modules/programs/opencode/_hm/ -> home/modules/shared/
-  sharedMcpDefs = import ../../../../home/modules/shared/mcp-server-defs.nix { inherit lib; };
+  # Location: modules/lib/shared/ (dendritic structure)
+  sharedMcpDefs = import ../../../lib/shared/mcp-server-defs.nix { inherit lib; };
 
   # Transform shared MCP server definition to OpenCode format
   # OpenCode uses: { type = "local"; command = [...]; environment = {}; enabled = true; }

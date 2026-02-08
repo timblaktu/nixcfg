@@ -26,9 +26,9 @@
       let
         lib = pkgs.lib;
 
-        # Import shared Claude Code library
+        # Import shared Claude Code library from dendritic structure
         # Note: We pass a minimal config since Termux scripts don't need home-manager features
-        claudeLib = import ../../home/modules/claude-code/lib.nix {
+        claudeLib = import ../programs/claude-code/_hm/lib.nix {
           inherit lib pkgs;
           config = { }; # Minimal config for Termux (no home-manager)
         };
