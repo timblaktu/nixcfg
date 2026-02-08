@@ -1,7 +1,7 @@
 # Plan 019: Migrate nixcfg to Dendritic Pattern
 
 **Created**: 2026-02-07
-**Status**: PLANNING
+**Status**: IN_PROGRESS
 **Branch**: `refactor/modularization` (existing, Plan 018 paused)
 **Replaces**: Plan 018 (modularization) - same goal, new approach
 
@@ -193,7 +193,7 @@ in
 | Task | Description | Status |
 |------|-------------|--------|
 | 0.1 | Add import-tree to flake inputs | PENDING |
-| 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | PENDING |
+| 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | COMPLETE |
 | 0.3 | Create `modules/flake-parts/lib.nix` (mkNixos, mkHomeManager helpers) | PENDING |
 | 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | PENDING |
 | 0.5 | Create `modules/flake-parts/systems.nix` (supported architectures) | PENDING |
