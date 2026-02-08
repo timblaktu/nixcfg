@@ -525,7 +525,7 @@
               # Modern CLI replacements (subset for HM)
               dua # Disk usage analyzer
               glow # Markdown renderer
-              nixfmt-rfc-style
+              nixfmt
 
               # Media tools
               ffmpeg

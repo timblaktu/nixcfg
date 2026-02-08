@@ -464,7 +464,7 @@
               memoryUpdateScript
             ] ++ optionals (cfg.mcpServers.sequentialThinkingPython.enable or false) [
               (pkgs.writers.writeBashBin "sequential-thinking-mcp" ''
-                exec ${nixmcp.packages.${pkgs.system}.sequential-thinking-mcp}/bin/sequential-thinking-mcp "$@"
+                exec ${nixmcp.packages.${pkgs.stdenv.hostPlatform.system}.sequential-thinking-mcp}/bin/sequential-thinking-mcp "$@"
               '')
             ] ++ optionals cfg.hooks.formatting.enable [
               nixpkgs-fmt

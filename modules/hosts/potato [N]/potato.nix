@@ -64,7 +64,7 @@ in
 
     # User configuration - add home-manager package
     users.users.${username}.packages = lib.mkDefault (with pkgs; [
-      inputs.home-manager.packages.${pkgs.system}.default
+      inputs.home-manager.packages.${pkgs.stdenv.hostPlatform.system}.default
     ]);
 
     # Basic system packages for ARM SBC

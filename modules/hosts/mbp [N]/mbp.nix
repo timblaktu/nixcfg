@@ -117,7 +117,7 @@ in
     # User configuration - mostly handled by system-default layer
     # This adds host-specific package (home-manager)
     users.users.${username}.packages = lib.mkDefault (with pkgs; [
-      inputs.home-manager.packages.${pkgs.system}.default
+      inputs.home-manager.packages.${pkgs.stdenv.hostPlatform.system}.default
     ]);
 
     # Enable GnuPG agent with SSH support

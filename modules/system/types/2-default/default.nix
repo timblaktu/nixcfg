@@ -384,7 +384,7 @@
               marker-pdf
               (pkgs.callPackage ../../../../pkgs/tomd { })
               nix-diff
-              nixfmt-rfc-style
+              nixfmt
               pkg-config
               poppler
               resvg
@@ -461,7 +461,8 @@
           (lib.mkIf cfg.enableSshClient {
             programs.ssh = {
               enable = true;
-              addKeysToAgent = cfg.sshAddKeysToAgent;
+              # Disable deprecated defaults - we set our own in matchBlocks."*"
+              enableDefaultConfig = false;
 
               # Sensible defaults for SSH client
               extraConfig = ''
@@ -480,6 +481,11 @@
 
               # Default match blocks
               matchBlocks = {
+                # Global defaults (applies to all hosts)
+                "*" = {
+                  addKeysToAgent = cfg.sshAddKeysToAgent;
+                };
+
                 # GitHub
                 "github.com" = {
                   hostname = "github.com";
