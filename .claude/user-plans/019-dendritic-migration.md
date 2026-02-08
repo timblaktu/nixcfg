@@ -249,7 +249,7 @@ in
 | 3.2 | ssh [NDnd] | High | PARTIAL (integrated into system types) |
 | 3.3 | tmux [NDnd] | High | COMPLETE |
 | 3.4 | neovim [NDnd] (1871 LOC) | High | COMPLETE |
-| 3.5 | wsl [N] system settings | High | PENDING |
+| 3.5 | wsl [N] system settings | High | COMPLETE |
 | 3.6 | wsl-home [nd] user settings | High | PENDING |
 
 ### Phase 4: Feature Migrations (Tools)
