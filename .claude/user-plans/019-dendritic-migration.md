@@ -325,7 +325,7 @@ in
 | 6.4.7 | Migrate legacy-common/aliases.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.9 | Migrate remaining legacy-common/* | TASK:COMPLETE (2026-02-08) |
-| 6.4.10 | Migrate standalone modules | TASK:PENDING |
+| 6.4.10 | Migrate standalone modules | TASK:COMPLETE (2026-02-08) |
 | 6.4.11 | Update all hosts to remove base.nix import | TASK:PENDING |
 | 6.4.12 | Delete `home/modules/` directory | TASK:PENDING |
 
@@ -666,14 +666,27 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 **Goal**: Move remaining `home/modules/*.nix` files.
 
-**Files to migrate**:
-- `terminal-verification.nix` → Host-specific (WSL only) or `modules/programs/terminal/`
-- `windows-terminal.nix` → `modules/programs/windows-terminal/` (WSL-specific)
-- `podman-tools.nix` → `modules/programs/podman/`
-- `git-auth-helpers.nix` → `modules/programs/git/` (extend existing)
-- `gitlab-auth.nix` → `modules/programs/gitlab-auth/`
+**Status**: COMPLETE (2026-02-08)
 
-**Validation**: `nix flake check --no-build`
+**Files migrated**:
+- `terminal-verification.nix` → Extended `modules/programs/terminal/terminal.nix` (merged)
+- `windows-terminal.nix` → `modules/programs/windows-terminal [nd]/windows-terminal.nix`
+- `podman-tools.nix` → `modules/programs/podman [nd]/podman.nix`
+- `git-auth-helpers.nix` → `modules/programs/git-auth-helpers [nd]/git-auth-helpers.nix`
+- `gitlab-auth.nix` → Already exists at `modules/programs/gitlab-auth [nd]/` (deleted legacy)
+
+**Host updates**:
+- All 6 HM hosts updated to import new modules
+- WSL hosts: podman, windows-terminal, git-auth-helpers
+- Non-WSL hosts: podman (enabled), git-auth-helpers
+- ARM SBC (potato): podman disabled for lightweight footprint
+
+**base.nix changes**:
+- Removed imports of migrated modules
+- Removed `enableContainerSupport` option (now handled by podman module)
+- Removed `terminalVerification` passthrough (now in terminal module directly)
+
+**Validation**: `nix flake check --no-build` ✓
 
 ---
 
@@ -882,6 +895,19 @@ The higher layers (`system-cli`, `system-desktop`) exist for NixOS but not Darwi
 **Status**: Future enhancement - per Open Question #4
 **Issue**: Currently each host defines user inline; factory would generate from single definition.
 **Action**: Evaluate after basic dendritic migration is complete.
+
+### F5: Files Module Refactoring
+**Status**: Low priority - works but anti-pattern
+**Issue**: `home/modules/files/default.nix` and `home/files/default.nix` use several anti-patterns:
+  - **Exclusion list anti-pattern**: `validatedScriptNames` list (316-339) manually tracks scripts "installed elsewhere". Fragile and easy to forget updating.
+  - **Path coupling**: Hardcoded `filesDir = ./../../files` creates tight coupling between module and file location.
+  - **Eval-time generation**: Generates bash/zsh completions dynamically by parsing help text at evaluation time. Clever but expensive.
+**Recommended approach**:
+  - Distribute file ownership to feature modules (each module owns its scripts)
+  - Use `inputs.self + "/path"` instead of relative paths
+  - Generate completions at build time (derivation) not eval time
+  - Central files module becomes a thin coordinator or disappears entirely
+**Deferred from**: Task 6.4.10 (2026-02-08)
 
 ## Notes
 

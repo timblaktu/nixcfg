@@ -105,7 +105,9 @@ in
       inputs.self.modules.homeManager.shell-utils
       inputs.self.modules.homeManager.terminal
       inputs.self.modules.homeManager.system-tools
-      # Note: No wsl-home, esp-idf, or onedrive - this is bare-metal NixOS, not WSL
+      inputs.self.modules.homeManager.podman
+      inputs.self.modules.homeManager.git-auth-helpers
+      # Note: No wsl-home, esp-idf, onedrive, or windows-terminal - this is bare-metal NixOS, not WSL
     ];
 
     # Dendritic home-minimal options (required by system types)
@@ -120,6 +122,9 @@ in
 
     # Enable tmux auto-reload on home-manager generation change
     programs.tmux.autoReload.enable = true;
+
+    # Container tools (disabled for lightweight ARM SBC)
+    programs.podman-tools.enable = false;
 
     # Secrets management (dendritic module)
     secretsManagement = {

@@ -44,35 +44,23 @@ in
     # nixvim.nix migrated to modules/programs/neovim/ (dendritic pattern)
     # Legacy common modules (moved from home/common/ - Plan 019 Task 6.3)
     # environment.nix migrated to modules/programs/development-tools/ (Task 6.4.6)
-    # - Go, Rust, Pyenv environment setup now in development-tools module
-    # - Removed unused legacy vars (BUILD_DIR, TRIP, ANDROID_SDK)
-    # - Shell module already handles GPG_TTY, HM session vars sourcing
     # aliases.nix migrated to modules/programs/shell/ (Task 6.4.7)
-    # - Useful aliases (lsblk, dgit, rbw*, sops*, poetryshell, lh, gitit) → shell module
-    # - Shell functions (better_less, verbosecd, SSHOPTS_LENIENT) → shell module
-    # - Removed personal project aliases (cdtr, cdmx, nvtr, nvmx, cdddd) - too specific
-    # - Removed drive aliases (cdint, cdext1-2, cdc/g/x/y/z) - WSL mount-specific
     # Import both files modules - they will be conditionally enabled
     ./files
     ../files
     # development.nix migrated to modules/programs/development-tools/ (Task 6.4.9)
-    # - Claude utils (claudevloop, restart_claude, etc.) now in development-tools
-    # - Enhanced CLI tools (bat, eza, delta, etc.) now in development-tools
     # terminal.nix migrated to modules/programs/terminal/ (Task 6.4.9)
     # system.nix migrated to modules/programs/system-tools/ (Task 6.4.9)
     # shell-utils.nix migrated to modules/programs/shell-utils/ (Task 6.4.8)
-    # - Shell utility scripts (mytree, vwatch, mergejson, etc.)
-    # - Bash library files (~/.local/lib/*.bash)
-    ./terminal-verification.nix # WSL Windows Terminal verification
-    ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
+    # terminal-verification.nix migrated to modules/programs/terminal/ (Task 6.4.10)
+    # windows-terminal.nix migrated to modules/programs/windows-terminal/ (Task 6.4.10)
     # claude-code.nix migrated to modules/programs/claude-code/ (dendritic pattern)
     # opencode.nix migrated to modules/programs/opencode/ (dendritic pattern)
     # secrets-management.nix migrated to modules/programs/secrets-management/ (dendritic pattern)
     # github-auth.nix migrated to modules/programs/github-auth/ (dendritic pattern)
-    ./gitlab-auth.nix # GitLab authentication (Bitwarden/SOPS)
-    ./git-auth-helpers.nix # Combined git auth helpers (refresh-git-creds)
-    ./podman-tools.nix # Container tools configuration
-    # Enhanced nix-writers based script management (migrated to unified files)
+    # gitlab-auth.nix migrated to modules/programs/gitlab-auth/ (Task 6.4.10)
+    # git-auth-helpers.nix migrated to modules/programs/git-auth-helpers/ (Task 6.4.10)
+    # podman-tools.nix migrated to modules/programs/podman/ (Task 6.4.10)
     # esp-idf.nix migrated to modules/programs/esp-idf/ (Task 6.4.9)
     # onedrive.nix migrated to modules/programs/onedrive/ (Task 6.4.9)
   ];
@@ -211,11 +199,11 @@ in
       description = "Enable Claude Code configuration with MCP servers";
     };
 
-    enableContainerSupport = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Enable user container tools (podman-compose, podman-tui, etc.)";
-    };
+    # ─────────────────────────────────────────────────────────────────────────
+    # DEPRECATED OPTIONS - Migrated to dendritic modules (Task 6.4.10)
+    # enableContainerSupport → import podman module, set programs.podman-tools.enable
+    # terminalVerification → now built into terminal module, uses terminalVerification.* directly
+    # ─────────────────────────────────────────────────────────────────────────
 
     # Environment variables
     environmentVariables = mkOption {
@@ -229,32 +217,6 @@ in
       type = types.str;
       default = "24.11";
       description = "Home Manager state version";
-    };
-
-
-    # Terminal verification options (WSL-specific)
-    terminalVerification = mkOption {
-      type = types.submodule {
-        options = {
-          enable = mkOption {
-            type = types.bool;
-            default = true;
-            description = "Enable automatic Windows Terminal verification on WSL systems";
-          };
-          verbose = mkOption {
-            type = types.bool;
-            default = false;
-            description = "Show verification messages on startup";
-          };
-          warnOnMisconfiguration = mkOption {
-            type = types.bool;
-            default = true;
-            description = "Show warning if Windows Terminal bold rendering is not configured optimally";
-          };
-        };
-      };
-      default = { };
-      description = "Windows Terminal verification settings for WSL systems";
     };
   };
 
@@ -339,42 +301,11 @@ in
       programs.tmux.enable = cfg.enableTmux;
       programs.tmux.autoReload.enable = cfg.enableTmux; # Auto-reload on HM generation change
 
-      # Pass terminal verification configuration to the module
-      terminalVerification = {
-        enable = cfg.terminalVerification.enable;
-        verbose = cfg.terminalVerification.verbose;
-        warnOnMisconfiguration = cfg.terminalVerification.warnOnMisconfiguration;
-      };
-
-      # Validated scripts configuration removed - migrated to unified files
-
       # ─────────────────────────────────────────────────────────────────────────
-      # Claude Code - MIGRATED to host files (Task 6.4.3)
-      # Configuration now lives in each host's home.nix using lib.claudeCode presets
-      # See: modules/flake-parts/lib.nix for preset definitions
+      # MIGRATED CONFIGURATIONS (Task 6.4.10)
+      # terminalVerification → now in terminal module (import it and use terminalVerification.* directly)
+      # programs.podman-tools → import podman module and configure there
       # ─────────────────────────────────────────────────────────────────────────
-
-      # ─────────────────────────────────────────────────────────────────────────
-      # OpenCode - MIGRATED to host files (Task 6.4.4)
-      # Configuration now lives in each host's home.nix using lib.openCode presets
-      # See: modules/flake-parts/lib.nix for preset definitions
-      # ─────────────────────────────────────────────────────────────────────────
-
-      # ─────────────────────────────────────────────────────────────────────────
-      # Yazi - MIGRATED to dendritic module (Task 6.4.5)
-      # Configuration now lives in modules/programs/yazi/yazi.nix
-      # ─────────────────────────────────────────────────────────────────────────
-
-      # Container tools configuration (conditional)
-      programs.podman-tools = {
-        enable = cfg.enableContainerSupport;
-        enableCompose = true;
-        aliases = {
-          docker = "podman";
-          d = "podman";
-          dc = "podman-compose";
-        };
-      };
 
       # Unified files module configuration (always enabled)
       homeFiles.enable = true;

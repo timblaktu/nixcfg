@@ -39,6 +39,9 @@ in
       inputs.self.modules.homeManager.system-tools
       inputs.self.modules.homeManager.esp-idf
       inputs.self.modules.homeManager.onedrive
+      inputs.self.modules.homeManager.podman
+      inputs.self.modules.homeManager.windows-terminal
+      inputs.self.modules.homeManager.git-auth-helpers
     ];
 
     # Dendritic home-minimal options (required by system types)
@@ -56,6 +59,17 @@ in
 
     # OneDrive utilities (WSL host)
     oneDriveUtils.enable = true;
+
+    # Container tools (podman-tui, podman-compose)
+    programs.podman-tools = {
+      enable = true;
+      enableCompose = true;
+      aliases = {
+        docker = "podman";
+        d = "podman";
+        dc = "podman-compose";
+      };
+    };
 
     # Enable tmux auto-reload on home-manager generation change
     programs.tmux.autoReload.enable = true;
