@@ -1,24 +1,12 @@
 # flake-modules/systems.nix
 # System-specific configuration and utilities
+#
+# NOTE: Utility functions (nixpkgsFor, extractHostname) have been moved to
+# modules/flake-parts/lib.nix as part of Plan 019 (dendritic pattern migration).
+# Access them via: inputs.self.lib.nixpkgsFor, inputs.self.lib.extractHostname
 { inputs, ... }: {
   # Systems are defined in the main flake.nix
   # This module provides system-specific logic and utilities
-  
-  flake = {
-    # Expose utility functions for cross-system usage
-    lib = {
-      # Helper to get nixpkgs for a specific system with our overlays
-      nixpkgsFor = system: import inputs.nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-        overlays = [
-          (import ../overlays)
-        ];
-      };
-      
-      # Helper to extract hostname from configuration name pattern "user@hostname"
-      extractHostname = configName: 
-        builtins.elemAt (inputs.nixpkgs.lib.splitString "@" configName) 1;
-    };
-  };
+
+  # Utility functions are now in modules/flake-parts/lib.nix
 }
