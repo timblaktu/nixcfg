@@ -13,6 +13,55 @@
 
 ---
 
+# 🔄 SESSION WORKFLOW PROTOCOL
+
+## Starting a New Session
+When user says **"resume"**, **"continue"**, or **"next task"**:
+1. Read the active plan: `.claude/user-plans/019-dendritic-migration.md`
+2. Find the first PENDING task (or continue IN_PROGRESS task)
+3. State the task scope concisely and ask for confirmation before proceeding
+
+## Task Execution Pattern (5 Steps)
+Every task follows this pattern - adapt depth based on complexity:
+
+### 1. **Research** (if needed)
+- Review relevant files, understand current state
+- Skip if prior session already documented findings
+- Document any new discoveries in plan or CLAUDE.md
+
+### 2. **Present**
+- State task scope in 2-3 sentences
+- List specific files to be modified/created
+- Note any ambiguities or decision points
+- **STOP and wait for user confirmation**
+
+### 3. **Approve**
+- User confirms scope OR asks for clarification
+- Resolve any ambiguities before proceeding
+- If scope changes significantly, update plan file first
+
+### 4. **Execute**
+- Make changes following completion standard
+- Commit at logical inflection points
+- Keep user informed of progress on longer tasks
+
+### 5. **Validate**
+- Run `nix flake check --no-build`
+- For HM changes: `home-manager switch --flake '.#TARGET' --dry-run`
+- Verify expected behavior
+- **Only mark COMPLETE after validation passes**
+
+## End of Session
+Always provide continuation prompt:
+```
+Continue Plan 019.
+Last completed: [task ID and brief description]
+Next task: [task ID] - [one-line description]
+Check: [relevant file path]
+```
+
+---
+
 # ⚠️ CRITICAL PROJECT-SPECIFIC RULES ⚠️
 - **SESSION CONTINUITY**: Update this CLAUDE.md file with task progress and provide end-of-response summary of changes made
 - **COMPLETION STANDARD**: Tasks complete ONLY when: (1) `git add` all files, (2) `nix flake check` passes, (3) `nix run home-manager -- switch --flake '.#TARGET' --dry-run` succeeds, (4) end-to-end functionality demonstrated. **Writing code ≠ Working system**

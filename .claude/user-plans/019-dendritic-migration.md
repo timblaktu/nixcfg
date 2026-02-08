@@ -293,10 +293,39 @@ in
 | 6.1 | Remove `flake-modules/` (replaced by import-tree) | COMPLETE |
 | 6.2 | Remove `hosts/common/` | COMPLETE |
 | 6.3 | Remove `home/common/` (moved to `home/modules/legacy-common/`) | COMPLETE |
-| 6.4 | Remove `home/modules/` | PENDING |
+| 6.4 | Remove `home/modules/` | IN_PROGRESS |
 | 6.5 | Remove `modules/` (old NixOS modules) | PENDING |
 | 6.6 | Update ARCHITECTURE.md | PENDING |
 | 6.7 | Update CLAUDE.md with new patterns | PENDING |
+
+#### Task 6.4 Sub-tasks: Remove `home/modules/`
+
+**Context**: `home/modules/base.nix` is still imported by all 6 hosts. It provides:
+- `disabledModules` for upstream claude-code/opencode
+- `homeBase` options (username, homeDirectory, stateVersion)
+- Program configs: claude-code (~150 LOC), opencode (~120 LOC), yazi (~100 LOC)
+- Imports: legacy-common/* (~4300 LOC), files/, terminal modules
+
+**Strategy**: Migrate content to dendritic modules, then update hosts to remove base.nix import.
+
+| Sub-task | Description | DoD | Status |
+|----------|-------------|-----|--------|
+| 6.4.1 | Move `disabledModules` to dendritic claude-code module | Modules still disabled, hosts don't import base.nix for this | PENDING |
+| 6.4.2 | Replace `homeBase` options with dendritic system types | `home-minimal` provides username/homeDirectory/stateVersion | PENDING |
+| 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | Each host has its own claude-code config block | PENDING |
+| 6.4.4 | Move opencode CONFIG to host files | Each host has its own opencode config block | PENDING |
+| 6.4.5 | Create dendritic yazi module | `modules/programs/yazi/` exists with current config | PENDING |
+| 6.4.6 | Migrate legacy-common/environment.nix | Content absorbed into home-default or dedicated module | PENDING |
+| 6.4.7 | Migrate legacy-common/aliases.nix | Content absorbed into shell module or host configs | PENDING |
+| 6.4.8 | Migrate legacy-common/shell-utils.nix | Content absorbed into appropriate module | PENDING |
+| 6.4.9 | Migrate remaining legacy-common/* | esp-idf, onedrive, terminal, system, development | PENDING |
+| 6.4.10 | Migrate standalone modules | terminal-verification, windows-terminal, podman-tools, git-auth-helpers | PENDING |
+| 6.4.11 | Update all hosts to remove base.nix import | No host imports `home/modules/base.nix` | PENDING |
+| 6.4.12 | Delete `home/modules/` directory | Directory removed, `nix flake check` passes | PENDING |
+
+**Execution Order**: 6.4.1-6.4.2 (infrastructure) → 6.4.3-6.4.5 (high-value) → 6.4.6-6.4.10 (legacy) → 6.4.11-6.4.12 (cleanup)
+
+**Per-task validation**: After each sub-task, run `nix flake check --no-build` and verify at least one host builds.
 
 ## Technical Decisions
 
