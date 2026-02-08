@@ -257,7 +257,7 @@ in
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 4.1 | claude-code [nd] | High | PENDING |
+| 4.1 | claude-code [nd] | High | COMPLETE |
 | 4.2 | opencode [nd] | High | PENDING |
 | 4.3 | secrets-management [NDnd] | Medium | PENDING |
 | 4.4 | github-auth [nd] | Medium | PENDING |

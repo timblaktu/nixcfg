@@ -24,6 +24,7 @@
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
+            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             {
               homeBase = {
                 username = "tim";
@@ -74,6 +75,7 @@
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
+            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             {
               homeBase = {
                 username = "tim";
@@ -130,6 +132,7 @@
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
+            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             {
               homeBase = {
                 username = "tim";
@@ -212,6 +215,7 @@
             self.modules.homeManager.tmux # Dendritic pattern tmux module
             self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
+            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             {
               homeBase = {
                 username = "tim";
@@ -302,6 +306,7 @@
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
+            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
             {
               homeBase = {
                 username = "tim";

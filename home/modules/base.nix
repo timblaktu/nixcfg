@@ -53,7 +53,7 @@ in
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
-    ./claude-code.nix # Claude Code - enhanced multi-account module (upstream disabled via disabledModules)
+    # claude-code.nix migrated to modules/programs/claude-code/ (dendritic pattern)
     ./opencode.nix # OpenCode - enhanced multi-account module (upstream disabled via disabledModules)
     ./secrets-management.nix # RBW and SOPS configuration
     ./github-auth.nix # GitHub authentication (Bitwarden/SOPS)
