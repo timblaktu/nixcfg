@@ -3,7 +3,7 @@
 
 {
   imports = [
-    ./hardware-configuration.nix
+    ./hardware-config.nix
     ../../modules/base.nix
     inputs.sops-nix.nixosModules.sops
   ];
