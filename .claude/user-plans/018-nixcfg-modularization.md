@@ -454,7 +454,7 @@ lib.ai-dev = {
 - [x] Consistent hardware config naming across all hosts (0.6.2: mbp renamed)
 - [x] MCP adapter code exists in ONE place, consumed by both claude/opencode (0.6.3: mcp-server-defs.nix)
 - [x] `nix flake check` passes (verified after each task)
-- [x] `home-manager switch --dry-run` succeeds (verified: tim@thinky-nixos)
+- [x] `home-manager switch --dry-run` succeeds (verified: tim@pa161878-nixos)
 
 ### Task 0.6.1: Consolidate podman-tools.nix
 
