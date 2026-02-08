@@ -65,10 +65,14 @@
         }
       );
 
+      # nixos-wsl-minimal: Dendritic pattern - module defined in modules/hosts/nixos-wsl-minimal [N]/
       nixos-wsl-minimal = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
-          modules = [ ../hosts/nixos-wsl-minimal ];
+          modules = [
+            # Keep allowUnfree = false for distribution
+            self.modules.nixos.nixos-wsl-minimal
+          ];
           specialArgs = {
             inherit inputs;
           };
