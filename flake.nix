@@ -60,8 +60,6 @@
     # Documentation tooling
     drawio-svg-sync.url = "github:timblaktu/drawio-svg-sync";
 
-    # Dendritic pattern - auto-import all modules from a directory tree
-    import-tree.url = "github:vic/import-tree";
   };
 
   outputs = inputs@{ flake-parts, import-tree, ... }:
