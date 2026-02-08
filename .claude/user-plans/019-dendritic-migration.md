@@ -216,7 +216,7 @@ in
 | 1.4 | Migrate starship config | N/A (no starship config exists) |
 | 1.5 | Test on thinky-nixos (NixOS + HM) | COMPLETE |
 | 1.6 | Test on thinky-ubuntu (HM only) | COMPLETE (wired in, dry-run verified) |
-| 1.7 | Remove old shell configs after verification | PENDING |
+| 1.7 | Remove old shell configs after verification | COMPLETE |
 
 **Definition of Done**:
 - Shell works identically on all hosts
