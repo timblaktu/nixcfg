@@ -129,6 +129,22 @@
           };
         }
       );
+
+      # tim@macbook-air: Dendritic pattern - module defined in modules/hosts/macbook-air [D]/
+      "tim@macbook-air" = withSystem "aarch64-darwin" ({ pkgs, ... }:
+        inputs.home-manager.lib.homeManagerConfiguration {
+          inherit pkgs;
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.homeManager."tim@macbook-air"
+          ];
+          extraSpecialArgs = {
+            inherit inputs;
+            inherit (inputs) nixpkgs-stable;
+            hostname = "macbook-air";
+          };
+        }
+      );
     };
   };
 }

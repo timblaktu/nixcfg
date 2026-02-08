@@ -274,7 +274,7 @@ in
 | 5.3 | thinky-ubuntu (HM only) | COMPLETE |
 | 5.4 | mbp (Intel Mac running NixOS) | COMPLETE |
 | 5.5 | potato (ARM SBC) | COMPLETE |
-| 5.6 | macbook-air (Apple Silicon) | PENDING |
+| 5.6 | macbook-air (Apple Silicon) | COMPLETE |
 | 5.7 | nixos-wsl-minimal (template) | PENDING |
 
 ### Phase 6: Cleanup
