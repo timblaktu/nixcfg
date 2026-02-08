@@ -11,6 +11,9 @@ in
     ../../modules/nixos/wsl-cuda.nix # HOST-SPECIFIC: CUDA support
   ];
 
+  # System default layer configuration (required by system types)
+  systemDefault.userName = "tim";
+
   # Host-specific WSL common configuration
   wslCommon = {
     hostname = "pa161878-nixos";

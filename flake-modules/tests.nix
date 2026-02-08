@@ -134,11 +134,11 @@
         # === MODULE INTEGRATION TESTS ===
         module-base-integration = mkModuleTest {
           name = "module-base-integration";
-          description = "Testing base module integration";
+          description = "Testing system default module integration";
           hostName = "thinky-nixos";
           attributes = {
-            userName = self.nixosConfigurations.thinky-nixos.config.base.userName;
-            userGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.base.userGroups;
+            userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
+            userGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.systemDefault.userGroups;
           };
           checks = ''
             [[ "$userName" == "tim" ]] || (echo "❌ Username not tim" && exit 1)
@@ -258,7 +258,7 @@
               timeout = 30;
             };
             # Verify both modules' attributes are accessible and consistent
-            userName = self.nixosConfigurations.thinky-nixos.config.base.userName;
+            userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
             wslUser = self.nixosConfigurations.thinky-nixos.config.wsl.defaultUser;
             sshPort = toString self.nixosConfigurations.thinky-nixos.config.wslCommon.sshPort;
             opensshPort = toString (builtins.head self.nixosConfigurations.thinky-nixos.config.services.openssh.ports);
@@ -287,7 +287,7 @@
             };
             # Check if SOPS is enabled and user matches
             sopsEnabled = if self.nixosConfigurations.thinky-nixos.config.sopsNix.enable then "1" else "0";
-            userName = self.nixosConfigurations.thinky-nixos.config.base.userName;
+            userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
             userExists = if (builtins.hasAttr "tim" self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
           } ''
           echo "Testing SOPS-NiX integration with base module..."
@@ -305,7 +305,7 @@
         # Test Home Manager integration for WSL hosts
         cross-module-home-manager =
           let
-            systemUser = self.nixosConfigurations.thinky-nixos.config.base.userName;
+            systemUser = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
             hmConfigName = "${systemUser}@thinky-nixos";
           in
           pkgs.runCommand "cross-module-home-manager"

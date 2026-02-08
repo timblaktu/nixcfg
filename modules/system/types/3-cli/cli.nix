@@ -94,6 +94,13 @@
             default = [ ];
             description = "Additional CLI packages to install";
           };
+
+          # Claude Code enterprise settings
+          enableClaudeCodeEnterprise = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enable Claude Code enterprise managed settings at /etc/claude-code/managed-settings.json";
+          };
         };
 
         config = lib.mkMerge [
@@ -231,6 +238,63 @@
                 enable = lib.mkDefault true;
                 dates = lib.mkDefault "weekly";
               };
+            };
+          })
+
+          # Claude Code Enterprise Settings
+          (lib.mkIf cfg.enableClaudeCodeEnterprise {
+            environment.etc."claude-code/managed-settings.json" = {
+              text = builtins.toJSON {
+                # Top-precedence settings that cannot be overridden by users
+                model = "opus";
+
+                # Security and permissions (organization-wide enforcement) - v2.0 schema
+                permissions = {
+                  allow = [
+                    "Bash"
+                    "mcp__context7"
+                    "mcp__mcp-nixos"
+                    "mcp__sequential-thinking"
+                    "Read"
+                    "Write"
+                    "Edit"
+                    "WebFetch"
+                  ];
+                  deny = [
+                    "Search"
+                    "Find"
+                    "Bash(rm -rf /*)"
+                    "Read(.env)"
+                    "Write(/etc/passwd)"
+                  ];
+                  ask = [ ];
+                  defaultMode = "default";
+                  additionalDirectories = [ ];
+                };
+
+                # Environment variables
+                env = {
+                  CLAUDE_CODE_ENABLE_TELEMETRY = "0";
+                };
+
+                # Statusline configuration (consistent across all accounts)
+                statusLine = {
+                  type = "command";
+                  command = "claude-statusline-powerline";
+                  padding = 0;
+                };
+
+                # Project overrides
+                projectOverrides = {
+                  enabled = true;
+                  searchPaths = [
+                    ".claude/settings.json"
+                    ".claude.json"
+                    "claude.config.json"
+                  ];
+                };
+              };
+              mode = "0644";
             };
           })
         ];

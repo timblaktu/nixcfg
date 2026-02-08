@@ -93,6 +93,12 @@
             description = "Console keymap";
           };
 
+          consolePackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = [ ];
+            description = "Console-related packages (fonts, etc.)";
+          };
+
           # SSH configuration
           sshEnable = lib.mkOption {
             type = lib.types.bool;
@@ -119,32 +125,29 @@
             description = "Require password for sudo";
           };
 
-          # Integration options
-          enableHomeManager = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = ''
-              Enable Home Manager NixOS module integration.
-              When true, imports home-manager.nixosModules.home-manager.
-              You must still configure home-manager.users.<name> separately.
-            '';
-          };
-
-          enableSops = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = ''
-              Enable SOPS-nix for secrets management.
-              When true, imports sops-nix.nixosModules.sops.
-              You must configure sops.defaultSopsFile and secrets separately.
-            '';
-          };
+          # NOTE: enableHomeManager and enableSops options removed.
+          # These integrations should be done at the host level by importing
+          # the appropriate modules directly. See the comment in the config section.
 
           # System packages beyond minimal
           additionalPackages = lib.mkOption {
             type = lib.types.listOf lib.types.package;
             default = [ ];
             description = "Additional system packages";
+          };
+
+          # Shell aliases
+          extraShellAliases = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+            description = "Additional shell aliases";
+          };
+
+          # Environment variables
+          extraEnvironment = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+            description = "Additional system-wide environment variables";
           };
         };
 
@@ -167,13 +170,14 @@
             console = {
               font = lib.mkDefault cfg.consoleFont;
               keyMap = lib.mkDefault cfg.consoleKeyMap;
+              packages = lib.mkDefault cfg.consolePackages;
             };
 
             # User creation
             users.users.${cfg.userName} = {
               isNormalUser = lib.mkDefault true;
               extraGroups = lib.mkDefault cfg.userGroups;
-              shell = lib.mkDefault cfg.userShell;
+              shell = lib.mkForce cfg.userShell; # mkForce to override NixOS default
               packages = lib.mkDefault cfg.userPackages;
             };
 
@@ -202,7 +206,13 @@
               ll = "ls -la";
               update = "sudo nixos-rebuild switch";
               upgrade = "sudo nixos-rebuild switch --upgrade";
-            };
+            } // cfg.extraShellAliases;
+
+            # Environment variables
+            environment.variables = lib.mkMerge [
+              { EDITOR = "nvim"; }
+              cfg.extraEnvironment
+            ];
           }
 
           # SSH configuration
@@ -216,20 +226,17 @@
             };
           })
 
-          # Home Manager integration
-          (lib.mkIf cfg.enableHomeManager {
-            imports = [ inputs.home-manager.nixosModules.home-manager ];
-
-            home-manager = {
-              useGlobalPkgs = lib.mkDefault true;
-              useUserPackages = lib.mkDefault true;
-            };
-          })
-
-          # SOPS integration
-          (lib.mkIf cfg.enableSops {
-            imports = [ inputs.sops-nix.nixosModules.sops ];
-          })
+          # NOTE: Home Manager and SOPS integration should be handled at the host level
+          # by importing the appropriate modules directly. Conditional imports don't
+          # work properly in Nix modules.
+          #
+          # Example in host config:
+          #   imports = [
+          #     inputs.home-manager.nixosModules.home-manager
+          #     inputs.sops-nix.nixosModules.sops
+          #   ];
+          #   home-manager.useGlobalPkgs = true;
+          #   home-manager.useUserPackages = true;
         ];
       };
 
@@ -271,32 +278,28 @@
             description = "System time zone";
           };
 
-          # Integration options
-          enableHomeManager = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = ''
-              Enable Home Manager Darwin module integration.
-              When true, imports home-manager.darwinModules.home-manager.
-              You must still configure home-manager.users.<name> separately.
-            '';
-          };
-
-          enableSops = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = ''
-              Enable SOPS-nix for secrets management.
-              When true, imports sops-nix.darwinModules.sops.
-              You must configure sops.defaultSopsFile and secrets separately.
-            '';
-          };
+          # NOTE: enableHomeManager and enableSops options removed.
+          # These integrations should be done at the host level.
 
           # System packages beyond minimal
           additionalPackages = lib.mkOption {
             type = lib.types.listOf lib.types.package;
             default = [ ];
             description = "Additional system packages";
+          };
+
+          # Shell aliases
+          extraShellAliases = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+            description = "Additional shell aliases";
+          };
+
+          # Environment variables
+          extraEnvironment = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+            description = "Additional system-wide environment variables";
           };
         };
 
@@ -337,23 +340,16 @@
             # Shell aliases
             environment.shellAliases = {
               ll = "ls -la";
-            };
+            } // cfg.extraShellAliases;
+
+            # Environment variables
+            environment.variables = lib.mkMerge [
+              { EDITOR = "nvim"; }
+              cfg.extraEnvironment
+            ];
           }
 
-          # Home Manager integration
-          (lib.mkIf cfg.enableHomeManager {
-            imports = [ inputs.home-manager.darwinModules.home-manager ];
-
-            home-manager = {
-              useGlobalPkgs = lib.mkDefault true;
-              useUserPackages = lib.mkDefault true;
-            };
-          })
-
-          # SOPS integration
-          (lib.mkIf cfg.enableSops {
-            imports = [ inputs.sops-nix.darwinModules.sops ];
-          })
+          # NOTE: Home Manager and SOPS integration should be handled at the host level
         ];
       };
   };

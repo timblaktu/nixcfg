@@ -10,6 +10,9 @@ in
     ../common/wsl-base.nix # Common WSL base configuration
   ];
 
+  # System default layer configuration (required by system types)
+  systemDefault.userName = "tim";
+
   # Host-specific WSL common configuration
   wslCommon = {
     hostname = "thinky-nixos";

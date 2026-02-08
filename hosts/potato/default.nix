@@ -5,15 +5,16 @@
   imports = [
     # Hardware configuration
     ./hardware-config.nix
-    ../../modules/base.nix
+    # Dendritic system type - provides system-default layer (includes minimal)
+    inputs.self.modules.nixos.system-default
     inputs.sops-nix.nixosModules.sops
   ];
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = lib.mkDefault true;
 
-  # Base module configuration
-  base = {
+  # Default layer configuration (2-default)
+  systemDefault = {
     userName = "tim";
     userGroups = lib.mkDefault [ "wheel" "networkmanager" "gpio" ];
   };

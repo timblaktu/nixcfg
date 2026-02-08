@@ -4,30 +4,32 @@
 {
   imports = [
     ./hardware-config.nix
-    ../../modules/base.nix
+    # Dendritic system type - provides system-default layer (includes minimal)
+    # Note: Using system-default rather than system-cli as this is a more minimal headless setup
+    inputs.self.modules.nixos.system-default
     inputs.sops-nix.nixosModules.sops
   ];
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = lib.mkDefault true;
 
-  # Base module configuration
-  base = {
+  # Default layer configuration (2-default)
+  systemDefault = {
     userName = "tim";
     sshPasswordAuth = lib.mkDefault true;
-    requireWheelPassword = lib.mkDefault false;
+    wheelNeedsPassword = lib.mkDefault false;
     userGroups = lib.mkDefault [ "wheel" "networkmanager" "audio" "video" ];
-    additionalPackages = lib.mkDefault (with pkgs; [
-      kbd
-      terminus_font
-      powerline-fonts
-    ]);
     consolePackages = lib.mkDefault (with pkgs; [
       kbd
       terminus_font
       powerline-fonts
     ]);
-    additionalShellAliases = lib.mkDefault { };
+    additionalPackages = lib.mkDefault (with pkgs; [
+      kbd
+      terminus_font
+      powerline-fonts
+    ]);
+    extraShellAliases = lib.mkDefault { };
   };
 
   # Hostname
