@@ -323,7 +323,7 @@ in
 | 6.4.5 | Create dendritic yazi module | TASK:COMPLETE (2026-02-08) |
 | 6.4.6 | Migrate legacy-common/environment.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.7 | Migrate legacy-common/aliases.nix | TASK:COMPLETE (2026-02-08) |
-| 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:PENDING |
+| 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.9 | Migrate remaining legacy-common/* | TASK:PENDING |
 | 6.4.10 | Migrate standalone modules | TASK:PENDING |
 | 6.4.11 | Update all hosts to remove base.nix import | TASK:PENDING |
@@ -577,13 +577,42 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 #### 6.4.8: Migrate legacy-common/shell-utils.nix
 
-**Goal**: Move shell utilities to appropriate module.
+**Goal**: Move shell utilities to `modules/programs/shell-utils/`.
 
-**Current state**: `home/modules/legacy-common/shell-utils.nix`
+**Implementation** (2026-02-08): Created dedicated dendritic module.
 
-**Target**: Likely `modules/programs/shell/` or `modules/system/types/3-cli/home.nix`
+**What was done**:
+1. Created `modules/programs/shell-utils/shell-utils.nix` - Full dendritic module with:
+   - 9 shell utility scripts (mytree, vwatch, mergejson, colorfuncs, help-format-template,
+     soundcloud-dl, stress-wrapper, wifi-test-comparison, remote-wifi-analyzer)
+   - 9 bash library files (~/.local/lib/*.bash) for sourcing
 
-**Validation**: `nix flake check --no-build`
+2. Copied source files to `modules/programs/shell-utils/files/`:
+   - `files/bin/` - Shell script source files
+   - `files/lib/` - Bash library files
+
+3. Updated all 6 host files to import `inputs.self.modules.homeManager.shell-utils`
+
+4. Removed shell-utils.nix import from base.nix with migration comment
+
+5. Deleted `home/modules/legacy-common/shell-utils.nix` (209 lines)
+
+**Architecture note**: Unlike legacy module which used `homeBase.enableShellUtils` option,
+dendritic module is unconditionally enabled when imported (standard dendritic pattern).
+
+**Files created**:
+- `modules/programs/shell-utils/shell-utils.nix`
+- `modules/programs/shell-utils/files/bin/*` (8 script files)
+- `modules/programs/shell-utils/files/lib/*` (9 library files)
+
+**Files modified**:
+- `home/modules/base.nix` - Removed import, added migration comment
+- `modules/hosts/*/` - All 6 host files updated
+
+**Files deleted**:
+- `home/modules/legacy-common/shell-utils.nix` (209 lines)
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 

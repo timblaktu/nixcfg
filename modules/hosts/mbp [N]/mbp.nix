@@ -217,6 +217,7 @@ in
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.development-tools
       inputs.self.modules.homeManager.yazi
+      inputs.self.modules.homeManager.shell-utils
       # Note: NO wsl-home module - this is bare-metal NixOS, not WSL
     ];
 

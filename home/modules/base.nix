@@ -58,7 +58,9 @@ in
     ./legacy-common/development.nix
     ./legacy-common/terminal.nix
     ./legacy-common/system.nix
-    ./legacy-common/shell-utils.nix
+    # shell-utils.nix migrated to modules/programs/shell-utils/ (Task 6.4.8)
+    # - Shell utility scripts (mytree, vwatch, mergejson, etc.)
+    # - Bash library files (~/.local/lib/*.bash)
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
     # claude-code.nix migrated to modules/programs/claude-code/ (dendritic pattern)
