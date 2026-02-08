@@ -210,56 +210,13 @@
         }
       );
 
+      # tim@thinky-nixos: Dendritic pattern - module defined in modules/hosts/thinky-nixos/
       "tim@thinky-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            ../home/modules/base.nix
-            self.modules.homeManager.shell # Dendritic pattern shell module
-            self.modules.homeManager.git # Dendritic pattern git module
-            self.modules.homeManager.tmux # Dendritic pattern tmux module
-            self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
-            self.modules.homeManager.wsl-home # Dendritic pattern WSL home module
-            self.modules.homeManager.claude-code # Dendritic pattern claude-code module
-            self.modules.homeManager.secrets-management # Dendritic pattern secrets-management module
-            self.modules.homeManager.github-auth # Dendritic pattern github-auth module
-            {
-              homeBase = {
-                username = "tim";
-                homeDirectory = "/home/tim";
-              };
-
-              # WSL home settings (defaults from wsl-home module)
-              wsl-home-settings = {
-                distroName = "nixos";
-              };
-
-              # Enable tmux auto-reload on home-manager generation change
-              programs.tmux.autoReload.enable = true;
-
-              # Secrets management
-              secretsManagement = {
-                enable = true;
-                rbw.email = "timblaktu@gmail.com";
-              };
-
-              # GitHub authentication
-              gitAuth.github = {
-                enable = true;
-                mode = "bitwarden";
-                bitwarden = {
-                  item = "github.com";
-                  field = "PAT-timtam2026";
-                };
-                cli.tokenOverrides.pr = {
-                  item = "github.com";
-                  field = "PAT-pubclassic";
-                };
-              };
-            }
-            # ../home/migration/wsl-home-files.nix # WSL-specific unified files configuration - DISABLED after module-based migration
-            # ../home/modules/autovalidate-demo.nix  # Disabled - requires home-manager autoValidate integration
+            self.modules.homeManager."tim@thinky-nixos"
           ];
           extraSpecialArgs = {
             inherit inputs;

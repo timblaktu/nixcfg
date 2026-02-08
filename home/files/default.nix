@@ -419,7 +419,8 @@ in
       mkUnifiedFile = mkValidatedFile;
       mkUnifiedLibrary = mkScriptLibrary;
       inherit mkClaudeWrapper;
-      inherit autoWriter autoWriterBin debugAutoWriter;
+      inherit autoWriter autoWriterBin;
+      # Note: debugAutoWriter mentioned in docs but not implemented - omitted
     };
 
     # Install executable scripts

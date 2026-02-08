@@ -13,7 +13,7 @@
           };
         }
       );
-      
+
       potato = withSystem "aarch64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
@@ -24,7 +24,7 @@
           };
         }
       );
-      
+
       pa161878-nixos = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
@@ -36,14 +36,18 @@
           };
         }
       );
-      
+
+      # thinky-nixos: Dendritic pattern - module defined in modules/hosts/thinky-nixos/
       thinky-nixos = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
-          modules = [ ../hosts/thinky-nixos ];
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.thinky-nixos
+          ];
           specialArgs = {
             inherit inputs;
-            inherit (inputs) nixpkgs-stable mcp-servers-nix;
+            inherit (inputs) nixpkgs-stable;
             wslHostname = "thinky-nixos";
           };
         }

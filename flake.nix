@@ -73,6 +73,7 @@
           ./modules/meta
           ./modules/programs
           ./modules/system
+          ./modules/hosts
         ])
 
         # Existing flake-modules (to be migrated in Phase 6)
