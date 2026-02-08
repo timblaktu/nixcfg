@@ -327,7 +327,7 @@ in
 | 6.4.9 | Migrate remaining legacy-common/* | TASK:COMPLETE (2026-02-08) |
 | 6.4.10 | Migrate standalone modules | TASK:COMPLETE (2026-02-08) |
 | 6.4.11 | Update all hosts to remove base.nix import | TASK:COMPLETE (2026-02-08) |
-| 6.4.12 | Move shared libs to dendritic structure | TASK:PENDING |
+| 6.4.12 | Move shared libs to dendritic structure | TASK:COMPLETE (2026-02-08) |
 | 6.4.13 | Migrate home/modules/files to dendritic | TASK:PENDING |
 | 6.4.14 | Delete remaining home/modules/ files | TASK:PENDING |
 | 6.4.15 | Delete home/modules/ directory | TASK:PENDING |
@@ -737,17 +737,29 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 **Goal**: Move `home/modules/lib/` and `home/modules/shared/` into dendritic module structure.
 
-**Current state**:
-- `home/modules/lib/rbw.nix` - Used by claude-code and opencode for Bitwarden auth
-- `home/modules/shared/ai-instructions.nix` - Used by opencode
-- `home/modules/shared/mcp-server-defs.nix` - Used by claude-code and opencode MCP configs
+**Implementation** (2026-02-08): Completed successfully.
 
-**Action**:
-1. Move `home/modules/lib/` → `modules/lib/` (shared utilities not tied to specific program)
-2. Move `home/modules/shared/` → `modules/lib/shared/` or inline into relevant modules
-3. Update import paths in dendritic modules
+**What was done**:
+1. Created `modules/lib/` directory for shared utilities
+2. Copied `home/modules/lib/rbw.nix` → `modules/lib/rbw.nix`
+3. Copied `home/modules/lib/git-forge-auth.nix` → `modules/lib/git-forge-auth.nix`
+4. Copied `home/modules/shared/` → `modules/lib/shared/`
+5. Updated import paths in 5 files:
+   - `modules/programs/opencode/opencode.nix`
+   - `modules/programs/opencode/_hm/mcp-servers.nix`
+   - `modules/programs/claude-code/_hm/lib.nix`
+   - `modules/programs/claude-code/_hm/mcp-servers.nix`
+   - `modules/flake-parts/termux-outputs.nix`
 
-**Validation**: `nix flake check --no-build` passes
+**Files created**:
+- `modules/lib/rbw.nix`
+- `modules/lib/git-forge-auth.nix`
+- `modules/lib/shared/ai-instructions.nix`
+- `modules/lib/shared/mcp-server-defs.nix`
+
+**Note**: Old files in `home/modules/lib/` and `home/modules/shared/` kept for now (will delete in 6.4.14)
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 
