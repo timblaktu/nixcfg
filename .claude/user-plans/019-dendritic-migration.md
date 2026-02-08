@@ -229,9 +229,9 @@ in
 | Task | Description | Status |
 |------|-------------|--------|
 | 2.1 | Create `modules/system/types/1-minimal/` | COMPLETE |
-| 2.2 | Create `modules/system/types/2-default/` | PENDING |
-| 2.3 | Create `modules/system/types/3-cli/` | PENDING |
-| 2.4 | Create `modules/system/types/4-desktop/` | PENDING |
+| 2.2 | Create `modules/system/types/2-default/` | COMPLETE |
+| 2.3 | Create `modules/system/types/3-cli/` | COMPLETE |
+| 2.4 | Create `modules/system/types/4-desktop/` | COMPLETE |
 | 2.5 | Migrate `modules/base.nix` → system types | PENDING |
 | 2.6 | Migrate `home/modules/base.nix` → system types | PENDING |
 
