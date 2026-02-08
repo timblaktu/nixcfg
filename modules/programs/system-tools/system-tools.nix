@@ -24,34 +24,34 @@
           # SOPS secret bootstrap from Bitwarden
           (pkgs.writeShellApplication {
             name = "bootstrap-secrets";
-            text = builtins.readFile ../../../home/files/bin/bootstrap-secrets.sh;
+            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/bootstrap-secrets.sh");
             runtimeInputs = with pkgs; [ rbw nix coreutils age ];
           })
 
           # SSH key bootstrap from Bitwarden
           (pkgs.writeShellApplication {
             name = "bootstrap-ssh-keys";
-            text = builtins.readFile ../../../home/files/bin/bootstrap-ssh-keys.sh;
+            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/bootstrap-ssh-keys.sh");
             runtimeInputs = with pkgs; [ rbw openssh coreutils util-linux ];
           })
 
           # WSL tarball builder for NixOS configurations
           (pkgs.writeShellApplication {
             name = "build-wsl-tarball";
-            text = builtins.readFile ../../../home/files/bin/build-wsl-tarball;
+            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/build-wsl-tarball");
             runtimeInputs = with pkgs; [ nix coreutils util-linux ];
           })
 
           # USB device restart utilities
           (pkgs.writeShellApplication {
             name = "restart-usb";
-            text = builtins.readFile ../../../home/files/bin/restart-usb;
+            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/restart-usb");
             runtimeInputs = with pkgs; [ coreutils util-linux usbutils ];
           })
 
           (pkgs.writeShellApplication {
             name = "restart-usb-improved";
-            text = builtins.readFile ../../../home/files/bin/restart-usb-improved;
+            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/restart-usb-improved");
             runtimeInputs = with pkgs; [ coreutils util-linux usbutils ];
           })
         ];
@@ -60,13 +60,13 @@
         # These are provided as reference files for Windows/WSL environments
         home.file = {
           ".local/share/docs/windows-scripts/fix-terminal-fonts.ps1".source =
-            ../../../home/files/bin/fix-terminal-fonts.ps1;
+            (../../.. + "/modules/programs/files [nd]/files/bin/fix-terminal-fonts.ps1");
           ".local/share/docs/windows-scripts/font-detection-functions.ps1".source =
-            ../../../home/files/bin/font-detection-functions.ps1;
+            (../../.. + "/modules/programs/files [nd]/files/bin/font-detection-functions.ps1");
           ".local/share/docs/windows-scripts/install-terminal-fonts.ps1".source =
-            ../../../home/files/bin/install-terminal-fonts.ps1;
+            (../../.. + "/modules/programs/files [nd]/files/bin/install-terminal-fonts.ps1");
           ".local/share/docs/windows-scripts/restart-usb-v4.ps1".source =
-            ../../../home/files/bin/restart-usb-v4.ps1;
+            (../../.. + "/modules/programs/files [nd]/files/bin/restart-usb-v4.ps1");
         };
       };
   };

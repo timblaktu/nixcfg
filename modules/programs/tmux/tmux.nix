@@ -20,7 +20,7 @@
 { config, lib, inputs, ... }:
 let
   # Library files for scripts (shared with other modules)
-  libPath = ../../../home/files/lib;
+  libPath = (../../.. + "/modules/programs/files [nd]/files/lib");
 in
 {
   flake.modules = {

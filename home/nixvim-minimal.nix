@@ -1,28 +1,13 @@
-# Minimal nixvim-only home-manager configuration
-# This imports the shared nixvim config and adds only minimal home-manager setup
+# Minimal nixvim-only home-manager module
+# This provides minimal overrides for the dendritic neovim module
+#
+# NOTE: This is a standalone module imported by tim@nixvim-minimal config
+# in home-configurations.nix. It imports the dendritic neovim module and
+# applies minimal preference overrides.
 { config, lib, pkgs, inputs, ... }:
 
 {
-  imports = [ 
-    inputs.nixvim.homeModules.nixvim
-    ./common/nixvim.nix 
-  ];
-
-  home = {
-    username = "tim";
-    homeDirectory = "/home/tim";
-    stateVersion = "24.11";
-  };
-
-  # Manage Nix configuration for experimental features
-  nix = {
-    settings.experimental-features = [ "nix-command" "flakes" ];
-  };
-
-  programs.home-manager.enable = true;
-  
-  # Disable version check to avoid warnings
-  home.enableNixpkgsReleaseCheck = false;
+  imports = [ inputs.self.modules.homeManager.neovim ];
 
   # Override some settings for minimal preferences
   programs.nixvim.opts = {
@@ -30,13 +15,13 @@
     shiftwidth = lib.mkForce 4;
     tabstop = lib.mkForce 4;
     softtabstop = lib.mkForce 4;
-    
-    # Disable backups in minimal config  
+
+    # Disable backups in minimal config
     backup = lib.mkForce false;
     writebackup = lib.mkForce false;
     backupdir = lib.mkForce null;
     backupcopy = lib.mkForce null;
-    
+
     # Use XDG state directory for undo
     undodir = lib.mkForce "${config.xdg.stateHome}/nvim/undo";
   };

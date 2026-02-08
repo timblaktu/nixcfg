@@ -329,8 +329,8 @@ in
 | 6.4.11 | Update all hosts to remove base.nix import | TASK:COMPLETE (2026-02-08) |
 | 6.4.12 | Move shared libs to dendritic structure | TASK:COMPLETE (2026-02-08) |
 | 6.4.13 | Migrate home/modules/files to dendritic | TASK:COMPLETE (2026-02-08) |
-| 6.4.14 | Delete remaining home/modules/ files | TASK:PENDING |
-| 6.4.15 | Delete home/modules/ directory | TASK:PENDING |
+| 6.4.14 | Delete remaining home/modules/ files | TASK:COMPLETE (2026-02-08) |
+| 6.4.15 | Delete home/modules/ directory | TASK:COMPLETE (2026-02-08) |
 
 **Execution Order**: 6.4.1-6.4.2 (infrastructure) → 6.4.3-6.4.5 (high-value) → 6.4.6-6.4.10 (legacy) → 6.4.11 (hosts) → 6.4.12-6.4.15 (final cleanup)
 
@@ -805,18 +805,35 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 **Goal**: Clean up any remaining files in `home/modules/`.
 
-**Files to delete** (after dependencies migrated):
-- `home/modules/base.nix` - No longer imported by any host
-- `home/modules/claude-code.nix` - Superseded by dendritic module
-- `home/modules/claude-code-statusline.nix` - Superseded by dendritic module
-- `home/modules/opencode.nix` - Superseded by dendritic module
-- `home/modules/github-auth.nix` - Superseded by dendritic module
-- `home/modules/secrets-management.nix` - Superseded by dendritic module
-- `home/modules/claude-code/` directory - Superseded (check for any remaining deps)
-- `home/modules/opencode/` directory - Superseded
-- Markdown/doc files (*.md) - Move to docs/ or delete if outdated
+**Implementation** (2026-02-08): Deleted entire directory and fixed broken path references.
 
-**Validation**: `nix flake check --no-build`
+**What was done**:
+1. Deleted `home/modules/` directory (66 files):
+   - Nix modules: base.nix, claude-code.nix, opencode.nix, github-auth.nix, etc.
+   - Directories: claude-code/, opencode/, lib/, shared/
+   - Documentation: README-*.md files
+
+2. Deleted `home/migration/` directory (leftover from dendritic migration):
+   - darwin-home-files.nix, linux-home-files.nix, wsl-home-files.nix
+
+3. Fixed `home/nixvim-minimal.nix` to use dendritic neovim module:
+   - Changed from broken `./common/nixvim.nix` to `inputs.self.modules.homeManager.neovim`
+
+4. Fixed path references in 5 modules (changed `home/files/` → `modules/programs/files [nd]/files/`):
+   - `modules/programs/system-tools/system-tools.nix` - 9 paths
+   - `modules/programs/terminal/terminal.nix` - 4 paths
+   - `modules/programs/development-tools/development-tools.nix` - 4 paths
+   - `modules/system/types/2-default/default.nix` - 1 path (glow.yml)
+   - `modules/programs/tmux/tmux.nix` - 1 path (libPath)
+
+**Files deleted**:
+- `home/modules/` (66 files)
+- `home/migration/` (3 files)
+
+**Remaining in `home/`**:
+- `home/nixvim-minimal.nix` - Still used by tim@nixvim-minimal config
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
 
 ---
 
@@ -824,11 +841,10 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 **Goal**: Remove the deprecated directory entirely.
 
-**Prerequisite**: Tasks 6.4.12-6.4.14 complete, no remaining imports.
+**Status**: COMPLETE (2026-02-08) - Done as part of 6.4.14
 
-**Command**: `rm -rf home/modules/`
-
-**Validation**: `nix flake check --no-build` + full build on at least one host
+**Note**: Directory deleted in 6.4.14. The `home/` directory now only contains
+`nixvim-minimal.nix` which is still used by the tim@nixvim-minimal configuration.
 
 ## Technical Decisions
 

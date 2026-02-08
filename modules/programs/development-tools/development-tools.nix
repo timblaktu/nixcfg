@@ -301,25 +301,25 @@
               # PDF to Markdown converter CLI using pymupdf4llm with parallel processing
               (pkgs.writers.writePython3Bin "pdf2md"
                 { libraries = [ pkgs.python3Packages.pymupdf4llm ]; }
-                (builtins.readFile ../../../home/files/bin/pdf2md.py)
+                (builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/pdf2md.py"))
               )
 
               # Claude development workflow scripts
               (pkgs.writeShellApplication {
                 name = "claudevloop";
-                text = builtins.readFile ../../../home/files/bin/claudevloop;
+                text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/claudevloop");
                 runtimeInputs = with pkgs; [ neovim ];
               })
 
               (pkgs.writeShellApplication {
                 name = "restart_claude";
-                text = builtins.readFile ../../../home/files/bin/restart_claude;
+                text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/restart_claude");
                 runtimeInputs = with pkgs; [ jq findutils coreutils ];
               })
 
               (pkgs.writeShellApplication {
                 name = "mkclaude_desktop_config";
-                text = builtins.readFile ../../../home/files/bin/mkclaude_desktop_config;
+                text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/mkclaude_desktop_config");
                 runtimeInputs = with pkgs; [ jq coreutils ];
               })
 

@@ -454,7 +454,7 @@
             };
 
             # Glow markdown renderer configuration
-            home.file.".config/glow/glow.yml".source = ../../../../home/files/glow.yml;
+            home.file.".config/glow/glow.yml".source = (../../../.. + "/modules/programs/files [nd]/files/glow.yml");
           }
 
           # SSH client configuration
