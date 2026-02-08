@@ -1,3 +1,18 @@
+# 🚨 ACTIVE PLAN 019 - CORRECT WORKTREE CHECK 🚨
+
+> **BEFORE DOING ANY WORK ON PLAN 019**, verify you're in the correct worktree:
+> ```bash
+> pwd                    # MUST be: /home/tim/src/nixcfg-dendritic
+> git branch --show-current  # MUST be: refactor/dendritic-pattern
+> ```
+>
+> **If you're in `/home/tim/src/nixcfg`** → WRONG! Switch with: `cd ~/src/nixcfg-dendritic`
+>
+> Plan 019 work was consolidated from `refactor/modularization` into `refactor/dendritic-pattern`
+> on 2026-02-08. The `refactor/modularization` branch in ~/src/nixcfg is kept for reference only.
+
+---
+
 # ⚠️ CRITICAL PROJECT-SPECIFIC RULES ⚠️
 - **SESSION CONTINUITY**: Update this CLAUDE.md file with task progress and provide end-of-response summary of changes made
 - **COMPLETION STANDARD**: Tasks complete ONLY when: (1) `git add` all files, (2) `nix flake check` passes, (3) `nix run home-manager -- switch --flake '.#TARGET' --dry-run` succeeds, (4) end-to-end functionality demonstrated. **Writing code ≠ Working system**

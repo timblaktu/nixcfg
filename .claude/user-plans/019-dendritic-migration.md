@@ -1,8 +1,16 @@
 # Plan 019: Migrate nixcfg to Dendritic Pattern
 
+> **WORK IN WRONG DIRECTORY?** This plan MUST be worked on in:
+> ```
+> cd ~/src/nixcfg-dendritic   # <-- THE CORRECT WORKTREE
+> git branch                   # Should show: refactor/dendritic-pattern
+> ```
+> If you're in `~/src/nixcfg` (main repo), STOP and switch to the dendritic worktree!
+
 **Created**: 2026-02-07
 **Status**: IN_PROGRESS
-**Branch**: `refactor/dendritic-pattern` (worktree: ~/src/nixcfg-dendritic)
+**Branch**: `refactor/dendritic-pattern`
+**Worktree**: `~/src/nixcfg-dendritic` (NOT ~/src/nixcfg!)
 **Replaces**: Plan 018 (modularization) - same goal, new approach
 
 ## Executive Summary
