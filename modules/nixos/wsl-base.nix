@@ -26,10 +26,10 @@
   imports = [
     # Dendritic system type - provides system-cli layer (includes default and minimal)
     inputs.self.modules.nixos.system-cli
-    # WSL-specific modules
-    ../../modules/wsl-common.nix
-    ../../modules/wsl-tarball-checks.nix
-    ../../modules/nixos/sops-nix.nix
+    # WSL-specific modules (relative to modules/nixos/)
+    ../wsl-common.nix
+    ../wsl-tarball-checks.nix
+    ./sops-nix.nix
     inputs.sops-nix.nixosModules.sops
     inputs.nixos-wsl.nixosModules.default
   ];

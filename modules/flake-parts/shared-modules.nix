@@ -8,12 +8,10 @@
       # Platform: NixOS-WSL distribution ONLY
       # Provides: System-level WSL integration (wsl.conf, users, SSH daemon, SOPS)
       # Usage: Import in WSL NixOS host configs
-      wsl-base = import ../../hosts/common/wsl-base.nix;
+      wsl-base = import ../nixos/wsl-base.nix;
 
-      # Centralized SSH authorized keys
-      # Provides: Shared SSH public keys for user access
-      # Usage: Import and reference in user configuration
-      ssh-keys = import ../../hosts/common/ssh-keys.nix;
+      # NOTE: SSH keys are available as data in modules/ssh-keys-data.nix
+      # (not a module, just an attribute set for use in host configurations)
     };
 
     # Home Manager modules for user-level configuration
