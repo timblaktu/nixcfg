@@ -1,0 +1,378 @@
+# modules/system/types/3-cli/cli.nix
+# CLI-focused system configuration layer [ND]
+#
+# Provides:
+#   flake.modules.nixos.system-cli - NixOS with full CLI tooling
+#   flake.modules.darwin.system-cli - Darwin with full CLI tooling
+#
+# This layer IMPORTS system-default and adds:
+#   - SSH authorized_keys management
+#   - Advanced CLI/development tools
+#   - Git configuration
+#   - Network utilities
+#   - Optional container runtime (Docker/Podman)
+#
+# Does NOT include:
+#   - Desktop environments (4-desktop)
+#   - GUI applications (4-desktop)
+#
+# Usage in host config:
+#   imports = [ inputs.self.modules.nixos.system-cli ];
+#   systemCli = {
+#     sshAuthorizedKeys = [ "ssh-ed25519 AAAA..." ];
+#     enableDocker = true;
+#   };
+#   # Also set systemDefault options as needed
+#   systemDefault.userName = "tim";
+{ config, lib, inputs, ... }:
+{
+  flake.modules = {
+    # === NixOS CLI Module ===
+    nixos.system-cli = { config, lib, pkgs, ... }:
+      let
+        cfg = config.systemCli;
+        defaultCfg = config.systemDefault;
+      in
+      {
+        imports = [
+          # Import default layer
+          inputs.self.modules.nixos.system-default
+        ];
+
+        options.systemCli = {
+          # SSH key management
+          sshAuthorizedKeys = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            description = "SSH public keys for the primary user";
+            example = [ "ssh-ed25519 AAAA... user@host" ];
+          };
+
+          # Git configuration
+          gitDefaultBranch = lib.mkOption {
+            type = lib.types.str;
+            default = "main";
+            description = "Default git branch name";
+          };
+
+          gitEditor = lib.mkOption {
+            type = lib.types.str;
+            default = "nvim";
+            description = "Default git editor";
+          };
+
+          # Container runtime
+          enableDocker = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enable Docker container runtime";
+          };
+
+          enablePodman = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enable Podman container runtime";
+          };
+
+          # Network tools
+          enableNetworkTools = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Install network diagnostic tools";
+          };
+
+          # Development packages
+          enableDevTools = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Install development CLI tools";
+          };
+
+          # Additional CLI packages
+          additionalPackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = [ ];
+            description = "Additional CLI packages to install";
+          };
+        };
+
+        config = lib.mkMerge [
+          # Core CLI configuration
+          {
+            # SSH authorized keys for primary user
+            users.users.${defaultCfg.userName}.openssh.authorizedKeys.keys =
+              lib.mkIf (cfg.sshAuthorizedKeys != [ ]) cfg.sshAuthorizedKeys;
+
+            # Git configuration system-wide
+            programs.git = {
+              enable = lib.mkDefault true;
+              config = {
+                init.defaultBranch = lib.mkDefault cfg.gitDefaultBranch;
+                core.editor = lib.mkDefault cfg.gitEditor;
+                pull.rebase = lib.mkDefault false;
+                push.autoSetupRemote = lib.mkDefault true;
+              };
+            };
+
+            # Enhanced shell prompt and aliases
+            environment.shellAliases = {
+              # File listing with eza if available
+              ls = "eza --icons";
+              la = "eza -la --icons";
+              lt = "eza --tree --icons";
+              # Git shortcuts
+              gs = "git status";
+              gd = "git diff";
+              gl = "git log --oneline -20";
+              # System shortcuts
+              nixfmt = "nixpkgs-fmt";
+              rebuild = "sudo nixos-rebuild switch";
+            };
+
+            # Enable common CLI programs
+            programs.neovim = {
+              enable = lib.mkDefault true;
+              defaultEditor = lib.mkDefault true;
+              viAlias = lib.mkDefault true;
+              vimAlias = lib.mkDefault true;
+            };
+
+            programs.tmux = {
+              enable = lib.mkDefault true;
+              clock24 = lib.mkDefault true;
+              terminal = lib.mkDefault "screen-256color";
+            };
+          }
+
+          # Development tools
+          (lib.mkIf cfg.enableDevTools {
+            environment.systemPackages = with pkgs; [
+              # Modern CLI replacements
+              eza # Better ls
+              bat # Better cat
+              delta # Better diff
+              du-dust # Better du
+              duf # Better df
+              procs # Better ps
+              bottom # Better top
+              hyperfine # Benchmarking
+
+              # Development essentials
+              jq # JSON processor
+              yq # YAML processor
+              fzf # Fuzzy finder
+              tree # Directory tree
+              tokei # Code statistics
+              direnv # Directory-specific environments
+              shellcheck # Shell script analysis
+              nixpkgs-fmt # Nix formatter
+
+              # Search and navigation
+              zoxide # Smarter cd
+              broot # Directory navigator
+
+              # Compression
+              unzip
+              p7zip
+
+              # Misc utilities
+              tldr # Simplified man pages
+              just # Command runner
+            ] ++ cfg.additionalPackages;
+
+            # Enable direnv integration
+            programs.direnv = {
+              enable = lib.mkDefault true;
+              nix-direnv.enable = lib.mkDefault true;
+            };
+          })
+
+          # Network tools
+          (lib.mkIf cfg.enableNetworkTools {
+            environment.systemPackages = with pkgs; [
+              # Network diagnostics
+              netcat-openbsd
+              dig # DNS lookup
+              whois
+              traceroute
+              mtr # Better traceroute
+              nmap # Port scanner
+              tcpdump # Packet capture
+              iperf3 # Network performance
+              curlie # Better curl with colors
+              httpie # HTTP client
+              wget2 # Better wget
+              aria2 # Download manager
+            ];
+
+            # Enable mtr for regular users
+            programs.mtr.enable = lib.mkDefault true;
+          })
+
+          # Docker configuration
+          (lib.mkIf cfg.enableDocker {
+            virtualisation.docker = {
+              enable = true;
+              autoPrune = {
+                enable = lib.mkDefault true;
+                dates = lib.mkDefault "weekly";
+              };
+            };
+            # Add user to docker group
+            users.users.${defaultCfg.userName}.extraGroups = [ "docker" ];
+          })
+
+          # Podman configuration
+          (lib.mkIf cfg.enablePodman {
+            virtualisation.podman = {
+              enable = true;
+              dockerCompat = lib.mkDefault (!cfg.enableDocker);
+              autoPrune = {
+                enable = lib.mkDefault true;
+                dates = lib.mkDefault "weekly";
+              };
+            };
+          })
+        ];
+      };
+
+    # === Darwin CLI Module ===
+    darwin.system-cli = { config, lib, pkgs, ... }:
+      let
+        cfg = config.systemCli;
+        defaultCfg = config.systemDefault;
+      in
+      {
+        imports = [
+          # Import default layer
+          inputs.self.modules.darwin.system-default
+        ];
+
+        options.systemCli = {
+          # Git configuration
+          gitDefaultBranch = lib.mkOption {
+            type = lib.types.str;
+            default = "main";
+            description = "Default git branch name";
+          };
+
+          gitEditor = lib.mkOption {
+            type = lib.types.str;
+            default = "nvim";
+            description = "Default git editor";
+          };
+
+          # Development packages
+          enableDevTools = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Install development CLI tools";
+          };
+
+          # Network tools
+          enableNetworkTools = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Install network diagnostic tools";
+          };
+
+          # Additional CLI packages
+          additionalPackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = [ ];
+            description = "Additional CLI packages to install";
+          };
+        };
+
+        config = lib.mkMerge [
+          # Core CLI configuration
+          {
+            # Git configuration system-wide
+            programs.git = {
+              enable = lib.mkDefault true;
+              config = {
+                init.defaultBranch = lib.mkDefault cfg.gitDefaultBranch;
+                core.editor = lib.mkDefault cfg.gitEditor;
+                pull.rebase = lib.mkDefault false;
+                push.autoSetupRemote = lib.mkDefault true;
+              };
+            };
+
+            # Enhanced shell aliases
+            environment.shellAliases = {
+              # File listing with eza if available
+              ls = "eza --icons";
+              la = "eza -la --icons";
+              lt = "eza --tree --icons";
+              # Git shortcuts
+              gs = "git status";
+              gd = "git diff";
+              gl = "git log --oneline -20";
+              # System shortcuts
+              nixfmt = "nixpkgs-fmt";
+            };
+          }
+
+          # Development tools
+          (lib.mkIf cfg.enableDevTools {
+            environment.systemPackages = with pkgs; [
+              # Modern CLI replacements
+              eza # Better ls
+              bat # Better cat
+              delta # Better diff
+              du-dust # Better du
+              duf # Better df
+              procs # Better ps
+              bottom # Better top
+              hyperfine # Benchmarking
+
+              # Development essentials
+              jq # JSON processor
+              yq # YAML processor
+              fzf # Fuzzy finder
+              tree # Directory tree
+              tokei # Code statistics
+              direnv # Directory-specific environments
+              shellcheck # Shell script analysis
+              nixpkgs-fmt # Nix formatter
+              neovim # Editor
+
+              # Search and navigation
+              zoxide # Smarter cd
+              broot # Directory navigator
+
+              # Compression
+              unzip
+              p7zip
+
+              # Misc utilities
+              tldr # Simplified man pages
+              just # Command runner
+            ] ++ cfg.additionalPackages;
+
+            # Enable direnv integration
+            programs.direnv = {
+              enable = lib.mkDefault true;
+              nix-direnv.enable = lib.mkDefault true;
+            };
+          })
+
+          # Network tools
+          (lib.mkIf cfg.enableNetworkTools {
+            environment.systemPackages = with pkgs; [
+              # Network diagnostics (Darwin-compatible subset)
+              netcat
+              whois
+              mtr # Better traceroute
+              nmap # Port scanner
+              iperf3 # Network performance
+              curlie # Better curl with colors
+              httpie # HTTP client
+              wget # Note: wget2 may have Darwin issues
+              aria2 # Download manager
+            ];
+          })
+        ];
+      };
+  };
+}
