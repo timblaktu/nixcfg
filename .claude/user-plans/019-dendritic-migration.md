@@ -300,7 +300,7 @@ in
 | 6.2 | Remove `hosts/common/` | TASK:COMPLETE |
 | 6.3 | Remove `home/common/` (moved to `home/modules/legacy-common/`) | TASK:COMPLETE |
 | 6.4 | Remove `home/modules/` | TASK:COMPLETE (2026-02-08) |
-| 6.5 | Remove `modules/` (old NixOS modules) | TASK:PENDING |
+| 6.5 | Remove `modules/` (old NixOS modules) | TASK:COMPLETE (2026-02-08) |
 | 6.6 | Update ARCHITECTURE.md | TASK:PENDING |
 | 6.7 | Update CLAUDE.md with new patterns | TASK:PENDING |
 
@@ -993,14 +993,9 @@ but should be addressed in future sessions:
 **Blocked by**: None, can be done anytime after Phase 6.
 
 ### F2: Legacy NixOS Modules Cleanup
-**Status**: Medium priority - leftover from pre-dendritic structure
-**Issue**: `modules/nixos/` contains 12 legacy NixOS modules (bitwarden-*, sops-*, ssh-*, wsl-*).
-These are NOT flake-parts modules and are excluded from import-tree.
-**Action**: Evaluate each module:
-  - Migrate to dendritic pattern (`flake.modules.nixos.*`) if still needed
-  - Delete if superseded by dendritic modules
-  - Document if intentionally kept as traditional NixOS modules
-**Note**: These are currently imported via `hosts/*/default.nix` - migration requires coordination.
+**Status**: ✅ COMPLETE (Task 6.5, 2026-02-08)
+**Resolution**: All 12 legacy modules in `modules/nixos/` deleted - all were superseded by dendritic modules.
+`hosts/` directory also deleted; `hardware-config.nix` files moved to `modules/hosts/*/_hardware-config.nix`.
 
 ### F3: darwin.system-cli and darwin.system-desktop
 **Status**: Low priority - macbook-air only uses system-default currently
