@@ -326,7 +326,7 @@ in
 | 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:COMPLETE (2026-02-08) |
 | 6.4.9 | Migrate remaining legacy-common/* | TASK:COMPLETE (2026-02-08) |
 | 6.4.10 | Migrate standalone modules | TASK:COMPLETE (2026-02-08) |
-| 6.4.11 | Update all hosts to remove base.nix import | TASK:PENDING |
+| 6.4.11 | Update all hosts to remove base.nix import | TASK:COMPLETE (2026-02-08) |
 | 6.4.12 | Delete `home/modules/` directory | TASK:PENDING |
 
 **Execution Order**: 6.4.1-6.4.2 (infrastructure) → 6.4.3-6.4.5 (high-value) → 6.4.6-6.4.10 (legacy) → 6.4.11-6.4.12 (cleanup)
@@ -694,28 +694,39 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 
 **Goal**: No host imports `home/modules/base.nix`.
 
-**Files to modify** (remove base.nix import from each):
-- `modules/hosts/thinky-nixos/home.nix`
-- `modules/hosts/pa161878-nixos/home.nix`
-- `modules/hosts/thinky-ubuntu/home.nix`
-- `modules/hosts/mbp/home.nix`
-- `modules/hosts/potato/home.nix`
-- `modules/hosts/macbook-air/home.nix`
+**Implementation** (2026-02-08): Successfully removed base.nix from all 6 hosts.
 
-**Validation**:
-1. `nix flake check --no-build` passes
-2. Dry-run on ALL hosts: `home-manager switch --flake '.#USER@HOST' --dry-run`
-3. **(Recommended)** Derivation diffing to verify functional equivalence:
-   ```bash
-   # Before making changes to a host
-   nix build '.#homeConfigurations."tim@thinky-nixos".activationPackage' -o result-before
+**What was done**:
+1. Extended `home-default.basePackages` in `modules/system/types/2-default/default.nix`:
+   - Added ~17 missing packages from base.nix (act, dua, ffmpeg, glow, imagemagick, etc.)
+   - Added tomd custom package
 
-   # After making changes
-   nix build '.#homeConfigurations."tim@thinky-nixos".activationPackage' -o result-after
+2. Migrated functionality to home-default:
+   - `programs.parallel` with `will-cite = true`
+   - `home.file.".config/glow/glow.yml"` for glow config
 
-   # Compare (empty diff = identical output)
-   nix run nixpkgs#dix result-before result-after
-   ```
+3. Updated all 6 host files:
+   - Changed from `home-minimal` to `home-default` import (home-default includes home-minimal)
+   - Replaced base.nix import with direct files module imports (`../../../home/modules/files`, `../../../home/files`)
+   - Added `homeFiles.enable = true` to each host
+   - Migrated `homeBase.environmentVariables` → `homeDefault.environmentVariables` (potato, macbook-air)
+
+4. Cleaned up dead code in `home/modules/files/default.nix`:
+   - Removed unused `cfg = config.homeBase` line
+
+**Files modified**:
+- `modules/system/types/2-default/default.nix` - Added packages, parallel, glow config
+- `modules/hosts/thinky-nixos/thinky-nixos.nix` - Removed base.nix, added files imports
+- `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix` - Removed base.nix, added files imports
+- `modules/hosts/thinky-ubuntu [nd]/thinky-ubuntu.nix` - Removed base.nix, added files imports
+- `modules/hosts/mbp [N]/mbp.nix` - Removed base.nix, added files imports
+- `modules/hosts/potato [N]/potato.nix` - Removed base.nix, migrated homeBase→homeDefault
+- `modules/hosts/macbook-air [D]/macbook-air.nix` - Removed base.nix, migrated homeBase→homeDefault
+- `home/modules/files/default.nix` - Removed dead code
+
+**Validation**: `nix flake check --no-build` ✓, `home-manager switch --dry-run` ✓
+
+**Note**: base.nix still exists but is no longer imported by any host. Task 6.4.12 will delete it.
 
 ---
 

@@ -201,11 +201,11 @@ in
   # === Home Manager Module ===
   flake.modules.homeManager."tim@mbp" = { config, lib, pkgs, ... }: {
     imports = [
-      # Dendritic system type - provides home-minimal layer (required first)
-      inputs.self.modules.homeManager.home-minimal
-      # Legacy base module (will be removed in Phase 6)
-      # Provides: disabledModules, detailed program configs (no longer provides username/homeDirectory)
-      ../../../home/modules/base.nix
+      # Dendritic system type - provides home-default layer (includes home-minimal)
+      inputs.self.modules.homeManager.home-default
+      # Files modules (scripts, utilities)
+      ../../../home/modules/files
+      ../../../home/files
       # Dendritic feature modules
       inputs.self.modules.homeManager.shell
       inputs.self.modules.homeManager.git
@@ -229,6 +229,9 @@ in
     homeMinimal = {
       inherit username homeDirectory;
     };
+
+    # Unified files module (scripts, utilities)
+    homeFiles.enable = true;
 
     # Enable tmux auto-reload on home-manager generation change
     programs.tmux.autoReload.enable = true;

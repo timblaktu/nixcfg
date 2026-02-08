@@ -365,16 +365,36 @@
             type = lib.types.listOf lib.types.package;
             default = with pkgs; [
               # Core utilities
+              act
               coreutils-full
               curl
+              dua
               fd
+              ffmpeg
+              ffmpegthumbnailer
               file
               fzf
+              glow
               htop
+              imagemagick
+              inotify-tools
               jq
+              lbzip2
+              markitdown
+              marker-pdf
+              (pkgs.callPackage ../../../../pkgs/tomd { })
+              nix-diff
+              nixfmt-rfc-style
+              pkg-config
+              poppler
+              resvg
               ripgrep
+              speedtest
+              stress-ng
               tree
+              ueberzugpp
               unzip
+              yt-dlp
               zoxide
               p7zip
 
@@ -384,11 +404,13 @@
               pinentry-curses
               sops
               openssl
+              openssl.dev
 
               # Fonts
               nerd-fonts.caskaydia-mono
               cascadia-code
               noto-fonts-color-emoji
+              twemoji-color-font
             ];
             description = "Base packages for all home environments";
           };
@@ -424,6 +446,15 @@
             # Disable input method to avoid fcitx5 package issues
             i18n.inputMethod.enable = false;
             i18n.inputMethod.type = null;
+
+            # GNU Parallel with citation notice silenced
+            programs.parallel = {
+              enable = true;
+              will-cite = true; # Accept citation policy to avoid first-run prompt
+            };
+
+            # Glow markdown renderer configuration
+            home.file.".config/glow/glow.yml".source = ../../../../home/files/glow.yml;
           }
 
           # SSH client configuration

@@ -4,8 +4,6 @@
 with lib;
 
 let
-  cfg = config.homeBase;
-
   # Get the absolute path to the files directory
   filesDir = ./../../files;
 
