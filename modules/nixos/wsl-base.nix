@@ -16,7 +16,7 @@
 # - pa161878-nixos (NixOS-WSL host)
 #
 # FOR PORTABLE WSL CONFIG (works on ANY WSL distro):
-# See home/common/wsl-home-base.nix instead - that's a Home Manager module
+# See modules/system/settings/wsl-home/wsl-home.nix instead - that's a Home Manager module
 # that works on any WSL distribution with Nix + home-manager installed.
 #
 # USAGE: Import this in NixOS-WSL host configs to get standard WSL system setup

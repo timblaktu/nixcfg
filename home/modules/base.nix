@@ -42,15 +42,16 @@ in
     # git.nix migrated to modules/programs/git/ (dendritic pattern)
     # tmux.nix migrated to modules/programs/tmux/ (dendritic pattern)
     # nixvim.nix migrated to modules/programs/neovim/ (dendritic pattern)
-    ../common/environment.nix
-    ../common/aliases.nix
+    # Legacy common modules (moved from home/common/ - Plan 019 Task 6.3)
+    ./legacy-common/environment.nix
+    ./legacy-common/aliases.nix
     # Import both files modules - they will be conditionally enabled
     ./files
     ../files
-    ../common/development.nix
-    ../common/terminal.nix
-    ../common/system.nix
-    ../common/shell-utils.nix
+    ./legacy-common/development.nix
+    ./legacy-common/terminal.nix
+    ./legacy-common/system.nix
+    ./legacy-common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
     # claude-code.nix migrated to modules/programs/claude-code/ (dendritic pattern)
@@ -62,9 +63,9 @@ in
     ./podman-tools.nix # Container tools configuration
     # Enhanced nix-writers based script management (migrated to unified files)
     # Import ESP-IDF development module
-    ../common/esp-idf.nix
+    ./legacy-common/esp-idf.nix
     # Import OneDrive utilities module (WSL-specific)
-    ../common/onedrive.nix
+    ./legacy-common/onedrive.nix
   ];
 
   options.homeBase = {

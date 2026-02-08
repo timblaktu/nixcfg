@@ -397,10 +397,10 @@ in
         # The base script using writers.writeBashBin pattern
         baseScript = pkgs.writers.writeBashBin "tmux-session-picker" (
           let
-            script = builtins.readFile ../files/bin/tmux-session-picker;
-            terminalUtils = builtins.readFile ../files/lib/terminal-utils.bash;
-            colorUtils = builtins.readFile ../files/lib/color-utils.bash;
-            pathUtils = builtins.readFile ../files/lib/path-utils.bash;
+            script = builtins.readFile ../../files/bin/tmux-session-picker;
+            terminalUtils = builtins.readFile ../../files/lib/terminal-utils.bash;
+            colorUtils = builtins.readFile ../../files/lib/color-utils.bash;
+            pathUtils = builtins.readFile ../../files/lib/path-utils.bash;
           in
           builtins.replaceStrings
             [
@@ -440,14 +440,14 @@ in
     # Tmux session picker profiled version (performance testing)
     (pkgs.writeShellApplication {
       name = "tmux-session-picker-profiled";
-      text = builtins.readFile ../files/bin/tmux-session-picker-profiled;
+      text = builtins.readFile ../../files/bin/tmux-session-picker-profiled;
       runtimeInputs = with pkgs; [ fzf tmux parallel python3 fd ripgrep time ];
     })
 
     # Tmux CPU/memory status display with colored braille indicators
     (pkgs.writeShellApplication {
       name = "tmux-cpu-mem";
-      text = builtins.readFile ../files/bin/tmux-cpu-mem;
+      text = builtins.readFile ../../files/bin/tmux-cpu-mem;
       runtimeInputs = with pkgs; [ procps coreutils ];
     })
 
@@ -457,14 +457,14 @@ in
       text = builtins.replaceStrings
         [ "TMUX_RESURRECT_SAVE_SCRIPT_NIX_PLACEHOLDER" ]
         [ "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh" ]
-        (builtins.readFile ../files/bin/tmux-save-with-rename);
+        (builtins.readFile ../../files/bin/tmux-save-with-rename);
       runtimeInputs = with pkgs; [ tmux ];
     })
 
     # Tmux test data generator for testing session picker
     (pkgs.writeShellApplication {
       name = "tmux-test-data-generator";
-      text = builtins.readFile ../files/bin/tmux-test-data-generator;
+      text = builtins.readFile ../../files/bin/tmux-test-data-generator;
       runtimeInputs = with pkgs; [ coreutils ];
       passthru.tests = {
         syntax = pkgs.runCommand "test-tmux-test-data-generator-syntax" { } ''
@@ -475,7 +475,7 @@ in
             nativeBuildInputs = [
               (pkgs.writeShellApplication {
                 name = "tmux-test-data-generator";
-                text = builtins.readFile ../files/bin/tmux-test-data-generator;
+                text = builtins.readFile ../../files/bin/tmux-test-data-generator;
                 runtimeInputs = with pkgs; [ coreutils ];
               })
             ];
@@ -501,7 +501,7 @@ in
             nativeBuildInputs = [
               (pkgs.writeShellApplication {
                 name = "tmux-test-data-generator";
-                text = builtins.readFile ../files/bin/tmux-test-data-generator;
+                text = builtins.readFile ../../files/bin/tmux-test-data-generator;
                 runtimeInputs = with pkgs; [ coreutils ];
               })
             ];
@@ -699,7 +699,7 @@ in
     (pkgs.writers.writeBashBin "tmux-window-status-format" (builtins.replaceStrings
       [ ''source "''${HOME}/lib/general-utils.bash"'' ]
       [ "source \"${config.home.homeDirectory}/.local/lib/general-utils.bash\"" ]
-      (builtins.readFile ../files/bin/tmux-window-status-format)
+      (builtins.readFile ../../files/bin/tmux-window-status-format)
     ))
 
     # Tmux resurrect cleanup script

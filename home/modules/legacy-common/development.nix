@@ -41,7 +41,7 @@ in
       # PDF to Markdown converter CLI using pymupdf4llm with parallel processing
       (pkgs.writers.writePython3Bin "pdf2md"
         { libraries = [ pkgs.python3Packages.pymupdf4llm ]; }
-        (builtins.readFile ../files/bin/pdf2md.py)
+        (builtins.readFile ../../files/bin/pdf2md.py)
       )
       flex
       bison
@@ -66,19 +66,19 @@ in
       # Claude development workflow scripts
       (pkgs.writeShellApplication {
         name = "claudevloop";
-        text = builtins.readFile ../files/bin/claudevloop;
+        text = builtins.readFile ../../files/bin/claudevloop;
         runtimeInputs = with pkgs; [ neovim ];
       })
 
       (pkgs.writeShellApplication {
         name = "restart_claude";
-        text = builtins.readFile ../files/bin/restart_claude;
+        text = builtins.readFile ../../files/bin/restart_claude;
         runtimeInputs = with pkgs; [ jq findutils coreutils ];
       })
 
       (pkgs.writeShellApplication {
         name = "mkclaude_desktop_config";
-        text = builtins.readFile ../files/bin/mkclaude_desktop_config;
+        text = builtins.readFile ../../files/bin/mkclaude_desktop_config;
         runtimeInputs = with pkgs; [ jq coreutils ];
       })
 

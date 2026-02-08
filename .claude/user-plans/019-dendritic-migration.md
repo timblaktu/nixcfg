@@ -292,7 +292,7 @@ in
 |------|-------------|--------|
 | 6.1 | Remove `flake-modules/` (replaced by import-tree) | COMPLETE |
 | 6.2 | Remove `hosts/common/` | COMPLETE |
-| 6.3 | Remove `home/common/` | PENDING |
+| 6.3 | Remove `home/common/` (moved to `home/modules/legacy-common/`) | COMPLETE |
 | 6.4 | Remove `home/modules/` | PENDING |
 | 6.5 | Remove `modules/` (old NixOS modules) | PENDING |
 | 6.6 | Update ARCHITECTURE.md | PENDING |
