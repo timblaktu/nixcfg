@@ -275,14 +275,14 @@ in
 | 5.4 | mbp (Intel Mac running NixOS) | COMPLETE |
 | 5.5 | potato (ARM SBC) | COMPLETE |
 | 5.6 | macbook-air (Apple Silicon) | COMPLETE |
-| 5.7 | nixos-wsl-minimal (template) | PENDING |
+| 5.7 | nixos-wsl-minimal (template) | COMPLETE |
 
 ### Phase 6: Cleanup
 **Goal**: Remove deprecated structure
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 6.1 | Remove `flake-modules/` (replaced by import-tree) | PENDING |
+| 6.1 | Remove `flake-modules/` (replaced by import-tree) | IN_PROGRESS (7/12 files migrated) |
 | 6.2 | Remove `hosts/common/` | PENDING |
 | 6.3 | Remove `home/common/` | PENDING |
 | 6.4 | Remove `home/modules/` | PENDING |
