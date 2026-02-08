@@ -340,8 +340,7 @@
           } ''
           echo "Testing SSH public keys registry module..."
 
-          # Test module file exists and is syntactically valid
-          echo "✅ Module file location: modules/nixos/ssh-public-keys.nix"
+          # Test SSH key format validation patterns (used in dendritic modules)
 
           # Test key format validation regex
           # Valid SSH key should match the pattern

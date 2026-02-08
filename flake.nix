@@ -66,9 +66,8 @@
     flake-parts.lib.mkFlake { inherit inputs; } {
       # Import our modular flake structure
       imports = [
-        # Dendritic pattern: auto-import flake-parts modules
-        # Only import-tree the directories containing flake-parts modules
-        # (Legacy NixOS modules in modules/nixos/ are NOT flake-parts modules)
+        # Dendritic pattern: auto-import all flake-parts modules
+        # Each directory contains modules that export to flake.modules.*
         (import-tree [
           ./modules/flake-parts
           ./modules/meta

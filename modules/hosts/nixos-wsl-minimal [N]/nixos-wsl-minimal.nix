@@ -23,7 +23,7 @@ in
   flake.modules.nixos.nixos-wsl-minimal = { config, lib, pkgs, ... }: {
     imports = [
       # Hardware configuration (WSL2-specific)
-      ../../../hosts/nixos-wsl-minimal/hardware-config.nix
+      ./_hardware-config.nix
       # Dendritic system type - minimal layer (no user creation - we handle it)
       inputs.self.modules.nixos.system-minimal
       # NixOS-WSL module
