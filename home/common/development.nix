@@ -26,7 +26,7 @@ in
       cargo
       rustfmt
       clippy
-      nodejs
+      nodejs_22
       yarn
       (python3.withPackages (ps: with ps; [
         ipython
