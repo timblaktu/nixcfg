@@ -7,20 +7,27 @@ in
 {
   imports = [
     ./hardware-config.nix
-    ../common/wsl-base.nix # Common WSL base configuration
+    # Dendritic system type - provides system-cli layer (includes default and minimal)
+    inputs.self.modules.nixos.system-cli
+    # Dendritic WSL configuration
+    inputs.self.modules.nixos.wsl
   ];
 
-  # Host-specific WSL common configuration
-  wslCommon = {
+  # System default layer configuration (required by system types)
+  systemDefault.userName = "tim";
+
+  # WSL settings (dendritic module)
+  wsl-settings = {
     hostname = "thinky-nixos";
     defaultUser = "tim";
     sshPort = 2223;
     userGroups = [ "wheel" "dialout" ];
-    authorizedKeys = [ sshKeys.timblaktu ];
+    sshAuthorizedKeys = [ sshKeys.timblaktu ];
+    usbip.autoAttach = [ "3-1" "3-2" ];
+    extraShellAliases = {
+      esp32c5 = "esp-idf-shell";
+    };
   };
-
-  # SSH service configuration
-  services.openssh.ports = [ 2223 ];
 
   # USB device management for ESP32 development
   services.udev.packages = [

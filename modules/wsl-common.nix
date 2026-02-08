@@ -96,9 +96,9 @@ in
       }
     ];
 
-    # Connect wslCommon.defaultUser to base.userName
-    # This ensures the base module has the correct username when wslCommon is enabled
-    base.userName = cfg.defaultUser;
+    # NOTE: Hosts using system types should set systemDefault.userName directly
+    # rather than relying on this module to propagate it. The wslCommon.defaultUser
+    # option is used for WSL-specific settings (wsl.defaultUser, users.users.${}).
 
     # WSL configuration
     wsl = {

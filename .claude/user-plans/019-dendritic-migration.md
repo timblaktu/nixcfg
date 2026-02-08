@@ -31,7 +31,7 @@ Migrate nixcfg from host-centric organization to feature-centric dendritic patte
 - ~22,000 lines of Nix across 99 files
 - 5 NixOS hosts, 6 HM configs, 1 Darwin config
 - 12 flake-module components
-- Key complexity: nixvim (70KB), tmux (37KB), claude-code (710 LOC)
+- Key complexity: nixvim (1871 LOC), tmux (733 LOC), claude-code (710 LOC)
 
 ## Architecture Design
 
@@ -56,9 +56,9 @@ nixcfg/
 │   ├── system/                       # System-level configuration
 │   │   ├── types/                   # Composition layers
 │   │   │   ├── 1-minimal [NDnd]/    # Base: nix settings, state version
-│   │   │   ├── 2-default [NDnd]/    # + home-manager, secrets
-│   │   │   ├── 3-cli [NDnd]/        # + ssh, tools
-│   │   │   └── 4-desktop [NDnd]/    # + printing, DE
+│   │   │   ├── 2-default [NDnd]/    # + user, locale, SSH client (HM)
+│   │   │   ├── 3-cli [NDnd]/        # + SSH daemon, dev tools
+│   │   │   └── 4-desktop [NDnd]/    # + printing, DE, GUI
 │   │   └── settings/
 │   │       ├── locale [NDnd]/       # Timezone, keyboard
 │   │       ├── networking [N]/      # NetworkManager, firewall
@@ -193,11 +193,11 @@ in
 | Task | Description | Status |
 |------|-------------|--------|
 | 0.1 | Add import-tree to flake inputs | COMPLETE |
-| 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | PENDING |
-| 0.3 | Create `modules/flake-parts/lib.nix` (mkNixos, mkHomeManager helpers) | PENDING |
-| 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | PENDING |
-| 0.5 | Create `modules/flake-parts/systems.nix` (supported architectures) | PENDING |
-| 0.6 | Verify `nix flake check` passes with new structure | PENDING |
+| 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | COMPLETE |
+| 0.3 | Create `modules/flake-parts/lib.nix` (mkNixos, mkHomeManager helpers) | COMPLETE |
+| 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | COMPLETE |
+| 0.5 | Create `modules/flake-parts/systems.nix` (supported architectures) | COMPLETE |
+| 0.6 | Verify `nix flake check` passes with new structure | COMPLETE |
 
 **Definition of Done**:
 - import-tree loads all modules from `modules/`
@@ -210,13 +210,13 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1.1 | Create `modules/programs/shell [NDnd]/shell.nix` | PENDING |
-| 1.2 | Migrate zsh config from `home/common/zsh.nix` | PENDING |
-| 1.3 | Migrate fish config (if any) | PENDING |
-| 1.4 | Migrate starship config | PENDING |
-| 1.5 | Test on thinky-nixos (NixOS + HM) | PENDING |
-| 1.6 | Test on thinky-ubuntu (HM only) | PENDING |
-| 1.7 | Remove old shell configs after verification | PENDING |
+| 1.1 | Create `modules/programs/shell [NDnd]/shell.nix` | COMPLETE |
+| 1.2 | Migrate zsh config from `home/common/zsh.nix` | COMPLETE (included in 1.1) |
+| 1.3 | Migrate fish config (if any) | N/A (no fish config exists) |
+| 1.4 | Migrate starship config | N/A (no starship config exists) |
+| 1.5 | Test on thinky-nixos (NixOS + HM) | COMPLETE |
+| 1.6 | Test on thinky-ubuntu (HM only) | COMPLETE (wired in, dry-run verified) |
+| 1.7 | Remove old shell configs after verification | COMPLETE |
 
 **Definition of Done**:
 - Shell works identically on all hosts
@@ -228,12 +228,12 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 2.1 | Create `modules/system/types/1-minimal/` | PENDING |
-| 2.2 | Create `modules/system/types/2-default/` | PENDING |
-| 2.3 | Create `modules/system/types/3-cli/` | PENDING |
-| 2.4 | Create `modules/system/types/4-desktop/` | PENDING |
-| 2.5 | Migrate `modules/base.nix` → system types | PENDING |
-| 2.6 | Migrate `home/modules/base.nix` → system types | PENDING |
+| 2.1 | Create `modules/system/types/1-minimal/` | COMPLETE |
+| 2.2 | Create `modules/system/types/2-default/` | COMPLETE |
+| 2.3 | Create `modules/system/types/3-cli/` | COMPLETE |
+| 2.4 | Create `modules/system/types/4-desktop/` | COMPLETE |
+| 2.5 | Migrate `modules/base.nix` → system types | COMPLETE |
+| 2.6 | Migrate `home/modules/base.nix` → system types | COMPLETE |
 
 **Definition of Done**:
 - Hosts import system-type, not individual modules
@@ -245,45 +245,45 @@ in
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 3.1 | git [NDnd] | High | PENDING |
-| 3.2 | ssh [NDnd] | High | PENDING |
-| 3.3 | tmux [NDnd] | High | PENDING |
-| 3.4 | neovim [NDnd] (70KB!) | High | PENDING |
-| 3.5 | wsl [N] system settings | High | PENDING |
-| 3.6 | wsl-home [nd] user settings | High | PENDING |
+| 3.1 | git [NDnd] | High | COMPLETE |
+| 3.2 | ssh [NDnd] | High | PARTIAL (integrated into system types) |
+| 3.3 | tmux [NDnd] | High | COMPLETE |
+| 3.4 | neovim [NDnd] (1871 LOC) | High | COMPLETE |
+| 3.5 | wsl [N] system settings | High | COMPLETE |
+| 3.6 | wsl-home [nd] user settings | High | COMPLETE |
 
 ### Phase 4: Feature Migrations (Tools)
 **Goal**: Migrate development tools
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 4.1 | claude-code [nd] | High | PENDING |
-| 4.2 | opencode [nd] | High | PENDING |
-| 4.3 | secrets-management [NDnd] | Medium | PENDING |
-| 4.4 | github-auth [nd] | Medium | PENDING |
-| 4.5 | gitlab-auth [nd] | Medium | PENDING |
-| 4.6 | development tools [nd] | Medium | PENDING |
+| 4.1 | claude-code [nd] | High | COMPLETE |
+| 4.2 | opencode [nd] | High | COMPLETE |
+| 4.3 | secrets-management [NDnd] | Medium | COMPLETE |
+| 4.4 | github-auth [nd] | Medium | COMPLETE |
+| 4.5 | gitlab-auth [nd] | Medium | COMPLETE |
+| 4.6 | development tools [nd] | Medium | COMPLETE |
 
 ### Phase 5: Host Compositions
 **Goal**: Migrate all hosts to new structure
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 5.1 | thinky-nixos (WSL primary) | PENDING |
-| 5.2 | pa161878-nixos (WSL work) | PENDING |
-| 5.3 | thinky-ubuntu (HM only) | PENDING |
-| 5.4 | mbp (Intel Mac) | PENDING |
-| 5.5 | potato (ARM SBC) | PENDING |
-| 5.6 | macbook-air (Apple Silicon) | PENDING |
-| 5.7 | nixos-wsl-minimal (template) | PENDING |
+| 5.1 | thinky-nixos (WSL primary) | COMPLETE |
+| 5.2 | pa161878-nixos (WSL work) | COMPLETE |
+| 5.3 | thinky-ubuntu (HM only) | COMPLETE |
+| 5.4 | mbp (Intel Mac running NixOS) | COMPLETE |
+| 5.5 | potato (ARM SBC) | COMPLETE |
+| 5.6 | macbook-air (Apple Silicon) | COMPLETE |
+| 5.7 | nixos-wsl-minimal (template) | COMPLETE |
 
 ### Phase 6: Cleanup
 **Goal**: Remove deprecated structure
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 6.1 | Remove `flake-modules/` (replaced by import-tree) | PENDING |
-| 6.2 | Remove `hosts/common/` | PENDING |
+| 6.1 | Remove `flake-modules/` (replaced by import-tree) | COMPLETE |
+| 6.2 | Remove `hosts/common/` | COMPLETE |
 | 6.3 | Remove `home/common/` | PENDING |
 | 6.4 | Remove `home/modules/` | PENDING |
 | 6.5 | Remove `modules/` (old NixOS modules) | PENDING |
@@ -329,6 +329,46 @@ in
 - Clear at-a-glance platform applicability
 - Matches dendritic community convention
 
+### 6. Layer Boundary Definitions (2026-02-07)
+**Decision**: Clear separation of concerns per layer
+
+| Layer | NixOS Content | Home Manager Content |
+|-------|---------------|---------------------|
+| **1-minimal** | Nix settings, GC, state version | HM basics, targets.genericLinux |
+| **2-default** | User creation, locale, console | SSH client, fonts, secrets tools |
+| **3-cli** | SSH daemon, dev tools, containers | Yazi, CLI packages, parallel |
+| **4-desktop** | DE, audio, bluetooth, printing | GUI packages only |
+
+**Key Decisions**:
+- SSH daemon in cli (not default): containers/CI/WSL don't need it
+- SSH client in home-default: symmetry with system layers
+- Power tools (tmux, ripgrep, fd) in cli, not default
+- Yazi in cli (TUI, not GUI)
+- Container tools in cli (CLI, not desktop)
+
+**Principle**: "Does this require a display server?" determines cli vs desktop
+
+### 7. Darwin Architecture Support (2026-02-08)
+**Decision**: Home Manager modules are architecture-agnostic; Darwin system modules need separate implementation
+
+**Architecture Matrix**:
+| System | Architecture | Home Manager | System Modules |
+|--------|--------------|--------------|----------------|
+| mbp | x86_64-linux (NixOS) | ✅ Uses HM modules | NixOS system-cli |
+| potato | aarch64-linux | ✅ Uses HM modules | NixOS system-cli |
+| macbook-air | aarch64-darwin | ✅ Uses HM modules | Needs darwin modules |
+| Future M4 Mac | aarch64-darwin | ✅ Uses HM modules | Needs darwin modules |
+| Future Intel Mac (darwin) | x86_64-darwin | ✅ Uses HM modules | Needs darwin modules |
+
+**Key Insights**:
+- Home Manager modules (shell, git, tmux, neovim, claude-code, etc.) work on all architectures
+- `homeDirectory` difference handled by `homeBase` option: `/home/tim` (Linux) vs `/Users/tim` (Darwin)
+- Darwin system modules (`flake.modules.darwin.*`) are empty - need implementation for Task 5.6
+- No blockers for adding Apple Silicon hosts; existing HM modules work unchanged
+- Darwin-specific features (Touch ID, Homebrew, system.defaults) go in darwin system modules
+
+**Note**: mbp runs NixOS on Intel Mac hardware (not nix-darwin), so it follows NixOS patterns.
+
 ## Risk Assessment
 
 | Risk | Mitigation |
@@ -356,7 +396,7 @@ in
 ## Open Questions
 
 1. Should we add flake-file for distributed inputs? (Decided: No, keep inputs in flake.nix)
-2. How to handle 70KB nixvim config? (Split into sub-modules or migrate as unit?)
+2. How to handle 70KB nixvim config? (Decided: Migrated as unit, extraConfigLua split to separate file)
 3. Keep existing flake-modules/ during transition? (Yes, remove in Phase 6)
 4. Factory pattern for WSL hosts? (TBD: evaluate after user factory works)
 

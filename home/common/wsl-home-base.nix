@@ -17,12 +17,12 @@
 # - Any other WSL distribution with Nix + home-manager installed
 #
 # FOR SYSTEM-LEVEL WSL CONFIG (NixOS-WSL only):
-# See hosts/common/wsl-base.nix - that's a NixOS system module that requires
+# See modules/nixos/wsl-base.nix - that's a NixOS system module that requires
 # a full NixOS-WSL distribution and provides system-level integration.
 #
 # USAGE: Import this in WSL home-manager configs to get standard WSL user setup
 #
-# NOTE: wslu appears in both this module and hosts/common/wsl-base.nix
+# NOTE: wslu appears in both this module and modules/nixos/wsl-base.nix
 # This is intentional - system-wide on NixOS-WSL, user-level on vanilla WSL.
 # Nix automatically deduplicates on NixOS-WSL, and it's essential for portability.
 { config, lib, pkgs, ... }:

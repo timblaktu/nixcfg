@@ -1,4 +1,20 @@
 # Parameterized Home Manager base module
+#
+# DEPRECATED: This module is being migrated to the dendritic system types pattern.
+# New configurations should use the layered system types instead:
+#   - homeManager.home-minimal (core HM setup)
+#   - homeManager.home-default (packages, fonts, environment)
+#   - homeManager.home-cli (git, tmux, shell tools)
+#   - homeManager.home-desktop (yazi, GUI applications)
+#
+# Migration path:
+#   1. Import the appropriate system type: inputs.self.modules.homeManager.home-cli
+#   2. Set options using the new namespaces: homeMinimal.*, homeDefault.*, homeCli.*
+#   3. For feature-specific config (claude-code, opencode), use dedicated feature modules
+#
+# This module will be removed in Phase 6 of Plan 019.
+# See: .claude/user-plans/019-dendritic-migration.md
+#
 { config, lib, pkgs, inputs ? null, ... }:
 
 with lib;
@@ -23,11 +39,9 @@ in
   ];
 
   imports = [
-    ../common/git.nix
-    ../common/tmux.nix
-    ./tmux-auto-reload.nix # Auto-reload tmux config on HM generation change
-    ../common/nixvim.nix
-    ../common/zsh.nix
+    # git.nix migrated to modules/programs/git/ (dendritic pattern)
+    # tmux.nix migrated to modules/programs/tmux/ (dendritic pattern)
+    # nixvim.nix migrated to modules/programs/neovim/ (dendritic pattern)
     ../common/environment.nix
     ../common/aliases.nix
     # Import both files modules - they will be conditionally enabled
@@ -39,10 +53,10 @@ in
     ../common/shell-utils.nix
     ./terminal-verification.nix # WSL Windows Terminal verification
     ./windows-terminal.nix # Windows Terminal settings management (non-destructive merge)
-    ./claude-code.nix # Claude Code - enhanced multi-account module (upstream disabled via disabledModules)
+    # claude-code.nix migrated to modules/programs/claude-code/ (dendritic pattern)
     ./opencode.nix # OpenCode - enhanced multi-account module (upstream disabled via disabledModules)
-    ./secrets-management.nix # RBW and SOPS configuration
-    ./github-auth.nix # GitHub authentication (Bitwarden/SOPS)
+    # secrets-management.nix migrated to modules/programs/secrets-management/ (dendritic pattern)
+    # github-auth.nix migrated to modules/programs/github-auth/ (dendritic pattern)
     ./gitlab-auth.nix # GitLab authentication (Bitwarden/SOPS)
     ./git-auth-helpers.nix # Combined git auth helpers (refresh-git-creds)
     ./podman-tools.nix # Container tools configuration
