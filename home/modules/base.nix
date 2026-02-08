@@ -41,7 +41,7 @@ in
   imports = [
     # git.nix migrated to modules/programs/git/ (dendritic pattern)
     # tmux.nix migrated to modules/programs/tmux/ (dendritic pattern)
-    ../common/nixvim.nix
+    # nixvim.nix migrated to modules/programs/neovim/ (dendritic pattern)
     ../common/environment.nix
     ../common/aliases.nix
     # Import both files modules - they will be conditionally enabled

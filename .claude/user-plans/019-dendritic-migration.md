@@ -31,7 +31,7 @@ Migrate nixcfg from host-centric organization to feature-centric dendritic patte
 - ~22,000 lines of Nix across 99 files
 - 5 NixOS hosts, 6 HM configs, 1 Darwin config
 - 12 flake-module components
-- Key complexity: nixvim (70KB), tmux (37KB), claude-code (710 LOC)
+- Key complexity: nixvim (1871 LOC), tmux (733 LOC), claude-code (710 LOC)
 
 ## Architecture Design
 
@@ -248,7 +248,7 @@ in
 | 3.1 | git [NDnd] | High | COMPLETE |
 | 3.2 | ssh [NDnd] | High | PARTIAL (integrated into system types) |
 | 3.3 | tmux [NDnd] | High | COMPLETE |
-| 3.4 | neovim [NDnd] (70KB!) | High | PENDING |
+| 3.4 | neovim [NDnd] (1871 LOC) | High | COMPLETE |
 | 3.5 | wsl [N] system settings | High | PENDING |
 | 3.6 | wsl-home [nd] user settings | High | PENDING |
 
@@ -375,7 +375,7 @@ in
 ## Open Questions
 
 1. Should we add flake-file for distributed inputs? (Decided: No, keep inputs in flake.nix)
-2. How to handle 70KB nixvim config? (Split into sub-modules or migrate as unit?)
+2. How to handle 70KB nixvim config? (Decided: Migrated as unit, extraConfigLua split to separate file)
 3. Keep existing flake-modules/ during transition? (Yes, remove in Phase 6)
 4. Factory pattern for WSL hosts? (TBD: evaluate after user factory works)
 

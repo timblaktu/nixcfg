@@ -23,6 +23,7 @@
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
+            self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             {
               homeBase = {
                 username = "tim";
@@ -71,6 +72,7 @@
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
+            self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             {
               homeBase = {
                 username = "tim";
@@ -137,6 +139,7 @@
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
+            self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             ../home/common/wsl-home-base.nix # Common WSL user configuration
             {
               homeBase = {
@@ -215,6 +218,7 @@
             self.modules.homeManager.shell # Dendritic pattern shell module
             self.modules.homeManager.git # Dendritic pattern git module
             self.modules.homeManager.tmux # Dendritic pattern tmux module
+            self.modules.homeManager.neovim # Dendritic pattern neovim/nixvim module
             {
               homeBase = {
                 username = "tim";
