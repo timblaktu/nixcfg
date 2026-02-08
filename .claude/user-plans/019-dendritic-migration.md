@@ -200,12 +200,12 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 0.1 | Add import-tree to flake inputs | COMPLETE |
-| 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | COMPLETE |
-| 0.3 | Create `modules/flake-parts/lib.nix` (mkNixos, mkHomeManager helpers) | COMPLETE |
-| 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | COMPLETE |
-| 0.5 | Create `modules/flake-parts/systems.nix` (supported architectures) | COMPLETE |
-| 0.6 | Verify `nix flake check` passes with new structure | COMPLETE |
+| 0.1 | Add import-tree to flake inputs | TASK:COMPLETE |
+| 0.2 | Create `modules/flake-parts/modules.nix` (enable flake.modules.*) | TASK:COMPLETE |
+| 0.3 | Create `modules/flake-parts/lib.nix` (mkNixos, mkHomeManager helpers) | TASK:COMPLETE |
+| 0.4 | Create `modules/meta/options.nix` (username as readOnly option) | TASK:COMPLETE |
+| 0.5 | Create `modules/flake-parts/systems.nix` (supported architectures) | TASK:COMPLETE |
+| 0.6 | Verify `nix flake check` passes with new structure | TASK:COMPLETE |
 
 **Definition of Done**:
 - import-tree loads all modules from `modules/`
@@ -218,13 +218,13 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1.1 | Create `modules/programs/shell [NDnd]/shell.nix` | COMPLETE |
-| 1.2 | Migrate zsh config from `home/common/zsh.nix` | COMPLETE (included in 1.1) |
-| 1.3 | Migrate fish config (if any) | N/A (no fish config exists) |
-| 1.4 | Migrate starship config | N/A (no starship config exists) |
-| 1.5 | Test on thinky-nixos (NixOS + HM) | COMPLETE |
-| 1.6 | Test on thinky-ubuntu (HM only) | COMPLETE (wired in, dry-run verified) |
-| 1.7 | Remove old shell configs after verification | COMPLETE |
+| 1.1 | Create `modules/programs/shell [NDnd]/shell.nix` | TASK:COMPLETE |
+| 1.2 | Migrate zsh config from `home/common/zsh.nix` | TASK:COMPLETE (included in 1.1) |
+| 1.3 | Migrate fish config (if any) | TASK:N/A (no fish config exists) |
+| 1.4 | Migrate starship config | TASK:N/A (no starship config exists) |
+| 1.5 | Test on thinky-nixos (NixOS + HM) | TASK:COMPLETE |
+| 1.6 | Test on thinky-ubuntu (HM only) | TASK:COMPLETE (wired in, dry-run verified) |
+| 1.7 | Remove old shell configs after verification | TASK:COMPLETE |
 
 **Definition of Done**:
 - Shell works identically on all hosts
@@ -236,12 +236,12 @@ in
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 2.1 | Create `modules/system/types/1-minimal/` | COMPLETE |
-| 2.2 | Create `modules/system/types/2-default/` | COMPLETE |
-| 2.3 | Create `modules/system/types/3-cli/` | COMPLETE |
-| 2.4 | Create `modules/system/types/4-desktop/` | COMPLETE |
-| 2.5 | Migrate `modules/base.nix` → system types | COMPLETE |
-| 2.6 | Migrate `home/modules/base.nix` → system types | COMPLETE |
+| 2.1 | Create `modules/system/types/1-minimal/` | TASK:COMPLETE |
+| 2.2 | Create `modules/system/types/2-default/` | TASK:COMPLETE |
+| 2.3 | Create `modules/system/types/3-cli/` | TASK:COMPLETE |
+| 2.4 | Create `modules/system/types/4-desktop/` | TASK:COMPLETE |
+| 2.5 | Migrate `modules/base.nix` → system types | TASK:COMPLETE |
+| 2.6 | Migrate `home/modules/base.nix` → system types | TASK:COMPLETE |
 
 **Definition of Done**:
 - Hosts import system-type, not individual modules
@@ -253,50 +253,50 @@ in
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 3.1 | git [NDnd] | High | COMPLETE |
-| 3.2 | ssh [NDnd] | High | PARTIAL (integrated into system types) |
-| 3.3 | tmux [NDnd] | High | COMPLETE |
-| 3.4 | neovim [NDnd] (1871 LOC) | High | COMPLETE |
-| 3.5 | wsl [N] system settings | High | COMPLETE |
-| 3.6 | wsl-home [nd] user settings | High | COMPLETE |
+| 3.1 | git [NDnd] | High | TASK:COMPLETE |
+| 3.2 | ssh [NDnd] | High | TASK:PARTIAL (integrated into system types) |
+| 3.3 | tmux [NDnd] | High | TASK:COMPLETE |
+| 3.4 | neovim [NDnd] (1871 LOC) | High | TASK:COMPLETE |
+| 3.5 | wsl [N] system settings | High | TASK:COMPLETE |
+| 3.6 | wsl-home [nd] user settings | High | TASK:COMPLETE |
 
 ### Phase 4: Feature Migrations (Tools)
 **Goal**: Migrate development tools
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 4.1 | claude-code [nd] | High | COMPLETE |
-| 4.2 | opencode [nd] | High | COMPLETE |
-| 4.3 | secrets-management [NDnd] | Medium | COMPLETE |
-| 4.4 | github-auth [nd] | Medium | COMPLETE |
-| 4.5 | gitlab-auth [nd] | Medium | COMPLETE |
-| 4.6 | development tools [nd] | Medium | COMPLETE |
+| 4.1 | claude-code [nd] | High | TASK:COMPLETE |
+| 4.2 | opencode [nd] | High | TASK:COMPLETE |
+| 4.3 | secrets-management [NDnd] | Medium | TASK:COMPLETE |
+| 4.4 | github-auth [nd] | Medium | TASK:COMPLETE |
+| 4.5 | gitlab-auth [nd] | Medium | TASK:COMPLETE |
+| 4.6 | development tools [nd] | Medium | TASK:COMPLETE |
 
 ### Phase 5: Host Compositions
 **Goal**: Migrate all hosts to new structure
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 5.1 | thinky-nixos (WSL primary) | COMPLETE |
-| 5.2 | pa161878-nixos (WSL work) | COMPLETE |
-| 5.3 | thinky-ubuntu (HM only) | COMPLETE |
-| 5.4 | mbp (Intel Mac running NixOS) | COMPLETE |
-| 5.5 | potato (ARM SBC) | COMPLETE |
-| 5.6 | macbook-air (Apple Silicon) | COMPLETE |
-| 5.7 | nixos-wsl-minimal (template) | COMPLETE |
+| 5.1 | thinky-nixos (WSL primary) | TASK:COMPLETE |
+| 5.2 | pa161878-nixos (WSL work) | TASK:COMPLETE |
+| 5.3 | thinky-ubuntu (HM only) | TASK:COMPLETE |
+| 5.4 | mbp (Intel Mac running NixOS) | TASK:COMPLETE |
+| 5.5 | potato (ARM SBC) | TASK:COMPLETE |
+| 5.6 | macbook-air (Apple Silicon) | TASK:COMPLETE |
+| 5.7 | nixos-wsl-minimal (template) | TASK:COMPLETE |
 
 ### Phase 6: Cleanup
 **Goal**: Remove deprecated structure
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 6.1 | Remove `flake-modules/` (replaced by import-tree) | COMPLETE |
-| 6.2 | Remove `hosts/common/` | COMPLETE |
-| 6.3 | Remove `home/common/` (moved to `home/modules/legacy-common/`) | COMPLETE |
-| 6.4 | Remove `home/modules/` | IN_PROGRESS |
-| 6.5 | Remove `modules/` (old NixOS modules) | PENDING |
-| 6.6 | Update ARCHITECTURE.md | PENDING |
-| 6.7 | Update CLAUDE.md with new patterns | PENDING |
+| 6.1 | Remove `flake-modules/` (replaced by import-tree) | TASK:COMPLETE |
+| 6.2 | Remove `hosts/common/` | TASK:COMPLETE |
+| 6.3 | Remove `home/common/` (moved to `home/modules/legacy-common/`) | TASK:COMPLETE |
+| 6.4 | Remove `home/modules/` | TASK:IN_PROGRESS |
+| 6.5 | Remove `modules/` (old NixOS modules) | TASK:PENDING |
+| 6.6 | Update ARCHITECTURE.md | TASK:PENDING |
+| 6.7 | Update CLAUDE.md with new patterns | TASK:PENDING |
 
 #### Task 6.4 Sub-tasks: Remove `home/modules/`
 
@@ -308,24 +308,218 @@ in
 
 **Strategy**: Migrate content to dendritic modules, then update hosts to remove base.nix import.
 
-| Sub-task | Description | DoD | Status |
-|----------|-------------|-----|--------|
-| 6.4.1 | Move `disabledModules` to dendritic claude-code module | Modules still disabled, hosts don't import base.nix for this | PENDING |
-| 6.4.2 | Replace `homeBase` options with dendritic system types | `home-minimal` provides username/homeDirectory/stateVersion | PENDING |
-| 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | Each host has its own claude-code config block | PENDING |
-| 6.4.4 | Move opencode CONFIG to host files | Each host has its own opencode config block | PENDING |
-| 6.4.5 | Create dendritic yazi module | `modules/programs/yazi/` exists with current config | PENDING |
-| 6.4.6 | Migrate legacy-common/environment.nix | Content absorbed into home-default or dedicated module | PENDING |
-| 6.4.7 | Migrate legacy-common/aliases.nix | Content absorbed into shell module or host configs | PENDING |
-| 6.4.8 | Migrate legacy-common/shell-utils.nix | Content absorbed into appropriate module | PENDING |
-| 6.4.9 | Migrate remaining legacy-common/* | esp-idf, onedrive, terminal, system, development | PENDING |
-| 6.4.10 | Migrate standalone modules | terminal-verification, windows-terminal, podman-tools, git-auth-helpers | PENDING |
-| 6.4.11 | Update all hosts to remove base.nix import | No host imports `home/modules/base.nix` | PENDING |
-| 6.4.12 | Delete `home/modules/` directory | Directory removed, `nix flake check` passes | PENDING |
+| Sub-task | Description | Status |
+|----------|-------------|--------|
+| 6.4.1 | Move `disabledModules` to dendritic modules | TASK:PENDING |
+| 6.4.2 | Replace `homeBase` options with dendritic system types | TASK:PENDING |
+| 6.4.3 | Move claude-code CONFIG (accounts, mcp) to host files | TASK:PENDING |
+| 6.4.4 | Move opencode CONFIG to host files | TASK:PENDING |
+| 6.4.5 | Create dendritic yazi module | TASK:PENDING |
+| 6.4.6 | Migrate legacy-common/environment.nix | TASK:PENDING |
+| 6.4.7 | Migrate legacy-common/aliases.nix | TASK:PENDING |
+| 6.4.8 | Migrate legacy-common/shell-utils.nix | TASK:PENDING |
+| 6.4.9 | Migrate remaining legacy-common/* | TASK:PENDING |
+| 6.4.10 | Migrate standalone modules | TASK:PENDING |
+| 6.4.11 | Update all hosts to remove base.nix import | TASK:PENDING |
+| 6.4.12 | Delete `home/modules/` directory | TASK:PENDING |
 
 **Execution Order**: 6.4.1-6.4.2 (infrastructure) → 6.4.3-6.4.5 (high-value) → 6.4.6-6.4.10 (legacy) → 6.4.11-6.4.12 (cleanup)
 
 **Per-task validation**: After each sub-task, run `nix flake check --no-build` and verify at least one host builds.
+
+---
+
+### Sub-task Implementation Details
+
+#### 6.4.1: Move `disabledModules` to dendritic modules
+
+**Goal**: Each dendritic module disables its upstream counterpart automatically.
+
+**Current state** (`home/modules/base.nix:36-39`):
+```nix
+disabledModules = [
+  "programs/claude-code.nix"
+  "programs/opencode.nix"
+];
+```
+
+**Files to modify**:
+1. `modules/programs/claude-code/claude-code.nix` - Add after line 31 (inside `homeManager.claude-code`):
+   ```nix
+   disabledModules = [ "programs/claude-code.nix" ];
+   ```
+2. `modules/programs/opencode/opencode.nix` - Add after line 27 (inside `homeManager.opencode`):
+   ```nix
+   disabledModules = [ "programs/opencode.nix" ];
+   ```
+
+**Validation**: `nix flake check --no-build` passes
+
+**Note**: The `disabledModules` in base.nix stays until task 6.4.12 (backward compatibility).
+
+---
+
+#### 6.4.2: Replace `homeBase` options with dendritic system types
+
+**Goal**: Remove dependency on `homeBase.*` options; use `homeMinimal.*` from system types.
+
+**Current state** (`home/modules/base.nix:71-84`):
+- `homeBase.username` - required, used by all hosts
+- `homeBase.homeDirectory` - required, used by all hosts
+- Also provides `basePackages` list
+
+**Files to modify**:
+1. `modules/system/types/1-minimal/home.nix` - Ensure `homeMinimal.username` and `homeMinimal.homeDirectory` are defined
+2. Each host's home.nix - Change from `homeBase.username` to `homeMinimal.username`
+
+**Validation**: `nix flake check --no-build` + dry-run on thinky-nixos
+
+---
+
+#### 6.4.3: Move claude-code CONFIG to host files
+
+**Goal**: Each host defines its own claude-code accounts/MCP config inline.
+
+**Current state**: Config is in `home/modules/base.nix` (shared across all hosts).
+
+**Files to modify**:
+- `modules/hosts/thinky-nixos/home.nix` - Add claude-code config block
+- `modules/hosts/pa161878-nixos/home.nix` - Add claude-code config block
+- `modules/hosts/thinky-ubuntu/home.nix` - Add claude-code config block
+- (etc. for other hosts that use claude-code)
+
+**Template**:
+```nix
+programs.claude-code = {
+  enable = true;
+  accounts = {
+    max = { enable = true; displayName = "Claude Max"; };
+    pro = { enable = true; displayName = "Claude Pro"; };
+  };
+  # ... MCP servers, hooks, etc.
+};
+```
+
+**Validation**: `nix flake check --no-build` + dry-run on each modified host
+
+---
+
+#### 6.4.4: Move opencode CONFIG to host files
+
+**Goal**: Each host defines its own opencode accounts inline.
+
+**Current state**: Config is in `home/modules/opencode.nix` (imported by base.nix).
+
+**Files to modify**: Same hosts as 6.4.3, add `programs.opencode` blocks.
+
+**Validation**: `nix flake check --no-build`
+
+---
+
+#### 6.4.5: Create dendritic yazi module
+
+**Goal**: Move yazi config to `modules/programs/yazi/`.
+
+**Current state**: Yazi config is in `home/modules/base.nix` (basePackages) or legacy-common.
+
+**Files to create**:
+- `modules/programs/yazi/yazi.nix` - Define `flake.modules.homeManager.yazi`
+
+**Validation**: `nix flake check --no-build` + verify yazi works
+
+---
+
+#### 6.4.6: Migrate legacy-common/environment.nix
+
+**Goal**: Absorb environment variables and session config into appropriate dendritic module.
+
+**Current state**: `home/modules/legacy-common/environment.nix` sets XDG dirs, PATH, etc.
+
+**Target**: Content goes into `modules/system/types/2-default/home.nix` (environment is default-level).
+
+**Validation**: `nix flake check --no-build`
+
+---
+
+#### 6.4.7: Migrate legacy-common/aliases.nix
+
+**Goal**: Move shell aliases to shell module or host configs.
+
+**Current state**: `home/modules/legacy-common/aliases.nix` defines shell aliases.
+
+**Target**: `modules/programs/shell/shell.nix` or host-specific if aliases vary.
+
+**Validation**: `nix flake check --no-build`
+
+---
+
+#### 6.4.8: Migrate legacy-common/shell-utils.nix
+
+**Goal**: Move shell utilities to appropriate module.
+
+**Current state**: `home/modules/legacy-common/shell-utils.nix`
+
+**Target**: Likely `modules/programs/shell/` or `modules/system/types/3-cli/home.nix`
+
+**Validation**: `nix flake check --no-build`
+
+---
+
+#### 6.4.9: Migrate remaining legacy-common/*
+
+**Goal**: Clear out `home/modules/legacy-common/` directory.
+
+**Files to migrate**:
+- `esp-idf.nix` → `modules/programs/esp-idf/` (or host-specific if only used on one host)
+- `onedrive.nix` → `modules/programs/onedrive/` (WSL-specific)
+- `terminal.nix` → `modules/programs/terminal/`
+- `system.nix` → `modules/system/types/` (appropriate layer)
+- `development.nix` → `modules/system/types/3-cli/home.nix` or dedicated module
+
+**Validation**: `nix flake check --no-build` after each file
+
+---
+
+#### 6.4.10: Migrate standalone modules
+
+**Goal**: Move remaining `home/modules/*.nix` files.
+
+**Files to migrate**:
+- `terminal-verification.nix` → Host-specific (WSL only) or `modules/programs/terminal/`
+- `windows-terminal.nix` → `modules/programs/windows-terminal/` (WSL-specific)
+- `podman-tools.nix` → `modules/programs/podman/`
+- `git-auth-helpers.nix` → `modules/programs/git/` (extend existing)
+- `gitlab-auth.nix` → `modules/programs/gitlab-auth/`
+
+**Validation**: `nix flake check --no-build`
+
+---
+
+#### 6.4.11: Update all hosts to remove base.nix import
+
+**Goal**: No host imports `home/modules/base.nix`.
+
+**Files to modify** (remove base.nix import from each):
+- `modules/hosts/thinky-nixos/home.nix`
+- `modules/hosts/pa161878-nixos/home.nix`
+- `modules/hosts/thinky-ubuntu/home.nix`
+- `modules/hosts/mbp/home.nix`
+- `modules/hosts/potato/home.nix`
+- `modules/hosts/macbook-air/home.nix`
+
+**Validation**: `nix flake check --no-build` + dry-run on ALL hosts
+
+---
+
+#### 6.4.12: Delete `home/modules/` directory
+
+**Goal**: Remove the deprecated directory entirely.
+
+**Prerequisite**: All prior sub-tasks complete.
+
+**Command**: `rm -rf home/modules/`
+
+**Validation**: `nix flake check --no-build` + full build on at least one host
 
 ## Technical Decisions
 
