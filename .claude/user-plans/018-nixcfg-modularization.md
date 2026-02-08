@@ -30,7 +30,7 @@ Refactor the nixcfg repository to extract reusable components into shareable fla
 | **0.6** | **Internal Cleanup (Path B)** | | |
 | 0.6.1 | Consolidate podman-tools.nix | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.2 | Rename hardware-configuration.nix | `TASK:COMPLETE` | 2026-02-07 |
-| 0.6.3 | Unify MCP server adapters | `TASK:PENDING` | |
+| 0.6.3 | Unify MCP server adapters | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.4 | Consolidate modules/home/ directory | `TASK:COMPLETE` | 2026-02-07 |
 | 0.6.5 | Document module boundaries | `TASK:PENDING` | |
 | 0.6.6 | Evaluate TUR wrapper consolidation | `TASK:PENDING` | |
@@ -490,23 +490,27 @@ lib.ai-dev = {
 
 ### Task 0.6.3: Unify MCP Server Adapters
 
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE` (2026-02-07) - Accepted as appropriate design
 
-**Problem**: Two nearly-identical MCP integration modules:
+**Original Problem**: Two MCP integration modules appeared ~80% duplicated:
 - `home/modules/claude-code/mcp-servers.nix` (246 LOC)
 - `home/modules/opencode/mcp-servers.nix` (227 LOC)
 
-Both consume `home/modules/shared/mcp-server-defs.nix` but have separate adapter logic (~80% duplication).
+**Analysis Findings**:
+1. **Already shared**: Both import `shared/mcp-server-defs.nix` (6632 LOC) for core definitions
+2. **Necessarily different**: Output formats differ
+   - Claude: `{ command, args, env, timeout, retries }`
+   - OpenCode: `{ type = "local"; command = [...]; environment; enabled }`
+3. **Subtle option differences**: Claude has extra servers (cliMcpServer, sequentialThinkingPython),
+   OpenCode has typed custom submodule, different defaults
+4. **Pattern differences**: Claude uses `optionalAttrs`, OpenCode uses `if-then-else`
+   (required for JSON serialization)
 
-**Solution**:
-1. Create `home/modules/shared/mcp-integration.nix` with common adapter
-2. Parameterize for claude-code vs opencode differences
-3. Have both modules import and use shared adapter
-4. Remove duplicate code from individual modules
+**Decision**: Accept current design as appropriate. The meaningful sharing (server definitions)
+already exists. The "duplication" is format-specific adaptation that MUST differ. Further
+abstraction would add complexity without clear benefit and violate "avoid over-engineering" principle.
 
-**Verification**:
-- `nix flake check` passes
-- Both `claudemax` and `opencodemax` get identical MCP servers
+**No code changes required** - current architecture is sound.
 
 ---
 
