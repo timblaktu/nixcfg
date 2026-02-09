@@ -189,7 +189,7 @@
               eza # Better ls
               bat # Better cat
               delta # Better diff
-              du-dust # Better du
+              dust # Better du
               duf # Better df
               procs # Better ps
               bottom # Better top
@@ -415,7 +415,7 @@
               eza # Better ls
               bat # Better cat
               delta # Better diff
-              du-dust # Better du
+              dust # Better du
               duf # Better df
               procs # Better ps
               bottom # Better top
@@ -538,13 +538,14 @@
               nix-diff
 
               # Misc
-              inotify-tools
               lbzip2
               poppler
               resvg
               speedtest
               stress-ng
               ueberzugpp
+            ] ++ lib.optionals pkgs.stdenv.isLinux [
+              inotify-tools
             ];
             description = "CLI packages to install";
           };

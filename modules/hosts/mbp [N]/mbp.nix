@@ -36,7 +36,7 @@ in
     # System default layer configuration (required by system types)
     systemDefault = {
       userName = username;
-      wheelNeedsPassword = lib.mkDefault false;
+      wheelNeedsPassword = false;
       userGroups = lib.mkDefault [ "wheel" "networkmanager" "audio" "video" ];
       consolePackages = lib.mkDefault (with pkgs; [
         kbd

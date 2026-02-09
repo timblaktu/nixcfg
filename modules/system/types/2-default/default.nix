@@ -102,9 +102,9 @@
 
           # Security
           wheelNeedsPassword = lib.mkOption {
-            type = lib.types.bool;
-            default = true;
-            description = "Require password for sudo";
+            type = lib.types.nullOr lib.types.bool;
+            default = null;
+            description = "Require password for sudo (null = use system default)";
           };
 
           # NOTE: enableHomeManager and enableSops options removed.
@@ -169,8 +169,8 @@
             # Default shell program
             programs.zsh.enable = lib.mkDefault (cfg.userShell == pkgs.zsh);
 
-            # Security
-            security.sudo.wheelNeedsPassword = lib.mkDefault cfg.wheelNeedsPassword;
+            # Security - only set if explicitly configured
+            security.sudo.wheelNeedsPassword = lib.mkIf (cfg.wheelNeedsPassword != null) cfg.wheelNeedsPassword;
 
             # System packages - basic troubleshooting utilities
             # Power tools (tmux, ripgrep, fd) are in system-cli
@@ -377,22 +377,17 @@
               glow
               htop
               imagemagick
-              inotify-tools
               jq
               lbzip2
               markitdown
-              marker-pdf
-              (pkgs.callPackage ../../../../pkgs/tomd { })
               nix-diff
               nixfmt
               pkg-config
               poppler
               resvg
               ripgrep
-              speedtest
               stress-ng
               tree
-              ueberzugpp
               unzip
               yt-dlp
               zoxide
@@ -411,6 +406,12 @@
               cascadia-code
               noto-fonts-color-emoji
               twemoji-color-font
+            ] ++ lib.optionals pkgs.stdenv.isLinux [
+              inotify-tools
+              marker-pdf
+              (pkgs.callPackage ../../../../pkgs/tomd { })
+              speedtest
+              ueberzugpp
             ];
             description = "Base packages for all home environments";
           };
