@@ -9,8 +9,6 @@
 { lib
 , stdenv
 , python3
-, writeShellScriptBin
-, runCommand
 , bc
 , qpdf        # PDF splitting and TOC extraction
 , systemd     # Memory limiting via systemd-run
@@ -48,13 +46,17 @@ let
   # Version of marker-pdf to install
   version = "1.10.1";
 
-  # Create the script with substitutions
-  markerScript = runCommand "marker-pdf-script"
-    {
-      src = ./marker-pdf-env.sh;
-    } ''
-    cp $src $out
-    substituteInPlace $out \
+in
+stdenv.mkDerivation {
+  pname = "marker-pdf";
+  inherit version;
+
+  dontUnpack = true;
+
+  installPhase = ''
+    runHook preInstall
+    mkdir -p $out/bin
+    substitute ${./marker-pdf-env.sh} $out/bin/marker-pdf-env \
       --replace "@qpdf@" "${qpdf}" \
       --replace "@systemd@" "${systemd}" \
       --replace "@gawk@" "${gawk}" \
@@ -65,10 +67,10 @@ let
       --replace "@shell@" "${stdenv.shell}" \
       --replace "@version@" "${version}" \
       --replace "@cudaSupport@" "${if cudaSupport then "enabled" else "disabled"}"
+    chmod +x $out/bin/marker-pdf-env
+    runHook postInstall
   '';
 
-in
-writeShellScriptBin "marker-pdf-env" (builtins.readFile markerScript) // {
   meta = with lib; {
     description = "PDF to Markdown converter with ML-based OCR and GPU acceleration";
     homepage = "https://github.com/VikParuchuri/marker";
