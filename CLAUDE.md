@@ -74,6 +74,11 @@ Check: [relevant file path]
 - **NIX FLAKE CHECK DEBUGGING**: When `nix flake check` fails, debug in-place using: (1) `nix log /nix/store/...` for detailed failure logs, (2) `nix flake check --verbose --debug --print-build-logs`, (3) `nix build .#checks.SYSTEM.TEST_NAME` for individual test execution, (4) `nix repl` + `:lf .` for interactive flake exploration. NEVER waste time on manual test reproduction - use Nix's built-in debugging tools.
 - **RAPID ITERATION = FREQUENT CHECK-INS**: When user says "rapid iteration" or "quick/short responses", this means STOP AFTER EACH SMALL STEP and report back for guidance. Do NOT interpret as "work faster" - it means "communicate more frequently". After each change, explain what you did and ask what to do next.
 - **DENDRITIC MODULE PATTERN**: All feature modules use `flake.modules.homeManager.*` namespace (e.g., `modules.homeManager.claude-code`). Upstream home-manager modules are disabled via `disabledModules` INSIDE each dendritic module's deferredModule content. Enhanced implementations provide multi-account support, categorized hooks, statusline variants, MCP helpers, and WSL integration.
+- **HOME-MANAGER FILE CONFLICTS**: When `home-manager switch` reports "Existing file would be clobbered":
+  1. **COMPARE**: Show both the existing file and the nix-generated file
+  2. **ANALYZE**: Find the Nix config that generates it; determine if this is conventional (new Nix-managed file) or unexpected
+  3. **INTEGRATE**: If conventional, ensure important content from manual file is added to Nix config BEFORE proceeding
+  4. **PROCEED**: Only then use `-b backup` flag. If not conventional, STOP and report findings to user.
 
 # 🔧 **DEVELOPMENT ENVIRONMENT**
 - Claude code may be running in the terminal or the web. Both use the same .claude/ and CLAUDE.md files in the repo.

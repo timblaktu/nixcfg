@@ -500,6 +500,16 @@
                   user = "git";
                   identityFile = cfg.sshIdentityFiles;
                 };
+
+                # Work hosts (migrated from manual ~/.ssh/config)
+                "pdx-gw2" = {
+                  user = "blackt1";
+                };
+
+                "he*" = {
+                  proxyJump = "pdx-gw2";
+                  user = "blackt1";
+                };
               };
             };
 

@@ -452,9 +452,34 @@
               }
             ));
 
+            # Import wrapper generation library
+            claudeLib = import ./_hm/lib.nix { inherit lib pkgs config; };
+
+            # Generate wrapper scripts for each enabled account
+            wrapperScripts = lib.mapAttrsToList
+              (name: account:
+                pkgs.writers.writeBashBin "claude${name}" (
+                  claudeLib.mkClaudeWrapperScript {
+                    account = name;
+                    displayName = account.displayName;
+                    configDir = "${runtimePath}/.claude-${name}";
+                    claudeBin = "${pkgs.claude-code}/bin/claude";
+                    api = account.api or { };
+                    secrets = account.secrets or { };
+                    extraEnvVars = {
+                      DISABLE_TELEMETRY = "1";
+                      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+                      DISABLE_ERROR_REPORTING = "1";
+                    } // (account.extraEnvVars or { });
+                  }
+                )
+              )
+              (lib.filterAttrs (n: a: a.enable) cfg.accounts);
+
           in
           mkIf cfg.enable {
             home.packages = with pkgs; [
+              claude-code
               nodejs_22
               git
               ripgrep
@@ -479,7 +504,7 @@
               shellcheck
             ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
               libnotify
-            ];
+            ] ++ wrapperScripts;
 
             home.file = mkMerge [
               (mkMerge (mapAttrsToList
