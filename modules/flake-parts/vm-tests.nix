@@ -337,6 +337,80 @@
           '';
         };
 
+        # Shell environment test: verifies zsh configuration, aliases, session
+        # variables, plugins, and custom functions via Home Manager in a VM.
+        vm-shell-env = pkgs.testers.nixosTest {
+          name = "vm-shell-env";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.system-default
+              inputs.home-manager.nixosModules.home-manager
+            ];
+
+            systemDefault.userName = "tim";
+            systemDefault.wheelNeedsPassword = false;
+
+            networking.firewall.enable = false;
+            virtualisation.memorySize = 2048;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.tim = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.shell
+                ];
+
+                homeMinimal = {
+                  username = "tim";
+                  homeDirectory = "/home/tim";
+                };
+
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-tim.service")
+
+            # --- Test 1: Zsh starts without errors ---
+            machine.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+
+            # --- Test 2: Zsh is the login shell ---
+            machine.succeed("getent passwd tim | grep -q zsh")
+
+            # --- Test 3: Session variables are set ---
+            machine.succeed("su - tim -c 'zsh -ic \"echo \\$EDITOR\"' | grep -q nvim")
+
+            # --- Test 4: Shell aliases are defined ---
+            # Check a few representative aliases from the module
+            machine.succeed("su - tim -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+            machine.succeed("su - tim -c 'zsh -ic \"alias ll\"' | grep -q 'ls -l'")
+            machine.succeed("su - tim -c 'zsh -ic \"alias v\"' | grep -q nvim")
+
+            # --- Test 5: Zsh history path configured in .zshrc ---
+            # The module sets history path to $XDG_DATA_HOME/zsh/history
+            machine.succeed("su - tim -c 'grep -q zsh/history ~/.zshrc'")
+
+            # --- Test 6: Zsh completion system loaded ---
+            machine.succeed("su - tim -c 'grep -q compinit ~/.zshrc'")
+
+            # --- Test 7: Zsh plugins configured ---
+            # Home Manager writes plugin source lines into .zshrc
+            machine.succeed("su - tim -c 'grep -q zsh-autosuggestions ~/.zshrc'")
+            machine.succeed("su - tim -c 'grep -q zsh-syntax-highlighting ~/.zshrc'")
+
+            # --- Test 8: Custom prompt is set (not default) ---
+            # Our module sets PROMPT with smart_pwd and shell_scope_indicator
+            machine.succeed("su - tim -c 'grep -q smart_pwd ~/.zshrc'")
+          '';
+        };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
