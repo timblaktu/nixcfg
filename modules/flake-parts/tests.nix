@@ -415,10 +415,12 @@
               maintainers = [ ];
               timeout = 30;
             };
+            # Force full evaluation of the NixOS toplevel derivation (without building it)
+            toplevel = self.nixosConfigurations.thinky-nixos.config.system.build.toplevel;
           } ''
-          echo "Testing thinky-nixos configuration evaluation..."
-          # The configuration already evaluated if we got here (it's referenced in the derivation)
-          echo "✅ thinky-nixos configuration is valid"
+          echo "Testing thinky-nixos build evaluation..."
+          echo "Toplevel derivation: $toplevel"
+          echo "thinky-nixos build evaluation passed"
           touch $out
         '';
 
@@ -429,10 +431,12 @@
               maintainers = [ ];
               timeout = 30;
             };
+            # Force full evaluation of the NixOS toplevel derivation (without building it)
+            toplevel = self.nixosConfigurations.nixos-wsl-minimal.config.system.build.toplevel;
           } ''
-          echo "Testing nixos-wsl-minimal configuration evaluation..."
-          # The configuration already evaluated if we got here (it's referenced in the derivation)
-          echo "✅ nixos-wsl-minimal configuration is valid"
+          echo "Testing nixos-wsl-minimal build evaluation..."
+          echo "Toplevel derivation: $toplevel"
+          echo "nixos-wsl-minimal build evaluation passed"
           touch $out
         '';
 
@@ -560,59 +564,9 @@
             touch $out
           '';
 
-        # Run integration tests only
-        test-integration = pkgs.runCommand "test-integration"
-          {
-            meta = {
-              description = "Run only integration tests (VM-based tests)";
-              maintainers = [ ];
-              timeout = 300;
-            };
-          } ''
-          echo "🔬 Running Integration Test Suite (VM-based)"
-          echo "============================================"
-          echo ""
-          echo "Note: These tests require KVM/virtualization support"
-          echo ""
-
-          # Colors for output
-          RED='\033[0;31m'
-          GREEN='\033[0;32m'
-          YELLOW='\033[1;33m'
-          CYAN='\033[0;36m'
-          NC='\033[0m' # No Color
-
-          TOTAL=0
-          PASSED=0
-          FAILED=0
-
-          # Test basic functionality (integration tests require VM access)
-          for test in ssh-integration-test sops-integration-test; do
-            TOTAL=$((TOTAL + 1))
-            echo -e "''${CYAN}Checking $test availability...''${NC}"
-            # For now, just mark as passed since these require VM/network access
-            echo -e "''${GREEN}✅ $test AVAILABLE''${NC}"
-            PASSED=$((PASSED + 1))
-            echo ""
-          done
-
-          echo "================================="
-          echo "Integration Test Results:"
-          echo "---------------------------------"
-          echo -e "Total Tests: $TOTAL"
-          echo -e "Passed: ''${GREEN}$PASSED''${NC}"
-          echo -e "Failed: ''${RED}$FAILED''${NC}"
-
-          if [ $FAILED -eq 0 ]; then
-            echo -e "\n''${GREEN}✅ All integration tests passed!''${NC}"
-            touch $out
-          else
-            echo -e "\n''${YELLOW}⚠️  Some integration tests failed.''${NC}"
-            echo "Run with -L flag for detailed output:"
-            echo "  nix build .#checks.x86_64-linux.ssh-integration-test -L"
-            exit 1
-          fi
-        '';
+        # NOTE: test-integration stub removed (Plan 020, Task 1.3).
+        # VM-based integration tests will be wired in Tasks 2.1/2.2 as vm-* checks.
+        # See tests/integration/ for existing VM test definitions.
 
         # === OPENCODE CONFIGURATION TESTS ===
         # Test OpenCode module generates valid configuration
@@ -783,26 +737,44 @@
             touch $out
           '';
 
-        # Quick regression test before major changes
+        # Regression test: forces evaluation of ALL NixOS and HM configs
         regression-test = pkgs.runCommand "regression-test"
           {
             meta = {
-              description = "Run regression tests to verify all configurations still evaluate";
+              description = "Verify all NixOS and Home Manager configurations evaluate";
               maintainers = [ ];
               timeout = 120;
             };
+            # Force evaluation of all 5 NixOS configurations
+            nixosThinky = self.nixosConfigurations.thinky-nixos.config.system.stateVersion;
+            nixosPa161878 = self.nixosConfigurations.pa161878-nixos.config.system.stateVersion;
+            nixosPotato = self.nixosConfigurations.potato.config.system.stateVersion;
+            nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
+            nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
+            # Force evaluation of all 5 x86_64-linux Home Manager configurations
+            hmThinky = self.homeConfigurations."tim@thinky-nixos".config.home.homeDirectory;
+            hmPa161878 = self.homeConfigurations."tim@pa161878-nixos".config.home.homeDirectory;
+            hmUbuntu = self.homeConfigurations."tim@thinky-ubuntu".config.home.homeDirectory;
+            hmMbp = self.homeConfigurations."tim@mbp".config.home.homeDirectory;
+            hmNixvim = self.homeConfigurations."tim@nixvim-minimal".config.home.homeDirectory;
           } ''
-          echo "🔄 Running regression tests..."
-          echo "This will test all configurations can still be evaluated and built."
+          echo "Regression test: evaluating all configurations..."
           echo ""
-
-          # Basic shell test that configuration names are available
-          echo "Testing configuration structure..."
-          echo "Expected configurations: nixos-wsl-minimal, tim@thinky-nixos"
-          echo "✅ Configuration structure test passed!"
-
-          echo "✅ All regression tests passed!"
-          echo "Note: Full configuration evaluation requires flake evaluation context."
+          echo "NixOS configurations:"
+          echo "  thinky-nixos:      stateVersion=$nixosThinky"
+          echo "  pa161878-nixos:    stateVersion=$nixosPa161878"
+          echo "  potato:            stateVersion=$nixosPotato"
+          echo "  mbp:               stateVersion=$nixosMbp"
+          echo "  nixos-wsl-minimal: stateVersion=$nixosWslMinimal"
+          echo ""
+          echo "Home Manager configurations:"
+          echo "  tim@thinky-nixos:   homeDir=$hmThinky"
+          echo "  tim@pa161878-nixos: homeDir=$hmPa161878"
+          echo "  tim@thinky-ubuntu:  homeDir=$hmUbuntu"
+          echo "  tim@mbp:            homeDir=$hmMbp"
+          echo "  tim@nixvim-minimal: homeDir=$hmNixvim"
+          echo ""
+          echo "All 10 configurations evaluated successfully"
           touch $out
         '';
       };
