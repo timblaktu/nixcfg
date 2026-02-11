@@ -411,6 +411,177 @@
           '';
         };
 
+        # SOPS secrets test: verifies sops-nix NixOS module integration with
+        # our dendritic secrets-management module. Tests that secrets defined in
+        # sops.secrets.* are decrypted at boot and placed at correct paths with
+        # correct permissions and ownership.
+        #
+        # Unlike vm-sops-deployment (which tests manual SOPS CLI operations),
+        # this test validates the actual sops-nix NixOS module decryption service.
+        vm-sops-secrets =
+          let
+            # Static test fixtures: pre-generated age keypair + SOPS-encrypted YAML.
+            # These are checked into tests/fixtures/sops/ and avoid IFD (import from
+            # derivation), so `nix flake check --no-build` still works.
+            #
+            # Plaintext values in the encrypted file:
+            #   database_password: supersecret123
+            #   api_key: key-abc-def-789
+            #   tls_cert: (PEM certificate block)
+            #
+            # To regenerate: see tests/fixtures/sops/README.md
+            testSecretsFile = ../../tests/fixtures/sops/test-secrets.yaml;
+            testAgeKeyFile = ../../tests/fixtures/sops/test-age-key.txt;
+          in
+          pkgs.testers.nixosTest {
+            name = "vm-sops-secrets";
+
+            nodes.machine = { config, pkgs, lib, ... }: {
+              imports = [
+                self.modules.nixos.system-default
+                inputs.sops-nix.nixosModules.sops
+                self.modules.nixos.secrets-management
+              ];
+
+              systemDefault.userName = "tim";
+              systemDefault.wheelNeedsPassword = false;
+
+              networking.firewall.enable = false;
+              virtualisation.memorySize = 1024;
+
+              # Enable our dendritic secrets-management module
+              secretsManagement = {
+                enable = true;
+                sops = {
+                  ageKeyFile = "/var/lib/sops-nix/key.txt";
+                  generateHostKeys = false; # No SSH host keys in VM test
+                };
+              };
+
+              # Deploy the test age key before sops-nix runs
+              # Deploy the test age key before sops-nix's setupSecrets runs.
+              # sops-nix's setupSecrets depends on "users" and "groups"; our script
+              # has no deps so it runs early in the activation sequence.
+              system.activationScripts.deployTestAgeKey.text = ''
+                mkdir -p /var/lib/sops-nix
+                cp ${testAgeKeyFile} /var/lib/sops-nix/key.txt
+                chmod 600 /var/lib/sops-nix/key.txt
+              '';
+
+              # Point sops at our pre-encrypted test secrets
+              sops.defaultSopsFile = testSecretsFile;
+
+              # Disable SSH key paths since we use a dedicated age key
+              sops.age.sshKeyPaths = lib.mkForce [ ];
+
+              # Define secrets with various permissions and owners
+              sops.secrets."database_password" = {
+                mode = "0400";
+                owner = "root";
+                group = "root";
+              };
+
+              sops.secrets."api_key" = {
+                mode = "0440";
+                owner = "tim";
+                group = "users";
+              };
+
+              sops.secrets."tls_cert" = {
+                mode = "0444";
+                owner = "root";
+                group = "root";
+              };
+
+              # Test service that reads a decrypted secret.
+              # Secrets are decrypted during activation (before systemd starts services),
+              # so by the time this service runs, secrets are already available.
+              systemd.services.secret-consumer = {
+                description = "Test service that reads SOPS secrets";
+                wantedBy = [ "multi-user.target" ];
+
+                script = ''
+                  if [ -f /run/secrets/database_password ]; then
+                    echo "SECRET_AVAILABLE"
+                  else
+                    echo "SECRET_MISSING"
+                    exit 1
+                  fi
+                '';
+
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                };
+              };
+            };
+
+            testScript = ''
+              machine.wait_for_unit("multi-user.target")
+
+              # --- Test 1: sops-nix activation ran (decrypts secrets during system activation) ---
+              # sops-nix uses an activation script (setupSecrets), not a systemd service.
+              # If secrets exist at /run/secrets/, the activation succeeded.
+              machine.succeed("test -d /run/secrets")
+
+              # --- Test 2: Age key was deployed ---
+              machine.succeed("test -f /var/lib/sops-nix/key.txt")
+              key_content = machine.succeed("cat /var/lib/sops-nix/key.txt")
+              assert "AGE-SECRET-KEY" in key_content, "Age key not present"
+
+              # --- Test 3: Secrets directory exists ---
+              machine.succeed("test -d /run/secrets")
+
+              # --- Test 4: Secrets decrypted and present ---
+              machine.succeed("test -f /run/secrets/database_password")
+              machine.succeed("test -f /run/secrets/api_key")
+              machine.succeed("test -f /run/secrets/tls_cert")
+
+              # --- Test 5: Secret content is correct ---
+              db_pass = machine.succeed("cat /run/secrets/database_password").strip()
+              assert db_pass == "supersecret123", f"Expected 'supersecret123', got '{db_pass}'"
+
+              api_key = machine.succeed("cat /run/secrets/api_key").strip()
+              assert api_key == "key-abc-def-789", f"Expected 'key-abc-def-789', got '{api_key}'"
+
+              tls_cert = machine.succeed("cat /run/secrets/tls_cert")
+              assert "BEGIN CERTIFICATE" in tls_cert, f"TLS cert content wrong: {tls_cert}"
+
+              # --- Test 6: File permissions are correct ---
+              # database_password: mode 0400, owner root:root
+              perms = machine.succeed("stat -c %a /run/secrets/database_password").strip()
+              assert perms == "400", f"database_password: expected mode 400, got {perms}"
+              owner = machine.succeed("stat -c %U:%G /run/secrets/database_password").strip()
+              assert owner == "root:root", f"database_password: expected root:root, got {owner}"
+
+              # api_key: mode 0440, owner tim:users
+              perms = machine.succeed("stat -c %a /run/secrets/api_key").strip()
+              assert perms == "440", f"api_key: expected mode 440, got {perms}"
+              owner = machine.succeed("stat -c %U:%G /run/secrets/api_key").strip()
+              assert owner == "tim:users", f"api_key: expected tim:users, got {owner}"
+
+              # tls_cert: mode 0444, owner root:root
+              perms = machine.succeed("stat -c %a /run/secrets/tls_cert").strip()
+              assert perms == "444", f"tls_cert: expected mode 444, got {perms}"
+
+              # --- Test 7: Service that consumes secrets ran ---
+              machine.wait_for_unit("secret-consumer.service")
+              logs = machine.succeed("journalctl -u secret-consumer --no-pager")
+              assert "SECRET_AVAILABLE" in logs, f"Service failed to access secret: {logs}"
+
+              # --- Test 8: tmpfiles rule created sops directory ---
+              machine.succeed("test -d /var/lib/sops-nix")
+              perms = machine.succeed("stat -c %a /var/lib/sops-nix").strip()
+              assert perms == "700", f"/var/lib/sops-nix: expected mode 700, got {perms}"
+
+              # --- Test 9: Non-root user can read user-owned secret ---
+              machine.succeed("su - tim -c 'cat /run/secrets/api_key' | grep -q key-abc-def-789")
+
+              # --- Test 10: Non-root user cannot read root-only secret ---
+              machine.fail("su - tim -c 'cat /run/secrets/database_password'")
+            '';
+          };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
