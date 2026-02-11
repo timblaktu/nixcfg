@@ -2,7 +2,7 @@
 # Full system test for SSH key management pipeline including Bitwarden, SOPS, and cross-host auth
 { pkgs, lib, ... }:
 
-pkgs.nixosTest {
+pkgs.testers.nixosTest {
   name = "ssh-key-management-integration";
 
   nodes = {

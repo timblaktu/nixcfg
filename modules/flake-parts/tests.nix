@@ -564,9 +564,9 @@
             touch $out
           '';
 
-        # NOTE: test-integration stub removed (Plan 020, Task 1.3).
-        # VM-based integration tests will be wired in Tasks 2.1/2.2 as vm-* checks.
-        # See tests/integration/ for existing VM test definitions.
+        # === VM INTEGRATION TESTS ===
+        # Wired from tests/integration/ — require KVM to build
+        vm-ssh-management = import ../../tests/integration/ssh-management.nix { inherit pkgs lib; };
 
         # === OPENCODE CONFIGURATION TESTS ===
         # Test OpenCode module generates valid configuration
