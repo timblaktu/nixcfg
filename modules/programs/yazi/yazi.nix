@@ -22,8 +22,8 @@
           enable = true;
           enableZshIntegration = true;
           plugins = {
-            toggle-pane = pkgs.yaziPlugins.toggle-pane;
-            mediainfo = pkgs.yaziPlugins.mediainfo;
+            inherit (pkgs.yaziPlugins) toggle-pane;
+            inherit (pkgs.yaziPlugins) mediainfo;
             # Override glow plugin to use dynamic width instead of hardcoded 55
             glow = pkgs.yaziPlugins.glow.overrideAttrs (old: {
               postPatch = ''
@@ -31,13 +31,13 @@
                 cp ${./files/yazi-glow-main.lua} main.lua
               '';
             });
-            miller = pkgs.yaziPlugins.miller;
-            ouch = pkgs.yaziPlugins.ouch;
+            inherit (pkgs.yaziPlugins) miller;
+            inherit (pkgs.yaziPlugins) ouch;
             # Additional useful plugins
-            chmod = pkgs.yaziPlugins.chmod;
-            full-border = pkgs.yaziPlugins.full-border;
-            git = pkgs.yaziPlugins.git;
-            smart-enter = pkgs.yaziPlugins.smart-enter;
+            inherit (pkgs.yaziPlugins) chmod;
+            inherit (pkgs.yaziPlugins) full-border;
+            inherit (pkgs.yaziPlugins) git;
+            inherit (pkgs.yaziPlugins) smart-enter;
           };
           initLua = ./files/yazi-init.lua;
           settings = {

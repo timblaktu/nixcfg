@@ -439,8 +439,8 @@ in
       # Static files
       (mapAttrs'
         (name: fileConfig: nameValuePair fileConfig.target {
-          source = fileConfig.source;
-          executable = fileConfig.executable;
+          inherit (fileConfig) source;
+          inherit (fileConfig) executable;
         })
         cfg.staticFiles
       );

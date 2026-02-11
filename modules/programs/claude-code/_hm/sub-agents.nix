@@ -145,8 +145,8 @@ in
           "Semantic code understanding"
           "Dependency tracking"
         ];
-        instructions = cfg.subAgents.codeSearcher.instructions;
-        examples = cfg.subAgents.codeSearcher.examples;
+        inherit (cfg.subAgents.codeSearcher) instructions;
+        inherit (cfg.subAgents.codeSearcher) examples;
       };
     })
 
@@ -160,7 +160,7 @@ in
           "Decision tracking"
           "Knowledge base management"
         ];
-        instructions = cfg.subAgents.memoryBank.instructions;
+        inherit (cfg.subAgents.memoryBank) instructions;
       };
     })
 
@@ -174,7 +174,7 @@ in
           "Dependency analysis"
           "Performance optimization suggestions"
         ];
-        instructions = cfg.subAgents.architect.instructions;
+        inherit (cfg.subAgents.architect) instructions;
       };
     })
 

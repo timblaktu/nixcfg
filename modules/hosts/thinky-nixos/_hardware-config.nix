@@ -1,7 +1,7 @@
 { config, lib, pkgs, modulesPath, ... }:
 let
   # Reference the default user from the wslCommon configuration
-  defaultUser = config.wsl.defaultUser;
+  inherit (config.wsl) defaultUser;
 
   driveConfigs = [
     { name = "timblaktu"; letter = "X"; }

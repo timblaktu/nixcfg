@@ -168,80 +168,80 @@ in
     # NixOS MCP server (using shared definition)
     optionalAttrs cfg.mcpServers.nixos.enable {
       mcp-nixos = toClaudeCodeFormat (sharedMcpDefs.nixos.mkConfig {
-        cacheTtl = cfg.mcpServers.nixos.cacheTtl;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.nixos) cacheTtl;
+        inherit (cfg) debug;
       });
     } //
     # Python/UV version - uses shared definition
     optionalAttrs cfg.mcpServers.sequentialThinkingPython.enable {
       sequential-thinking-python = toClaudeCodeFormat (sharedMcpDefs.sequentialThinkingPython.mkConfig {
-        timeout = cfg.mcpServers.sequentialThinkingPython.timeout;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.sequentialThinkingPython) timeout;
+        inherit (cfg) debug;
       });
     } //
     # Official TypeScript version (using shared definition)
     optionalAttrs cfg.mcpServers.sequentialThinking.enable {
       sequential-thinking = toClaudeCodeFormat (sharedMcpDefs.sequentialThinking.mkConfig {
-        timeout = cfg.mcpServers.sequentialThinking.timeout;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.sequentialThinking) timeout;
+        inherit (cfg) debug;
       });
     } //
     # Context7 (using shared definition)
     optionalAttrs cfg.mcpServers.context7.enable {
       context7 = toClaudeCodeFormat (sharedMcpDefs.context7.mkConfig {
-        debug = cfg.debug;
+        inherit (cfg) debug;
       });
     } //
     # Serena (using shared definition)
     optionalAttrs cfg.mcpServers.serena.enable {
       serena = toClaudeCodeFormat (sharedMcpDefs.serena.mkConfig {
-        context = cfg.mcpServers.serena.context;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.serena) context;
+        inherit (cfg) debug;
       });
     } //
     # Brave Search (using shared definition)
     optionalAttrs (cfg.mcpServers.brave.apiKey != null) {
       brave-search = toClaudeCodeFormat (sharedMcpDefs.brave.mkConfig {
-        apiKey = cfg.mcpServers.brave.apiKey;
-        searchCount = cfg.mcpServers.brave.searchCount;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.brave) apiKey;
+        inherit (cfg.mcpServers.brave) searchCount;
+        inherit (cfg) debug;
       });
     } //
     # Puppeteer (using shared definition)
     optionalAttrs cfg.mcpServers.puppeteer.enable {
       puppeteer = toClaudeCodeFormat (sharedMcpDefs.puppeteer.mkConfig {
-        headless = cfg.mcpServers.puppeteer.headless;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.puppeteer) headless;
+        inherit (cfg) debug;
       });
     } //
     # GitHub (using shared definition)
     optionalAttrs (cfg.mcpServers.github.token != null) {
       github = toClaudeCodeFormat (sharedMcpDefs.github.mkConfig {
-        token = cfg.mcpServers.github.token;
-        defaultBranch = cfg.mcpServers.github.defaultBranch;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.github) token;
+        inherit (cfg.mcpServers.github) defaultBranch;
+        inherit (cfg) debug;
       });
     } //
     # GitLab (using shared definition)
     optionalAttrs cfg.mcpServers.gitlab.enable {
       gitlab = toClaudeCodeFormat (sharedMcpDefs.gitlab.mkConfig {
-        url = cfg.mcpServers.gitlab.url;
-        token = cfg.mcpServers.gitlab.token;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.gitlab) url;
+        inherit (cfg.mcpServers.gitlab) token;
+        inherit (cfg) debug;
       });
     } //
     # Filesystem (using shared definition)
     optionalAttrs cfg.mcpServers.mcpFilesystem.enable {
       mcp-filesystem = toClaudeCodeFormat (sharedMcpDefs.filesystem.mkConfig {
-        allowedPaths = cfg.mcpServers.mcpFilesystem.allowedPaths;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.mcpFilesystem) allowedPaths;
+        inherit (cfg) debug;
       });
     } //
     # CLI MCP server (using shared definition)
     optionalAttrs cfg.mcpServers.cliMcpServer.enable {
       cli-mcp-server = toClaudeCodeFormat (sharedMcpDefs.cliMcpServer.mkConfig {
-        allowedDir = cfg.mcpServers.cliMcpServer.allowedDir;
-        debug = cfg.debug;
+        inherit (cfg.mcpServers.cliMcpServer) allowedDir;
+        inherit (cfg) debug;
       });
     };
 }

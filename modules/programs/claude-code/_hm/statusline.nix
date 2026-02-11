@@ -6,7 +6,7 @@ with lib;
 
 let
   cfg = config.programs.claude-code.statusline;
-  writers = pkgs.writers;
+  inherit (pkgs) writers;
 
   # CLI tool dependencies - leverage the rich nixcfg environment
   commonDeps = with pkgs; [
@@ -483,7 +483,7 @@ let
     # Fast hash-based color (no external commands)
     HASH=0
     for ((i=0; i<''${#ACCOUNT}; i++)); do
-      HASH=$(( (HASH * 31 + $(printf "%d" "'''${ACCOUNT:$i:1}")) % 256 ))
+      HASH=$(( (HASH * 31 + $(printf "%d" "'''${"ACCOUNT:$i:1"}")) % 256 ))
     done
     COLOR_INDEX=$((HASH % 6))
     

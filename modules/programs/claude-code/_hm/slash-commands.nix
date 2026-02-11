@@ -177,6 +177,6 @@ in
       };
     };
 
-    custom = cfg.slashCommands.custom;
+    inherit (cfg.slashCommands) custom;
   };
 }

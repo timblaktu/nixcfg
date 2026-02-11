@@ -208,6 +208,6 @@ rec {
   toOpenCodeFormat = name: serverCfg: {
     inherit (serverCfg) type command args;
   } // optionalAttrs (serverCfg.env != { }) {
-    env = serverCfg.env;
+    inherit (serverCfg) env;
   };
 }

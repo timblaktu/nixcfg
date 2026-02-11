@@ -23,7 +23,7 @@ with lib;
 let
   cfg = config.programs.claude-code;
   skillsCfg = cfg.skills;
-  nixcfgPath = cfg.nixcfgPath;
+  inherit (cfg) nixcfgPath;
   runtimePath = "${nixcfgPath}/claude-runtime";
 
   # Built-in skill definitions - files stored alongside this module
@@ -122,7 +122,7 @@ let
   # Combine builtin and custom skills
   allSkills = (mapAttrs
     (name: _: {
-      files = builtinSkillDefs.${name}.files;
+      inherit (builtinSkillDefs.${name}) files;
       isBuiltin = true;
     })
     enabledBuiltins) // (mapAttrs

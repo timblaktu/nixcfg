@@ -11,7 +11,7 @@
         inherit (customPkgs) nixvim-anywhere markitdown marker-pdf tomd;
 
         # Docling package (using nlohmann_json 3.10.5 from nixpkgs)
-        docling = pkgs.docling;
+        inherit (pkgs) docling;
 
         # nixvim-anywhere convenience targets (Type 2 conversion approach - RECOMMENDED)
         # Temporarily disabled during API migration

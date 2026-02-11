@@ -66,7 +66,7 @@ in
       # WSL configuration
       wsl = {
         enable = true;
-        defaultUser = defaultUser;
+        inherit defaultUser;
 
         # Enable basic Windows integration
         interop = {

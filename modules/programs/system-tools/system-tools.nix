@@ -60,13 +60,13 @@
         # These are provided as reference files for Windows/WSL environments
         home.file = {
           ".local/share/docs/windows-scripts/fix-terminal-fonts.ps1".source =
-            (../../.. + "/modules/programs/files [nd]/files/bin/fix-terminal-fonts.ps1");
+            ../../.. + "/modules/programs/files [nd]/files/bin/fix-terminal-fonts.ps1";
           ".local/share/docs/windows-scripts/font-detection-functions.ps1".source =
-            (../../.. + "/modules/programs/files [nd]/files/bin/font-detection-functions.ps1");
+            ../../.. + "/modules/programs/files [nd]/files/bin/font-detection-functions.ps1";
           ".local/share/docs/windows-scripts/install-terminal-fonts.ps1".source =
-            (../../.. + "/modules/programs/files [nd]/files/bin/install-terminal-fonts.ps1");
+            ../../.. + "/modules/programs/files [nd]/files/bin/install-terminal-fonts.ps1";
           ".local/share/docs/windows-scripts/restart-usb-v4.ps1".source =
-            (../../.. + "/modules/programs/files [nd]/files/bin/restart-usb-v4.ps1");
+            ../../.. + "/modules/programs/files [nd]/files/bin/restart-usb-v4.ps1";
         };
       };
   };

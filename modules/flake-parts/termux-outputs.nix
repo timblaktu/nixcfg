@@ -24,7 +24,7 @@
     # Build on host system - these are pure text scripts, no cross-compilation needed
     packages.x86_64-linux.termux-claude-scripts = withSystem "x86_64-linux" ({ pkgs, ... }:
       let
-        lib = pkgs.lib;
+        inherit (pkgs) lib;
 
         # Import shared Claude Code library from dendritic structure
         # Note: We pass a minimal config since Termux scripts don't need home-manager features

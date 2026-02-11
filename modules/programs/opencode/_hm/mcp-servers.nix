@@ -171,57 +171,57 @@ in
         preConfigured =
           (if cfg.mcpServers.nixos.enable then {
             "mcp-nixos" = toOpencodeFormat (sharedMcpDefs.nixos.mkConfig {
-              cacheTtl = cfg.mcpServers.nixos.cacheTtl;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.nixos) cacheTtl;
+              inherit (cfg) debug;
             });
           } else { })
           // (if cfg.mcpServers.sequentialThinking.enable then {
             "sequential-thinking" = toOpencodeFormat (sharedMcpDefs.sequentialThinking.mkConfig {
-              timeout = cfg.mcpServers.sequentialThinking.timeout;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.sequentialThinking) timeout;
+              inherit (cfg) debug;
             });
           } else { })
           // (if cfg.mcpServers.context7.enable then {
             "context7" = toOpencodeFormat (sharedMcpDefs.context7.mkConfig {
-              debug = cfg.debug;
+              inherit (cfg) debug;
             });
           } else { })
           // (if cfg.mcpServers.serena.enable then {
             "serena" = toOpencodeFormat (sharedMcpDefs.serena.mkConfig {
-              context = cfg.mcpServers.serena.context;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.serena) context;
+              inherit (cfg) debug;
             });
           } else { })
           // (if (cfg.mcpServers.brave.enable && cfg.mcpServers.brave.apiKey != "") then {
             "brave-search" = toOpencodeFormat (sharedMcpDefs.brave.mkConfig {
-              apiKey = cfg.mcpServers.brave.apiKey;
-              searchCount = cfg.mcpServers.brave.searchCount;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.brave) apiKey;
+              inherit (cfg.mcpServers.brave) searchCount;
+              inherit (cfg) debug;
             });
           } else { })
           // (if cfg.mcpServers.puppeteer.enable then {
             "puppeteer" = toOpencodeFormat (sharedMcpDefs.puppeteer.mkConfig {
-              headless = cfg.mcpServers.puppeteer.headless;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.puppeteer) headless;
+              inherit (cfg) debug;
             });
           } else { })
           // (if (cfg.mcpServers.github.enable && cfg.mcpServers.github.token != "") then {
             "github" = toOpencodeFormat (sharedMcpDefs.github.mkConfig {
-              token = cfg.mcpServers.github.token;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.github) token;
+              inherit (cfg) debug;
             });
           } else { })
           // (if cfg.mcpServers.gitlab.enable then {
             "gitlab" = toOpencodeFormat (sharedMcpDefs.gitlab.mkConfig {
-              url = cfg.mcpServers.gitlab.url;
-              token = cfg.mcpServers.gitlab.token;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.gitlab) url;
+              inherit (cfg.mcpServers.gitlab) token;
+              inherit (cfg) debug;
             });
           } else { })
           // (if cfg.mcpServers.filesystem.enable then {
             "filesystem" = toOpencodeFormat (sharedMcpDefs.filesystem.mkConfig {
-              allowedPaths = cfg.mcpServers.filesystem.allowedPaths;
-              debug = cfg.debug;
+              inherit (cfg.mcpServers.filesystem) allowedPaths;
+              inherit (cfg) debug;
             });
           } else { });
       in

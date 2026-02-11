@@ -79,8 +79,8 @@
         # (From home/modules/lib/git-forge-auth.nix)
         resolveBwConfig = bwCfg:
           if bwCfg.item != null then {
-            item = bwCfg.item;
-            field = bwCfg.field;
+            inherit (bwCfg) item;
+            inherit (bwCfg) field;
           } else {
             item = bwCfg.tokenName;
             field = null;

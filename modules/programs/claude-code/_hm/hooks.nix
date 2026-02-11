@@ -19,8 +19,8 @@ let
         ({
           inherit type timeout;
         } // (if command != null
-        then { command = command; }
-        else { script = script; })
+        then { inherit command; }
+        else { inherit script; })
         // (optionalAttrs (env != { }) { inherit env; })
         // (optionalAttrs continueOnError { continueOnError = true; }))
       ];

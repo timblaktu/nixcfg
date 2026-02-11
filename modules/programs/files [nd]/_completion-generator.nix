@@ -347,7 +347,7 @@ let
           name = "${targetDir}/${name}";
           value = {
             source = sourceDir + "/${name}";
-            executable = executable;
+            inherit executable;
           };
         })
         files;

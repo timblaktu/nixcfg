@@ -292,9 +292,9 @@
 
           # Core Home Manager identity
           home = {
-            username = cfg.username;
-            homeDirectory = cfg.homeDirectory;
-            stateVersion = cfg.stateVersion;
+            inherit (cfg) username;
+            inherit (cfg) homeDirectory;
+            inherit (cfg) stateVersion;
 
             # Add ~/bin to PATH
             sessionPath = [ "$HOME/bin" ];

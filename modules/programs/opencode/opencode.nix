@@ -431,7 +431,7 @@
 
         config =
           let
-            nixcfgPath = cfg.nixcfgPath;
+            inherit (cfg) nixcfgPath;
             runtimePath = "${nixcfgPath}/opencode-runtime";
 
             # Build the MCP configuration from _internal
@@ -440,27 +440,27 @@
             # Build agent configuration
             agentConfig = mapAttrs
               (name: agent: {
-                description = agent.description;
+                inherit (agent) description;
               } // optionalAttrs (agent.model != null) {
-                model = agent.model;
+                inherit (agent) model;
               } // optionalAttrs (agent.prompt != null) {
-                prompt = agent.prompt;
+                inherit (agent) prompt;
               } // optionalAttrs (agent.tools != { }) {
-                tools = agent.tools;
+                inherit (agent) tools;
               } // optionalAttrs (agent.permission != { }) {
-                permission = agent.permission;
+                inherit (agent) permission;
               })
               cfg.agents;
 
             # Build command configuration
             commandConfig = mapAttrs
               (name: cmd: {
-                description = cmd.description;
-                template = cmd.template;
+                inherit (cmd) description;
+                inherit (cmd) template;
               } // optionalAttrs (cmd.agent != null) {
-                agent = cmd.agent;
+                inherit (cmd) agent;
               } // optionalAttrs (cmd.model != null) {
-                model = cmd.model;
+                inherit (cmd) model;
               } // optionalAttrs cmd.subtask {
                 subtask = true;
               })
@@ -469,10 +469,10 @@
             # Build formatter configuration
             formatterConfig = mapAttrs
               (name: fmt: {
-                command = fmt.command;
-                extensions = fmt.extensions;
+                inherit (fmt) command;
+                inherit (fmt) extensions;
               } // optionalAttrs (fmt.environment != { }) {
-                environment = fmt.environment;
+                inherit (fmt) environment;
               } // optionalAttrs fmt.disabled {
                 disabled = true;
               })
@@ -494,7 +494,7 @@
               // optionalAttrs (commandConfig != { }) { command = commandConfig; }
               // optionalAttrs (cfg.permissions != { }) { permission = cfg.permissions; }
               // optionalAttrs (cfg.instructions.files != [ ]) { instructions = cfg.instructions.files; }
-              // optionalAttrs (cfg.tui.theme != null) { theme = cfg.tui.theme; }
+              // optionalAttrs (cfg.tui.theme != null) { inherit (cfg.tui) theme; }
               // {
                 tui = {
                   scroll_speed = cfg.tui.scrollSpeed;
@@ -503,13 +503,13 @@
                 };
               }
               // optionalAttrs (formatterConfig != { }) { formatter = formatterConfig; }
-              // optionalAttrs (cfg.provider != { }) { provider = cfg.provider; }
+              // optionalAttrs (cfg.provider != { }) { inherit (cfg) provider; }
               // {
                 watcher = {
-                  ignore = cfg.watcher.ignore;
+                  inherit (cfg.watcher) ignore;
                 };
-                autoupdate = cfg.autoupdate;
-                share = cfg.share;
+                inherit (cfg) autoupdate;
+                inherit (cfg) share;
               };
 
             # Generate AGENTS.md content using shared instructions
@@ -525,7 +525,7 @@
               sharedInstructions.mkMemoryContent sharedInstructions {
                 toolName = "OpenCode";
                 mcpServers = mcpServerStatus;
-                extraContent = cfg.instructions.extraContent;
+                inherit (cfg.instructions) extraContent;
               };
 
             # Create account-specific config file

@@ -91,8 +91,8 @@ rec {
   # Helper to resolve bitwarden config to item/field for rbwLib
   resolveBwConfig = bwCfg:
     if bwCfg.item != null then {
-      item = bwCfg.item;
-      field = bwCfg.field;
+      inherit (bwCfg) item;
+      inherit (bwCfg) field;
     } else {
       item = bwCfg.tokenName;
       field = null;

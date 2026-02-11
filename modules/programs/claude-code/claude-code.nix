@@ -308,7 +308,7 @@
         config =
           let
             cfg = config.programs.claude-code;
-            nixcfgPath = cfg.nixcfgPath;
+            inherit (cfg) nixcfgPath;
             runtimePath = "${nixcfgPath}/claude-runtime";
             templatesPath = "${nixcfgPath}/claude-templates";
 
@@ -371,11 +371,11 @@
                 hasStatusline = cfg._internal.statuslineSettings != { };
 
                 permissionsV2 = {
-                  allow = cfg.permissions.allow;
-                  deny = cfg.permissions.deny;
-                  ask = cfg.permissions.ask;
-                  defaultMode = cfg.permissions.defaultMode;
-                  additionalDirectories = cfg.permissions.additionalDirectories;
+                  inherit (cfg.permissions) allow;
+                  inherit (cfg.permissions) deny;
+                  inherit (cfg.permissions) ask;
+                  inherit (cfg.permissions) defaultMode;
+                  inherit (cfg.permissions) additionalDirectories;
                 };
 
                 accountEnvVars =
@@ -392,12 +392,12 @@
                 mergedEnvVars = cfg.environmentVariables // accountEnvVars;
               in
               {
-                model = model;
+                inherit model;
                 permissions = permissionsV2;
               }
               // optionalAttrs (mergedEnvVars != { }) { env = mergedEnvVars; }
               // optionalAttrs hasHooks { hooks = cleanHooks; }
-              // optionalAttrs (cfg.experimental != { }) { experimental = cfg.experimental; }
+              // optionalAttrs (cfg.experimental != { }) { inherit (cfg) experimental; }
               // optionalAttrs hasStatusline cfg._internal.statuslineSettings
               // optionalAttrs cfg.enableProjectOverrides {
                 projectOverrides = {
@@ -429,11 +429,11 @@
                 hasStatusline = cfg._internal.statuslineSettings != { };
 
                 permissionsV2 = {
-                  allow = cfg.permissions.allow;
-                  deny = cfg.permissions.deny;
-                  ask = cfg.permissions.ask;
-                  defaultMode = cfg.permissions.defaultMode;
-                  additionalDirectories = cfg.permissions.additionalDirectories;
+                  inherit (cfg.permissions) allow;
+                  inherit (cfg.permissions) deny;
+                  inherit (cfg.permissions) ask;
+                  inherit (cfg.permissions) defaultMode;
+                  inherit (cfg.permissions) additionalDirectories;
                 };
               in
               {
@@ -442,7 +442,7 @@
               }
               // optionalAttrs (cfg.environmentVariables != { }) { env = cfg.environmentVariables; }
               // optionalAttrs hasHooks { hooks = cleanHooks; }
-              // optionalAttrs (cfg.experimental != { }) { experimental = cfg.experimental; }
+              // optionalAttrs (cfg.experimental != { }) { inherit (cfg) experimental; }
               // optionalAttrs hasStatusline cfg._internal.statuslineSettings
               // optionalAttrs cfg.enableProjectOverrides {
                 projectOverrides = {
@@ -461,7 +461,7 @@
                 pkgs.writers.writeBashBin "claude${name}" (
                   claudeLib.mkClaudeWrapperScript {
                     account = name;
-                    displayName = account.displayName;
+                    inherit (account) displayName;
                     configDir = "${runtimePath}/.claude-${name}";
                     claudeBin = "${pkgs.claude-code}/bin/claude";
                     api = account.api or { };
@@ -566,9 +566,9 @@
                   copy_template "${mkSettingsTemplate {
                     model = if account.model != null then account.model else cfg.defaultModel;
                     accountApi = {
-                      baseUrl = account.api.baseUrl;
-                      modelMappings = account.api.modelMappings;
-                      extraEnvVars = account.extraEnvVars;
+                      inherit (account.api) baseUrl;
+                      inherit (account.api) modelMappings;
+                      inherit (account) extraEnvVars;
                     };
                   }}" "$accountDir/settings.json"
                   echo "Updated settings to v2.0 schema: $accountDir/settings.json"
@@ -589,11 +589,11 @@
                     echo "Enforcing Nix-managed settings in .claude.json..."
 
                     jq_args=(--argjson permissions '${builtins.toJSON {
-                      allow = cfg.permissions.allow;
-                      deny = cfg.permissions.deny;
-                      ask = cfg.permissions.ask;
-                      defaultMode = cfg.permissions.defaultMode;
-                      additionalDirectories = cfg.permissions.additionalDirectories;
+                      inherit (cfg.permissions) allow;
+                      inherit (cfg.permissions) deny;
+                      inherit (cfg.permissions) ask;
+                      inherit (cfg.permissions) defaultMode;
+                      inherit (cfg.permissions) additionalDirectories;
                     }}')
                     ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
                     ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
@@ -651,11 +651,11 @@
                 echo "Enforcing Nix-managed settings in .claude.json..."
 
                 jq_args=(--argjson permissions '${builtins.toJSON {
-                  allow = cfg.permissions.allow;
-                  deny = cfg.permissions.deny;
-                  ask = cfg.permissions.ask;
-                  defaultMode = cfg.permissions.defaultMode;
-                  additionalDirectories = cfg.permissions.additionalDirectories;
+                  inherit (cfg.permissions) allow;
+                  inherit (cfg.permissions) deny;
+                  inherit (cfg.permissions) ask;
+                  inherit (cfg.permissions) defaultMode;
+                  inherit (cfg.permissions) additionalDirectories;
                 }}')
                 ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
                 ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}

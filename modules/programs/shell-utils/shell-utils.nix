@@ -11,7 +11,7 @@
 #
 # Usage in host config:
 #   imports = [ inputs.self.modules.homeManager.shell-utils ];
-{ ... }:
+_:
 {
   flake.modules = {
     # === Home Manager Module ===

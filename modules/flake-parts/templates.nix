@@ -1,6 +1,6 @@
 # modules/flake-parts/templates.nix
 # Flake templates for easy colleague onboarding
-{ ... }: {
+_: {
   flake = {
     templates = {
       # WSL NixOS template - Full NixOS-WSL distribution

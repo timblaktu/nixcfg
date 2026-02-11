@@ -67,7 +67,7 @@
             } // extraConfig;
           };
 
-          testScript = testScript;
+          inherit testScript;
         };
 
     in

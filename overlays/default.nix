@@ -13,11 +13,11 @@ let
 in
 {
   # Custom packages and overrides go here
-  markitdown = customPkgs.markitdown;
-  marker-pdf = customPkgs.marker-pdf;
+  inherit (customPkgs) markitdown;
+  inherit (customPkgs) marker-pdf;
 
   # ISOLATED: docling from custom nixpkgs (temporary until PR #184 merges)
-  docling = pkgsDocling.docling;
+  inherit (pkgsDocling) docling;
 
   # Fix watchfiles test failure that affects MCP servers
   # Fallback: Disable problematic tests while working on version update

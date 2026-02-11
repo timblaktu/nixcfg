@@ -29,15 +29,15 @@
         requiredSettings = {
           # Font configuration
           profiles.defaults.font = {
-            face = cfg.font.face;
-            size = cfg.font.size;
+            inherit (cfg.font) face;
+            inherit (cfg.font) size;
           };
 
           # Color scheme name
           profiles.defaults.colorScheme = cfg.colorScheme.name;
 
           # Keybindings array
-          keybindings = cfg.keybindings;
+          inherit (cfg) keybindings;
 
           # Color schemes array
           schemes = [ cfg.colorScheme.definition ];

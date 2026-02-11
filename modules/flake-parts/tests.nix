@@ -33,7 +33,7 @@
             };
             # Force evaluation of the HM configuration by referencing it
             inherit (self.homeConfigurations.${configName}.config.home) homeDirectory;
-            username = self.homeConfigurations.${configName}.config.home.username;
+            inherit (self.homeConfigurations.${configName}.config.home) username;
           } ''
           echo "Testing ${configName} HM evaluation..."
           echo "Home directory: $homeDirectory"
@@ -168,7 +168,7 @@
           description = "Testing system default module integration";
           hostName = "thinky-nixos";
           attributes = {
-            userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
+            inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
             userGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.systemDefault.userGroups;
           };
           checks = ''
@@ -184,7 +184,7 @@
           hostName = "thinky-nixos";
           attributes = {
             enable = if self.nixosConfigurations.thinky-nixos.config.wsl.enable then "1" else "0";
-            hostname = self.nixosConfigurations.thinky-nixos.config.wsl-settings.hostname;
+            inherit (self.nixosConfigurations.thinky-nixos.config.wsl-settings) hostname;
             sshPort = toString self.nixosConfigurations.thinky-nixos.config.wsl-settings.sshPort;
           };
           checks = ''
@@ -291,7 +291,7 @@
               timeout = 30;
             };
             # Verify both modules' attributes are accessible and consistent
-            userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
+            inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
             wslUser = self.nixosConfigurations.thinky-nixos.config.wsl.defaultUser;
             sshPort = toString self.nixosConfigurations.thinky-nixos.config.wsl-settings.sshPort;
             opensshPort = toString (builtins.head self.nixosConfigurations.thinky-nixos.config.services.openssh.ports);
@@ -320,7 +320,7 @@
             };
             # Check if SOPS is enabled via wsl-settings and user matches
             sopsEnabled = if self.nixosConfigurations.thinky-nixos.config.wsl-settings.sops.enable then "1" else "0";
-            userName = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
+            inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
             userExists = if (builtins.hasAttr "tim" self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
           } ''
           echo "Testing SOPS-NiX integration with base module..."
@@ -350,7 +350,7 @@
               };
               # Check Home Manager configuration
               inherit systemUser;
-              hmConfigName = hmConfigName;
+              inherit hmConfigName;
               hmUserExists = if (builtins.hasAttr hmConfigName self.homeConfigurations) then "1" else "0";
             } ''
             echo "Testing Home Manager integration..."
@@ -426,7 +426,7 @@
               timeout = 30;
             };
             # Force full evaluation of the NixOS toplevel derivation (without building it)
-            toplevel = self.nixosConfigurations.thinky-nixos.config.system.build.toplevel;
+            inherit (self.nixosConfigurations.thinky-nixos.config.system.build) toplevel;
           } ''
           echo "Testing thinky-nixos build evaluation..."
           echo "Toplevel derivation: $toplevel"
@@ -442,7 +442,7 @@
               timeout = 30;
             };
             # Force full evaluation of the NixOS toplevel derivation (without building it)
-            toplevel = self.nixosConfigurations.nixos-wsl-minimal.config.system.build.toplevel;
+            inherit (self.nixosConfigurations.nixos-wsl-minimal.config.system.build) toplevel;
           } ''
           echo "Testing nixos-wsl-minimal build evaluation..."
           echo "Toplevel derivation: $toplevel"
@@ -762,6 +762,21 @@
           cd $src
           find . -name '*.nix' -not -path './.git/*' -not -path './result*' -print0 \
             | xargs -0 nixpkgs-fmt --check
+          touch $out
+        '';
+
+        lint-statix = pkgs.runCommand "lint-statix"
+          {
+            meta = {
+              description = "Check Nix anti-patterns with statix";
+              maintainers = [ ];
+              timeout = 120;
+            };
+            nativeBuildInputs = [ pkgs.statix ];
+            src = self;
+          } ''
+          cd $src
+          statix check .
           touch $out
         '';
 

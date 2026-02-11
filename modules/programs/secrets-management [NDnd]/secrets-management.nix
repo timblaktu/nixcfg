@@ -221,12 +221,12 @@
           # RBW configuration file
           home.file.".config/rbw/config.json" = mkIf (cfg.rbw.email != null) {
             text = builtins.toJSON {
-              email = cfg.rbw.email;
+              inherit (cfg.rbw) email;
               base_url = cfg.rbw.baseUrl;
               identity_url = cfg.rbw.identityUrl;
               ui_url = cfg.rbw.uiUrl;
               notifications_url = cfg.rbw.notificationsUrl;
-              pinentry = cfg.rbw.pinentry;
+              inherit (cfg.rbw) pinentry;
               lock_timeout = cfg.rbw.lockTimeout;
               sync_interval = cfg.rbw.syncInterval;
               sso_id = null;

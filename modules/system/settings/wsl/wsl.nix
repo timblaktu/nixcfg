@@ -341,7 +341,7 @@
             # Enable WSL
             wsl = {
               enable = true;
-              defaultUser = cfg.defaultUser;
+              inherit (cfg) defaultUser;
               interop.includePath = cfg.interop.includePath;
               interop.register = cfg.interop.register;
               wslConf.automount.root = cfg.automountRoot;
@@ -379,8 +379,8 @@
           (lib.mkIf cfg.usbip.enable {
             wsl.usbip = {
               enable = true;
-              autoAttach = cfg.usbip.autoAttach;
-              snippetIpAddress = cfg.usbip.snippetIpAddress;
+              inherit (cfg.usbip) autoAttach;
+              inherit (cfg.usbip) snippetIpAddress;
             };
           })
 
