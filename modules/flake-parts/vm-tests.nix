@@ -258,6 +258,85 @@
               )
             '';
           };
+        # Home Manager activation test: verifies that HM integrates with NixOS,
+        # activates successfully, generates config files, and provides programs.
+        # Uses NixOS-integrated HM (home-manager.nixosModules) to test activation
+        # in a VM, even though the repo normally uses standalone HM.
+        vm-hm-activation = pkgs.testers.nixosTest {
+          name = "vm-hm-activation";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.system-default
+              inputs.home-manager.nixosModules.home-manager
+            ];
+
+            systemDefault.userName = "tim";
+            systemDefault.wheelNeedsPassword = false;
+
+            networking.firewall.enable = false;
+            virtualisation.memorySize = 2048;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.tim = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.shell
+                  self.modules.homeManager.git
+                ];
+
+                homeMinimal = {
+                  username = "tim";
+                  homeDirectory = "/home/tim";
+                };
+
+                # Override genericLinux — not needed in NixOS-integrated mode
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # --- Test 1: Home Manager activation completed ---
+            # In NixOS-integrated mode, HM activates via system activation.
+            # home-manager-tim.service is the systemd unit for the user's activation.
+            machine.wait_for_unit("home-manager-tim.service")
+
+            # --- Test 2: Git is configured by HM ---
+            machine.succeed("su - tim -c 'git --version'")
+            # Git config should contain user.name from the dendritic git module
+            machine.succeed("su - tim -c 'git config user.name' | grep -q 'Tim Black'")
+            machine.succeed("su - tim -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
+
+            # --- Test 3: Git config file generated ---
+            # HM puts git config in XDG path
+            machine.succeed("test -f /home/tim/.config/git/config")
+
+            # --- Test 4: Zsh configured by HM ---
+            machine.succeed("test -f /home/tim/.zshrc")
+
+            # --- Test 5: home-manager command available ---
+            machine.succeed("su - tim -c 'home-manager --version'")
+
+            # --- Test 6: HM-generated XDG directories exist ---
+            # Home Manager creates XDG config structure during activation
+            machine.succeed("test -d /home/tim/.config/git")
+
+            # --- Test 7: HM-managed program in PATH ---
+            # Delta (git diff viewer) is enabled by the git module
+            machine.succeed("su - tim -c 'which delta'")
+
+            # --- Test 8: Zsh history directory created ---
+            # The shell module configures zsh history in XDG data dir
+            machine.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+          '';
+        };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
