@@ -1,0 +1,627 @@
+# Plan 021: Test Coverage & Quality — Linting, Module Isolation, Composition Tests
+
+**Branch**: `refactor/dendritic-pattern`
+**Worktree**: `/home/tim/src/nixcfg-dendritic`
+**Status**: IN_PROGRESS
+**Created**: 2026-02-11
+**Follows**: Plan 020 (VM Test Infrastructure)
+
+---
+
+## Context
+
+Plan 020 built the VM test infrastructure: `mkVmTest` helper, 3 boot smoke tests, 7 feature/integration tests, 6 package build tests, and 30+ eval checks. The repo now has 46 checks in `nix flake check`.
+
+**What's still missing:**
+
+1. **No static analysis** — `nixpkgs-fmt`, `statix`, `deadnix` are not wired into checks. Formatting drift and dead code accumulate silently.
+
+2. **No module isolation tests** — The 20 HM modules and 6 NixOS modules are only tested through host config composition. If a module breaks in isolation (e.g., missing default, type error), no test catches it until a full host config fails. This undermines the dendritic pattern's promise of composable, independent modules.
+
+3. **Largest modules have zero runtime validation** — `neovim` (1,871 LOC) and `tmux` (733 LOC) have never been VM-tested. `development-tools`, `yazi`, `shell-utils`, `git` (beyond basic `--version`), and `system-desktop` have no VM coverage.
+
+4. **No composition/permutation tests** — The dendritic pattern's key value is that modules compose freely. No test verifies this. Modules are tested in fixed combinations (the same 2-3 module set per VM test), never in isolation or alternate groupings.
+
+**Goal**: Close these gaps systematically — add static analysis, prove each module works alone, test the largest untested modules, then verify modules compose in various real-world permutations.
+
+---
+
+## Testing Taxonomy (Extended from Plan 020)
+
+| Tier | Prefix | Speed | What it proves | Plan 020 | Plan 021 |
+|------|--------|-------|----------------|----------|----------|
+| T0 | `eval-*` | <1s | Nix expressions evaluate | 30+ | +26 module isolation |
+| T0.5 | `lint-*` | 5-30s | Code quality (format, lint, dead code) | 0 | +3 |
+| T1 | `build-*` | minutes | Derivations build | 6 | — |
+| T2 | `vm-*` boot | 2-3min | System boots to multi-user.target | 3 | +1 (desktop) |
+| T3 | `vm-*` feature | 3-5min | Services start, programs work | 7 | +7 |
+
+**New convention**: `lint-*` checks run source-level analysis tools. They require a build (T1-like) to execute the tool, but are logically code quality checks, not derivation builds.
+
+---
+
+## Constraints (Inherited from Plan 020 + New)
+
+- **WSL features** cannot be VM-tested (no Windows host in QEMU)
+- **Darwin configs** cannot be VM-tested (need macOS)
+- **aarch64-linux** VM tests need native runner
+- VM tests compose from **dendritic modules**, not full host configs
+- `nix flake check --no-build` must remain fast (eval-only path unchanged)
+- **lint-* checks** are build-required (they execute tools), so they run during full `nix flake check` but NOT during `--no-build`
+- **Module isolation failures are findings** — if a module can't eval standalone, document the dependency rather than force-fixing it
+
+---
+
+## Session Workflow (MANDATORY per task)
+
+Identical to Plan 020:
+
+1. **Update plan**: Set task status to `TASK:IN_PROGRESS`
+2. **Execute**: Make changes, validate as specified in task DoD
+3. **Commit**: `git add` + `git commit` with descriptive message
+4. **Validate**: Run `nix flake check --no-build` (always) + task-specific checks
+5. **Update plan**: Set task status to `TASK:COMPLETE`
+6. **Commit plan**: `git add` + `git commit` the plan status update
+7. **STOP**: Provide `/next-task`-compatible continuation prompt and end session
+
+---
+
+## Task Progress
+
+| Task | Phase | Status | Validation | Description |
+|------|-------|--------|------------|-------------|
+| 1.1 | Linting | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.lint-formatting'` | Add nixpkgs-fmt formatting check |
+| 1.2 | Linting | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.lint-statix'` | Add statix Nix linting check |
+| 1.3 | Linting | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.lint-deadnix'` | Add deadnix dead code check |
+| 2.1 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | Create module isolation eval test helpers |
+| 2.2 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | HM module standalone eval tests (20 modules) |
+| 2.3 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
+| 3.1 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
+| 3.2 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
+| 3.3 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
+| 3.4 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
+| 3.5 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
+| 4.1 | Composition | `TASK:PENDING` | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
+| 4.2 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` | HM module isolation VM tests |
+| 4.3 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-composition-*' -L` | HM module composition pair tests |
+| 4.4 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-full-cli-stack' -L` | Full CLI stack integration test |
+| 5.1 | Documentation | `TASK:PENDING` | N/A (docs) | Update tests/README.md and coverage matrix |
+
+---
+
+## Phase 1: Static Analysis & Linting
+
+### Task 1.1 — Add nixpkgs-fmt Formatting Check
+
+**File**: `modules/flake-parts/tests.nix` (add to checks)
+
+Create a `lint-formatting` check that runs `nixpkgs-fmt --check` against all `.nix` files in the repository. This ensures formatting consistency without needing manual enforcement.
+
+```nix
+lint-formatting = pkgs.runCommand "lint-formatting" {
+  nativeBuildInputs = [ pkgs.nixpkgs-fmt pkgs.findutils ];
+  src = self;
+} ''
+  cd $src
+  find . -name '*.nix' -not -path './.git/*' -not -path './result*' \
+    | xargs nixpkgs-fmt --check
+  touch $out
+'';
+```
+
+**Important**: If current code has formatting issues, fix them first, commit, THEN add the check. The check should pass on the commit that adds it.
+
+**Definition of Done**:
+- All `.nix` files pass `nixpkgs-fmt --check`
+- `nix build '.#checks.x86_64-linux.lint-formatting'` succeeds
+- `nix flake check --no-build` still fast (check is build-required, skipped with --no-build)
+
+---
+
+### Task 1.2 — Add statix Nix Linting Check
+
+**File**: `modules/flake-parts/tests.nix`
+
+Create a `lint-statix` check that runs `statix check` on the repository. Statix detects Nix anti-patterns: unused let bindings, manual inherit patterns, eta-reducible functions, empty patterns.
+
+```nix
+lint-statix = pkgs.runCommand "lint-statix" {
+  nativeBuildInputs = [ pkgs.statix ];
+  src = self;
+} ''
+  cd $src
+  statix check .
+  touch $out
+'';
+```
+
+**Important**: Run `statix check .` first to identify current issues. Fix them or add a `.statix.toml` with targeted ignores. The check must pass when added.
+
+**Definition of Done**:
+- `statix check .` passes (or issues are addressed in `.statix.toml`)
+- `nix build '.#checks.x86_64-linux.lint-statix'` succeeds
+- Any `.statix.toml` ignores are documented with rationale
+
+---
+
+### Task 1.3 — Add deadnix Dead Code Check
+
+**File**: `modules/flake-parts/tests.nix`
+
+Create a `lint-deadnix` check that detects unused variables, unused function arguments, empty let blocks, and other dead code patterns.
+
+```nix
+lint-deadnix = pkgs.runCommand "lint-deadnix" {
+  nativeBuildInputs = [ pkgs.deadnix ];
+  src = self;
+} ''
+  cd $src
+  deadnix --fail .
+  touch $out
+'';
+```
+
+**Important**: Run `deadnix .` first to identify dead code. Clean it up, commit, then add the check. Use `deadnix --exclude` for intentional patterns (e.g., `{ config, pkgs, lib, ... }:` where not all are used — this is idiomatic Nix).
+
+**Flags to consider**: `--no-underscore` (allow `_`-prefixed unused vars), `--no-lambda-pattern-names` (don't flag module pattern args like `{ config, pkgs, ... }:`).
+
+**Definition of Done**:
+- `deadnix --fail .` passes (with appropriate flag selection)
+- `nix build '.#checks.x86_64-linux.lint-deadnix'` succeeds
+- Dead code cleaned up in preceding commit(s)
+
+---
+
+## Phase 2: Module Isolation Eval Tests (T0)
+
+### Task 2.1 — Create Module Isolation Eval Test Helpers
+
+**File**: `modules/flake-parts/tests.nix`
+
+Create two new helpers:
+
+```nix
+# Test that a Home Manager module evaluates standalone with home-minimal
+mkHmModuleEvalTest = name: module: extraImports: extraConfig:
+  pkgs.runCommand "eval-hm-module-${name}" {
+    meta.description = "Isolation eval test: HM module ${name}";
+    meta.timeout = 60;
+    # Force evaluation by referencing a config attribute
+    homeDir = (inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      modules = [
+        self.modules.homeManager.home-minimal
+        module
+      ] ++ extraImports;
+      extraSpecialArgs = { inherit inputs; };
+    }).config.home.homeDirectory;
+  } ''
+    echo "Module ${name} evaluates standalone: $homeDir"
+    touch $out
+  '';
+
+# Test that a NixOS module evaluates standalone
+mkNixosModuleEvalTest = name: module: extraConfig:
+  pkgs.runCommand "eval-nixos-module-${name}" {
+    meta.description = "Isolation eval test: NixOS module ${name}";
+    meta.timeout = 60;
+    stateVersion = (lib.nixosSystem {
+      inherit system;
+      modules = [ module extraConfig ];
+    }).config.system.stateVersion;
+  } ''
+    echo "Module ${name} evaluates standalone: $stateVersion"
+    touch $out
+  '';
+```
+
+**Note**: The exact implementation will depend on what imports each module needs. Some modules may need `inputs` via `extraSpecialArgs`. The helpers should be flexible enough to accommodate this.
+
+**Definition of Done**:
+- Both helpers defined in `tests.nix`
+- At least one test using each helper passes
+- `nix flake check --no-build` succeeds
+
+---
+
+### Task 2.2 — HM Module Standalone Eval Tests
+
+**File**: `modules/flake-parts/tests.nix`
+
+Create `eval-hm-module-*` for each of the 20 HM modules. Use `mkHmModuleEvalTest` from Task 2.1.
+
+**All 20 HM modules**:
+| Module | VM-Safe? | Expected Dependencies |
+|--------|----------|----------------------|
+| shell | Yes | home-minimal only |
+| git | Yes | home-minimal only |
+| tmux | Yes | home-minimal only |
+| neovim | Yes | home-minimal only |
+| development-tools | Yes | home-minimal only |
+| yazi | Yes | home-minimal only |
+| shell-utils | Yes | home-minimal only |
+| files | Maybe | May need autoWriter/homeFiles infra |
+| podman | Maybe | home-minimal only |
+| terminal | Maybe | home-minimal only |
+| secrets-management | Maybe | May need sops-nix input |
+| claude-code | Yes (eval) | home-minimal + inputs |
+| opencode | Yes (eval) | home-minimal + inputs |
+| github-auth | Yes (eval) | home-minimal only |
+| gitlab-auth | Yes (eval) | home-minimal only |
+| git-auth-helpers | Yes (eval) | home-minimal only |
+| esp-idf | Maybe | May need specialized inputs |
+| windows-terminal | Yes (eval) | home-minimal only |
+| onedrive | Yes (eval) | home-minimal only |
+| system-tools | Yes (eval) | home-minimal only |
+
+**Important**: Module isolation eval tests prove that the Nix expressions *evaluate* — they don't need runtime resources (API keys, WSL, etc.). Even `claude-code` can eval-test because evaluation doesn't execute any programs.
+
+If a module fails to evaluate standalone, **document the dependency** rather than skipping the test. This is valuable information about the module's coupling.
+
+**Definition of Done**:
+- `eval-hm-module-*` check exists for each of 20 HM modules
+- All pass during `nix flake check --no-build`
+- Any modules requiring extra imports are documented
+
+---
+
+### Task 2.3 — NixOS Module Standalone Eval Tests
+
+**File**: `modules/flake-parts/tests.nix`
+
+Create `eval-nixos-module-*` for the 6 NixOS modules:
+
+1. `eval-nixos-module-system-minimal` — self.modules.nixos.system-minimal
+2. `eval-nixos-module-system-default` — self.modules.nixos.system-default
+3. `eval-nixos-module-system-cli` — self.modules.nixos.system-cli
+4. `eval-nixos-module-system-desktop` — self.modules.nixos.system-desktop
+5. `eval-nixos-module-secrets-management` — self.modules.nixos.secrets-management
+6. `eval-nixos-module-wsl` — self.modules.nixos.wsl
+
+**Note**: Some of these are already implicitly tested by host config eval tests and VM boot tests. These standalone tests add value by proving each module evaluates in isolation without host-specific config.
+
+**Definition of Done**:
+- `eval-nixos-module-*` check exists for each of 6 NixOS modules
+- All pass during `nix flake check --no-build`
+- Any modules requiring specific config (e.g., wsl needs NixOS-WSL input) are documented
+
+---
+
+## Phase 3: VM Feature Coverage Expansion (T3)
+
+### Task 3.1 — Neovim VM Test
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+Test the neovim module (1,871 LOC — largest module, zero runtime validation):
+
+```nix
+vm-neovim = # Uses system-default + HM (home-minimal + neovim)
+```
+
+**Test assertions**:
+1. `nvim --version` works (binary present)
+2. `nvim --headless -c 'qa!'` exits cleanly (config loads without errors)
+3. Neovim config directory exists (`~/.config/nvim/` or HM-managed path)
+4. Treesitter parsers installed (check for parser directory)
+5. Key plugins loaded (telescope, lsp, treesitter — check runtimepath)
+6. `:checkhealth` runs without critical errors (`nvim --headless -c 'checkhealth' -c 'qa!'`)
+7. Default editor is nvim (`$EDITOR` or alternatives system)
+
+**Memory**: 2048 MB (neovim + treesitter parsers need RAM)
+
+**Definition of Done**: `nix build '.#checks.x86_64-linux.vm-neovim' -L` passes with all assertions.
+
+---
+
+### Task 3.2 — Tmux VM Test
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+Test the tmux module (733 LOC — second largest, zero runtime validation):
+
+**Test assertions**:
+1. `tmux -V` works (binary present, correct version)
+2. Tmux server starts (`tmux new-session -d -s test`)
+3. Tmux config loaded (`.tmux.conf` exists or HM-managed path)
+4. Key keybindings configured (prefix key, split panes)
+5. Plugins directory populated (resurrect, continuum, vim-tmux-navigator)
+6. Session can be listed (`tmux list-sessions`)
+7. Tmux-session-picker script exists and is executable
+
+**Memory**: 2048 MB
+
+**Definition of Done**: `nix build '.#checks.x86_64-linux.vm-tmux' -L` passes.
+
+---
+
+### Task 3.3 — Git Advanced VM Test
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+Deeper git testing beyond `vm-hm-activation`'s basic `git --version`:
+
+**Test assertions**:
+1. Delta configured as diff pager (`git config core.pager` → delta)
+2. Git aliases defined (at least 3 representative: `st`, `co`, `br` or similar)
+3. Global gitignore configured
+4. Git-LFS available (`git lfs version`)
+5. Pre-commit hook infrastructure (`.config/git/hooks/` or equivalent)
+6. Merge tool configured (nvim-based if neovim present)
+7. Git credential helper configured
+
+**Memory**: 2048 MB
+
+**Definition of Done**: `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` passes.
+
+---
+
+### Task 3.4 — Development Tools VM Test
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+Test the development-tools module with default flag settings:
+
+**Test assertions**:
+1. Enhanced CLI tools present: `bat`, `eza`, `delta`, `bottom` (`btm`)
+2. If enableRust: `rustc --version`, `cargo --version`
+3. If enableNode: `node --version`, `npm --version`
+4. If enablePython: `python3 --version`, `pip3 --version`
+5. If enableGo: `go version`
+6. Kubernetes tools (if enabled): `kubectl`, `k9s`
+7. Claude dev utilities present (if enableClaudeUtils)
+
+**Note**: Test with defaults first. Feature flag permutation testing is deferred to Phase 4 (eval-only tests for flag combinations, not full VM tests for each permutation).
+
+**Memory**: 2048 MB (many packages)
+
+**Definition of Done**: `nix build '.#checks.x86_64-linux.vm-development-tools' -L` passes.
+
+---
+
+### Task 3.5 — Desktop System Type VM Test
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+Complete the system type test matrix — `system-desktop` is the only untested layer:
+
+**Test assertions**:
+1. System boots to multi-user.target (don't require graphical.target — no display)
+2. X11/Wayland packages present (`which Xorg` or `which Xwayland`, or check package list)
+3. Display manager package present (check for gdm/sddm/lightdm binary)
+4. Desktop environment packages present (check for representative binary)
+5. Sound system configured (PipeWire/PulseAudio packages present)
+6. Printing service configured (CUPS packages present)
+7. Inherits cli layer: SSH daemon, dev tools from parent layers
+
+**Note**: We do NOT start a display server (no GPU in VM). We verify packages are installed and services are declared. This is sufficient for a system type layer test.
+
+**Memory**: 2048 MB (desktop packages are large)
+
+**Definition of Done**: `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` passes.
+
+---
+
+## Phase 4: Dendritic Composition & Permutation Tests
+
+This phase validates the core promise of the dendritic pattern: **modules compose freely**.
+
+### Task 4.1 — Create mkHmModuleTest Composition Helper
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+Create a helper that reduces boilerplate for testing HM modules in VMs:
+
+```nix
+# mkHmModuleTest: Create a VM test for Home Manager module(s)
+#
+# Provides system-default + home-manager + home-minimal automatically.
+# Caller only needs to specify which HM modules to test and what to assert.
+mkHmModuleTest = { name, description ? "HM module test: ${name}",
+                    hmModules, testScript, memory ? 2048, extraNixosModules ? [],
+                    hmConfig ? {} }:
+  pkgs.testers.nixosTest {
+    name = "vm-${name}";
+    nodes.machine = { config, pkgs, lib, ... }: {
+      imports = [
+        self.modules.nixos.system-default
+        inputs.home-manager.nixosModules.home-manager
+      ] ++ extraNixosModules;
+
+      systemDefault.userName = "tim";
+      systemDefault.wheelNeedsPassword = false;
+      networking.firewall.enable = false;
+      virtualisation.memorySize = memory;
+
+      home-manager = {
+        useGlobalPkgs = true;
+        useUserPackages = true;
+        extraSpecialArgs = { inherit inputs; };
+        users.tim = { config, pkgs, lib, ... }: {
+          imports = [ self.modules.homeManager.home-minimal ] ++ hmModules;
+          homeMinimal = {
+            username = "tim";
+            homeDirectory = "/home/tim";
+          };
+          targets.genericLinux.enable = lib.mkForce false;
+        } // hmConfig;
+      };
+    };
+    testScript = testScript;
+  };
+```
+
+**Definition of Done**:
+- `mkHmModuleTest` helper defined in `vm-tests.nix`
+- At least one test uses it successfully
+- Existing HM VM tests (vm-hm-activation, vm-shell-env) could optionally be refactored to use it (but don't break them)
+
+---
+
+### Task 4.2 — HM Module Isolation VM Tests
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+For each VM-safe HM module, create a test that activates it **alone** with only `home-minimal`. This proves each module is truly independent.
+
+**VM-safe modules to test in isolation** (8 modules):
+
+| Module | Key Assertion |
+|--------|---------------|
+| tmux | `tmux -V` works |
+| neovim | `nvim --version` works |
+| git | `git config user.name` returns value |
+| shell | `zsh -c "echo OK"` works |
+| development-tools | `bat --version` works (enhanced CLI) |
+| yazi | `yazi --version` works |
+| shell-utils | representative script exists in PATH |
+| podman | `podman --version` works |
+
+**Implementation options**:
+- **Option A**: Single test `vm-hm-module-isolation` that boots once and tests all modules sequentially (slower boot, but shared overhead)
+- **Option B**: Separate tests `vm-hm-isolation-tmux`, `vm-hm-isolation-neovim`, etc. (parallel execution, but many VM boots)
+- **Recommended**: Option A — single VM with parameterized sub-tests. Each module gets its own VM node, but they boot in parallel via `start_all()`.
+
+**Definition of Done**:
+- Each of 8 VM-safe HM modules activates alone in a VM
+- HM activation succeeds for each
+- Module's primary binary/config file exists
+- `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` passes
+
+---
+
+### Task 4.3 — HM Module Composition Pair Tests
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+Test key module pairs that have known integration points:
+
+| Pair | Integration Point | Key Assertion |
+|------|-------------------|---------------|
+| neovim + tmux | tmux-navigator plugin | Both start, navigator keybinding exists |
+| git + neovim | Neovim as merge/diff tool | `git config merge.tool` → nvimdiff |
+| git + shell | Git aliases in zsh | `zsh -ic "alias gs"` → git status |
+| shell + tmux | Both configure terminal env | zsh inside tmux works |
+
+**Implementation**: Single test `vm-hm-composition-pairs` with 4 nodes (one per pair), or a few focused tests.
+
+**Definition of Done**:
+- Each pair's integration point verified
+- No option conflicts between paired modules
+- `nix build '.#checks.x86_64-linux.vm-hm-composition-pairs' -L` passes
+
+---
+
+### Task 4.4 — Full CLI Stack Integration Test
+
+**File**: `modules/flake-parts/vm-tests.nix`
+
+The ultimate integration test: `system-cli` + ALL VM-safe HM modules together. This simulates a near-production configuration without WSL/hardware-specific dependencies.
+
+**Modules included**:
+- NixOS: `system-cli`
+- HM: `home-minimal`, `shell`, `git`, `tmux`, `neovim`, `development-tools`, `yazi`, `shell-utils`, `podman`
+
+**Test assertions**:
+1. HM activation succeeds
+2. All primary binaries present (nvim, tmux, git, yazi, bat, podman, zsh)
+3. No option conflicts (implicit — HM activation would fail)
+4. Key cross-module features work:
+   - Git with delta pager
+   - Zsh with git aliases
+   - Neovim starts cleanly
+   - Tmux starts server
+5. User environment is coherent (PATH, EDITOR, aliases all correct)
+
+**Memory**: 3072 MB (many packages)
+
+**Definition of Done**:
+- `nix build '.#checks.x86_64-linux.vm-full-cli-stack' -L` passes
+- All 9 HM modules activate together without conflicts
+- Cross-module integration points verified
+
+---
+
+## Phase 5: Documentation
+
+### Task 5.1 — Update tests/README.md and Coverage Matrix
+
+**File**: `tests/README.md`
+
+Update documentation to reflect Plan 021 additions:
+
+1. Add `lint-*` tier to taxonomy table
+2. Document module isolation test pattern and helpers
+3. Document composition test strategy
+4. Add coverage matrix showing which modules have which test tiers
+5. Document `mkHmModuleTest` helper usage
+6. Update "How to Add a New Test" section with new patterns
+7. Add coverage matrix:
+
+```
+Module Coverage Matrix:
+                    T0-Eval  T0.5-Lint  T1-Build  T2-Boot  T3-Feature  T3-Isolation  T3-Composition
+system-minimal       ✓                              ✓
+system-default       ✓                              ✓        ✓
+system-cli           ✓                              ✓        ✓ (SSH)
+system-desktop       ✓                              ✓
+shell                ✓                                        ✓           ✓              ✓
+git                  ✓                                        ✓           ✓              ✓
+tmux                 ✓                                        ✓           ✓              ✓
+neovim               ✓                                        ✓           ✓              ✓
+development-tools    ✓                                        ✓           ✓
+...etc
+```
+
+**Definition of Done**:
+- tests/README.md updated with all new test categories
+- Coverage matrix accurate and complete
+- Quick-start examples for running new test tiers
+
+---
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `modules/flake-parts/tests.nix` | Eval + lint checks (modify) |
+| `modules/flake-parts/vm-tests.nix` | VM test infrastructure (modify) |
+| `tests/README.md` | Test documentation (update) |
+| `.statix.toml` | **NEW**: statix configuration (if needed) |
+
+---
+
+## Module VM-Testability Reference
+
+| HM Module | Eval-Test? | VM-Test? | Reason if No |
+|-----------|-----------|----------|--------------|
+| shell | ✓ | ✓ | — |
+| git | ✓ | ✓ | — |
+| tmux | ✓ | ✓ | — |
+| neovim | ✓ | ✓ | — |
+| development-tools | ✓ | ✓ | — |
+| yazi | ✓ | ✓ | — |
+| shell-utils | ✓ | ✓ | — |
+| podman | ✓ | ✓ | Needs container runtime |
+| files | ✓ | Maybe | Complex homeFiles infra |
+| terminal | ✓ | Maybe | Font verification needs X |
+| secrets-management | ✓ | ✓ | Already tested (vm-sops-secrets) |
+| claude-code | ✓ | No | Requires API keys at runtime |
+| opencode | ✓ | No | Requires API keys at runtime |
+| github-auth | ✓ | No | Requires Bitwarden at runtime |
+| gitlab-auth | ✓ | No | Requires Bitwarden at runtime |
+| git-auth-helpers | ✓ | No | Requires Bitwarden at runtime |
+| esp-idf | ✓ | No | Specialized hardware dev |
+| windows-terminal | ✓ | No | WSL-only |
+| onedrive | ✓ | No | WSL-only |
+| system-tools | ✓ | No | Bootstrap scripts need real env |
+
+---
+
+## Verification
+
+After each phase:
+1. `nix flake check --no-build` — all eval tests pass (T0 + T0 module isolation)
+2. `nix build '.#checks.x86_64-linux.lint-formatting'` — formatting check
+3. `nix build '.#checks.x86_64-linux.vm-SPECIFIC' -L` — specific VM test
+4. Full suite: `nix flake check` (everything including VM + lint + build)
