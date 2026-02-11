@@ -77,7 +77,7 @@ If validation fails at step 4, fix in-place and re-commit — do NOT leave broke
 | 1.3 | Fix Stubs | `TASK:COMPLETE` | `nix flake check --no-build` | Fix 4 stub checks to test real things |
 | 2.1 | Wire Existing | `TASK:COMPLETE` | `nix build '.#checks.x86_64-linux.vm-ssh-management' -L` | Wire ssh-management.nix into checks |
 | 2.2 | Wire Existing | `TASK:COMPLETE` | `nix build '.#checks.x86_64-linux.vm-sops-deployment' -L` | Wire sops-deployment.nix into checks (2026-02-10) |
-| 3.1 | VM Scaffold | `TASK:PENDING` | `nix flake check --no-build` | Create vm-tests.nix + mkVmTest helper |
+| 3.1 | VM Scaffold | `TASK:COMPLETE` | `nix flake check --no-build` | Create vm-tests.nix + mkVmTest helper (2026-02-10) |
 | 3.2 | VM Boot | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-boot-minimal' -L` | Boot smoke test (minimal config) |
 | 3.3 | VM Sys Types | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-system-type-default' -L` | System type layer tests |
 | 4.1 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-ssh-service' -L` | SSH service test |
