@@ -74,7 +74,7 @@ If validation fails at step 4, fix in-place and re-commit — do NOT leave broke
 |------|-------|--------|------------|-------------|
 | 1.1 | Gap Analysis | `TASK:COMPLETE` | N/A (analysis) | Gap matrix — done inline below |
 | 1.2 | Eval Coverage | `TASK:COMPLETE` | `nix flake check --no-build` | Add eval tests: pa161878 + 5 HM configs |
-| 1.3 | Fix Stubs | `TASK:PENDING` | `nix flake check --no-build` | Fix 4 stub checks to test real things |
+| 1.3 | Fix Stubs | `TASK:COMPLETE` | `nix flake check --no-build` | Fix 4 stub checks to test real things |
 | 2.1 | Wire Existing | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-ssh-management' -L` | Wire ssh-management.nix into checks |
 | 2.2 | Wire Existing | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-sops-deployment' -L` | Wire sops-deployment.nix into checks |
 | 3.1 | VM Scaffold | `TASK:PENDING` | `nix flake check --no-build` | Create vm-tests.nix + mkVmTest helper |
