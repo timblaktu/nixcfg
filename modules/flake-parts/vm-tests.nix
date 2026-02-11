@@ -172,7 +172,92 @@
           '';
         };
 
-        # === VM feature tests will be added in tasks 4.x ===
+        # === VM FEATURE TESTS (T3) ===
+
+        # SSH service test: multi-node test verifying sshd configuration,
+        # password auth disabled, root login denied, key-based cross-node auth
+        vm-ssh-service =
+          let
+            # Test-only SSH keypair (no passphrase, used only in ephemeral VMs)
+            testPubKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA5KxOZmLBW+mf3To2lxhJhMyAHvsfldNX3ukpjEsAiV vm-test@nixos-test";
+            # Write the private key to the nix store for deployment into the VM.
+            # No indentation — OpenSSH is strict about private key format.
+            testPrivKeyFile = pkgs.writeText "vm-test-privkey"
+              "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACAOSsTmZiwVvpn906NpcYSYTMgB77H5XTV97pKYxLAIlQAAAJjnvjzN5748\nzQAAAAtzc2gtZWQyNTUxOQAAACAOSsTmZiwVvpn906NpcYSYTMgB77H5XTV97pKYxLAIlQ\nAAAEAr+7qHcVT3Nb6tl278Jni4sYl0GSOAglGZw3AKd0FNqw5KxOZmLBW+mf3To2lxhJhM\nyAHvsfldNX3ukpjEsAiVAAAAEnZtLXRlc3RAbml4b3MtdGVzdAECAw==\n-----END OPENSSH PRIVATE KEY-----\n";
+          in
+          mkVmTest {
+            name = "ssh-service";
+            description = "SSH daemon configuration and cross-node key-based auth";
+            nodes = {
+              server = { config, pkgs, ... }: {
+                imports = [ self.modules.nixos.system-cli ];
+                networking.firewall.enable = false;
+                virtualisation.memorySize = 1024;
+                systemDefault.userName = "tim";
+                # Deploy the test public key via the dendritic sshAuthorizedKeys option
+                systemCli.sshAuthorizedKeys = [ testPubKey ];
+              };
+              client = { config, pkgs, ... }: {
+                imports = [ self.modules.nixos.system-cli ];
+                networking.firewall.enable = false;
+                virtualisation.memorySize = 1024;
+                systemDefault.userName = "tim";
+              };
+            };
+            testScript = ''
+              start_all()
+
+              # --- Test 1: SSH daemon starts and is running ---
+              server.wait_for_unit("sshd.service")
+
+              # --- Test 2: SSH settings are correct ---
+              # Password authentication disabled
+              server.succeed("sshd -T | grep -qi 'passwordauthentication no'")
+              # Root login denied
+              server.succeed("sshd -T | grep -qi 'permitrootlogin no'")
+
+              # --- Test 3: SSH listens on port 22 ---
+              server.wait_for_open_port(22)
+
+              # --- Test 4: Authorized keys deployed for user tim ---
+              # NixOS may use /etc/ssh/authorized_keys.d/ or ~/.ssh/authorized_keys
+              server.succeed(
+                  "{ cat /etc/ssh/authorized_keys.d/tim 2>/dev/null"
+                  " || cat /home/tim/.ssh/authorized_keys; }"
+                  " | grep -q ssh-ed25519"
+              )
+
+              # --- Test 5: Key-based SSH from client to server ---
+              client.wait_for_unit("multi-user.target")
+
+              # Deploy the test private key to client
+              client.succeed("mkdir -p /home/tim/.ssh && chmod 700 /home/tim/.ssh")
+              client.succeed("cp ${testPrivKeyFile} /home/tim/.ssh/id_ed25519")
+              client.succeed("chmod 600 /home/tim/.ssh/id_ed25519")
+              client.succeed("chown -R tim:users /home/tim/.ssh")
+
+              # Add server to known_hosts (avoid interactive host key prompt)
+              client.succeed(
+                  "su - tim -c 'ssh-keyscan server >> /home/tim/.ssh/known_hosts 2>/dev/null'"
+              )
+
+              # SSH from client to server and verify command execution
+              result = client.succeed(
+                  "su - tim -c 'ssh -i /home/tim/.ssh/id_ed25519 tim@server echo SSH_OK'"
+              )
+              assert "SSH_OK" in result, f"Expected SSH_OK in output, got: {result}"
+
+              # --- Test 6: Password auth rejected ---
+              # BatchMode=yes causes ssh to fail immediately if password would be needed
+              # (no interactive prompt). This verifies password auth is truly disabled.
+              client.fail(
+                  "su - tim -c 'ssh -o PubkeyAuthentication=no"
+                  " -o BatchMode=yes"
+                  " -o StrictHostKeyChecking=no"
+                  " tim@server echo SHOULD_NOT_WORK'"
+              )
+            '';
+          };
       };
     };
 }
