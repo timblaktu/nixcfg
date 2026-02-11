@@ -2,7 +2,7 @@
 
 **Branch**: `refactor/dendritic-pattern`
 **Worktree**: `/home/tim/src/nixcfg-dendritic`
-**Status**: PLANNING
+**Status**: COMPLETE
 **Created**: 2026-02-10
 
 ---
@@ -86,7 +86,7 @@ If validation fails at step 4, fix in-place and re-commit — do NOT leave broke
 | 4.4 | VM Features | `TASK:COMPLETE` | `nix build '.#checks.x86_64-linux.vm-shell-env' -L` | Shell environment test (2026-02-11) |
 | 4.5 | VM Features | `TASK:COMPLETE` | `nix build '.#checks.x86_64-linux.vm-sops-secrets' -L` | SOPS secrets test (2026-02-11) |
 | 5.1 | Pkg Builds | `TASK:COMPLETE` | `nix build '.#checks.x86_64-linux.build-marker-pdf'` | Package build tests (2026-02-11) |
-| 6.1 | Documentation | `TASK:PENDING` | N/A (docs) | Update tests/README.md |
+| 6.1 | Documentation | `TASK:COMPLETE` | N/A (docs) | Update tests/README.md (2026-02-11) |
 
 ---
 
