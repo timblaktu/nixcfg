@@ -746,6 +746,25 @@
             touch $out
           '';
 
+        # === STATIC ANALYSIS & LINTING (T0.5) ===
+        # These checks run source-level analysis tools. They require a build to
+        # execute the tool but are logically code quality checks.
+        lint-formatting = pkgs.runCommand "lint-formatting"
+          {
+            meta = {
+              description = "Check nixpkgs-fmt formatting on all .nix files";
+              maintainers = [ ];
+              timeout = 120;
+            };
+            nativeBuildInputs = [ pkgs.nixpkgs-fmt pkgs.findutils ];
+            src = self;
+          } ''
+          cd $src
+          find . -name '*.nix' -not -path './.git/*' -not -path './result*' -print0 \
+            | xargs -0 nixpkgs-fmt --check
+          touch $out
+        '';
+
         # Regression test: forces evaluation of ALL NixOS and HM configs
         regression-test = pkgs.runCommand "regression-test"
           {
