@@ -258,6 +258,55 @@
               )
             '';
           };
+        # User configuration test: verifies user setup, groups, home directory,
+        # shell, sudo, nix trusted-users, and environment variables
+        vm-user-config = mkVmTest {
+          name = "user-config";
+          description = "User creation, groups, home directory, shell, and sudo";
+          modules = [ self.modules.nixos.system-default ];
+          extraConfig = {
+            systemDefault.userName = "tim";
+            systemDefault.userGroups = [ "wheel" "networkmanager" "audio" "video" "docker" ];
+            systemDefault.wheelNeedsPassword = false;
+            systemDefault.extraShellAliases = { testvm = "echo test-alias-works"; };
+            systemDefault.extraEnvironment = { TEST_VAR = "vm-test-value"; };
+          };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # --- Test 1: User exists and is a normal user ---
+            machine.succeed("id tim")
+            machine.succeed("getent passwd tim | grep -q /home/tim")
+
+            # --- Test 2: Home directory exists and is owned by user ---
+            machine.succeed("test -d /home/tim")
+            machine.succeed("stat -c '%U' /home/tim | grep -q tim")
+
+            # --- Test 3: User is in expected groups ---
+            machine.succeed("id -nG tim | grep -q wheel")
+            machine.succeed("id -nG tim | grep -q audio")
+            machine.succeed("id -nG tim | grep -q video")
+
+            # --- Test 4: Shell is zsh ---
+            machine.succeed("getent passwd tim | grep -q zsh")
+            # zsh binary exists
+            machine.succeed("which zsh")
+
+            # --- Test 5: User can sudo (wheel group) ---
+            # sudo should work for wheel members (default NixOS config)
+            machine.succeed("su - tim -c 'sudo -n true'")
+
+            # --- Test 6: Nix trusts the user ---
+            machine.succeed("nix show-config | grep trusted-users | grep -q tim")
+
+            # --- Test 7: Environment variable set ---
+            machine.succeed("bash -lc 'echo $TEST_VAR' | grep -q vm-test-value")
+
+            # --- Test 8: Shell alias defined in system config ---
+            # NixOS puts environment.shellAliases in shell rc files
+            machine.succeed("grep -q testvm /etc/bashrc")
+          '';
+        };
       };
     };
 }
