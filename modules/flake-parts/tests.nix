@@ -567,6 +567,7 @@
         # === VM INTEGRATION TESTS ===
         # Wired from tests/integration/ — require KVM to build
         vm-ssh-management = import ../../tests/integration/ssh-management.nix { inherit pkgs lib; };
+        vm-sops-deployment = import ../../tests/integration/sops-deployment.nix { inherit pkgs lib; };
 
         # === OPENCODE CONFIGURATION TESTS ===
         # Test OpenCode module generates valid configuration
