@@ -1,368 +1,299 @@
-# NixOS Configuration Test Suite
+# nixcfg Test Suite
 
 ## Overview
 
-This directory contains the comprehensive test suite for the NixOS SSH key management system. The tests validate module functionality, configuration integrity, and system integration using the NixOS testing framework.
+This repository uses a layered test strategy with four tiers, all integrated
+into `nix flake check`. Tests validate everything from Nix expression
+evaluation through full NixOS VM boots with service verification.
+
+## Test Tiers
+
+| Tier | Prefix | Speed | What it proves | KVM? |
+|------|--------|-------|----------------|------|
+| T0 | `eval-*` | <1s | Nix expressions evaluate | No |
+| T1 | `build-*` | min | Derivations build | No |
+| T2 | `vm-*` (boot) | 2-3min | System boots to multi-user.target | Yes |
+| T3 | `vm-*` (feature) | 3-5min | Services start, programs work | Yes |
 
 ## Quick Start
 
 ```bash
-# Run all tests
-nix run '.#apps.x86_64-linux.test-all'
+# Eval-only (fast, no builds, no KVM required)
+nix flake check --no-build
 
-# Run specific test
-nix build '.#checks.x86_64-linux.ssh-simple-test' -L
+# Run a specific check
+nix build '.#checks.x86_64-linux.eval-thinky-nixos'
 
-# Run integration tests (requires KVM)
-nix run '.#apps.x86_64-linux.test-integration'
+# Run a specific VM test (requires KVM)
+nix build '.#checks.x86_64-linux.vm-boot-minimal' -L
+
+# Run everything (eval + build + VM tests)
+nix flake check
 ```
 
-## Test Structure
+## File Layout
 
 ```
 tests/
-├── README.md                    # This file
-├── sops-simple.nix             # Basic SOPS functionality tests
-├── ssh-auth.nix                # SSH authentication component tests
-├── sops-nix.nix               # Advanced SOPS operations tests
-└── integration/               # VM-based integration tests
-    ├── ssh-management.nix     # Full SSH key management pipeline
-    ├── sops-deployment.nix    # SOPS-NiX deployment scenarios
-    └── bitwarden-mock.nix     # Mock Bitwarden service for testing
+├── README.md                              # This file
+├── sops-simple.nix                        # SOPS encryption/decryption tests
+├── ssh-auth.nix                           # SSH key format validation
+├── sops-nix.nix                           # SOPS-NiX integration tests
+├── fixtures/
+│   └── sops/                              # Pre-generated SOPS test fixtures
+│       ├── README.md                      # How to regenerate fixtures
+│       ├── test-age-key.txt               # Static age keypair (test only)
+│       └── test-secrets.yaml              # SOPS-encrypted test secrets
+└── integration/
+    ├── ssh-management.nix                 # Multi-node SSH key management VM test
+    ├── sops-deployment.nix                # SOPS secret deployment VM test
+    └── bitwarden-mock.nix                 # Mock Bitwarden service for testing
+
+modules/flake-parts/
+├── tests.nix                              # T0/T1 checks: eval, build, module integration
+└── vm-tests.nix                           # T2/T3 checks: VM boot and feature tests
 ```
 
-## Test Categories
+## Test Infrastructure
 
-### Unit Tests
-Fast, isolated tests that verify individual components:
-- **sops-simple.nix**: Basic SOPS encryption/decryption
-- **ssh-auth.nix**: SSH key generation and validation
-- **sops-nix.nix**: Advanced SOPS-NiX integration
+### Where checks are defined
 
-### Integration Tests
-Comprehensive VM-based tests that verify full system behavior:
-- **ssh-management.nix**: End-to-end SSH key management with Bitwarden mock
-- **sops-deployment.nix**: Secret deployment and permissions in real NixOS VMs
+All checks are registered in `checks.x86_64-linux.*` via two flake-parts modules:
 
-### Module Tests (in flake-modules/tests.nix)
-Configuration and module interaction tests:
-- Configuration evaluation tests
-- Cross-module integration tests
-- Service configuration validation
+- **`modules/flake-parts/tests.nix`** -- Eval tests (T0), build tests (T1), and
+  module integration tests. These run without KVM.
+- **`modules/flake-parts/vm-tests.nix`** -- VM tests (T2/T3). Uses `mkVmTest`
+  helper and `pkgs.testers.nixosTest`. Requires KVM.
 
-## Writing Tests
+### mkVmTest helper
 
-### Unit Test Template
+`vm-tests.nix` provides a `mkVmTest` function that wraps `pkgs.testers.nixosTest`
+with common defaults:
 
 ```nix
-# tests/my-test.nix
-{ pkgs, lib, ... }:
-
-pkgs.runCommand "my-test" {
-  meta = {
-    description = "Test description";
-    maintainers = [ ];
-    timeout = 30;  # seconds
-  };
-  buildInputs = with pkgs; [ 
-    # required packages
-  ];
-} ''
-  echo "Running test..."
-  
-  # Test logic here
-  if [[ condition ]]; then
-    echo "✅ Test passed"
-  else
-    echo "❌ Test failed"
-    exit 1
-  fi
-  
-  touch $out
-''
-```
-
-### Integration Test Template
-
-```nix
-# tests/integration/my-integration-test.nix
-{ pkgs, lib, ... }:
-
-pkgs.nixosTest {
-  name = "my-integration-test";
-  
-  nodes = {
-    machine = { config, pkgs, ... }: {
-      # VM configuration
-      services.openssh.enable = true;
-      virtualisation.memorySize = 1024;
-    };
-  };
-  
+mkVmTest {
+  name = "boot-minimal";                          # check name: vm-boot-minimal
+  description = "Minimal NixOS boots";
+  modules = [ self.modules.nixos.system-minimal ]; # dendritic modules
   testScript = ''
     machine.start()
     machine.wait_for_unit("multi-user.target")
-    
-    # Python test script
-    machine.succeed("command to test")
-    
-    print("✅ Test completed successfully")
   '';
 }
 ```
 
-## Test Execution
+Parameters:
 
-### Prerequisites
+- `name` -- Becomes `vm-${name}` in the checks attrset
+- `modules` -- NixOS modules (from `self.modules.nixos.*`)
+- `nodes` -- Full nodes attrset (overrides single-node shorthand)
+- `testScript` -- Python test script (nixos-test-driver syntax)
+- `memory` -- VM memory in MB (default: 1024)
+- `extraConfig` -- Additional NixOS config merged into the machine node
 
-For unit tests:
-- Nix 2.18+ with flakes enabled
-- x86_64-linux system
+VM tests compose from **dendritic modules** (`self.modules.nixos.*`,
+`self.modules.homeManager.*`) rather than importing full host configs.
+This avoids WSL/hardware dependencies that cannot run in QEMU.
 
-For integration tests:
-- KVM support (check with `ls /dev/kvm`)
-- User in `kvm` group
-- 2GB+ RAM available
+### Helper functions in tests.nix
 
-### Running Tests
+- `mkEvalTest name hostName` -- Eval test for a NixOS configuration
+- `mkHmEvalTest name configName` -- Eval test for a Home Manager configuration
+- `mkModuleTest { name, description, hostName, attributes, checks }` --
+  Module integration test with custom attribute checks
 
-#### All Tests
-```bash
-nix run '.#apps.x86_64-linux.test-all'
+## Check Inventory
+
+### T0: Eval Tests
+
+**NixOS configurations** (5):
+`eval-thinky-nixos`, `eval-pa161878-nixos`, `eval-potato`,
+`eval-nixos-wsl-minimal`, `eval-mbp`
+
+**Home Manager configurations** (5, x86_64-linux only):
+`eval-hm-thinky-nixos`, `eval-hm-pa161878-nixos`, `eval-hm-thinky-ubuntu`,
+`eval-hm-mbp`, `eval-hm-nixvim-minimal`
+
+Skipped: `tim@potato` (aarch64-linux), `tim@macbook-air` (aarch64-darwin)
+
+**Module integration**:
+`module-base-integration`, `module-wsl-settings-integration`,
+`ssh-service-configured`, `user-tim-configured`,
+`config-snapshot-validation`, `cross-module-wsl-base`,
+`cross-module-sops-base`, `cross-module-home-manager`,
+`ssh-public-keys-registry`
+
+**Build evaluation** (force toplevel derivation eval without building):
+`build-thinky-nixos-dryrun`, `build-nixos-wsl-minimal-dryrun`
+
+**Other eval tests**:
+`flake-validation`, `validated-scripts-module`,
+`unified-files-diagnostic-test`, `files-module-test`,
+`hybrid-files-module-test`, `tmux-picker-syntax`,
+`opencode-config-validation`, `opencode-json-syntax`,
+`opencode-mcp-structure`, `regression-test`
+
+### T1: Build Tests
+
+**Package builds** (6):
+`build-marker-pdf`, `build-markitdown`, `build-tomd`,
+`build-nixvim-anywhere`, `build-docling`, `build-termux-claude-scripts`
+
+### T2: VM Boot Tests
+
+- `vm-boot-minimal` -- Minimal NixOS boots, `nix --version` works
+- `vm-system-type-default` -- User creation, locale, timezone, zsh
+- `vm-system-type-cli` -- SSH daemon, dev tools, neovim, tmux
+
+### T3: VM Feature Tests
+
+- `vm-ssh-management` -- Multi-node SSH key management pipeline
+- `vm-sops-deployment` -- SOPS CLI encryption/decryption operations
+- `vm-ssh-service` -- Multi-node SSH: key auth, password rejection
+- `vm-user-config` -- User setup, groups, sudo, nix trusted-users
+- `vm-hm-activation` -- Home Manager activates, generates configs
+- `vm-shell-env` -- Zsh config, aliases, plugins, session variables
+- `vm-sops-secrets` -- sops-nix decryption, permissions, service access
+
+## Adding a New Test
+
+### New eval test
+
+Add to `modules/flake-parts/tests.nix`:
+
+```nix
+my-new-eval-test = mkEvalTest "my-host" "my-host";
 ```
 
-#### Specific Test
-```bash
-# Build and run
-nix build '.#checks.x86_64-linux.test-name' -L
+### New VM test
 
-# Just check if it builds
-nix build '.#checks.x86_64-linux.test-name' --dry-run
-```
+Add to `modules/flake-parts/vm-tests.nix`:
 
-#### With Debugging
-```bash
-# Verbose output
-nix build '.#checks.x86_64-linux.test-name' -L --show-trace
-
-# Keep failed build directory
-nix build '.#checks.x86_64-linux.test-name' --keep-failed
-```
-
-## Test Files
-
-### sops-simple.nix
-Tests basic SOPS functionality including:
-- Age key generation
-- Secret encryption/decryption
-- File permissions
-- Key format validation
-
-### ssh-auth.nix
-Tests SSH authentication components:
-- SSH key generation (Ed25519, RSA)
-- Key format validation
-- Authorized keys formatting
-- Public key extraction
-
-### sops-nix.nix
-Tests advanced SOPS-NiX integration:
-- Multi-user secret access
-- Service integration patterns
-- Secret rotation
-- Permission management
-
-### integration/ssh-management.nix
-Full system test including:
-- Bitwarden CLI mock
-- Cross-host SSH authentication
-- Key distribution pipeline
-- User management
-
-### integration/sops-deployment.nix
-Tests SOPS deployment in VMs:
-- Secret file deployment
-- Runtime decryption
-- Service access patterns
-- Permission verification
-
-### integration/bitwarden-mock.nix
-Provides mock Bitwarden service:
-- Simulates vault operations
-- Returns test keys
-- No network dependencies
-
-## Test Runners
-
-Located in `flake-modules/tests.nix`:
-
-### test-all
-Runs complete test suite with colored output and statistics.
-
-### test-integration  
-Runs only VM-based integration tests with detailed logging.
-
-### regression-test
-Quick validation that all configurations still evaluate.
-
-### snapshot
-Generates configuration snapshots for comparison.
-
-## Coverage
-
-Current test coverage: **~85%**
-
-### Well Tested (>90%)
-- Base module configuration
-- WSL module integration
-- SOPS-NiX operations
-- SSH key registry
-
-### Moderately Tested (70-90%)
-- Bitwarden integration
-- SSH key automation
-- Bootstrap operations
-
-### Gaps (<70%)
-- Error recovery paths
-- Network failure scenarios
-- Concurrent operations
-
-## Troubleshooting
-
-### Common Issues
-
-#### KVM not available
-```bash
-# Enable KVM module
-sudo modprobe kvm-intel  # or kvm-amd
-
-# Add user to kvm group
-sudo usermod -a -G kvm $USER
-```
-
-#### Test timeout
-```bash
-# Increase timeout in test file
-meta = {
-  timeout = 120;  # seconds
+```nix
+vm-my-feature = mkVmTest {
+  name = "my-feature";
+  description = "Test that my-feature works in a VM";
+  modules = [ self.modules.nixos.system-default ];
+  extraConfig = {
+    systemDefault.userName = "tim";
+  };
+  testScript = ''
+    machine.wait_for_unit("multi-user.target")
+    machine.succeed("some-command")
+  '';
 };
 ```
 
-#### Out of memory
-```bash
-# Reduce VM memory in test
-virtualisation.memorySize = 512;  # MB
-```
+For tests that need Home Manager:
 
-### Debug Techniques
-
-1. **Add debug output**:
 ```nix
-echo "DEBUG: variable value = $var" >&2
+vm-my-hm-feature = pkgs.testers.nixosTest {
+  name = "vm-my-hm-feature";
+  nodes.machine = { config, pkgs, lib, ... }: {
+    imports = [
+      self.modules.nixos.system-default
+      inputs.home-manager.nixosModules.home-manager
+    ];
+    systemDefault.userName = "tim";
+    home-manager = {
+      useGlobalPkgs = true;
+      useUserPackages = true;
+      extraSpecialArgs = { inherit inputs; };
+      users.tim = { ... }: {
+        imports = [
+          self.modules.homeManager.home-minimal
+          self.modules.homeManager.my-feature
+        ];
+        homeMinimal = {
+          username = "tim";
+          homeDirectory = "/home/tim";
+        };
+        targets.genericLinux.enable = lib.mkForce false;
+      };
+    };
+  };
+  testScript = ''
+    machine.wait_for_unit("multi-user.target")
+    machine.wait_for_unit("home-manager-tim.service")
+    machine.succeed("su - tim -c 'my-command'")
+  '';
+};
 ```
 
-2. **Interactive VM debugging**:
-```python
-# In testScript
-import time
-time.sleep(30)  # Pause for inspection
-machine.shell_interact()  # Drop to shell
+### New package build test
+
+Add to `modules/flake-parts/tests.nix`:
+
+```nix
+build-my-package = self'.packages.my-package;
 ```
 
-3. **Keep test artifacts**:
+Putting a package in `checks` makes `nix flake check` build it.
+
+## Prerequisites
+
+**Eval tests (T0)**: Nix with flakes enabled. Any platform.
+
+**Build tests (T1)**: Same as T0. Builds may take minutes.
+
+**VM tests (T2/T3)**:
+- KVM support: `ls /dev/kvm`
+- User in `kvm` group: `id -nG | grep kvm`
+- 2GB+ RAM available per VM test
+
+## Constraints
+
+- **WSL features** cannot be VM-tested (no Windows host in QEMU)
+- **Darwin configs** cannot be VM-tested (need macOS)
+- **aarch64-linux** VM tests need cross-compilation or native runner
+- `nix flake check --no-build` stays fast (eval-only, no KVM needed)
+
+## Debugging
+
+### Verbose output
+
 ```bash
-nix build '.#checks.x86_64-linux.test-name' --keep-failed
+nix build '.#checks.x86_64-linux.vm-boot-minimal' -L --show-trace
+```
+
+### Keep failed build artifacts
+
+```bash
+nix build '.#checks.x86_64-linux.vm-my-test' --keep-failed
 ls /tmp/nix-build-*/
 ```
 
-## Contributing
+### View VM test build logs
 
-### Adding New Tests
-
-1. Create test file in appropriate directory
-2. Register in `flake-modules/tests.nix`
-3. Run locally to verify
-4. Update documentation if needed
-
-### Test Guidelines
-
-- Keep tests fast and deterministic
-- Mock external dependencies
-- Use descriptive names
-- Add timeout limits
-- Document what's being tested
-- Clean up resources
-
-### Review Checklist
-
-- [ ] Test passes locally
-- [ ] No hardcoded paths
-- [ ] Appropriate timeout set
-- [ ] Clear failure messages
-- [ ] Documentation updated
-- [ ] No sensitive data
-
-## CI/CD Integration
-
-Tests are designed to run in CI pipelines:
-
-```yaml
-# GitHub Actions example
-- name: Run tests
-  run: nix run '.#apps.x86_64-linux.test-all'
+```bash
+nix log /nix/store/...-vm-test-vm-boot-minimal
 ```
 
-See `docs/ci-cd-integration.md` for detailed CI setup.
+### Interactive VM debugging
 
-## Performance
+In your test script:
 
-### Execution Times
-- Unit tests: <1 second each
-- Module tests: ~1 second each
-- Integration tests: 2-5 minutes each
-- Full suite: ~10 minutes
+```python
+machine.shell_interact()  # Drop to interactive shell
+```
 
-### Resource Usage
-- Unit tests: <100MB RAM
-- Integration tests: 1-2GB RAM per VM
-- Disk: ~1GB for test artifacts
+### Common failures
 
-### Optimization Tips
-- Run tests in parallel where possible
-- Use `--dry-run` for quick checks
-- Cache Nix store between runs
-- Skip integration tests during development
+**"KVM not available"** -- Check `/dev/kvm` permissions:
+```bash
+sudo modprobe kvm-intel  # or kvm-amd
+sudo usermod -a -G kvm $USER
+# Re-login for group change to take effect
+```
 
-## Future Improvements
+**VM test timeout** -- Increase memory or check for boot loops:
+```nix
+mkVmTest {
+  memory = 2048;  # increase from default 1024
+  # ...
+};
+```
 
-### Planned
-- [ ] Performance benchmarks
-- [ ] Stress testing suite
-- [ ] Security audit tests
-- [ ] Coverage reporting
-
-### Ideas
-- Mutation testing
-- Property-based testing
-- Chaos engineering tests
-- Cross-platform testing
-
-## Related Documentation
-
-- [Test Coverage Report](../docs/test-coverage-report.md)
-- [Test Execution Guide](../docs/test-execution-guide.md)
-- [Test Results Analysis](../docs/test-results-analysis.md)
-- [CI/CD Integration](../docs/ci-cd-integration.md)
-
-## Support
-
-For test-related issues:
-1. Check troubleshooting section above
-2. Review test output carefully
-3. Check test source code
-4. Search existing issues
-5. Ask in NixOS community
-
----
-*Test Suite Version: 1.0 | Framework: NixOS Testing | Last Updated: 2025-09-15*
+**"Existing file would be clobbered"** (HM tests) -- Use `lib.mkForce` to
+override conflicting options, or set `targets.genericLinux.enable = false`
+for NixOS-integrated HM tests.
