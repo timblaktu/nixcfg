@@ -406,8 +406,18 @@
           touch $out
         '';
 
-        # === BUILD TESTS ===
-        # We can't do actual dry-run builds in sandbox, so we just ensure configurations evaluate
+        # === PACKAGE BUILD TESTS (T1) ===
+        # Referencing packages in checks forces nix flake check to build them.
+        # These verify that all custom packages build successfully.
+        build-marker-pdf = self'.packages.marker-pdf;
+        build-markitdown = self'.packages.markitdown;
+        build-tomd = self'.packages.tomd;
+        build-nixvim-anywhere = self'.packages.nixvim-anywhere;
+        build-docling = self'.packages.docling;
+        build-termux-claude-scripts = self'.packages.termux-claude-scripts;
+
+        # === BUILD EVALUATION TESTS ===
+        # NixOS toplevel derivation eval tests (force evaluation without full build)
         build-thinky-nixos-dryrun = pkgs.runCommand "build-thinky-nixos-dryrun"
           {
             meta = {
