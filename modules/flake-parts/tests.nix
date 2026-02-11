@@ -22,6 +22,26 @@
           touch $out
         '';
 
+      # Helper function to create Home Manager evaluation tests
+      mkHmEvalTest = name: configName:
+        pkgs.runCommand "eval-hm-${name}"
+          {
+            meta = {
+              description = "Evaluation test for ${configName} HM configuration";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            # Force evaluation of the HM configuration by referencing it
+            inherit (self.homeConfigurations.${configName}.config.home) homeDirectory;
+            username = self.homeConfigurations.${configName}.config.home.username;
+          } ''
+          echo "Testing ${configName} HM evaluation..."
+          echo "Home directory: $homeDirectory"
+          echo "Username: $username"
+          echo "OK"
+          touch $out
+        '';
+
       # Helper function to create module integration tests
       mkModuleTest = { name, description, hostName, attributes, checks }:
         pkgs.runCommand name
@@ -42,6 +62,7 @@
       # Configuration snapshot baseline for validation
       snapshotBaseline = {
         "thinky-nixos" = { stateVersion = "24.11"; };
+        "pa161878-nixos" = { stateVersion = "24.11"; };
         "potato" = { stateVersion = "24.11"; };
         "nixos-wsl-minimal" = { stateVersion = "24.11"; };
         "mbp" = { stateVersion = "24.11"; };
@@ -126,10 +147,20 @@
           '';
 
         # === CONFIGURATION EVALUATION TESTS ===
+        # NixOS configuration eval tests
         eval-thinky-nixos = mkEvalTest "thinky-nixos" "thinky-nixos";
+        eval-pa161878-nixos = mkEvalTest "pa161878-nixos" "pa161878-nixos";
         eval-potato = mkEvalTest "potato" "potato";
         eval-nixos-wsl-minimal = mkEvalTest "nixos-wsl-minimal" "nixos-wsl-minimal";
         eval-mbp = mkEvalTest "mbp" "mbp";
+
+        # Home Manager configuration eval tests (x86_64-linux only)
+        # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
+        eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "tim@thinky-nixos";
+        eval-hm-pa161878-nixos = mkHmEvalTest "pa161878-nixos" "tim@pa161878-nixos";
+        eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "tim@thinky-ubuntu";
+        eval-hm-mbp = mkHmEvalTest "mbp" "tim@mbp";
+        eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "tim@nixvim-minimal";
 
         # === MODULE INTEGRATION TESTS ===
         module-base-integration = mkModuleTest {
@@ -220,6 +251,7 @@
             };
             # Pre-evaluate all configurations to ensure they're valid
             thinkyVersion = self.nixosConfigurations.thinky-nixos.config.system.stateVersion;
+            pa161878Version = self.nixosConfigurations.pa161878-nixos.config.system.stateVersion;
             potatoVersion = self.nixosConfigurations.potato.config.system.stateVersion;
             wslVersion = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
             mbpVersion = self.nixosConfigurations.mbp.config.system.stateVersion;
@@ -232,6 +264,7 @@
             expected="${snapshotBaseline.${host}.stateVersion}"
             case "${host}" in
               thinky-nixos) actual="$thinkyVersion" ;;
+              pa161878-nixos) actual="$pa161878Version" ;;
               potato) actual="$potatoVersion" ;;
               nixos-wsl-minimal) actual="$wslVersion" ;;
               mbp) actual="$mbpVersion" ;;
