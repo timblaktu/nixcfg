@@ -274,29 +274,29 @@
           # Create glab config file (token provided via GITLAB_TOKEN env var)
           home.activation.glabConfig = mkIf cfg.cli.enable
             (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
-              mkdir -p "$HOME/.config/glab-cli"
-              CONFIG_FILE="$HOME/.config/glab-cli/config.yml"
+                    mkdir -p "$HOME/.config/glab-cli"
+                    CONFIG_FILE="$HOME/.config/glab-cli/config.yml"
 
-              # Remove symlink if it exists
-              if [ -L "$CONFIG_FILE" ]; then
-                rm -f "$CONFIG_FILE"
-              fi
+                    # Remove symlink if it exists
+                    if [ -L "$CONFIG_FILE" ]; then
+                      rm -f "$CONFIG_FILE"
+                    fi
 
-              # Create config WITHOUT token field
-              cat > "$CONFIG_FILE" <<EOF
-        # GitLab CLI configuration
-        # Token provided via GITLAB_TOKEN environment variable at runtime
-        host: ${cfg.host}
-        hosts:
-          ${cfg.host}:
-            git_protocol: ${cfg.protocol}
-            api_protocol: https
-        display_hyperlinks: true
-        glamour_style: dark
-        editor: ${config.home.sessionVariables.EDITOR or "vim"}
-        EOF
-              chmod 600 "$CONFIG_FILE"
-              $DRY_RUN_CMD echo "GitLab CLI configured for ${cfg.host} (token via env var)"
+                    # Create config WITHOUT token field
+                    cat > "$CONFIG_FILE" <<EOF
+              # GitLab CLI configuration
+              # Token provided via GITLAB_TOKEN environment variable at runtime
+              host: ${cfg.host}
+              hosts:
+                ${cfg.host}:
+                  git_protocol: ${cfg.protocol}
+                  api_protocol: https
+              display_hyperlinks: true
+              glamour_style: dark
+              editor: ${config.home.sessionVariables.EDITOR or "vim"}
+              EOF
+                    chmod 600 "$CONFIG_FILE"
+                    $DRY_RUN_CMD echo "GitLab CLI configured for ${cfg.host} (token via env var)"
             '');
 
           # Bitwarden mode: informational activation check

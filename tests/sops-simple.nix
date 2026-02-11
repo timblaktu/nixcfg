@@ -1,7 +1,8 @@
 # Simple SOPS-NiX Test
 { pkgs, lib }:
 
-pkgs.runCommand "test-sops-simple" {
+pkgs.runCommand "test-sops-simple"
+{
   buildInputs = with pkgs; [ sops age ];
 } ''
   set -x  # Enable debugging

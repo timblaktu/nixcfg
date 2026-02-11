@@ -163,7 +163,7 @@ in
     # Claude Code configuration (using lib presets + work account)
     programs.claude-code = inputs.self.lib.claudeCode.baseConfig // {
       accounts = inputs.self.lib.claudeCode.personalAccounts
-             // inputs.self.lib.claudeCode.workAccount;
+        // inputs.self.lib.claudeCode.workAccount;
       statusline = inputs.self.lib.claudeCode.defaultStatusline;
       mcpServers = inputs.self.lib.claudeCode.defaultMcpServers;
       subAgents.custom = inputs.self.lib.claudeCode.defaultSubAgents;
@@ -172,9 +172,9 @@ in
     # OpenCode configuration (using lib presets + work account)
     programs.opencode = inputs.self.lib.openCode.baseConfig // {
       accounts = inputs.self.lib.openCode.personalAccounts
-             // inputs.self.lib.openCode.workAccount;
+        // inputs.self.lib.openCode.workAccount;
       provider = inputs.self.lib.openCode.baseConfig.provider
-              // inputs.self.lib.openCode.workProvider;
+        // inputs.self.lib.openCode.workProvider;
       mcpServers = inputs.self.lib.openCode.defaultMcpServers;
       commands = inputs.self.lib.openCode.defaultCommands;
     };

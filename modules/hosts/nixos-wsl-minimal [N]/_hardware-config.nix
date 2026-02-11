@@ -7,7 +7,7 @@
 
   # WSL2 kernel is provided by Windows
   boot.loader.grub.enable = false;
-  
+
   # WSL2 handles its own networking
   networking.useDHCP = false;
 
@@ -16,10 +16,10 @@
     device = "/dev/disk/by-label/nixos";
     fsType = "ext4";
   };
-  
+
   # WSL2 memory is dynamic
   swapDevices = [ ];
-  
+
   # Platform
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
 }

@@ -2,7 +2,7 @@
 let
   # Reference the default user from the wslCommon configuration
   defaultUser = config.wsl.defaultUser;
-  
+
   driveConfigs = [
     { name = "timblaktu"; letter = "X"; }
     { name = "timandclaudiablack"; letter = "Y"; }

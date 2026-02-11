@@ -17,10 +17,10 @@
   # Boot settings
   boot.loader.grub.enable = false;
   boot.loader.generic-extlinux-compatible.enable = true;
-  
+
   # CPU configuration
   nixpkgs.hostPlatform = lib.mkDefault "aarch64-linux";
-  
+
   # This is a minimal placeholder configuration.
   # On the actual device, you should generate a proper configuration with:
   # nixos-generate-config --root /mnt

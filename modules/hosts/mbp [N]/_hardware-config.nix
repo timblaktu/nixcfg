@@ -1,10 +1,9 @@
 # MacBook Pro specific hardware configuration
-{
-  config,
-  lib,
-  pkgs,
-  modulesPath,
-  ...
+{ config
+, lib
+, pkgs
+, modulesPath
+, ...
 }: {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
@@ -12,10 +11,10 @@
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
-  boot.initrd.availableKernelModules = ["ohci_pci" "ehci_pci" "ahci" "firewire_ohci" "usb_storage" "usbhid" "sd_mod" "sr_mod"];
-  boot.initrd.kernelModules = [];
-  boot.kernelModules = ["kvm-intel" "wl"];
-  boot.blacklistedKernelModules = ["nouveau"];
+  boot.initrd.availableKernelModules = [ "ohci_pci" "ehci_pci" "ahci" "firewire_ohci" "usb_storage" "usbhid" "sd_mod" "sr_mod" ];
+  boot.initrd.kernelModules = [ ];
+  boot.kernelModules = [ "kvm-intel" "wl" ];
+  boot.blacklistedKernelModules = [ "nouveau" ];
   boot.consoleLogLevel = 7;
 
   fileSystems."/" = {
@@ -26,10 +25,10 @@
   fileSystems."/boot" = {
     device = "/dev/disk/by-uuid/C309-7801";
     fsType = "vfat";
-    options = ["fmask=0022" "dmask=0022"];
+    options = [ "fmask=0022" "dmask=0022" ];
   };
 
-  swapDevices = [];
+  swapDevices = [ ];
 
   # Enables DHCP on each ethernet and wireless interface
   networking.useDHCP = lib.mkDefault true;

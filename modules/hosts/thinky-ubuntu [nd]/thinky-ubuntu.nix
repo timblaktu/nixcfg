@@ -50,7 +50,7 @@ in
 
     # WSL home settings (dendritic module)
     wsl-home-settings = {
-      distroName = "ubuntu";  # vanilla Ubuntu, not NixOS
+      distroName = "ubuntu"; # vanilla Ubuntu, not NixOS
     };
 
     # ESP-IDF development environment (WSL host)

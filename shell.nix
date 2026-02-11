@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ pkgs ? import <nixpkgs> { } }:
 
 pkgs.mkShell {
   buildInputs = with pkgs; [
@@ -8,9 +8,9 @@ pkgs.mkShell {
     gitleaks
     nixpkgs-fmt
     nil
-    sops 
+    sops
   ];
-  
+
   shellHook = ''
     echo "🔒 NixCfg development environment loaded (shell.nix)"
     if [ -d .git ] && [ ! -f .git/hooks/pre-commit ]; then
