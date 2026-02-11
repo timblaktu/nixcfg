@@ -88,7 +88,23 @@
           inherit pkgs lib;
         };
 
-        # === VM tests from mkVmTest will be added in tasks 3.2, 3.3, 4.x ===
+        # === VM BOOT SMOKE TESTS (T2) ===
+
+        # Boot smoke test: does a minimal NixOS config boot to multi-user.target?
+        # Uses system-minimal module (base layer: nix settings, GC, store optimization)
+        vm-boot-minimal = mkVmTest {
+          name = "boot-minimal";
+          description = "Minimal NixOS boots to multi-user.target";
+          modules = [ self.modules.nixos.system-minimal ];
+          testScript = ''
+            machine.start()
+            machine.wait_for_unit("multi-user.target")
+            machine.succeed("nix --version")
+          '';
+        };
+
+        # === VM system type tests will be added in task 3.3 ===
+        # === VM feature tests will be added in tasks 4.x ===
       };
     };
 }
