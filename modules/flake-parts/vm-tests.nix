@@ -103,7 +103,75 @@
           '';
         };
 
-        # === VM system type tests will be added in task 3.3 ===
+        # === VM SYSTEM TYPE LAYER TESTS (T2) ===
+        # Each test verifies that a system type layer adds its expected functionality
+        # on top of the layers it imports.
+
+        # system-default: imports minimal, adds user creation, locale, timezone, zsh
+        vm-system-type-default = mkVmTest {
+          name = "system-type-default";
+          description = "system-default layer: user creation, locale, timezone";
+          modules = [ self.modules.nixos.system-default ];
+          extraConfig = {
+            systemDefault.userName = "tim";
+          };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # User creation
+            machine.succeed("id tim")
+            machine.succeed("id -nG tim | grep -q wheel")
+
+            # Locale
+            machine.succeed("locale | grep -q en_US")
+
+            # Timezone
+            machine.succeed("timedatectl show -p Timezone --value | grep -q America/Los_Angeles")
+
+            # Shell is zsh
+            machine.succeed("getent passwd tim | grep -q zsh")
+
+            # System packages from default layer
+            machine.succeed("which wget")
+            machine.succeed("which curl")
+            machine.succeed("which htop")
+
+            # Inherits minimal: nix works with flakes
+            machine.succeed("nix --version")
+          '';
+        };
+
+        # system-cli: imports default, adds SSH daemon, dev tools, network tools
+        vm-system-type-cli = mkVmTest {
+          name = "system-type-cli";
+          description = "system-cli layer: SSH daemon, dev tools, network tools";
+          modules = [ self.modules.nixos.system-cli ];
+          extraConfig = {
+            systemDefault.userName = "tim";
+          };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # SSH daemon running (cli layer enables sshd by default)
+            machine.wait_for_unit("sshd.service")
+
+            # Inherits default: user exists
+            machine.succeed("id tim")
+
+            # Dev tools present (enableDevTools = true by default)
+            machine.succeed("git --version")
+            machine.succeed("which jq")
+            machine.succeed("which fzf")
+            machine.succeed("which eza")
+
+            # Neovim as default editor
+            machine.succeed("which nvim")
+
+            # Tmux available
+            machine.succeed("which tmux")
+          '';
+        };
+
         # === VM feature tests will be added in tasks 4.x ===
       };
     };
