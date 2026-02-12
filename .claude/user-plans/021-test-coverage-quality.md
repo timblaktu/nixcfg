@@ -81,7 +81,7 @@ Identical to Plan 020:
 | 3.3 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
 | 3.4 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
 | 3.5 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
-| 4.1 | Composition | `TASK:PENDING` | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
+| 4.1 | Composition | `TASK:IN_PROGRESS` | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
 | 4.2 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` | HM module isolation VM tests |
 | 4.3 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-composition-*' -L` | HM module composition pair tests |
 | 4.4 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-full-cli-stack' -L` | Full CLI stack integration test |

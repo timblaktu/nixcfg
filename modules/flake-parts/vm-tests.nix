@@ -70,6 +70,78 @@
           inherit testScript;
         };
 
+      # mkHmModuleTest: Create a VM test for Home Manager module(s)
+      #
+      # Provides system-default + home-manager NixOS integration + home-minimal
+      # automatically. Caller only specifies which HM modules to test and what
+      # to assert in the testScript.
+      #
+      # Arguments:
+      #   name             - Test name (prefixed with "vm-" in checks)
+      #   description      - Human-readable description (default: "HM module test: ${name}")
+      #   hmModules        - List of HM modules to import (from self.modules.homeManager.*)
+      #   testScript       - Python test script (nixos-test-driver syntax)
+      #   memory           - VM memory in MB (default: 2048)
+      #   extraNixosModules - Additional NixOS modules to import (default: [])
+      #   hmConfig         - Additional attrs merged into the HM user config (default: {})
+      #
+      # Example:
+      #   mkHmModuleTest {
+      #     name = "yazi";
+      #     hmModules = [ self.modules.homeManager.yazi ];
+      #     testScript = ''
+      #       machine.wait_for_unit("multi-user.target")
+      #       machine.wait_for_unit("home-manager-tim.service")
+      #       machine.succeed("su - tim -c 'yazi --version'")
+      #     '';
+      #   }
+      mkHmModuleTest =
+        { name
+        , description ? "HM module test: ${name}"
+        , hmModules
+        , testScript
+        , memory ? 2048
+        , extraNixosModules ? [ ]
+        , hmConfig ? { }
+        ,
+        }:
+        pkgs.testers.nixosTest {
+          name = "vm-${name}";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.system-default
+              inputs.home-manager.nixosModules.home-manager
+            ] ++ extraNixosModules;
+
+            systemDefault.userName = "tim";
+            systemDefault.wheelNeedsPassword = false;
+            networking.firewall.enable = false;
+            virtualisation.memorySize = memory;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.tim = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                ] ++ hmModules;
+
+                homeMinimal = {
+                  username = "tim";
+                  homeDirectory = "/home/tim";
+                };
+
+                # NixOS-integrated HM doesn't need genericLinux
+                targets.genericLinux.enable = lib.mkForce false;
+              } // hmConfig;
+            };
+          };
+
+          inherit testScript;
+        };
+
     in
     {
       checks = {
@@ -1213,6 +1285,34 @@
               machine.succeed("getent passwd tim | grep -q zsh")
             '';
           };
+
+        # Yazi VM test: validates the yazi file manager module using mkHmModuleTest.
+        # Tests binary presence, config generation, and basic functionality.
+        # Also serves as proof-of-concept for the mkHmModuleTest helper.
+        # Plan 021 Task 4.1 (helper validation)
+        vm-yazi = mkHmModuleTest {
+          name = "yazi";
+          hmModules = [ self.modules.homeManager.yazi ];
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-tim.service")
+
+            # --- Test 1: yazi binary present ---
+            machine.succeed("su - tim -c 'yazi --version'")
+
+            # --- Test 2: Yazi config directory exists ---
+            machine.succeed("test -d /home/tim/.config/yazi")
+
+            # --- Test 3: Yazi config file generated ---
+            machine.succeed("test -f /home/tim/.config/yazi/yazi.toml")
+
+            # --- Test 4: Custom init.lua deployed ---
+            machine.succeed("test -f /home/tim/.config/yazi/init.lua")
+
+            # --- Test 5: Keymap config generated ---
+            machine.succeed("test -f /home/tim/.config/yazi/keymap.toml")
+          '';
+        };
 
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
