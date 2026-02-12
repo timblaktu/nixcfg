@@ -82,7 +82,7 @@ Identical to Plan 020:
 | 3.4 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
 | 3.5 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
 | 4.1 | Composition | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
-| 4.2 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` | HM module isolation VM tests |
+| 4.2 | Composition | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` | HM module isolation VM tests |
 | 4.3 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-composition-*' -L` | HM module composition pair tests |
 | 4.4 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-full-cli-stack' -L` | Full CLI stack integration test |
 | 5.1 | Documentation | `TASK:PENDING` | N/A (docs) | Update tests/README.md and coverage matrix |
@@ -684,6 +684,32 @@ For each VM-safe HM module, create a test that activates it **alone** with only 
 - HM activation succeeds for each
 - Module's primary binary/config file exists
 - `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` passes
+
+**Implementation** (2026-02-11): All 8 modules pass isolation VM tests. Test runs in ~64s.
+
+**What was done**:
+1. Created `vm-hm-module-isolation` test in `modules/flake-parts/vm-tests.nix`
+2. Used local `mkIsolationNode` helper to create 8 nodes, each with system-default + HM (home-minimal + ONE module)
+3. All 8 nodes boot in parallel via `start_all()`
+4. 1024 MB per node (sufficient for single-module isolation)
+
+**Modules requiring explicit enable**:
+- `development-tools`: `developmentTools.enable = true` (mkEnableOption defaults to false)
+- `podman`: `programs.podman-tools.enable = true` (mkEnableOption defaults to false)
+
+**Assertions per module** (2 each: primary binary/command + key config file):
+- tmux: `tmux -V` + `~/.config/tmux/tmux.conf`
+- neovim: `nvim --version` (NVIM) + `~/.config/nvim/` dir
+- git: `git config user.name` (Tim Black) + `~/.config/git/config`
+- shell: `zsh -c "echo ZSH_OK"` + `~/.zshrc`
+- development-tools: `bat --version` + `rustc --version`
+- yazi: `yazi --version` + `~/.config/yazi/yazi.toml`
+- shell-utils: `which mytree` + `~/.local/lib/general-utils.bash`
+- podman: `which podman-tui` + `~/.config/containers/registries.conf`
+
+**Key finding**: All 8 modules activate cleanly in total isolation, confirming the eval-time
+finding from Task 2.2 also holds at runtime. No module has hidden runtime dependencies on
+other HM modules.
 
 ---
 
