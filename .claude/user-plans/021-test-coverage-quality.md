@@ -76,7 +76,7 @@ Identical to Plan 020:
 | 2.1 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | Create module isolation eval test helpers |
 | 2.2 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | HM module standalone eval tests (20 modules) |
 | 2.3 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
-| 3.1 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
+| 3.1 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
 | 3.2 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
 | 3.3 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
 | 3.4 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
@@ -354,6 +354,27 @@ vm-neovim = # Uses system-default + HM (home-minimal + neovim)
 **Memory**: 2048 MB (neovim + treesitter parsers need RAM)
 
 **Definition of Done**: `nix build '.#checks.x86_64-linux.vm-neovim' -L` passes with all assertions.
+
+**Implementation** (2026-02-11): All 9 assertions pass. Test runs in ~78s.
+
+**What was done**:
+1. Added `vm-neovim` test to `modules/flake-parts/vm-tests.nix`
+2. Uses NixOS-integrated HM with `system-default` + `home-minimal` + `neovim`
+3. 2048 MB memory allocation
+
+**Test assertions verified**:
+1. `nvim --version` returns NVIM header
+2. `nvim --headless -c 'qa!'` exits cleanly (config loads without errors)
+3. `~/.config/nvim/` directory exists
+4. Treesitter parsers found in runtime path (parser/*.so files)
+5. Key plugins loadable: telescope, nvim-treesitter, gitsigns
+6. lspconfig module loadable (LSP infrastructure present)
+7. `$EDITOR` set to nvim
+8. `vi`/`vim` aliases resolve to NVIM (verified via `--version` output)
+9. `checkhealth` runs and generates `/tmp/nvim-health.txt`
+
+**Notable**: `viAlias`/`vimAlias` creates wrapper scripts — `which vi` path doesn't contain "nvim",
+but `vi --version` correctly shows NVIM. Test adjusted to check version output instead of path.
 
 ---
 
