@@ -1652,6 +1652,153 @@
             '';
           };
 
+        # Full CLI Stack Integration Test: activates system-cli + ALL 9 VM-safe
+        # HM modules together in a single VM. This is the ultimate integration test
+        # for the dendritic pattern — proving all modules compose without conflicts
+        # in a near-production configuration.
+        # Plan 021 Task 4.4
+        vm-full-cli-stack = pkgs.testers.nixosTest {
+          name = "vm-full-cli-stack";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.system-cli
+              inputs.home-manager.nixosModules.home-manager
+            ];
+
+            systemDefault.userName = "tim";
+            systemDefault.wheelNeedsPassword = false;
+            networking.firewall.enable = false;
+            virtualisation.memorySize = 3072;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.tim = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.shell
+                  self.modules.homeManager.git
+                  self.modules.homeManager.tmux
+                  self.modules.homeManager.neovim
+                  self.modules.homeManager.development-tools
+                  self.modules.homeManager.yazi
+                  self.modules.homeManager.shell-utils
+                  self.modules.homeManager.podman
+                ];
+
+                homeMinimal = {
+                  username = "tim";
+                  homeDirectory = "/home/tim";
+                };
+
+                developmentTools.enable = true;
+                programs.podman-tools.enable = true;
+
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-tim.service")
+
+            # === Section 1: All primary binaries present ===
+
+            machine.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
+            machine.succeed("su - tim -c 'tmux -V' | grep -q tmux")
+            machine.succeed("su - tim -c 'git --version'")
+            machine.succeed("su - tim -c 'yazi --version'")
+            machine.succeed("su - tim -c 'bat --version'")
+            machine.succeed("su - tim -c 'which podman-tui'")
+            machine.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+
+            # === Section 2: NixOS system-cli layer verified ===
+
+            machine.wait_for_unit("sshd.service")
+            machine.succeed("which jq")
+            machine.succeed("which fzf")
+            machine.succeed("which eza")
+
+            # === Section 3: Cross-module integration — git + delta ===
+
+            machine.succeed("su - tim -c 'git config core.pager' | grep -q delta")
+            machine.succeed("su - tim -c 'delta --version'")
+
+            # === Section 4: Cross-module integration — zsh + git aliases ===
+
+            machine.succeed("su - tim -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+            machine.succeed("su - tim -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
+
+            # === Section 5: Cross-module integration — neovim + tmux navigator ===
+
+            tmux_conf = machine.succeed("cat /home/tim/.config/tmux/tmux.conf")
+            assert "is_vim" in tmux_conf, "vim-tmux-navigator detection missing"
+
+            # === Section 6: Cross-module integration — git + neovim merge tool ===
+
+            machine.succeed("su - tim -c 'git config merge.tool' | grep -q smart-nvimdiff")
+            machine.succeed("su - tim -c 'git config diff.tool' | grep -q nvimdiff")
+
+            # === Section 7: Neovim starts cleanly with full config ===
+
+            machine.succeed("su - tim -c 'nvim --headless -c \"qa!\"'")
+
+            # === Section 8: Tmux server lifecycle ===
+
+            machine.succeed("su - tim -c 'tmux new-session -d -s full-stack-test'")
+            machine.succeed("su - tim -c 'tmux list-sessions' | grep -q full-stack-test")
+            machine.succeed("su - tim -c 'tmux kill-server'")
+
+            # === Section 9: User environment coherent ===
+
+            # EDITOR set to nvim
+            machine.succeed("su - tim -c 'echo $EDITOR' | grep -q nvim")
+
+            # Shell is zsh
+            machine.succeed("getent passwd tim | grep -q zsh")
+
+            # User is in wheel group (from system-default via system-cli)
+            machine.succeed("id -nG tim | grep -q wheel")
+
+            # Nix trusts the user
+            machine.succeed("nix show-config | grep trusted-users | grep -q tim")
+
+            # === Section 10: Module-specific configs all generated ===
+
+            machine.succeed("test -f /home/tim/.config/tmux/tmux.conf")
+            machine.succeed("test -f /home/tim/.config/git/config")
+            machine.succeed("test -d /home/tim/.config/nvim")
+            machine.succeed("test -f /home/tim/.config/yazi/yazi.toml")
+            machine.succeed("test -f /home/tim/.zshrc")
+            machine.succeed("test -f /home/tim/.config/containers/registries.conf")
+
+            # === Section 11: Development toolchains present ===
+
+            machine.succeed("su - tim -c 'rustc --version'")
+            machine.succeed("su - tim -c 'node --version'")
+            machine.succeed("su - tim -c 'python3 --version'")
+            machine.succeed("su - tim -c 'go version'")
+
+            # === Section 12: Shell utility scripts from shell-utils ===
+
+            machine.succeed("su - tim -c 'which mytree'")
+            machine.succeed("test -f /home/tim/.local/lib/general-utils.bash")
+
+            # === Section 13: Functional integration — init repo with aliases in zsh ===
+
+            machine.succeed(
+                "su - tim -c '"
+                "cd /tmp && mkdir full-stack-repo && cd full-stack-repo && git init"
+                " && echo hello > file.txt && git add file.txt"
+                " && git commit -m \"test commit\""
+                " && git log --oneline | grep -q \"test commit\"'"
+            )
+          '';
+        };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
