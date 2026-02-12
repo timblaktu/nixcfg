@@ -789,6 +789,133 @@
           '';
         };
 
+        # Git advanced VM test: validates git configuration beyond basic --version.
+        # Tests delta integration, aliases, gitignore, LFS, merge tools, credential
+        # helper, and bundled utility scripts. Uses NixOS-integrated HM with system-default.
+        # Plan 021 Task 3.3
+        vm-git-advanced = pkgs.testers.nixosTest {
+          name = "vm-git-advanced";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.system-default
+              inputs.home-manager.nixosModules.home-manager
+            ];
+
+            systemDefault.userName = "tim";
+            systemDefault.wheelNeedsPassword = false;
+
+            networking.firewall.enable = false;
+            virtualisation.memorySize = 2048;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.tim = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.git
+                ];
+
+                homeMinimal = {
+                  username = "tim";
+                  homeDirectory = "/home/tim";
+                };
+
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-tim.service")
+
+            # --- Test 1: Delta configured as git pager ---
+            machine.succeed("su - tim -c 'git config core.pager' | grep -q delta")
+
+            # --- Test 2: Delta side-by-side mode configured ---
+            machine.succeed("su - tim -c 'git config delta.side-by-side' | grep -q true")
+            machine.succeed("su - tim -c 'git config delta.line-numbers' | grep -q true")
+
+            # --- Test 3: Git aliases defined ---
+            machine.succeed("su - tim -c 'git config alias.st' | grep -q status")
+            machine.succeed("su - tim -c 'git config alias.ci' | grep -q commit")
+            machine.succeed("su - tim -c 'git config alias.co' | grep -q checkout")
+            machine.succeed("su - tim -c 'git config alias.br' | grep -q branch")
+            machine.succeed("su - tim -c 'git config alias.lg' | grep -q 'log --graph'")
+            machine.succeed("su - tim -c 'git config alias.unstage' | grep -q 'reset HEAD'")
+            machine.succeed("su - tim -c 'git config alias.last' | grep -q 'log -1 HEAD'")
+
+            # --- Test 4: Global gitignore patterns configured ---
+            # HM writes ignores to ~/.config/git/ignore (XDG default, no core.excludesFile needed)
+            ignores = machine.succeed("cat /home/tim/.config/git/ignore")
+            assert ".DS_Store" in ignores, f".DS_Store not in gitignore: {ignores}"
+            assert "*.swp" in ignores, f"*.swp not in gitignore: {ignores}"
+            assert "result" in ignores, f"result not in gitignore: {ignores}"
+            assert ".direnv/" in ignores, f".direnv/ not in gitignore: {ignores}"
+
+            # --- Test 5: Git LFS available ---
+            machine.succeed("su - tim -c 'git lfs version'")
+            # LFS filter configured
+            machine.succeed("su - tim -c 'git config filter.lfs.clean' | grep -q 'git-lfs clean'")
+
+            # --- Test 6: Pre-commit hook infrastructure ---
+            # HM generates hooks in the config directory
+            hooks_path = machine.succeed("su - tim -c 'git config core.hooksPath'").strip()
+            machine.succeed(f"test -d {hooks_path}")
+            machine.succeed(f"test -x {hooks_path}/pre-commit")
+
+            # --- Test 7: Merge tool configured (smart-nvimdiff) ---
+            machine.succeed("su - tim -c 'git config merge.tool' | grep -q smart-nvimdiff")
+            machine.succeed(
+                "su - tim -c 'git config mergetool.smart-nvimdiff.cmd'"
+                " | grep -q smart-nvimdiff"
+            )
+
+            # --- Test 8: Diff tool configured (nvimdiff) ---
+            machine.succeed("su - tim -c 'git config diff.tool' | grep -q nvimdiff")
+            machine.succeed("su - tim -c 'git config diff.algorithm' | grep -q histogram")
+
+            # --- Test 9: Credential helper configured ---
+            machine.succeed("su - tim -c 'git config credential.helper' | grep -q 'cache --timeout=3600'")
+
+            # --- Test 10: Init default branch is main ---
+            machine.succeed("su - tim -c 'git config init.defaultBranch' | grep -q main")
+
+            # --- Test 11: smart-nvimdiff script in PATH ---
+            machine.succeed("su - tim -c 'which smart-nvimdiff'")
+
+            # --- Test 12: Bundled utility scripts in PATH ---
+            machine.succeed("su - tim -c 'which syncfork'")
+            machine.succeed("su - tim -c 'which git-functions'")
+
+            # --- Test 13: Security and workflow tools available ---
+            machine.succeed("su - tim -c 'which gitleaks'")
+            machine.succeed("su - tim -c 'which lazygit'")
+            machine.succeed("su - tim -c 'which git-crypt'")
+            machine.succeed("su - tim -c 'which pre-commit'")
+
+            # --- Test 14: Delta binary is present and working ---
+            machine.succeed("su - tim -c 'delta --version'")
+
+            # --- Test 15: Merge conflict style is diff3 ---
+            machine.succeed("su - tim -c 'git config merge.conflictstyle' | grep -q diff3")
+
+            # --- Test 16: Functional test — init repo, commit, verify delta in log ---
+            machine.succeed(
+                "su - tim -c '"
+                "cd /tmp && mkdir test-repo && cd test-repo && git init"
+                " && echo hello > file.txt && git add file.txt"
+                " && git commit -m \"initial commit\""
+                " && echo world >> file.txt && git add file.txt"
+                " && git commit -m \"second commit\""
+                " && git log --oneline | grep -q \"second commit\"'"
+            )
+          '';
+        };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
