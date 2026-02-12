@@ -343,7 +343,7 @@ let
       dirContents = builtins.readDir sourceDir;
       files = filterAttrs (name: type: type == "regular" && !(builtins.elem name excludeNames)) dirContents;
       fileEntries = mapAttrs'
-        (name: value: {
+        (name: _value: {
           name = "${targetDir}/${name}";
           value = {
             source = sourceDir + "/${name}";
@@ -359,7 +359,7 @@ let
     let
       binDir = filesDir + "/bin";
       binContents = builtins.readDir binDir;
-      allFiles = filterAttrs (name: type: type == "regular") binContents;
+      allFiles = filterAttrs (_name: type: type == "regular") binContents;
       executableFiles = filterAttrs (name: _: !(builtins.elem name validatedScriptNames)) allFiles;
     in
     mapAttrs'
@@ -378,7 +378,7 @@ let
     let
       binDir = filesDir + "/bin";
       binContents = builtins.readDir binDir;
-      allFiles = filterAttrs (name: type: type == "regular") binContents;
+      allFiles = filterAttrs (_name: type: type == "regular") binContents;
       executableFiles = filterAttrs (name: _: !(builtins.elem name validatedScriptNames)) allFiles;
     in
     mapAttrs'

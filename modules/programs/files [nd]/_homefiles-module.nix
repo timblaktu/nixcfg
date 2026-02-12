@@ -240,7 +240,7 @@ let
 
     This preserves the comprehensive testing capabilities from validated-scripts.
   */
-  mkEnhancedTests = name: content: userTests:
+  mkEnhancedTests = name: content: _userTests:
     let
       # Content-based tests using proper runCommand format
       contentTests =
@@ -343,18 +343,6 @@ let
     in
     lib;
 
-  # Collect all tests from files for nix flake check integration
-  collectAllTests = files:
-    let
-      allTests = concatMap
-        (file:
-          let tests = file.passthru.enhancedTests or { };
-          in mapAttrsToList (testName: testDrv: testDrv) tests
-        )
-        (attrValues files);
-    in
-    listToAttrs (imap0 (i: test: nameValuePair "file-test-${toString i}" test) allTests);
-
 in
 {
   options.homeFiles = {
@@ -439,7 +427,7 @@ in
       ) //
       # Static files
       (mapAttrs'
-        (name: fileConfig: nameValuePair fileConfig.target {
+        (_name: fileConfig: nameValuePair fileConfig.target {
           inherit (fileConfig) source;
           inherit (fileConfig) executable;
         })
