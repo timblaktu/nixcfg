@@ -78,7 +78,7 @@ Identical to Plan 020:
 | 2.3 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
 | 3.1 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
 | 3.2 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
-| 3.3 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
+| 3.3 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
 | 3.4 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
 | 3.5 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
 | 4.1 | Composition | `TASK:PENDING` | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
@@ -440,6 +440,34 @@ Deeper git testing beyond `vm-hm-activation`'s basic `git --version`:
 **Memory**: 2048 MB
 
 **Definition of Done**: `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` passes.
+
+**Implementation** (2026-02-11): All 16 assertions pass. Test runs in ~24s.
+
+**What was done**:
+1. Added `vm-git-advanced` test to `modules/flake-parts/vm-tests.nix`
+2. Uses NixOS-integrated HM with `system-default` + `home-minimal` + `git`
+3. 2048 MB memory allocation
+
+**Test assertions verified**:
+1. Delta configured as git pager (`core.pager` → delta)
+2. Delta side-by-side and line-numbers modes enabled
+3. All 7 git aliases (`st`, `ci`, `co`, `br`, `lg`, `unstage`, `last`)
+4. Global gitignore patterns in `~/.config/git/ignore` (`.DS_Store`, `*.swp`, `result`, `.direnv/`)
+5. Git LFS available and filter configured
+6. Pre-commit hook infrastructure (hooksPath directory + executable pre-commit script)
+7. Merge tool set to `smart-nvimdiff` with custom cmd
+8. Diff tool set to `nvimdiff` with histogram algorithm
+9. Credential helper `cache --timeout=3600`
+10. Init default branch is `main`
+11. `smart-nvimdiff` script in PATH
+12. `syncfork` and `git-functions` utility scripts in PATH
+13. Security/workflow tools: `gitleaks`, `lazygit`, `git-crypt`, `pre-commit`
+14. Delta binary present and working
+15. Merge conflict style set to `diff3`
+16. Functional test: init repo, two commits, verify log
+
+**Notable**: HM writes gitignore patterns to `~/.config/git/ignore` (XDG default) rather than
+setting `core.excludesFile`. Git reads this location automatically per XDG spec.
 
 ---
 
