@@ -79,7 +79,7 @@ Identical to Plan 020:
 | 3.1 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
 | 3.2 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
 | 3.3 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
-| 3.4 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
+| 3.4 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
 | 3.5 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
 | 4.1 | Composition | `TASK:PENDING` | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
 | 4.2 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` | HM module isolation VM tests |
@@ -491,6 +491,30 @@ Test the development-tools module with default flag settings:
 **Memory**: 2048 MB (many packages)
 
 **Definition of Done**: `nix build '.#checks.x86_64-linux.vm-development-tools' -L` passes.
+
+**Implementation** (2026-02-11): All 33 assertions pass. Test runs in ~65s.
+
+**What was done**:
+1. Added `vm-development-tools` test to `modules/flake-parts/vm-tests.nix`
+2. Uses NixOS-integrated HM with `system-default` + `home-minimal` + `development-tools`
+3. 2048 MB memory allocation
+
+**Test assertions verified** (33 total, 8 categories):
+1-5. Enhanced CLI tools: bat, eza, delta, btm, mlr (all `--version` or `which`)
+6-10. Rust toolchain: rustc, cargo, rust-analyzer, rustfmt, clippy-driver
+11-13. Node.js: node, npm, yarn
+14-16. Python: python3, pip module, IPython import
+17-18. Go: `go version`, Go directories created (src/pkg/bin)
+19-22. C/C++ tools: cmake, gcc, make, pkg-config
+23-27. Build utilities: flex, bison, gperf, doxygen, entr
+28-32. Claude dev utilities: claudevloop, restart_claude, mkclaude_desktop_config, claude-models, pdf2md
+33. Negative test: kubectl NOT present (enableKubernetes=false by default)
+
+**Notable**: Session variables (GOPATH, PATH additions) cannot be reliably tested in NixOS-integrated
+HM without the shell module — HM writes `hm-session-vars.sh` but the file location varies in
+integrated mode and the login shell doesn't source it without the shell module's zsh configuration.
+These are verified by eval tests instead. Binaries work because HM puts them in the user's profile
+PATH regardless of session variable sourcing.
 
 ---
 
