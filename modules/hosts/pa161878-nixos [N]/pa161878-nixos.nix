@@ -43,6 +43,8 @@ in
       sshAuthorizedKeys = [ sshKeys.timblaktu ];
       # Enable CUDA support for GPU passthrough
       cuda.enable = true;
+      # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
+      binfmt.enable = true;
     };
 
     # User environment managed by standalone Home Manager

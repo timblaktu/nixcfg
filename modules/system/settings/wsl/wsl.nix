@@ -291,6 +291,27 @@
             };
           };
 
+          # === Cross-Architecture Build Support (binfmt + QEMU) ===
+          binfmt = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Enable QEMU user-mode emulation via binfmt_misc for cross-architecture builds";
+            };
+
+            emulatedSystems = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ "aarch64-linux" ];
+              description = "Systems to emulate (passed to boot.binfmt.emulatedSystems)";
+            };
+
+            matchCredentials = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Enable C flag for setuid binaries in chroot/container postinst scripts";
+            };
+          };
+
           # === Tarball Security Checks ===
           tarballChecks = {
             enable = lib.mkOption {
@@ -440,6 +461,18 @@
                 - WSL CUDA stubs are at: ${cfg.cuda.libraryPath}
               ''
             ];
+          })
+
+          # === Cross-Architecture Build Support (binfmt + QEMU) ===
+          (lib.mkIf cfg.binfmt.enable {
+            boot.binfmt.emulatedSystems = cfg.binfmt.emulatedSystems;
+            boot.binfmt.preferStaticEmulators = true;
+            boot.binfmt.registrations = lib.listToAttrs (
+              map (system: {
+                name = system;
+                value.matchCredentials = cfg.binfmt.matchCredentials;
+              }) cfg.binfmt.emulatedSystems
+            );
           })
 
           # === Tarball Security Checks ===

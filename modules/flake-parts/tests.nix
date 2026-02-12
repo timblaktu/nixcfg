@@ -270,6 +270,40 @@
           '';
         };
 
+        # === BINFMT CROSS-ARCHITECTURE INTEGRATION TEST ===
+        module-binfmt-integration = mkModuleTest {
+          name = "module-binfmt-integration";
+          description = "Testing binfmt cross-architecture build support";
+          hostName = "pa161878-nixos";
+          attributes = {
+            binfmtEnabled = if self.nixosConfigurations.pa161878-nixos.config.wsl-settings.binfmt.enable then "1" else "0";
+            emulatedSystems = builtins.concatStringsSep " " self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.emulatedSystems;
+            preferStatic = if self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.preferStaticEmulators then "1" else "0";
+            hasAarch64Reg = if (builtins.hasAttr "aarch64-linux" self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.registrations) then "1" else "0";
+            matchCreds = if self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.registrations.aarch64-linux.matchCredentials then "1" else "0";
+            extraPlatforms = builtins.concatStringsSep " " self.nixosConfigurations.pa161878-nixos.config.nix.settings.extra-platforms;
+          };
+          checks = ''
+            [[ "$binfmtEnabled" == "1" ]] || (echo "FAIL: binfmt not enabled" && exit 1)
+            echo "binfmt enabled: $binfmtEnabled"
+
+            echo "$emulatedSystems" | grep -q "aarch64-linux" || (echo "FAIL: aarch64-linux not in emulatedSystems" && exit 1)
+            echo "emulated systems: $emulatedSystems"
+
+            [[ "$preferStatic" == "1" ]] || (echo "FAIL: preferStaticEmulators not true" && exit 1)
+            echo "prefer static emulators: $preferStatic"
+
+            [[ "$hasAarch64Reg" == "1" ]] || (echo "FAIL: aarch64-linux registration missing" && exit 1)
+            echo "aarch64-linux registration exists: $hasAarch64Reg"
+
+            [[ "$matchCreds" == "1" ]] || (echo "FAIL: matchCredentials (C flag) not set" && exit 1)
+            echo "matchCredentials (C flag): $matchCreds"
+
+            echo "$extraPlatforms" | grep -q "aarch64-linux" || (echo "FAIL: aarch64-linux not in extra-platforms" && exit 1)
+            echo "nix extra-platforms: $extraPlatforms"
+          '';
+        };
+
         # === CRITICAL SERVICE TESTS ===
         ssh-service-configured = pkgs.runCommand "ssh-service-configured"
           {
