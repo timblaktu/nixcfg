@@ -106,6 +106,28 @@ nix build '.#checks.x86_64-linux.TEST_NAME'  # Specific test
 
 **Task Reset**: Update status to PENDING, delete artifacts, add reset note with date/reason
 
+**CRITICAL: Plan files must be self-contained** (learned 2026-02-12):
+- Save the FULL plan to disk, not a summary. New sessions cannot access previous session's chat input.
+- Every specification needed to execute remaining tasks MUST be in the plan file: file structure trees, rename tables, exclusion lists, documentation content specs, task DoDs.
+- The continuation prompt should reference ONLY files on disk, never "the original plan input from the previous session".
+- Test: Could a new Claude session execute the next task using ONLY the plan file + CLAUDE.md + codebase? If not, the plan file is incomplete.
+
+**Continuation Prompt Template**:
+```
+Continue Plan NNN: [Plan Name].
+
+Current status: Tasks 0-N complete. Tasks N+1-M pending.
+Last completed: [what was just finished]
+Next task: Task N+1: [task description]
+
+Persistent files:
+- Plan: .claude/user-plans/NNN-name.md (FULL specs for all remaining tasks)
+- Project memory: CLAUDE.md
+- [any other relevant files]
+```
+- NEVER reference "previous session context" or "original plan input"
+- The plan file path IS the context -- new session reads it to get all specs
+
 ## Universal Technical Learnings
 
 ### WSL Process Termination
