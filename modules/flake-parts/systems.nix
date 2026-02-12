@@ -10,20 +10,23 @@
 #   { config, ... }:
 #   {
 #     # Access all supported systems
-#     systems = config.flake.meta.systems.all;
+#     systems = config.dendriticMeta.systems.all;
 #
 #     # Access Linux-only systems
-#     linuxSystems = config.flake.meta.systems.linux;
+#     linuxSystems = config.dendriticMeta.systems.linux;
 #
 #     # Check if building for darwin
 #     perSystem = { system, ... }:
-#       lib.optionalAttrs (builtins.elem system config.flake.meta.systems.darwin) {
+#       lib.optionalAttrs (builtins.elem system config.dendriticMeta.systems.darwin) {
 #         # Darwin-specific outputs
 #       };
 #   }
+#
+# NOTE: These options live under `dendriticMeta` (not `flake.meta`) to avoid
+# creating an unknown flake output. Only `flake.*` options become flake outputs.
 { lib, ... }:
 {
-  options.flake.meta.systems = {
+  options.dendriticMeta.systems = {
     all = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [

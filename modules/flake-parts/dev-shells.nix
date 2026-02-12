@@ -96,7 +96,11 @@
 
       # Draw.io SVG rendering - re-renders SVG body from embedded mxGraphModel XML
       # Using external flake: github:timblaktu/drawio-svg-sync
-      drawio-svg-sync = inputs.drawio-svg-sync.apps.${system}.default;
+      drawio-svg-sync = inputs.drawio-svg-sync.apps.${system}.default // {
+        meta = (inputs.drawio-svg-sync.apps.${system}.default.meta or { }) // {
+          description = "Re-render .drawio.svg files from embedded mxGraphModel XML";
+        };
+      };
     };
   };
 }

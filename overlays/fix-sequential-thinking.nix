@@ -7,7 +7,7 @@
       # Create a fixed version of sequential-thinking-mcp
       sequential-thinking-mcp-fixed =
         let
-          originalPkg = nixmcp.packages.${pkgs.system}.sequential-thinking-mcp;
+          originalPkg = nixmcp.packages.${pkgs.stdenv.hostPlatform.system}.sequential-thinking-mcp;
         in
         originalPkg.overrideAttrs (oldAttrs: {
           postPatch = (oldAttrs.postPatch or "") + ''
