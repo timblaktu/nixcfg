@@ -83,7 +83,7 @@ Identical to Plan 020:
 | 3.5 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
 | 4.1 | Composition | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
 | 4.2 | Composition | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` | HM module isolation VM tests |
-| 4.3 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-composition-*' -L` | HM module composition pair tests |
+| 4.3 | Composition | `TASK:COMPLETE` 2026-02-12 | `nix build '.#checks.x86_64-linux.vm-hm-composition-pairs' -L` | HM module composition pair tests |
 | 4.4 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-full-cli-stack' -L` | Full CLI stack integration test |
 | 5.1 | Documentation | `TASK:PENDING` | N/A (docs) | Update tests/README.md and coverage matrix |
 
@@ -732,6 +732,45 @@ Test key module pairs that have known integration points:
 - Each pair's integration point verified
 - No option conflicts between paired modules
 - `nix build '.#checks.x86_64-linux.vm-hm-composition-pairs' -L` passes
+
+**Implementation** (2026-02-12): All 4 pairs pass. Test runs in ~77s.
+
+**What was done**:
+1. Created `vm-hm-composition-pairs` test in `modules/flake-parts/vm-tests.nix`
+2. Used local `mkPairNode` helper to create 4 nodes, each with system-default + HM (home-minimal + TWO modules)
+3. All 4 nodes boot in parallel via `start_all()`
+4. 2048 MB per node
+
+**Pair assertions verified**:
+
+- **neovim + tmux** (6 assertions):
+  - Both binaries present (nvim, tmux)
+  - tmux.conf contains `is_vim` detection for vim-tmux-navigator
+  - tmux.conf contains C-h/C-j/C-k/C-l navigator keybindings
+  - Neovim has tmux-navigator plugin in runtimepath
+  - Functional: start tmux session, run nvim inside it, both work together
+
+- **git + neovim** (7 assertions):
+  - Both binaries present
+  - `git config merge.tool` → smart-nvimdiff
+  - `git config mergetool.smart-nvimdiff.cmd` references smart-nvimdiff script
+  - `git config diff.tool` → nvimdiff, difftool cmd → `nvim -d`
+  - smart-nvimdiff script in PATH and callable
+  - Functional: create merge conflict, verify conflict detected
+
+- **git + shell** (6 assertions):
+  - Both git and zsh work
+  - Git aliases (gs, ga, gc, gp, gd) resolve in zsh interactive session
+  - Functional: use git init in zsh via alias, verify gs works
+
+- **shell + tmux** (5 assertions):
+  - Both work independently
+  - $TMUX env var is set inside tmux pane's shell (verified via send-keys + file write)
+  - zsh works inside tmux pane (verified via send-keys + file write)
+  - Shell .zshrc references TMUX variable (tmux detection logic)
+
+**Key technique**: For shell+tmux pane interaction, used `tmux send-keys` + `wait_until_succeeds`
+to write results to temporary files, avoiding timing issues with `capture-pane`.
 
 ---
 
