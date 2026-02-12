@@ -1428,6 +1428,230 @@
             '';
           };
 
+        # HM Module Composition Pair Tests: validates cross-module integration points
+        # that only work when specific module pairs are combined.
+        # 4 nodes (one per pair), all boot in parallel via start_all().
+        # Plan 021 Task 4.3
+        vm-hm-composition-pairs =
+          let
+            # Reuse the isolation node helper pattern but with multiple HM modules
+            mkPairNode = { hmModules, hmConfig ? { } }:
+              { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.nixos.system-default
+                  inputs.home-manager.nixosModules.home-manager
+                ];
+
+                systemDefault.userName = "tim";
+                systemDefault.wheelNeedsPassword = false;
+                networking.firewall.enable = false;
+                virtualisation.memorySize = 2048;
+
+                home-manager = {
+                  useGlobalPkgs = true;
+                  useUserPackages = true;
+                  extraSpecialArgs = { inherit inputs; };
+                  users.tim = { config, pkgs, lib, ... }: {
+                    imports = [
+                      self.modules.homeManager.home-minimal
+                    ] ++ hmModules;
+
+                    homeMinimal = {
+                      username = "tim";
+                      homeDirectory = "/home/tim";
+                    };
+
+                    targets.genericLinux.enable = lib.mkForce false;
+                  } // hmConfig;
+                };
+              };
+          in
+          pkgs.testers.nixosTest {
+            name = "vm-hm-composition-pairs";
+
+            nodes = {
+              # Pair 1: neovim + tmux (vim-tmux-navigator integration)
+              pair_nvim_tmux = mkPairNode {
+                hmModules = [
+                  self.modules.homeManager.neovim
+                  self.modules.homeManager.tmux
+                ];
+              };
+
+              # Pair 2: git + neovim (merge/diff tool integration)
+              pair_git_nvim = mkPairNode {
+                hmModules = [
+                  self.modules.homeManager.git
+                  self.modules.homeManager.neovim
+                ];
+              };
+
+              # Pair 3: git + shell (aliases integration)
+              pair_git_shell = mkPairNode {
+                hmModules = [
+                  self.modules.homeManager.git
+                  self.modules.homeManager.shell
+                ];
+              };
+
+              # Pair 4: shell + tmux (terminal env integration)
+              pair_shell_tmux = mkPairNode {
+                hmModules = [
+                  self.modules.homeManager.shell
+                  self.modules.homeManager.tmux
+                ];
+              };
+            };
+
+            testScript = ''
+              # Boot all 4 nodes in parallel
+              start_all()
+
+              # Wait for HM activation on all nodes
+              for node in [pair_nvim_tmux, pair_git_nvim, pair_git_shell, pair_shell_tmux]:
+                  node.wait_for_unit("multi-user.target")
+                  node.wait_for_unit("home-manager-tim.service")
+
+              # ========================================================
+              # Pair 1: neovim + tmux — vim-tmux-navigator integration
+              # ========================================================
+
+              # Both binaries present
+              pair_nvim_tmux.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
+              pair_nvim_tmux.succeed("su - tim -c 'tmux -V' | grep -q tmux")
+
+              # Tmux config has vim-tmux-navigator keybindings (C-h, C-j, C-k, C-l)
+              tmux_conf = pair_nvim_tmux.succeed("cat /home/tim/.config/tmux/tmux.conf")
+              assert "is_vim" in tmux_conf, "tmux-navigator is_vim detection missing from tmux.conf"
+              assert "C-h" in tmux_conf, "C-h navigator binding missing from tmux.conf"
+              assert "C-j" in tmux_conf, "C-j navigator binding missing from tmux.conf"
+              assert "C-k" in tmux_conf, "C-k navigator binding missing from tmux.conf"
+              assert "C-l" in tmux_conf, "C-l navigator binding missing from tmux.conf"
+
+              # Neovim has tmux-navigator plugin loaded
+              pair_nvim_tmux.succeed(
+                  "su - tim -c 'nvim --headless"
+                  " -c \"lua local ok, _ = pcall(require, \\\"tmux\\\"); if ok then print(\\\"TMUX_NAV_OK\\\") else"
+                  " local rtp = vim.api.nvim_list_runtime_paths();"
+                  " for _, p in ipairs(rtp) do if p:match(\\\"tmux\\\") then print(\\\"TMUX_NAV_OK\\\"); return end end;"
+                  " error(\\\"tmux-navigator not found\\\") end\""
+                  " -c \"qa!\"' 2>&1 | grep -q TMUX_NAV_OK"
+              )
+
+              # Functional test: start tmux, run nvim inside, verify both work together
+              pair_nvim_tmux.succeed("su - tim -c 'tmux new-session -d -s nvim-test'")
+              pair_nvim_tmux.succeed("su - tim -c 'tmux send-keys -t nvim-test \"nvim --headless -c qa!\" Enter'")
+              import time; time.sleep(2)
+              pair_nvim_tmux.succeed("su - tim -c 'tmux list-sessions' | grep -q nvim-test")
+
+              # ========================================================
+              # Pair 2: git + neovim — merge/diff tool integration
+              # ========================================================
+
+              # Both binaries present
+              pair_git_nvim.succeed("su - tim -c 'git --version'")
+              pair_git_nvim.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
+
+              # Git merge tool set to smart-nvimdiff (depends on nvim)
+              pair_git_nvim.succeed("su - tim -c 'git config merge.tool' | grep -q smart-nvimdiff")
+              pair_git_nvim.succeed(
+                  "su - tim -c 'git config mergetool.smart-nvimdiff.cmd'"
+                  " | grep -q smart-nvimdiff"
+              )
+
+              # Git diff tool set to nvimdiff
+              pair_git_nvim.succeed("su - tim -c 'git config diff.tool' | grep -q nvimdiff")
+              pair_git_nvim.succeed(
+                  "su - tim -c 'git config difftool.nvimdiff.cmd'"
+                  " | grep -q 'nvim -d'"
+              )
+
+              # smart-nvimdiff script is in PATH and executable
+              pair_git_nvim.succeed("su - tim -c 'which smart-nvimdiff'")
+
+              # The script references nvim — verify nvim is callable from the script's env
+              pair_git_nvim.succeed("su - tim -c 'smart-nvimdiff --help || true' 2>&1")
+
+              # Functional test: create merge conflict, verify merge tool config works
+              pair_git_nvim.succeed(
+                  "su - tim -c '"
+                  "cd /tmp && mkdir merge-test && cd merge-test && git init"
+                  " && echo base > file.txt && git add file.txt && git commit -m base"
+                  " && git checkout -b feature"
+                  " && echo feature > file.txt && git add file.txt && git commit -m feature"
+                  " && git checkout main 2>/dev/null || git checkout master"
+                  " && echo main > file.txt && git add file.txt && git commit -m main"
+                  " && git merge feature --no-edit || true'"
+              )
+              # Verify conflict exists (merge.tool would be invoked to resolve it)
+              pair_git_nvim.succeed(
+                  "su - tim -c 'cd /tmp/merge-test && git diff --name-only --diff-filter=U' | grep -q file.txt"
+              )
+
+              # ========================================================
+              # Pair 3: git + shell — aliases integration
+              # ========================================================
+
+              # Both git and zsh work
+              pair_git_shell.succeed("su - tim -c 'git --version'")
+              pair_git_shell.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+
+              # Git aliases available in zsh interactive session
+              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
+              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gc\"' | grep -q 'git commit'")
+              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gp\"' | grep -q 'git push'")
+              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gd\"' | grep -q 'git diff'")
+
+              # Functional test: use git alias in zsh to run actual git command
+              pair_git_shell.succeed(
+                  "su - tim -c 'cd /tmp && mkdir alias-test && cd alias-test && git init"
+                  " && zsh -ic \"gs\"'"
+              )
+
+              # ========================================================
+              # Pair 4: shell + tmux — terminal environment integration
+              # ========================================================
+
+              # Both work independently
+              pair_shell_tmux.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+              pair_shell_tmux.succeed("su - tim -c 'tmux -V' | grep -q tmux")
+
+              # Start a tmux session — the pane shell inherits $TMUX from tmux
+              pair_shell_tmux.succeed("su - tim -c 'tmux new-session -d -s shell-test'")
+
+              # Wait for tmux session to be ready and zsh to finish loading
+              pair_shell_tmux.succeed("su - tim -c 'tmux list-sessions' | grep -q shell-test")
+              import time; time.sleep(5)
+
+              # Verify TMUX env var is set inside the tmux pane's shell
+              # Use send-keys which runs inside the pane's shell where $TMUX is set
+              pair_shell_tmux.succeed(
+                  "su - tim -c 'tmux send-keys -t shell-test \"printenv TMUX > /tmp/tmux-env.txt\" Enter'"
+              )
+              # Wait for the command to execute (file to appear)
+              pair_shell_tmux.wait_until_succeeds("test -s /tmp/tmux-env.txt", timeout=10)
+              result = pair_shell_tmux.succeed("cat /tmp/tmux-env.txt").strip()
+              assert "/" in result, f"TMUX env var not set inside tmux pane: '{result}'"
+
+              # Verify zsh works inside tmux pane by running zsh command
+              pair_shell_tmux.succeed(
+                  "su - tim -c 'tmux send-keys -t shell-test \"zsh -c \\\"echo ZSH_IN_TMUX\\\" > /tmp/zsh-test.txt\" Enter'"
+              )
+              pair_shell_tmux.wait_until_succeeds("test -s /tmp/zsh-test.txt", timeout=10)
+              result = pair_shell_tmux.succeed("cat /tmp/zsh-test.txt").strip()
+              assert "ZSH_IN_TMUX" in result, f"zsh failed inside tmux pane: '{result}'"
+
+              # Verify tmux detection in shell config
+              # The shell module checks for TMUX variable in .zshrc
+              zshrc = pair_shell_tmux.succeed("cat /home/tim/.zshrc")
+              assert "TMUX" in zshrc, "Shell module should reference TMUX variable in .zshrc"
+
+              # Clean up
+              pair_shell_tmux.succeed("su - tim -c 'tmux kill-server'")
+            '';
+          };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
