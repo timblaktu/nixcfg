@@ -74,7 +74,7 @@ Identical to Plan 020:
 | 1.2 | Linting | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.lint-statix'` | Add statix Nix linting check |
 | 1.3 | Linting | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.lint-deadnix'` | Add deadnix dead code check |
 | 2.1 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | Create module isolation eval test helpers |
-| 2.2 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | HM module standalone eval tests (20 modules) |
+| 2.2 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | HM module standalone eval tests (20 modules) |
 | 2.3 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
 | 3.1 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
 | 3.2 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
@@ -262,6 +262,28 @@ If a module fails to evaluate standalone, **document the dependency** rather tha
 - `eval-hm-module-*` check exists for each of 20 HM modules
 - All pass during `nix flake check --no-build`
 - Any modules requiring extra imports are documented
+
+**Implementation** (2026-02-11): All 20 modules pass standalone eval with zero extra imports.
+
+**What was done**:
+1. Added 19 new `eval-hm-module-*` checks (shell already existed from Task 2.1)
+2. Each uses `mkHmModuleEvalTest` with only `home-minimal` + the module under test
+3. All 20 pass `nix flake check --no-build`
+
+**Key finding**: Every HM module evaluates standalone with only `home-minimal` as a dependency.
+No module required `extraImports` or `extraConfig`. This confirms the dendritic pattern's
+module independence promise — each module is truly self-contained at evaluation time.
+
+**Modules with `disabledModules`** (claude-code, opencode): Both work fine because
+`disabledModules` is placed inside the deferredModule content, which HM's evalModules processes
+correctly even in isolation.
+
+**Modules with relative imports** (opencode imports `../../lib/rbw.nix`, `../../lib/shared/`):
+These resolve at Nix parse time (file-system relative paths), not at module eval time,
+so they work regardless of the HM evaluation context.
+
+**Modules with conditional config** (git-auth-helpers uses `config.gitAuth.github or { enable = false; }`):
+Gracefully handle missing options via `or` fallback patterns, keeping them independent.
 
 ---
 
