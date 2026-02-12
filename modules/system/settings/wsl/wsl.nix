@@ -312,6 +312,23 @@
             };
           };
 
+          # === Systemd User Session Fix ===
+          # WSL overlays /run/user with its own tmpfs, causing ownership issues
+          # that break systemd user sessions, dbus, and XDG_RUNTIME_DIR
+          systemdUserSession = {
+            fixRuntimeDir = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Fix /run/user ownership for WSL systemd user sessions at boot";
+            };
+
+            enableLinger = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Enable user linger for persistent systemd user session";
+            };
+          };
+
           # === Tarball Security Checks ===
           tarballChecks = {
             enable = lib.mkOption {
@@ -468,11 +485,58 @@
             boot.binfmt.emulatedSystems = cfg.binfmt.emulatedSystems;
             boot.binfmt.preferStaticEmulators = true;
             boot.binfmt.registrations = lib.listToAttrs (
-              map (system: {
-                name = system;
-                value.matchCredentials = cfg.binfmt.matchCredentials;
-              }) cfg.binfmt.emulatedSystems
+              map
+                (system: {
+                  name = system;
+                  value.matchCredentials = cfg.binfmt.matchCredentials;
+                })
+                cfg.binfmt.emulatedSystems
             );
+          })
+
+          # === Systemd User Session Fix ===
+          # WSL overlays /run/user with root-owned tmpfs, breaking systemd user sessions.
+          # See: microsoft/WSL#13143, nix-community/NixOS-WSL#346
+          (lib.mkIf cfg.systemdUserSession.fixRuntimeDir (
+            let
+              uid = toString config.users.users.${cfg.defaultUser}.uid;
+            in
+            {
+              # Oneshot service to fix /run/user/<UID> ownership after WSL overlay
+              systemd.services."fix-wsl-user-runtime-dir" = {
+                description = "Fix /run/user/${uid} ownership for WSL systemd user session";
+                documentation = [ "man:systemd-user-runtime-dir(8)" ];
+                before = [ "user@${uid}.service" ];
+                after = [ "user-runtime-dir@${uid}.service" ];
+                wants = [ "user-runtime-dir@${uid}.service" ];
+                wantedBy = [ "multi-user.target" ];
+                unitConfig = {
+                  StopWhenUnneeded = true;
+                };
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  ExecStart = pkgs.writeShellScript "fix-wsl-user-runtime-dir" ''
+                    RUNDIR="/run/user/${uid}"
+                    if [ -d "$RUNDIR" ] && [ "$(${pkgs.coreutils}/bin/stat -c %u "$RUNDIR")" != "${uid}" ]; then
+                      ${pkgs.coreutils}/bin/chown ${uid} "$RUNDIR"
+                      ${pkgs.coreutils}/bin/chmod 0700 "$RUNDIR"
+                      echo "Fixed ownership of $RUNDIR for ${cfg.defaultUser} (UID ${uid})"
+                    fi
+                  '';
+                };
+              };
+
+              # Tmpfiles safety net
+              systemd.tmpfiles.rules = [
+                "d /run/user/${uid} 0700 ${cfg.defaultUser} users -"
+              ];
+            }
+          ))
+
+          # User linger for persistent user session
+          (lib.mkIf cfg.systemdUserSession.enableLinger {
+            users.users.${cfg.defaultUser}.linger = true;
           })
 
           # === Tarball Security Checks ===
