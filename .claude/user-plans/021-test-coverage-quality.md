@@ -75,7 +75,7 @@ Identical to Plan 020:
 | 1.3 | Linting | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.lint-deadnix'` | Add deadnix dead code check |
 | 2.1 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | Create module isolation eval test helpers |
 | 2.2 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | HM module standalone eval tests (20 modules) |
-| 2.3 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
+| 2.3 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
 | 3.1 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
 | 3.2 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
 | 3.3 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
@@ -306,6 +306,27 @@ Create `eval-nixos-module-*` for the 6 NixOS modules:
 - `eval-nixos-module-*` check exists for each of 6 NixOS modules
 - All pass during `nix flake check --no-build`
 - Any modules requiring specific config (e.g., wsl needs NixOS-WSL input) are documented
+
+**Implementation** (2026-02-11): All 6 NixOS modules pass standalone eval.
+
+**What was done**:
+1. Added 5 new `eval-nixos-module-*` checks (system-minimal already existed from Task 2.1)
+2. Each uses `mkNixosModuleEvalTest` with module-specific `extraConfig`
+
+**Dependency findings**:
+- `system-default`, `system-cli`, `system-desktop`: Require `systemDefault.userName = "testuser"` to
+  satisfy the `userName != ""` assertion. The system type hierarchy chains imports, so only the
+  `systemDefault` option needs to be set even for higher layers.
+- `secrets-management`: Requires `inputs.sops-nix.nixosModules.sops` imported via `extraConfig.imports`
+  because the module sets `sops.age.*` options that only exist when sops-nix is loaded. This is by
+  design — hosts import sops-nix at the host level.
+- `wsl`: Requires `wsl-settings.hostname`, `wsl-settings.defaultUser`, and `wsl-settings.sshPort`
+  to satisfy assertions. Despite importing `inputs.nixos-wsl.nixosModules.default` and
+  `inputs.sops-nix.nixosModules.sops` in its body, these are resolved at flake-parts closure time
+  — no `specialArgs` needed in `lib.nixosSystem`.
+
+**Key insight**: The dendritic pattern's closure-captured `inputs` means deferred modules carry
+their own import resolution. `mkNixosModuleEvalTest` doesn't need `specialArgs` for any module.
 
 ---
 
