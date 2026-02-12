@@ -916,6 +916,181 @@
           '';
         };
 
+        # Development tools VM test: validates the development-tools HM module with
+        # default flag settings. Tests language toolchains (Rust, Node, Python, Go, C/C++),
+        # build utilities, enhanced CLI tools, and Claude dev utilities.
+        # Uses NixOS-integrated HM with system-default.
+        # Plan 021 Task 3.4
+        vm-development-tools = pkgs.testers.nixosTest {
+          name = "vm-development-tools";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.system-default
+              inputs.home-manager.nixosModules.home-manager
+            ];
+
+            systemDefault.userName = "tim";
+            systemDefault.wheelNeedsPassword = false;
+
+            networking.firewall.enable = false;
+            virtualisation.memorySize = 2048;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.tim = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.development-tools
+                ];
+
+                homeMinimal = {
+                  username = "tim";
+                  homeDirectory = "/home/tim";
+                };
+
+                developmentTools.enable = true;
+                # All feature flags default to true except enableKubernetes and enablePyenv
+
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-tim.service")
+
+            # === Enhanced CLI Tools (enableEnhancedCli = true by default) ===
+
+            # --- Test 1: bat (better cat) ---
+            machine.succeed("su - tim -c 'bat --version'")
+
+            # --- Test 2: eza (modern ls) ---
+            machine.succeed("su - tim -c 'eza --version'")
+
+            # --- Test 3: delta (better diff) ---
+            machine.succeed("su - tim -c 'delta --version'")
+
+            # --- Test 4: bottom (system monitor) ---
+            machine.succeed("su - tim -c 'btm --version'")
+
+            # --- Test 5: miller (CSV/JSON processor) ---
+            machine.succeed("su - tim -c 'mlr --version'")
+
+            # === Rust Toolchain (enableRust = true by default) ===
+
+            # --- Test 6: rustc ---
+            machine.succeed("su - tim -c 'rustc --version'")
+
+            # --- Test 7: cargo ---
+            machine.succeed("su - tim -c 'cargo --version'")
+
+            # --- Test 8: rust-analyzer ---
+            machine.succeed("su - tim -c 'which rust-analyzer'")
+
+            # --- Test 9: rustfmt ---
+            machine.succeed("su - tim -c 'rustfmt --version'")
+
+            # --- Test 10: clippy ---
+            machine.succeed("su - tim -c 'which clippy-driver'")
+
+            # === Node.js Ecosystem (enableNode = true by default) ===
+
+            # --- Test 11: node ---
+            machine.succeed("su - tim -c 'node --version'")
+
+            # --- Test 12: npm ---
+            machine.succeed("su - tim -c 'npm --version'")
+
+            # --- Test 13: yarn ---
+            machine.succeed("su - tim -c 'yarn --version'")
+
+            # === Python (enablePython = true by default) ===
+
+            # --- Test 14: python3 ---
+            machine.succeed("su - tim -c 'python3 --version'")
+
+            # --- Test 15: pip available as module ---
+            machine.succeed("su - tim -c 'python3 -m pip --version'")
+
+            # --- Test 16: ipython available ---
+            machine.succeed("su - tim -c 'python3 -c \"import IPython\"'")
+
+            # === Go (enableGo = true by default) ===
+
+            # --- Test 17: go binary ---
+            machine.succeed("su - tim -c 'go version'")
+
+            # --- Test 18: Go directories created by activation ---
+            machine.succeed("test -d /home/tim/go/src")
+            machine.succeed("test -d /home/tim/go/pkg")
+            machine.succeed("test -d /home/tim/go/bin")
+
+            # === C/C++ Build Tools (enableCppTools = true by default) ===
+
+            # --- Test 19: cmake ---
+            machine.succeed("su - tim -c 'cmake --version'")
+
+            # --- Test 20: gcc ---
+            machine.succeed("su - tim -c 'gcc --version'")
+
+            # --- Test 21: make ---
+            machine.succeed("su - tim -c 'make --version'")
+
+            # --- Test 22: pkg-config ---
+            machine.succeed("su - tim -c 'pkg-config --version'")
+
+            # === Build Utilities (enableBuildUtils = true by default) ===
+
+            # --- Test 23: flex ---
+            machine.succeed("su - tim -c 'flex --version'")
+
+            # --- Test 24: bison ---
+            machine.succeed("su - tim -c 'bison --version'")
+
+            # --- Test 25: gperf ---
+            machine.succeed("su - tim -c 'gperf --version'")
+
+            # --- Test 26: doxygen ---
+            machine.succeed("su - tim -c 'doxygen --version'")
+
+            # --- Test 27: entr ---
+            machine.succeed("su - tim -c 'which entr'")
+
+            # === Claude Development Utilities (enableClaudeUtils = true by default) ===
+
+            # --- Test 28: claudevloop script ---
+            machine.succeed("su - tim -c 'which claudevloop'")
+
+            # --- Test 29: restart_claude script ---
+            machine.succeed("su - tim -c 'which restart_claude'")
+
+            # --- Test 30: mkclaude_desktop_config script ---
+            machine.succeed("su - tim -c 'which mkclaude_desktop_config'")
+
+            # --- Test 31: claude-models script ---
+            machine.succeed("su - tim -c 'which claude-models'")
+
+            # --- Test 32: pdf2md script ---
+            machine.succeed("su - tim -c 'which pdf2md'")
+
+            # === Kubernetes NOT installed by default (enableKubernetes = false) ===
+
+            # --- Test 33: kubectl should NOT be present ---
+            machine.fail("su - tim -c 'which kubectl'")
+
+            # === Session Paths ===
+
+            # Note: Session variables (GOPATH, PATH additions for .cargo/bin, go/bin,
+            # .local/bin) are configured via home.sessionVariables/sessionPath and verified
+            # by eval-hm-module-development-tools. Runtime PATH sourcing depends on the
+            # shell module, which is tested separately in vm-shell-env.
+          '';
+        };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
