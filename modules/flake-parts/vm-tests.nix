@@ -1314,6 +1314,120 @@
           '';
         };
 
+        # HM Module Isolation VM Tests: proves each VM-safe HM module activates
+        # successfully with ONLY home-minimal — no other HM modules.
+        # Each module gets its own VM node; all boot in parallel via start_all().
+        # This validates the dendritic pattern's promise of truly independent modules.
+        # Plan 021 Task 4.2
+        vm-hm-module-isolation =
+          let
+            # Helper: create a NixOS node that activates a single HM module in isolation
+            mkIsolationNode = { hmModules, hmConfig ? { } }:
+              { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.nixos.system-default
+                  inputs.home-manager.nixosModules.home-manager
+                ];
+
+                systemDefault.userName = "tim";
+                systemDefault.wheelNeedsPassword = false;
+                networking.firewall.enable = false;
+                virtualisation.memorySize = 1024;
+
+                home-manager = {
+                  useGlobalPkgs = true;
+                  useUserPackages = true;
+                  extraSpecialArgs = { inherit inputs; };
+                  users.tim = { config, pkgs, lib, ... }: {
+                    imports = [
+                      self.modules.homeManager.home-minimal
+                    ] ++ hmModules;
+
+                    homeMinimal = {
+                      username = "tim";
+                      homeDirectory = "/home/tim";
+                    };
+
+                    targets.genericLinux.enable = lib.mkForce false;
+                  } // hmConfig;
+                };
+              };
+          in
+          pkgs.testers.nixosTest {
+            name = "vm-hm-module-isolation";
+
+            nodes = {
+              node_tmux = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.tmux ];
+              };
+              node_neovim = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.neovim ];
+              };
+              node_git = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.git ];
+              };
+              node_shell = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.shell ];
+              };
+              node_devtools = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.development-tools ];
+                hmConfig = { developmentTools.enable = true; };
+              };
+              node_yazi = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.yazi ];
+              };
+              node_shellutils = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.shell-utils ];
+              };
+              node_podman = mkIsolationNode {
+                hmModules = [ self.modules.homeManager.podman ];
+                hmConfig = { programs.podman-tools.enable = true; };
+              };
+            };
+
+            testScript = ''
+              # Boot all 8 nodes in parallel
+              start_all()
+
+              # Wait for HM activation on all nodes
+              for node in [node_tmux, node_neovim, node_git, node_shell, node_devtools, node_yazi, node_shellutils, node_podman]:
+                  node.wait_for_unit("multi-user.target")
+                  node.wait_for_unit("home-manager-tim.service")
+
+              # === tmux: binary + config ===
+              node_tmux.succeed("su - tim -c 'tmux -V' | grep -q tmux")
+              node_tmux.succeed("test -f /home/tim/.config/tmux/tmux.conf")
+
+              # === neovim: binary + config dir ===
+              node_neovim.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
+              node_neovim.succeed("test -d /home/tim/.config/nvim")
+
+              # === git: user config + config file ===
+              node_git.succeed("su - tim -c 'git config user.name' | grep -q 'Tim Black'")
+              node_git.succeed("test -f /home/tim/.config/git/config")
+
+              # === shell: zsh works + zshrc generated ===
+              node_shell.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+              node_shell.succeed("test -f /home/tim/.zshrc")
+
+              # === development-tools: enhanced CLI + language toolchain ===
+              node_devtools.succeed("su - tim -c 'bat --version'")
+              node_devtools.succeed("su - tim -c 'rustc --version'")
+
+              # === yazi: binary + config file ===
+              node_yazi.succeed("su - tim -c 'yazi --version'")
+              node_yazi.succeed("test -f /home/tim/.config/yazi/yazi.toml")
+
+              # === shell-utils: representative script + library file ===
+              node_shellutils.succeed("su - tim -c 'which mytree'")
+              node_shellutils.succeed("test -f /home/tim/.local/lib/general-utils.bash")
+
+              # === podman: podman-tui binary + registries config ===
+              node_podman.succeed("su - tim -c 'which podman-tui'")
+              node_podman.succeed("test -f /home/tim/.config/containers/registries.conf")
+            '';
+          };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
