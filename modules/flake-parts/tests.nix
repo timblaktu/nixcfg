@@ -113,7 +113,6 @@
             packageCount = builtins.length homePackages;
 
             # Check unified files module
-            unifiedFiles = hmConfig.homeFiles or { };
             unifiedFilesEnabled = hmConfig.homeFiles.enable or false;
 
           in
@@ -584,7 +583,7 @@
             hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
             opencodeEnabled = hmConfig.programs.opencode-enhanced.enable or false;
             opencodeAccounts = hmConfig.programs.opencode-enhanced.accounts or { };
-            enabledAccounts = lib.filterAttrs (n: a: a.enable or false) opencodeAccounts;
+            enabledAccounts = lib.filterAttrs (_n: a: a.enable or false) opencodeAccounts;
             accountNames = builtins.attrNames enabledAccounts;
             mcpServers = hmConfig.programs.opencode-enhanced._internal.mcpServers or { };
             mcpServerNames = builtins.attrNames mcpServers;
@@ -632,7 +631,6 @@
         opencode-json-syntax =
           let
             hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
-            opencodeEnabled = hmConfig.programs.opencode-enhanced.enable or false;
             # Build a sample config to test JSON generation
             sampleConfig = {
               "$schema" = "https://opencode.ai/config.json";
@@ -777,6 +775,21 @@
           } ''
           cd $src
           statix check .
+          touch $out
+        '';
+
+        lint-deadnix = pkgs.runCommand "lint-deadnix"
+          {
+            meta = {
+              description = "Check for dead code with deadnix";
+              maintainers = [ ];
+              timeout = 120;
+            };
+            nativeBuildInputs = [ pkgs.deadnix ];
+            src = self;
+          } ''
+          cd $src
+          deadnix --no-lambda-pattern-names --no-underscore --fail .
           touch $out
         '';
 

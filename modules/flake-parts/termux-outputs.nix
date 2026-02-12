@@ -79,7 +79,7 @@
         };
 
         # Filter to enabled accounts only
-        enabledAccounts = lib.filterAttrs (n: a: a.enable) accounts;
+        enabledAccounts = lib.filterAttrs (_n: a: a.enable) accounts;
 
         # Generate Termux wrapper for each enabled account
         # Use writeTextFile instead of writeShellScriptBin to preserve Termux shebang
