@@ -80,7 +80,7 @@ Identical to Plan 020:
 | 3.2 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
 | 3.3 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
 | 3.4 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
-| 3.5 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
+| 3.5 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
 | 4.1 | Composition | `TASK:PENDING` | `nix flake check --no-build` | Create mkHmModuleTest composition helper |
 | 4.2 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L` | HM module isolation VM tests |
 | 4.3 | Composition | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-hm-composition-*' -L` | HM module composition pair tests |
@@ -538,6 +538,46 @@ Complete the system type test matrix — `system-desktop` is the only untested l
 **Memory**: 2048 MB (desktop packages are large)
 
 **Definition of Done**: `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` passes.
+
+**Implementation** (2026-02-11): All 18 assertions pass. Test runs in ~29s.
+
+**What was done**:
+1. Fixed 5 latent bugs in `system-desktop` module (prerequisite for VM test):
+   - `mkIf ... ++ mkIf ...` pattern in Bluetooth GUI and XDG portal `extraPortals` — changed to `lib.optionals`
+   - `gnome.gnome-bluetooth` → `gnome-bluetooth` (moved to top-level in nixpkgs)
+   - `nerdfonts.override { fonts = ... }` → `nerd-fonts.*` individual packages (new nixpkgs API)
+   - `noto-fonts-emoji` → `noto-fonts-color-emoji` (renamed in nixpkgs)
+   - `vistafonts` → `vista-fonts` (renamed in nixpkgs)
+2. Updated `nerdFontFamilies` option defaults to new attribute names
+3. Added VM test using `pkgsUnfree` instance (desktop module includes unfree corefonts/vista-fonts)
+
+**Test assertions verified** (18 total):
+1. System boots to multi-user.target
+2. SSH daemon running (inherited from CLI layer)
+3. Dev tools present: git, jq, nvim (inherited from CLI layer)
+4. X server/display infrastructure packages present
+5. GNOME desktop environment packages present (gnome-session share dir)
+6. GDM display manager configured (display-manager.service references gdm)
+7. PipeWire audio configured (pipewire, wireplumber, pipewire-pulse services)
+8. Bluetooth service configured (bluetooth.service, bluetoothctl binary)
+9. CUPS printing configured (cups.service, avahi-daemon for discovery)
+10. Fonts installed (Noto Sans, DejaVu, Liberation, JetBrainsMono Nerd Font, Font Awesome)
+11. Graphics/OpenGL infrastructure present (opengl-driver directory)
+12. Common GUI tools: xdg-open, xclip, wl-copy, grim, slurp
+13. XDG desktop portal configured
+14. dconf enabled (GNOME settings backend)
+15. GNOME excluded packages removed (gnome-tour not present)
+16. User in printer group (lp)
+17. rtkit enabled for real-time audio scheduling
+18. User exists with zsh shell (inherited from default layer)
+
+**Notable**: GDM actually starts a greeter session (`gdm-greeter`) in the VM despite no GPU.
+GNOME session initialization begins (`gnome-session-wayland@gnome-login.target`) but doesn't
+need to complete for our tests — we only verify packages and service declarations.
+
+**Bugs found and fixed**: 5 latent bugs in desktop.nix that weren't caught by eval tests
+because eval only forces `stateVersion`, not deep attribute evaluation of `fonts.packages` or
+`environment.systemPackages`. This validates the plan's rationale for VM tests.
 
 ---
 
