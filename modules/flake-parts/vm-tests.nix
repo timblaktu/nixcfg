@@ -1091,6 +1091,129 @@
           '';
         };
 
+        # Desktop system type VM test: validates the system-desktop layer with
+        # GNOME (default DE), PipeWire audio, Bluetooth, CUPS printing, fonts,
+        # and GPU/graphics configuration. Does NOT start a display server (no GPU
+        # in VM); verifies packages are installed and services are declared.
+        # Inherits system-cli layer (SSH, dev tools).
+        # Plan 021 Task 3.5
+        vm-system-type-desktop =
+          let
+            # Desktop module includes unfree fonts (corefonts, vistafonts).
+            # testers.nixosTest injects its pkgs into nodes, so we need a pkgs
+            # instance with allowUnfree to avoid the "externally created instance"
+            # assertion.
+            pkgsUnfree = import inputs.nixpkgs {
+              inherit system;
+              config.allowUnfree = true;
+            };
+          in
+          pkgsUnfree.testers.nixosTest {
+            name = "vm-system-type-desktop";
+
+            nodes.machine = { config, pkgs, ... }: {
+              imports = [ self.modules.nixos.system-desktop ];
+
+              networking.firewall.enable = false;
+              virtualisation.memorySize = 2048;
+
+              # Required by system-default (inherited via cli → default)
+              systemDefault.userName = "tim";
+              systemDefault.wheelNeedsPassword = false;
+
+              # Use defaults: GNOME, PipeWire, Bluetooth, Printing, Nerd Fonts
+            };
+
+            testScript = ''
+              machine.wait_for_unit("multi-user.target")
+
+              # === Test 1: System boots to multi-user.target ===
+              # Desktop VMs should reach multi-user even without a display
+              machine.succeed("systemctl is-active multi-user.target")
+
+              # === Test 2: Inherits CLI layer — SSH daemon running ===
+              machine.wait_for_unit("sshd.service")
+
+              # === Test 3: Inherits CLI layer — dev tools present ===
+              machine.succeed("which git")
+              machine.succeed("which jq")
+              machine.succeed("which nvim")
+
+              # === Test 4: X server / display infrastructure packages present ===
+              # X server is enabled by system-desktop even for Wayland setups
+              machine.succeed("which Xorg || which Xwayland || test -f /run/current-system/sw/bin/X")
+
+              # === Test 5: GNOME desktop environment packages present ===
+              # GNOME is the default DE; check for representative binaries/packages
+              machine.succeed("test -e /run/current-system/sw/share/gnome-session")
+
+              # === Test 6: GDM display manager configured ===
+              # GDM is auto-selected for GNOME; verify the service unit exists
+              machine.succeed("systemctl cat display-manager.service | grep -qi gdm")
+
+              # === Test 7: PipeWire audio configured (default backend) ===
+              # PipeWire service unit should exist
+              machine.succeed("systemctl cat pipewire.service")
+              # Wireplumber session manager configured
+              machine.succeed("systemctl cat wireplumber.service")
+              # PulseAudio compatibility module is enabled
+              machine.succeed("systemctl cat pipewire-pulse.service")
+
+              # === Test 8: Bluetooth service configured ===
+              machine.succeed("systemctl cat bluetooth.service")
+              # Bluetooth hardware support enabled
+              machine.succeed("which bluetoothctl")
+
+              # === Test 9: CUPS printing service configured ===
+              machine.succeed("systemctl cat cups.service")
+              # Printer discovery via Avahi
+              machine.succeed("systemctl cat avahi-daemon.service")
+
+              # === Test 10: Fonts installed ===
+              # Check fontconfig can find expected font families
+              machine.succeed("fc-list | grep -qi 'Noto Sans'")
+              machine.succeed("fc-list | grep -qi 'DejaVu'")
+              machine.succeed("fc-list | grep -qi 'Liberation'")
+              # Nerd Fonts (JetBrainsMono is the default)
+              machine.succeed("fc-list | grep -qi 'JetBrainsMono'")
+              # Font Awesome icons
+              machine.succeed("fc-list | grep -qi 'Font Awesome'")
+
+              # === Test 11: Graphics/OpenGL configured ===
+              # hardware.graphics.enable creates the graphics driver infrastructure
+              # Check for the mesa/graphics library directory
+              machine.succeed("test -d /run/opengl-driver || test -d /run/current-system/sw/lib")
+
+              # === Test 12: Common GUI tools installed ===
+              machine.succeed("which xdg-open")
+              machine.succeed("which xclip")
+              machine.succeed("which wl-copy")
+              machine.succeed("which grim")
+              machine.succeed("which slurp")
+
+              # === Test 13: XDG portal configured ===
+              # XDG portal service should be available
+              machine.succeed("test -d /run/current-system/sw/share/xdg-desktop-portal")
+
+              # === Test 14: dconf enabled (GNOME settings backend) ===
+              machine.succeed("which dconf")
+
+              # === Test 15: GNOME excluded packages not present ===
+              # gnome-tour and gnome-music should be excluded
+              machine.fail("which gnome-tour 2>/dev/null")
+
+              # === Test 16: User in printer group (lp) ===
+              machine.succeed("id -nG tim | grep -q lp")
+
+              # === Test 17: rtkit enabled for real-time audio scheduling ===
+              machine.succeed("systemctl cat rtkit-daemon.service")
+
+              # === Test 18: Inherits default layer — user exists ===
+              machine.succeed("id tim")
+              machine.succeed("getent passwd tim | grep -q zsh")
+            '';
+          };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {
