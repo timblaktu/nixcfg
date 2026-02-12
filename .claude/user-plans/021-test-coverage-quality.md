@@ -77,7 +77,7 @@ Identical to Plan 020:
 | 2.2 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | HM module standalone eval tests (20 modules) |
 | 2.3 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
 | 3.1 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
-| 3.2 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
+| 3.2 | VM Features | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.vm-tmux' -L` | Tmux VM test (server, session, plugins) |
 | 3.3 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-git-advanced' -L` | Git advanced VM test (delta, aliases, config) |
 | 3.4 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-development-tools' -L` | Development tools VM test (toolchains) |
 | 3.5 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-system-type-desktop' -L` | Desktop system type VM test |
@@ -396,6 +396,29 @@ Test the tmux module (733 LOC — second largest, zero runtime validation):
 **Memory**: 2048 MB
 
 **Definition of Done**: `nix build '.#checks.x86_64-linux.vm-tmux' -L` passes.
+
+**Implementation** (2026-02-11): All 14 assertions pass. Test runs in ~22s.
+
+**What was done**:
+1. Added `vm-tmux` test to `modules/flake-parts/vm-tests.nix`
+2. Uses NixOS-integrated HM with `system-default` + `home-minimal` + `tmux`
+3. 2048 MB memory allocation
+
+**Test assertions verified**:
+1. `tmux -V` returns tmux version header
+2. HM-managed config file at `~/.config/tmux/tmux.conf`
+3. Tmux server starts with `new-session -d`
+4. Sessions are listable with `list-sessions`
+5. Prefix key set to `C-a`
+6. Vi mode enabled (`mode-keys vi`)
+7. Mouse mode enabled
+8. Resurrect plugin loaded (`@resurrect-dir` option set)
+9. Continuum plugin loaded (`@continuum-save-interval` = 5)
+10. Resurrect data directory exists
+11. `tmux-session-picker` script in PATH
+12. Helper scripts in PATH: `tmux-cpu-mem`, `tmux-save-with-rename`, `tmux-window-status-format`, `tmux-test-data-generator`
+13. Multi-session management + pane splitting works
+14. Server kill and cleanup verified
 
 ---
 
