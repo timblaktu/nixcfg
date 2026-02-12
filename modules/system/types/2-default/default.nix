@@ -405,14 +405,22 @@
               cascadia-code
               noto-fonts-color-emoji
               twemoji-color-font
-            ] ++ lib.optionals pkgs.stdenv.isLinux [
+            ] ++ lib.optionals pkgs.stdenv.isLinux ([
               inotify-tools
-              marker-pdf
               (pkgs.callPackage ../../../../pkgs/tomd { })
               speedtest
               ueberzugpp
-            ];
+            ] ++ lib.optionals cfg.enableLocalAI [
+              marker-pdf
+            ]);
             description = "Base packages for all home environments";
+          };
+
+          # Local AI / GPU-accelerated packages (e.g. marker-pdf)
+          enableLocalAI = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Include GPU-accelerated AI packages (marker-pdf) in base packages";
           };
 
           # Additional packages

@@ -34,15 +34,14 @@ in
     systemDefault.userName = username;
 
     # WSL settings (dendritic module)
-    # GPU: NVIDIA RTX 2000 Ada (8GB VRAM) via WSL2 passthrough
+    # GPU: NVIDIA RTX 2000 Ada available but CUDA disabled (WSL /run/user issues)
     wsl-settings = {
       hostname = "pa161878-nixos";
       defaultUser = username;
       sshPort = 2223;
       userGroups = [ "wheel" "dialout" ];
       sshAuthorizedKeys = [ sshKeys.timblaktu ];
-      # Enable CUDA support for GPU passthrough
-      cuda.enable = true;
+      cuda.enable = false;
       # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
       binfmt.enable = true;
     };
@@ -85,6 +84,9 @@ in
     homeMinimal = {
       inherit username homeDirectory;
     };
+
+    # Disable GPU-accelerated AI packages (marker-pdf) on this host
+    homeDefault.enableLocalAI = false;
 
     # WSL home settings (dendritic module)
     wsl-home-settings = {
