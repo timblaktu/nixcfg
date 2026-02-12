@@ -126,8 +126,8 @@
 
           nerdFontFamilies = lib.mkOption {
             type = lib.types.listOf lib.types.str;
-            default = [ "JetBrainsMono" "FiraCode" "Hack" ];
-            description = "Nerd Font families to install";
+            default = [ "jetbrains-mono" "fira-code" "hack" ];
+            description = "Nerd Font families to install (use nerd-fonts.* attribute names, e.g. 'jetbrains-mono')";
           };
 
           extraFonts = lib.mkOption {
@@ -317,11 +317,12 @@
               };
 
               # Bluetooth GUI (based on DE)
-              environment.systemPackages = lib.mkIf (cfg.environment == "gnome") [
-                pkgs.gnome.gnome-bluetooth
-              ] ++ lib.mkIf (cfg.environment == "plasma") [
-                pkgs.kdePackages.bluedevil
-              ];
+              environment.systemPackages =
+                lib.optionals (cfg.environment == "gnome") [
+                  pkgs.gnome-bluetooth
+                ] ++ lib.optionals (cfg.environment == "plasma") [
+                  pkgs.kdePackages.bluedevil
+                ];
             })
 
             # Printing (CUPS)
@@ -386,7 +387,7 @@
                   noto-fonts
                   noto-fonts-cjk-sans
                   noto-fonts-cjk-serif
-                  noto-fonts-emoji
+                  noto-fonts-color-emoji
                   liberation_ttf
                   dejavu_fonts
 
@@ -395,10 +396,10 @@
 
                   # Microsoft fonts (if unfree allowed)
                   corefonts
-                  vistafonts
-                ] ++ lib.optionals cfg.enableNerdFonts [
-                  (nerdfonts.override { fonts = cfg.nerdFontFamilies; })
-                ] ++ cfg.extraFonts;
+                  vista-fonts
+                ] ++ lib.optionals cfg.enableNerdFonts (
+                  map (name: pkgs.nerd-fonts.${name}) cfg.nerdFontFamilies
+                ) ++ cfg.extraFonts;
 
                 fontconfig = {
                   enable = lib.mkDefault true;
@@ -440,11 +441,12 @@
               xdg.portal = {
                 enable = lib.mkDefault true;
                 wlr.enable = lib.mkDefault useWayland;
-                extraPortals = lib.mkIf (cfg.environment == "gnome") [
-                  pkgs.xdg-desktop-portal-gnome
-                ] ++ lib.mkIf (cfg.environment == "plasma") [
-                  pkgs.xdg-desktop-portal-kde
-                ];
+                extraPortals =
+                  lib.optionals (cfg.environment == "gnome") [
+                    pkgs.xdg-desktop-portal-gnome
+                  ] ++ lib.optionals (cfg.environment == "plasma") [
+                    pkgs.xdg-desktop-portal-kde
+                  ];
               };
 
               # dconf for GNOME settings
@@ -550,8 +552,8 @@
 
           nerdFontFamilies = lib.mkOption {
             type = lib.types.listOf lib.types.str;
-            default = [ "JetBrainsMono" "FiraCode" "Hack" ];
-            description = "Nerd Font families to install";
+            default = [ "jetbrains-mono" "fira-code" "hack" ];
+            description = "Nerd Font families to install (use nerd-fonts.* attribute names, e.g. 'jetbrains-mono')";
           };
 
           extraFonts = lib.mkOption {
@@ -621,13 +623,13 @@
               noto-fonts
               noto-fonts-cjk-sans
               noto-fonts-cjk-serif
-              noto-fonts-emoji
+              noto-fonts-color-emoji
 
               # Icon fonts
               font-awesome
-            ] ++ lib.optionals cfg.enableNerdFonts [
-              (nerdfonts.override { fonts = cfg.nerdFontFamilies; })
-            ] ++ cfg.extraFonts;
+            ] ++ lib.optionals cfg.enableNerdFonts (
+              map (name: pkgs.nerd-fonts.${name}) cfg.nerdFontFamilies
+            ) ++ cfg.extraFonts;
           }
 
           # System packages
