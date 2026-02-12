@@ -59,6 +59,80 @@
           touch $out
         '';
 
+      # Helper: Test that a Home Manager module evaluates standalone with home-minimal
+      #
+      # Arguments:
+      #   name         - Module name (used in check name: eval-hm-module-<name>)
+      #   module       - The deferred module to test (e.g., self.modules.homeManager.shell)
+      #   extraImports - Additional modules to import (default: [])
+      #   extraConfig  - Additional HM config to merge (default: {})
+      #
+      # Provides home-minimal with test user settings automatically.
+      # Forces evaluation by referencing config.home.homeDirectory.
+      mkHmModuleEvalTest = name: module:
+        { extraImports ? [ ], extraConfig ? { } }:
+        let
+          hmConfig = inputs.home-manager.lib.homeManagerConfiguration {
+            inherit pkgs;
+            modules = [
+              self.modules.homeManager.home-minimal
+              module
+              {
+                homeMinimal = {
+                  username = "testuser";
+                  homeDirectory = "/home/testuser";
+                };
+              }
+              extraConfig
+            ] ++ extraImports;
+            extraSpecialArgs = { inherit inputs; };
+          };
+        in
+        pkgs.runCommand "eval-hm-module-${name}"
+          {
+            meta = {
+              description = "Isolation eval test: HM module ${name}";
+              timeout = 60;
+            };
+            # Force evaluation by referencing a config attribute
+            homeDir = hmConfig.config.home.homeDirectory;
+          } ''
+          echo "HM module '${name}' evaluates standalone: $homeDir"
+          touch $out
+        '';
+
+      # Helper: Test that a NixOS module evaluates standalone
+      #
+      # Arguments:
+      #   name        - Module name (used in check name: eval-nixos-module-<name>)
+      #   module      - The deferred module to test (e.g., self.modules.nixos.system-minimal)
+      #   extraConfig - Additional NixOS config module (default: {})
+      #
+      # Forces evaluation by referencing config.system.stateVersion.
+      mkNixosModuleEvalTest = name: module:
+        { extraConfig ? { } }:
+        let
+          nixosConfig = inputs.nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              module
+              extraConfig
+            ];
+          };
+        in
+        pkgs.runCommand "eval-nixos-module-${name}"
+          {
+            meta = {
+              description = "Isolation eval test: NixOS module ${name}";
+              timeout = 60;
+            };
+            # Force evaluation by referencing a config attribute
+            stateVer = nixosConfig.config.system.stateVersion;
+          } ''
+          echo "NixOS module '${name}' evaluates standalone: $stateVer"
+          touch $out
+        '';
+
       # Configuration snapshot baseline for validation
       snapshotBaseline = {
         "thinky-nixos" = { stateVersion = "24.11"; };
@@ -792,6 +866,20 @@
           deadnix --no-lambda-pattern-names --no-underscore --fail .
           touch $out
         '';
+
+        # === MODULE ISOLATION EVAL TESTS (T0) ===
+        # Prove that individual modules evaluate standalone without host config.
+        # Uses mkHmModuleEvalTest / mkNixosModuleEvalTest helpers.
+
+        # Proof test: HM shell module evaluates with only home-minimal
+        eval-hm-module-shell = mkHmModuleEvalTest "shell"
+          self.modules.homeManager.shell
+          { };
+
+        # Proof test: NixOS system-minimal module evaluates standalone
+        eval-nixos-module-system-minimal = mkNixosModuleEvalTest "system-minimal"
+          self.modules.nixos.system-minimal
+          { };
 
         # Regression test: forces evaluation of ALL NixOS and HM configs
         regression-test = pkgs.runCommand "regression-test"

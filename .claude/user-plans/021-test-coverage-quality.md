@@ -73,7 +73,7 @@ Identical to Plan 020:
 | 1.1 | Linting | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.lint-formatting'` | Add nixpkgs-fmt formatting check |
 | 1.2 | Linting | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.lint-statix'` | Add statix Nix linting check |
 | 1.3 | Linting | `TASK:COMPLETE` 2026-02-11 | `nix build '.#checks.x86_64-linux.lint-deadnix'` | Add deadnix dead code check |
-| 2.1 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | Create module isolation eval test helpers |
+| 2.1 | Isolation | `TASK:COMPLETE` 2026-02-11 | `nix flake check --no-build` | Create module isolation eval test helpers |
 | 2.2 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | HM module standalone eval tests (20 modules) |
 | 2.3 | Isolation | `TASK:PENDING` | `nix flake check --no-build` | NixOS module standalone eval tests (6 modules) |
 | 3.1 | VM Features | `TASK:PENDING` | `nix build '.#checks.x86_64-linux.vm-neovim' -L` | Neovim VM test (headless validation) |
