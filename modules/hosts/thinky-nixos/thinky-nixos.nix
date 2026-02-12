@@ -41,6 +41,8 @@ in
       userGroups = [ "wheel" "dialout" ];
       sshAuthorizedKeys = [ sshKeys.timblaktu ];
       usbip.autoAttach = [ "3-1" "3-2" ];
+      # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
+      binfmt.enable = true;
       extraShellAliases = {
         esp32c5 = "esp-idf-shell";
       };
