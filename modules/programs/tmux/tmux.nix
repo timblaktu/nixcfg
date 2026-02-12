@@ -126,9 +126,6 @@ in
           #{?#{>=:#{client_width},${mediumWidth}},#(tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(tmux-cpu-mem medium),#(tmux-cpu-mem narrow)}}
         '';
 
-        # System info - load average now included in script
-        loadAverage = "#(cat /proc/loadavg | cut -d' ' -f1,2,3)";
-
         # Status bar components - pointer char only shown when nested
         pointerChar = "→";
         statusLeft = "#[''$lock_open]#(pgrep tmux | wc -l | awk '$1 > 1 {print \"${pointerChar}\"}')#[''$style_normal]#{=10;p10:host_short} %b %d %T";

@@ -335,7 +335,6 @@
     darwin.system-cli = { config, lib, pkgs, ... }:
       let
         cfg = config.systemCli;
-        defaultCfg = config.systemDefault;
       in
       {
         imports = [
@@ -474,7 +473,6 @@
     homeManager.home-cli = { config, lib, pkgs, ... }:
       let
         cfg = config.homeCli;
-        defaultCfg = config.homeDefault;
       in
       {
         imports = [

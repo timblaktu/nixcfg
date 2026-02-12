@@ -31,7 +31,6 @@
         # Import shared modules for DRY configuration
         # Location: modules/lib/shared/ (dendritic structure)
         sharedInstructions = import ../../lib/shared/ai-instructions.nix { inherit lib; };
-        sharedMcpDefs = import ../../lib/shared/mcp-server-defs.nix { inherit lib; };
 
         # Import shared rbw helper library for consistent credential handling
         # Location: modules/lib/ (dendritic structure)
@@ -439,7 +438,7 @@
 
             # Build agent configuration
             agentConfig = mapAttrs
-              (name: agent: {
+              (_name: agent: {
                 inherit (agent) description;
               } // optionalAttrs (agent.model != null) {
                 inherit (agent) model;
@@ -454,7 +453,7 @@
 
             # Build command configuration
             commandConfig = mapAttrs
-              (name: cmd: {
+              (_name: cmd: {
                 inherit (cmd) description;
                 inherit (cmd) template;
               } // optionalAttrs (cmd.agent != null) {
@@ -468,7 +467,7 @@
 
             # Build formatter configuration
             formatterConfig = mapAttrs
-              (name: fmt: {
+              (_name: fmt: {
                 inherit (fmt) command;
                 inherit (fmt) extensions;
               } // optionalAttrs (fmt.environment != { }) {
@@ -479,7 +478,7 @@
               cfg.formatters;
 
             # Generate complete opencode.json for an account
-            mkOpencodeConfig = accountName: accountCfg:
+            mkOpencodeConfig = _accountName: accountCfg:
               let
                 model = if accountCfg.model != null then accountCfg.model else cfg.defaultModel;
               in
@@ -513,7 +512,7 @@
               };
 
             # Generate AGENTS.md content using shared instructions
-            mkAgentsMdContent = accountName:
+            mkAgentsMdContent = _accountName:
               let
                 mcpServerStatus = map
                   (name: {
@@ -586,15 +585,15 @@
             home.packages = [
               cfg.package
             ] ++ (mapAttrsToList mkAccountScript
-              (filterAttrs (n: a: a.enable) cfg.accounts));
+              (filterAttrs (_n: a: a.enable) cfg.accounts));
 
             # Symlink config directories
             home.file = mkMerge [
               # Account-specific config directories
               (mkMerge (mapAttrsToList
-                (name: account: mkIf account.enable {
-                  ".config/opencode-${name}".source =
-                    config.lib.file.mkOutOfStoreSymlink "${runtimePath}/.opencode-${name}";
+                (_n: account: mkIf account.enable {
+                  ".config/opencode-${_n}".source =
+                    config.lib.file.mkOutOfStoreSymlink "${runtimePath}/.opencode-${_n}";
                 })
                 cfg.accounts))
 
@@ -661,7 +660,7 @@
               # OpenCode Session Management
               opencode-status() {
                 echo "Checking OpenCode sessions..."
-                for account in ${concatStringsSep " " (attrNames (filterAttrs (n: a: a.enable) cfg.accounts))}; do
+                for account in ${concatStringsSep " " (attrNames (filterAttrs (_n: a: a.enable) cfg.accounts))}; do
                   local pidfile="/tmp/opencode-''${account}.pid"
                   if [[ -f "$pidfile" ]]; then
                     local pid=$(cat "$pidfile")
@@ -680,7 +679,7 @@
               # OpenCode Session Management
               opencode-status() {
                 echo "Checking OpenCode sessions..."
-                for account in ${concatStringsSep " " (attrNames (filterAttrs (n: a: a.enable) cfg.accounts))}; do
+                for account in ${concatStringsSep " " (attrNames (filterAttrs (_n: a: a.enable) cfg.accounts))}; do
                   local pidfile="/tmp/opencode-''${account}.pid"
                   if [[ -f "$pidfile" ]]; then
                     local pid=$(cat "$pidfile")

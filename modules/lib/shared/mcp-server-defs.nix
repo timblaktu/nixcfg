@@ -196,7 +196,7 @@ rec {
 
   # Transform canonical server config to Claude Code JSON format
   # Claude Code uses: { command, args, env, timeout?, retries? }
-  toClaudeCodeFormat = name: serverCfg: {
+  toClaudeCodeFormat = _name: serverCfg: {
     inherit (serverCfg) command args timeout retries;
     env = serverCfg.env // {
       # Claude Code always adds these debug flags from cfg.debug
@@ -205,7 +205,7 @@ rec {
 
   # Transform canonical server config to OpenCode JSON format
   # OpenCode uses: { type, command, args, env? }
-  toOpenCodeFormat = name: serverCfg: {
+  toOpenCodeFormat = _name: serverCfg: {
     inherit (serverCfg) type command args;
   } // optionalAttrs (serverCfg.env != { }) {
     inherit (serverCfg) env;

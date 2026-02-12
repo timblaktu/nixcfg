@@ -325,7 +325,6 @@
     homeManager.home-default = { config, lib, pkgs, ... }:
       let
         cfg = config.homeDefault;
-        minCfg = config.homeMinimal;
       in
       {
         imports = [

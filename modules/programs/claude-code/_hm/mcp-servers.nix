@@ -22,22 +22,6 @@ let
     };
   };
 
-  # Legacy helper for backward compatibility (servers not yet in shared defs)
-  mkMcpServer =
-    { command
-    , args ? [ ]
-    , env ? { }
-    , debug ? cfg.debug
-    , timeout ? 300
-    , retries ? 3
-    }: {
-      inherit command args timeout retries;
-      env = env // {
-        DEBUG = if debug then "*" else "";
-        NODE_ENV = if debug then "development" else "production";
-      };
-    };
-
 in
 {
   options.programs.claude-code.mcpServers = {

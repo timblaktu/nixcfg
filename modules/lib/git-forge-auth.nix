@@ -12,7 +12,7 @@
 { pkgs, lib, config, options }:
 
 let
-  inherit (lib) mkOption mkEnableOption types mkIf mkMerge mkForce optionalString;
+  inherit (lib) mkOption types;
 
   # Import shared rbw helper library
   rbwLib = import ./rbw.nix { inherit pkgs lib; };

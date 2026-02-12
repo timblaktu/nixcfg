@@ -3,7 +3,7 @@
 {
   # Override the sequential-thinking-mcp package to fix the tuple issue
   nixpkgs.overlays = [
-    (final: prev: {
+    (_final: _prev: {
       # Create a fixed version of sequential-thinking-mcp
       sequential-thinking-mcp-fixed =
         let

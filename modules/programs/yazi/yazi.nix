@@ -25,7 +25,7 @@
             inherit (pkgs.yaziPlugins) toggle-pane;
             inherit (pkgs.yaziPlugins) mediainfo;
             # Override glow plugin to use dynamic width instead of hardcoded 55
-            glow = pkgs.yaziPlugins.glow.overrideAttrs (old: {
+            glow = pkgs.yaziPlugins.glow.overrideAttrs (_old: {
               postPatch = ''
                 # Replace main.lua with our patched version
                 cp ${./files/yazi-glow-main.lua} main.lua

@@ -26,9 +26,6 @@ in
     # === Home Manager Module ===
     # Primary shell configuration for user environment
     homeManager.shell = { config, pkgs, lib, ... }:
-      let
-        inherit (lib) mkIf;
-      in
       {
         programs.zsh = {
           enable = true;

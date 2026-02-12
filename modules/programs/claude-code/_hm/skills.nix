@@ -117,7 +117,7 @@ let
   '';
 
   # Get list of enabled builtin skills
-  enabledBuiltins = filterAttrs (name: enabled: enabled) skillsCfg.builtins;
+  enabledBuiltins = filterAttrs (_name: enabled: enabled) skillsCfg.builtins;
 
   # Combine builtin and custom skills
   allSkills = (mapAttrs

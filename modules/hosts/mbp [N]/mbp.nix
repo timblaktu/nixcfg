@@ -9,11 +9,6 @@
 # Deploy HM:    home-manager switch --flake '.#tim@mbp'
 { config, lib, inputs, ... }:
 let
-  # SSH public keys (shared across configurations)
-  sshKeys = {
-    timblaktu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkVsx3oZrqwkfU6FmhqNEeAGN8dj6lPxNcEwVCmJcQh timblaktu@gmail.com";
-  };
-
   # Common user settings
   username = "tim";
   homeDirectory = "/home/${username}";

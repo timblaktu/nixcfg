@@ -310,7 +310,6 @@
             cfg = config.programs.claude-code;
             inherit (cfg) nixcfgPath;
             runtimePath = "${nixcfgPath}/claude-runtime";
-            templatesPath = "${nixcfgPath}/claude-templates";
 
             userGlobalMemoryContent = builtins.readFile ./_hm/claude-code-user-memory-template.md;
 
@@ -336,7 +335,7 @@
               else
                 "NixOS";
 
-            mkClaudeDesktopServer = name: serverCfg:
+            mkClaudeDesktopServer = _name: serverCfg:
               let
                 envVars = serverCfg.env or { };
                 envPrefix =
@@ -367,7 +366,7 @@
               let
                 hasHooks = cfg._internal.hooks.PreToolUse != null || cfg._internal.hooks.PostToolUse != null ||
                   cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
-                cleanHooks = filterAttrs (n: v: v != null) cfg._internal.hooks;
+                cleanHooks = filterAttrs (_n: v: v != null) cfg._internal.hooks;
                 hasStatusline = cfg._internal.statuslineSettings != { };
 
                 permissionsV2 = {
@@ -421,37 +420,6 @@
               )
               cfg._internal.subAgentFiles;
 
-            enterpriseSettingsTemplate = pkgs.writeText "enterprise-managed-settings.json" (builtins.toJSON (
-              let
-                hasHooks = cfg._internal.hooks.PreToolUse != null || cfg._internal.hooks.PostToolUse != null ||
-                  cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
-                cleanHooks = filterAttrs (n: v: v != null) cfg._internal.hooks;
-                hasStatusline = cfg._internal.statuslineSettings != { };
-
-                permissionsV2 = {
-                  inherit (cfg.permissions) allow;
-                  inherit (cfg.permissions) deny;
-                  inherit (cfg.permissions) ask;
-                  inherit (cfg.permissions) defaultMode;
-                  inherit (cfg.permissions) additionalDirectories;
-                };
-              in
-              {
-                model = cfg.defaultModel;
-                permissions = permissionsV2;
-              }
-              // optionalAttrs (cfg.environmentVariables != { }) { env = cfg.environmentVariables; }
-              // optionalAttrs hasHooks { hooks = cleanHooks; }
-              // optionalAttrs (cfg.experimental != { }) { inherit (cfg) experimental; }
-              // optionalAttrs hasStatusline cfg._internal.statuslineSettings
-              // optionalAttrs cfg.enableProjectOverrides {
-                projectOverrides = {
-                  enabled = true;
-                  searchPaths = cfg.projectOverridePaths;
-                };
-              }
-            ));
-
             # Import wrapper generation library
             claudeLib = import ./_hm/lib.nix { inherit lib pkgs config; };
 
@@ -474,7 +442,7 @@
                   }
                 )
               )
-              (lib.filterAttrs (n: a: a.enable) cfg.accounts);
+              (lib.filterAttrs (_n: a: a.enable) cfg.accounts);
 
           in
           mkIf cfg.enable {
@@ -508,8 +476,8 @@
 
             home.file = mkMerge [
               (mkMerge (mapAttrsToList
-                (name: account: mkIf account.enable {
-                  ".claude-${name}".source = config.lib.file.mkOutOfStoreSymlink "${runtimePath}/.claude-${name}";
+                (_n: account: mkIf account.enable {
+                  ".claude-${_n}".source = config.lib.file.mkOutOfStoreSymlink "${runtimePath}/.claude-${_n}";
                 })
                 cfg.accounts))
 
@@ -597,7 +565,7 @@
                     }}')
                     ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
                     ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
-                    ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}')''}
+                    ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (_n: v: v != null) cfg._internal.hooks)}')''}
 
                     $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
                       '. |
@@ -617,8 +585,8 @@
 
                   ${optionalString (cfg._internal.subAgentFiles != {}) ''
                   $DRY_RUN_CMD mkdir -p "$accountDir/agents"
-                  ${concatStringsSep "\n" (mapAttrsToList (path: template: ''
-                  copy_template "${template}" "$accountDir/agents/${builtins.baseNameOf path}"
+                  ${concatStringsSep "\n" (mapAttrsToList (_path: template: ''
+                  copy_template "${template}" "$accountDir/agents/${builtins.baseNameOf _path}"
                   '') agentTemplates)}
                   echo "Deployed ${toString (length (attrNames cfg._internal.subAgentFiles))} sub-agent(s)"
                   ''}
@@ -659,7 +627,7 @@
                 }}')
                 ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
                 ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
-                ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (n: v: v != null) cfg._internal.hooks)}')''}
+                ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (_n: v: v != null) cfg._internal.hooks)}')''}
 
                 $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
                   '. |
@@ -679,8 +647,8 @@
 
               ${optionalString (cfg._internal.subAgentFiles != {}) ''
               $DRY_RUN_CMD mkdir -p "$baseDir/agents"
-              ${concatStringsSep "\n" (mapAttrsToList (path: template: ''
-              copy_template "${template}" "$baseDir/agents/${builtins.baseNameOf path}"
+              ${concatStringsSep "\n" (mapAttrsToList (_path: template: ''
+              copy_template "${template}" "$baseDir/agents/${builtins.baseNameOf _path}"
               '') agentTemplates)}
               echo "Deployed ${toString (length (attrNames cfg._internal.subAgentFiles))} sub-agent(s)"
               ''}
@@ -695,7 +663,7 @@
                 local found_sessions=false
                 echo "Checking Claude Code sessions..."
 
-                for account in ${lib.concatStringsSep " " (lib.attrNames (lib.filterAttrs (n: a: a.enable) cfg.accounts))}; do
+                for account in ${lib.concatStringsSep " " (lib.attrNames (lib.filterAttrs (_n: a: a.enable) cfg.accounts))}; do
                   local pidfile="/tmp/claude-''${account}.pid"
                   if [[ -f "$pidfile" ]]; then
                     local pid=$(cat "$pidfile")
@@ -718,7 +686,7 @@
                 local account="''${1:-}"
                 if [[ -z "$account" ]]; then
                   echo "Usage: claude-close <account>"
-                  echo "Available accounts: ${lib.concatStringsSep ", " (lib.attrNames (lib.filterAttrs (n: a: a.enable) cfg.accounts))}"
+                  echo "Available accounts: ${lib.concatStringsSep ", " (lib.attrNames (lib.filterAttrs (_n: a: a.enable) cfg.accounts))}"
                   return 1
                 fi
 
@@ -774,7 +742,7 @@
                 local account="''${1:-}"
                 if [[ -z "$account" ]]; then
                   echo "Usage: claude-close <account>"
-                  echo "Available accounts: ${lib.concatStringsSep ", " (lib.attrNames (lib.filterAttrs (n: a: a.enable) cfg.accounts))}"
+                  echo "Available accounts: ${lib.concatStringsSep ", " (lib.attrNames (lib.filterAttrs (_n: a: a.enable) cfg.accounts))}"
                   return 1
                 fi
 

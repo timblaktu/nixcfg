@@ -5,9 +5,6 @@ with lib;
 let
   cfg = config.programs.claude-code;
 
-  # Path to the user's global memory file in nixcfg  
-  userGlobalMemoryPath = "${cfg.nixcfgPath}/claude-runtime/.claude-\${CLAUDE_ACCOUNT:-max}/CLAUDE.md";
-
   # Create the memory editing script
   nixMemoryScript = pkgs.writeScript "nixmemory" ''
     #!/usr/bin/env bash

@@ -21,7 +21,7 @@
 { pkgs, lib }:
 
 let
-  inherit (lib) optionalString escapeShellArg;
+  inherit (lib) escapeShellArg;
 in
 rec {
   # Default staleness threshold in seconds (5 minutes)
