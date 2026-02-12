@@ -871,9 +871,67 @@
         # Prove that individual modules evaluate standalone without host config.
         # Uses mkHmModuleEvalTest / mkNixosModuleEvalTest helpers.
 
-        # Proof test: HM shell module evaluates with only home-minimal
+        # HM module isolation eval tests — prove each module evaluates standalone
+        # with only home-minimal as a dependency. See Plan 021 Task 2.2.
         eval-hm-module-shell = mkHmModuleEvalTest "shell"
           self.modules.homeManager.shell
+          { };
+        eval-hm-module-git = mkHmModuleEvalTest "git"
+          self.modules.homeManager.git
+          { };
+        eval-hm-module-tmux = mkHmModuleEvalTest "tmux"
+          self.modules.homeManager.tmux
+          { };
+        eval-hm-module-neovim = mkHmModuleEvalTest "neovim"
+          self.modules.homeManager.neovim
+          { };
+        eval-hm-module-development-tools = mkHmModuleEvalTest "development-tools"
+          self.modules.homeManager.development-tools
+          { };
+        eval-hm-module-yazi = mkHmModuleEvalTest "yazi"
+          self.modules.homeManager.yazi
+          { };
+        eval-hm-module-shell-utils = mkHmModuleEvalTest "shell-utils"
+          self.modules.homeManager.shell-utils
+          { };
+        eval-hm-module-files = mkHmModuleEvalTest "files"
+          self.modules.homeManager.files
+          { };
+        eval-hm-module-podman = mkHmModuleEvalTest "podman"
+          self.modules.homeManager.podman
+          { };
+        eval-hm-module-terminal = mkHmModuleEvalTest "terminal"
+          self.modules.homeManager.terminal
+          { };
+        eval-hm-module-secrets-management = mkHmModuleEvalTest "secrets-management"
+          self.modules.homeManager.secrets-management
+          { };
+        eval-hm-module-claude-code = mkHmModuleEvalTest "claude-code"
+          self.modules.homeManager.claude-code
+          { };
+        eval-hm-module-opencode = mkHmModuleEvalTest "opencode"
+          self.modules.homeManager.opencode
+          { };
+        eval-hm-module-github-auth = mkHmModuleEvalTest "github-auth"
+          self.modules.homeManager.github-auth
+          { };
+        eval-hm-module-gitlab-auth = mkHmModuleEvalTest "gitlab-auth"
+          self.modules.homeManager.gitlab-auth
+          { };
+        eval-hm-module-git-auth-helpers = mkHmModuleEvalTest "git-auth-helpers"
+          self.modules.homeManager.git-auth-helpers
+          { };
+        eval-hm-module-esp-idf = mkHmModuleEvalTest "esp-idf"
+          self.modules.homeManager.esp-idf
+          { };
+        eval-hm-module-windows-terminal = mkHmModuleEvalTest "windows-terminal"
+          self.modules.homeManager.windows-terminal
+          { };
+        eval-hm-module-onedrive = mkHmModuleEvalTest "onedrive"
+          self.modules.homeManager.onedrive
+          { };
+        eval-hm-module-system-tools = mkHmModuleEvalTest "system-tools"
+          self.modules.homeManager.system-tools
           { };
 
         # Proof test: NixOS system-minimal module evaluates standalone
