@@ -934,10 +934,55 @@
           self.modules.homeManager.system-tools
           { };
 
-        # Proof test: NixOS system-minimal module evaluates standalone
+        # NixOS module isolation eval tests — prove each module evaluates standalone.
+        # See Plan 021 Tasks 2.1 (helpers) and 2.3 (NixOS modules).
         eval-nixos-module-system-minimal = mkNixosModuleEvalTest "system-minimal"
           self.modules.nixos.system-minimal
           { };
+        eval-nixos-module-system-default = mkNixosModuleEvalTest "system-default"
+          self.modules.nixos.system-default
+          {
+            extraConfig = {
+              # system-default asserts userName != ""
+              systemDefault.userName = "testuser";
+            };
+          };
+        eval-nixos-module-system-cli = mkNixosModuleEvalTest "system-cli"
+          self.modules.nixos.system-cli
+          {
+            extraConfig = {
+              # system-cli imports system-default which asserts userName != ""
+              systemDefault.userName = "testuser";
+            };
+          };
+        eval-nixos-module-system-desktop = mkNixosModuleEvalTest "system-desktop"
+          self.modules.nixos.system-desktop
+          {
+            extraConfig = {
+              # system-desktop imports system-cli → system-default
+              systemDefault.userName = "testuser";
+            };
+          };
+        eval-nixos-module-secrets-management = mkNixosModuleEvalTest "secrets-management"
+          self.modules.nixos.secrets-management
+          {
+            # secrets-management sets sops.* options, which require sops-nix module
+            extraConfig = {
+              imports = [ inputs.sops-nix.nixosModules.sops ];
+            };
+          };
+        eval-nixos-module-wsl = mkNixosModuleEvalTest "wsl"
+          self.modules.nixos.wsl
+          {
+            extraConfig = {
+              # WSL module asserts hostname, defaultUser, and sshPort
+              wsl-settings = {
+                hostname = "test-wsl";
+                defaultUser = "testuser";
+                sshPort = 2223;
+              };
+            };
+          };
 
         # Regression test: forces evaluation of ALL NixOS and HM configs
         regression-test = pkgs.runCommand "regression-test"
