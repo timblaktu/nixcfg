@@ -102,6 +102,17 @@ in
             };
           };
 
+          includes = [
+            {
+              condition = "hasconfig:remote.*.url:https://git.panasonic.aero/**";
+              contents = {
+                user = {
+                  email = "timothy.black@panasonic.aero";
+                };
+              };
+            }
+          ];
+
           ignores = [
             ".DS_Store"
             "*.swp"

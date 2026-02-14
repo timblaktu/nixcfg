@@ -146,6 +146,11 @@ in
         field = "lord (access token)";
       };
       cli.enable = true;
+      # userName = null: Don't pre-fill username in git credential config.
+      # glab auth git-credential rejects username mismatches (compares against
+      # glab's internal user from whoami). With no username, glab provides its
+      # own credentials without the comparison check.
+      git.userName = null;
     };
 
     # Windows Terminal settings management (HOST-SPECIFIC)
