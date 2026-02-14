@@ -247,6 +247,16 @@
               description = "Install and configure GitLab CLI (glab)";
             };
 
+            apiUser = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                GitLab username for the CLI. Sets the `user` field in
+                glab's config.yml. If null, glab falls back to whoami.
+              '';
+              example = "blackt1";
+            };
+
             enableAliases = mkOption {
               type = types.bool;
               default = true;
@@ -287,6 +297,7 @@
               # GitLab CLI configuration
               # Token provided via GITLAB_TOKEN environment variable at runtime
               host: ${cfg.host}
+              ${lib.optionalString (cfg.cli.apiUser != null) "user: ${cfg.cli.apiUser}"}
               hosts:
                 ${cfg.host}:
                   git_protocol: ${cfg.protocol}

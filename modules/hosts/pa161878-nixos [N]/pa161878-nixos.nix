@@ -146,6 +146,7 @@ in
         field = "lord (access token)";
       };
       cli.enable = true;
+      cli.apiUser = "blackt1";
       # userName = null: Don't pre-fill username in git credential config.
       # glab auth git-credential rejects username mismatches (compares against
       # glab's internal user from whoami). With no username, glab provides its
