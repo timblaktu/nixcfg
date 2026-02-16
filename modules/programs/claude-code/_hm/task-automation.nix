@@ -9,29 +9,45 @@ let
   # Slash command for interactive task execution
   nextTaskMd = ''
     Read the plan file specified below (or auto-detect from CLAUDE.md if not specified),
-    find the first task with status "TASK:PENDING" in the Progress Tracking table,
+    find the next actionable task in the Progress Tracking table using the priority below,
     execute it following the task definition in that file,
     document findings in the corresponding section,
-    change status from "TASK:PENDING" to "TASK:COMPLETE" and add today's date,
+    update the task status as described below, and add today's date,
     and report what you completed and what's next.
     Commit your changes when done.
 
     Plan file: $ARGUMENTS
 
-    If no plan file argument is provided:
-    1. Check the project's CLAUDE.md for a "Primary File" or "Plan File" reference
-    2. Look for files matching `*-research.md`, `*-plan.md`, or `*-tasks.md` in docs/
-    3. Ask the user which file to use
+    TASK PRIORITY (find next task):
+    1. FIRST: Any task with status "TASK:IN_PROGRESS" — this is unfinished work, resume immediately
+    2. SECOND: First task with status "TASK:PENDING" not blocked by incomplete dependencies
+
+    STATUS TRANSITIONS:
+    - When starting a PENDING task: immediately change "TASK:PENDING" to "TASK:IN_PROGRESS"
+      in the plan file and commit, BEFORE beginning work
+    - When completing a task: change "TASK:IN_PROGRESS" to "TASK:COMPLETE" and add today's date
+    - If a task is already IN_PROGRESS (from a previous session): resume work, then mark COMPLETE
+
+    PLAN AUTO-DETECTION (when no plan file argument is provided):
+    1. Check the project's CLAUDE.md "Project Status" section for active plans with plan file paths
+    2. Prefer the plan with an IN_PROGRESS task (unfinished work from a previous session)
+    3. If multiple plans have IN_PROGRESS tasks: prefer the one with the most recent session
+       date in its progress table
+    4. If no IN_PROGRESS tasks: prefer the plan with the most recent session date among
+       PENDING tasks
+    5. If no dates in progress tables: use git log modification time of plan files as fallback
+       (rg "^\\| " file | ... or git log -1 --format=%ct -- <file>)
+    6. If still ambiguous: ask the user which plan to work on
 
     IMPORTANT: If you determine the task cannot be executed on the current host
     (e.g., requires Nix but running on Termux, or requires specific tools not available),
     output on its own line: ENVIRONMENT_NOT_CAPABLE
-    Then explain briefly. Do NOT mark the task complete - leave it PENDING for another host.
+    Then explain briefly. Do NOT mark the task complete - leave its status unchanged.
 
     IMPORTANT: If the task is marked as "Interactive" in the plan file, or requires user
     decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED
-    Then present the questions/options clearly. Do NOT mark the task complete - leave it
-    PENDING so the user can complete it in an interactive session using /next-task.
+    Then present the questions/options clearly. Do NOT mark it complete - leave its status
+    unchanged so the user can complete it in an interactive session using /next-task.
 
     CRITICAL: Do NOT invent "alternative approaches" or workarounds to tasks.
     If a task has prerequisites that aren't met (e.g., "test the Nix-generated package"
@@ -45,11 +61,11 @@ let
     - **Status**: Complete
     - **Summary**: [1-2 sentence summary]
 
-    ## Next Pending Task
-    - **Task ID**: [next task number/name]
+    ## Next Task
+    - **Task ID**: [next IN_PROGRESS or PENDING task number/name]
     - **Description**: [brief description]
 
-    If no pending tasks remain, output on its own line: ALL_TASKS_DONE
+    If no IN_PROGRESS or PENDING tasks remain, output on its own line: ALL_TASKS_DONE
 
     IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response
   '';
@@ -87,7 +103,7 @@ let
             plan_file="''${words[(r)*.md]}"
             if [[ -n "$plan_file" && -f "$plan_file" ]]; then
               local -a task_ids
-              task_ids=($(${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' "$plan_file" 2>/dev/null | \
+              task_ids=($(${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|IN_PROGRESS|COMPLETE)\s*\|' "$plan_file" 2>/dev/null | \
                 ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([A-Za-z0-9_-]\+\)[[:space:]]*|.*/\1/p' | \
                 ${pkgs.coreutils}/bin/tr '\n' ' '))
               if [[ ''${#task_ids[@]} -gt 0 ]]; then
@@ -132,7 +148,7 @@ let
             done
             if [[ -n "$plan_file" && -f "$plan_file" ]]; then
               local task_ids
-              task_ids=$(${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' "$plan_file" 2>/dev/null | \
+              task_ids=$(${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|IN_PROGRESS|COMPLETE)\s*\|' "$plan_file" 2>/dev/null | \
                 ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([A-Za-z0-9_-]\+\)[[:space:]]*|.*/\1/p' | \
                 ${pkgs.coreutils}/bin/tr '\n' ' ')
               COMPREPLY=( $(compgen -W "$task_ids" -- "$cur") )
@@ -165,7 +181,8 @@ let
       # Usage: run-tasks-${accountName} <plan-file> [options]
       #
       # Runs ${claudeWrapper} -p to execute tasks defined in a markdown plan file.
-      # The plan file must have a Progress Tracking table with "TASK:PENDING" status markers.
+      # The plan file must have a Progress Tracking table with TASK: status markers.
+      # Prioritizes IN_PROGRESS tasks (unfinished work) over PENDING tasks.
 
       set -euo pipefail
 
@@ -179,6 +196,7 @@ let
       GREEN='\033[0;32m'
       YELLOW='\033[1;33m'
       BLUE='\033[0;34m'
+      MAGENTA='\033[0;35m'
       CYAN='\033[0;36m'
       NC='\033[0m'
 
@@ -215,7 +233,7 @@ let
 
       Options:
         -n N              Run N tasks (default: 1)
-        -a, --all         Run all pending tasks
+        -a, --all         Run all actionable tasks (IN_PROGRESS + PENDING)
         -c, --continuous  Run continuously (survives rate limits)
         -d, --delay N     Seconds between tasks (default: ${toString taskCfg.safetyLimits.delayBetweenTasks})
         --model MODEL     Override model (alias or full name, e.g., opus, qwen-a3b)
@@ -235,7 +253,8 @@ let
         | 1    | ...  | TASK:COMPLETE | 2026-01-10 |     |
         | 2    | ...  | TASK:PENDING  |      | qwen |
 
-        Status tokens: TASK:PENDING, TASK:COMPLETE (unique to avoid false matches)
+        Status tokens: TASK:PENDING, TASK:IN_PROGRESS, TASK:COMPLETE
+        Also recognized: TASK:SKIPPED, TASK:BLOCKED, TASK:DEFERRED
         Model column: Optional, specifies model for this task (alias or full name)
         Model priority: --model CLI flag > Model column > account default
 
@@ -313,19 +332,32 @@ let
       # Build the prompt
       # NOTE: Sentinel tokens (ALL_TASKS_DONE, ENVIRONMENT_NOT_CAPABLE) must appear on their own line
       # for reliable detection - the script uses ^TOKEN anchored patterns to avoid false positives
-      PROMPT="Read ''${PLAN_FILE_ABS}, find the first task with status \"TASK:PENDING\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave it PENDING for another host to pick up. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave PENDING for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
+      PROMPT="Read ''${PLAN_FILE_ABS}, find the next actionable task in the Progress Tracking table. Priority: FIRST any task with status \"TASK:IN_PROGRESS\" (unfinished work, resume immediately), SECOND the first \"TASK:PENDING\" task not blocked by incomplete dependencies. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:IN_PROGRESS or TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
 
       # Functions
       pending_count() {
           ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
       }
 
-      # Extract task ID/name from the first TASK:PENDING row in the plan file
-      # Looks for patterns like "| R1 |" or "| I7 |" in the row with TASK:PENDING
+      in_progress_count() {
+          ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:IN_PROGRESS\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
+      }
+
+      actionable_count() {
+          ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:(PENDING|IN_PROGRESS)\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
+      }
+
+      # Extract task ID/name from the next actionable row in the plan file
+      # Priority: IN_PROGRESS first (resume unfinished work), then PENDING
       # Returns a sanitized name safe for use in filenames (no /, :, or spaces)
       get_next_task_name() {
           local line
-          line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null) || { echo "unknown"; return; }
+          # Try IN_PROGRESS first (unfinished work from previous session)
+          line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:IN_PROGRESS\s*\|' "$PLAN_FILE" 2>/dev/null) || true
+          # Fall back to PENDING
+          if [[ -z "$line" ]]; then
+              line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null) || { echo "unknown"; return; }
+          fi
           # Extract task ID from first or second column (handles both "| Task | Name |" and "| R1 | Name |" formats)
           local task_id
           task_id=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([A-Za-z0-9_-]\+\)[[:space:]]*|.*/\1/p')
@@ -344,12 +376,17 @@ let
           fi
       }
 
-      # Extract model specification from the first TASK:PENDING row in the plan file
-      # Looks for a Model column (5th column typically: Task | Name | Status | Date | Model)
+      # Extract model specification from the next actionable row in the plan file
+      # Priority: IN_PROGRESS first (resume unfinished work), then PENDING
       # Returns the model name if specified, empty string if not
       get_next_task_model() {
           local line
-          line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null) || { echo ""; return; }
+          # Try IN_PROGRESS first (unfinished work from previous session)
+          line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:IN_PROGRESS\s*\|' "$PLAN_FILE" 2>/dev/null) || true
+          # Fall back to PENDING
+          if [[ -z "$line" ]]; then
+              line=$(${pkgs.ripgrep}/bin/rg -m1 '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null) || { echo ""; return; }
+          fi
           # Count pipe characters to determine column count
           local col_count
           col_count=$(echo "$line" | ${pkgs.coreutils}/bin/tr -cd '|' | ${pkgs.coreutils}/bin/wc -c)
@@ -368,12 +405,16 @@ let
       save_state() {
           local tasks_run=$1
           local status=$2
-          local pending_now=''${3:-$(pending_count)}
+          local actionable_now=$(actionable_count)
+          local ip_now=$(in_progress_count)
+          local pending_now=$(pending_count)
           local runtime=$(($(date +%s) - START_TIME))
           cat > "$STATE_FILE" << EOF
       LAST_RUN=$(date -Iseconds)
       TASKS_RUN=$tasks_run
       STATUS=$status
+      ACTIONABLE_NOW=$actionable_now
+      IN_PROGRESS_NOW=$ip_now
       PENDING_NOW=$pending_now
       RUNTIME_SECONDS=$runtime
       PLAN_FILE=$PLAN_FILE_ABS
@@ -397,16 +438,17 @@ let
       print_exit_summary() {
           local reason=$1
           local tasks_run=$2
-          local pending=$3
           local runtime=$(($(date +%s) - START_TIME))
           local runtime_fmt=$(format_runtime $runtime)
+          local ip=$(in_progress_count)
+          local p=$(pending_count)
 
           echo ""
           echo -e "''${CYAN}===============================================''${NC}"
           echo -e "''${CYAN}  Session Summary''${NC}"
           echo -e "''${CYAN}===============================================''${NC}"
           echo -e "  Reason:    ''${reason}"
-          echo -e "  Tasks:     ''${tasks_run} completed, ''${pending} pending"
+          echo -e "  Tasks:     ''${tasks_run} completed, ''${ip} in-progress, ''${p} pending"
           echo -e "  Runtime:   ''${runtime_fmt}"
           echo -e "  Logs:      ''${LOG_DIR}/"
           echo -e "''${CYAN}===============================================''${NC}"
@@ -456,12 +498,12 @@ let
       # Output: Task ID | Name | Status | Date | Model (tab-separated for fzf)
       list_all_tasks() {
           # Find all table rows with TASK: status markers
-          ${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' "$PLAN_FILE" 2>/dev/null | while read -r line; do
+          ${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|IN_PROGRESS|COMPLETE|SKIPPED|BLOCKED|DEFERRED)\s*\|' "$PLAN_FILE" 2>/dev/null | while read -r line; do
               # Extract columns: | Task | Name | Status | Date | Model |
               local task_id name status date model
               task_id=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
               name=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
-              status=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/.*|\s*\(TASK:[A-Z]*\)\s*|.*/\1/p')
+              status=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/.*|\s*\(TASK:[A-Z_]*\)\s*|.*/\1/p')
               date=$(echo "$line" | ${pkgs.gnused}/bin/sed -n 's/^[[:space:]]*|[^|]*|[^|]*|[^|]*|[[:space:]]*\([^|]*\)[[:space:]]*|.*/\1/p' | ${pkgs.coreutils}/bin/tr -d ' ')
 
               # Try to extract model from 5th column
@@ -482,7 +524,7 @@ let
       show_task_list() {
           local pending_count=0
           local complete_count=0
-          local next_pending=""
+          local next_actionable=""
 
           echo -e "''${CYAN}Tasks in: $PLAN_FILE_ABS''${NC}"
           echo ""
@@ -493,17 +535,29 @@ let
               local status_color=""
               local marker=""
               case "$status" in
+                  TASK:IN_PROGRESS)
+                      status_color="''${MAGENTA}"
+                      # IN_PROGRESS always gets priority marker
+                      if [[ -z "$next_actionable" ]]; then
+                          next_actionable="$task_id"
+                      fi
+                      marker="►"
+                      ;;
                   TASK:PENDING)
                       status_color="''${YELLOW}"
                       pending_count=$((pending_count + 1))
-                      if [[ -z "$next_pending" ]]; then
-                          next_pending="$task_id"
+                      if [[ -z "$next_actionable" ]]; then
+                          next_actionable="$task_id"
                           marker="→"
                       fi
                       ;;
                   TASK:COMPLETE)
                       status_color="''${GREEN}"
                       complete_count=$((complete_count + 1))
+                      ;;
+                  TASK:BLOCKED|TASK:DEFERRED|TASK:SKIPPED)
+                      status_color="''${RED}"
+                      marker="⊘"
                       ;;
                   *)
                       status_color="''${NC}"
@@ -516,8 +570,9 @@ let
           echo ""
           # Re-count since subshell vars don't persist
           local p=$(${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0")
+          local ip=$(${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:IN_PROGRESS\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0")
           local c=$(${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:COMPLETE\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0")
-          echo -e "''${GREEN}Complete: $c''${NC}  ''${YELLOW}Pending: $p''${NC}"
+          echo -e "''${GREEN}Complete: $c''${NC}  ''${MAGENTA}In Progress: $ip''${NC}  ''${YELLOW}Pending: $p''${NC}"
       }
 
       # Interactive task selection with fzf
@@ -551,15 +606,15 @@ let
       # Get task line by ID, returns empty if not found
       get_task_line_by_id() {
           local target_id="$1"
-          ${pkgs.ripgrep}/bin/rg "\|\s*$target_id\s*\|" "$PLAN_FILE" 2>/dev/null | ${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|COMPLETE)\s*\|' | head -1
+          ${pkgs.ripgrep}/bin/rg "\|\s*$target_id\s*\|" "$PLAN_FILE" 2>/dev/null | ${pkgs.ripgrep}/bin/rg '\|\s*TASK:(PENDING|IN_PROGRESS|COMPLETE|SKIPPED|BLOCKED|DEFERRED)\s*\|' | head -1
       }
 
-      # Check if a task ID exists and is PENDING
-      is_task_pending() {
+      # Check if a task ID exists and is actionable (PENDING or IN_PROGRESS)
+      is_task_actionable() {
           local target_id="$1"
           local line
           line=$(get_task_line_by_id "$target_id")
-          [[ -n "$line" ]] && echo "$line" | ${pkgs.ripgrep}/bin/rg -q '\|\s*TASK:PENDING\s*\|'
+          [[ -n "$line" ]] && echo "$line" | ${pkgs.ripgrep}/bin/rg -q '\|\s*TASK:(PENDING|IN_PROGRESS)\s*\|'
       }
 
       # Get model for specific task by ID
@@ -585,7 +640,7 @@ let
           local iteration=$1
           local rate_limit_count=''${2:-0}
           local target_task_id="''${3:-}"  # Optional: specific task ID to run
-          local pending_before=$(pending_count)
+          local actionable_before=$(actionable_count)
 
           # Determine task name and model based on whether we have a specific task ID
           local task_name task_model
@@ -618,9 +673,9 @@ let
 
           # Single-line compact header: [N/total] TASK @ TIME (logs: basename)
           if [[ -n "$model_to_use" ]]; then
-              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${pending_before} pending)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC} ''${YELLOW}[model: ''${model_to_use}]''${NC}"
+              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${actionable_before} actionable)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC} ''${YELLOW}[model: ''${model_to_use}]''${NC}"
           else
-              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${pending_before} pending)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC}"
+              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${actionable_before} actionable)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC}"
           fi
 
           if [[ "$DRY_RUN" == true ]]; then
@@ -628,10 +683,10 @@ let
               return 0
           fi
 
-          # Build prompt - either for specific task or first pending
+          # Build prompt - either for specific task or next actionable (IN_PROGRESS > PENDING)
           local task_prompt
           if [[ -n "$target_task_id" ]]; then
-              task_prompt="Read ''${PLAN_FILE_ABS}, find the task with ID \"$target_task_id\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Change status from \"TASK:PENDING\" to \"TASK:COMPLETE\" and add today's date. Report what you completed and what's next. Commit your changes when done. If the task is already TASK:COMPLETE, output on its own line: TASK_ALREADY_COMPLETE. If no such task ID found, output on its own line: TASK_NOT_FOUND. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave it PENDING for another host to pick up. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave PENDING for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met, that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
+              task_prompt="Read ''${PLAN_FILE_ABS}, find the task with ID \"$target_task_id\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If the task is already TASK:COMPLETE, output on its own line: TASK_ALREADY_COMPLETE. If no such task ID found, output on its own line: TASK_NOT_FOUND. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met, that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
           else
               task_prompt="$PROMPT"
           fi
@@ -683,13 +738,11 @@ let
               if is_rate_limited "$json_output" "$raw_stderr"; then
                   local next_attempt=$((rate_limit_count + 1))
                   echo -e "  ''${YELLOW}⏳ Rate limited (''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}), waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
-                  save_state "$iteration" "rate_limited" "$pending_before"
-                  sleep $RATE_LIMIT_WAIT
+                  save_state "$iteration" "rate_limited"                  sleep $RATE_LIMIT_WAIT
                   return 2
               fi
 
-              save_state "$iteration" "startup_error" "$pending_before"
-              return 1
+              save_state "$iteration" "startup_error"              return 1
           fi
 
           # PRIORITY 2: Check JSON is_error field (most reliable for API errors)
@@ -700,13 +753,11 @@ let
               if is_rate_limited "$json_output" "$raw_stderr"; then
                   local next_attempt=$((rate_limit_count + 1))
                   echo -e "  ''${YELLOW}⏳ Rate limited (''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}), waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
-                  save_state "$iteration" "rate_limited" "$pending_before"
-                  sleep $RATE_LIMIT_WAIT
+                  save_state "$iteration" "rate_limited"                  sleep $RATE_LIMIT_WAIT
                   return 2
               fi
 
-              save_state "$iteration" "api_error_$json_subtype" "$pending_before"
-              return 1
+              save_state "$iteration" "api_error_$json_subtype"              return 1
           fi
 
           # PRIORITY 3: Check protocol sentinels in result text (defined in our prompt)
@@ -716,61 +767,53 @@ let
           # Environment not capable - skip this task, leave PENDING for another host
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^ENVIRONMENT_NOT_CAPABLE'; then
               echo -e "  ''${YELLOW}⊘ ''${task_name}: requires different host''${NC}"
-              save_state "$iteration" "environment_not_capable" "$pending_before"
-              return 5
+              save_state "$iteration" "environment_not_capable"              return 5
           fi
 
           # User input required - interactive task, needs manual completion via /next-task
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^USER_INPUT_REQUIRED'; then
               echo -e "  ''${YELLOW}⌨ ''${task_name}: requires user input (use /next-task interactively)''${NC}"
-              save_state "$iteration" "user_input_required" "$pending_before"
-              return 6
+              save_state "$iteration" "user_input_required"              return 6
           fi
 
           # All tasks done
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^ALL_TASKS_DONE'; then
-              local pending_after=$(pending_count)
-              if [[ "$pending_after" == "0" ]]; then
+              local actionable_after=$(actionable_count)
+              if [[ "$actionable_after" == "0" ]]; then
                   echo -e "  ''${GREEN}✓ All tasks complete''${NC}"
-                  save_state "$iteration" "all_complete" "$pending_after"
-                  return 3
+                  save_state "$iteration" "all_complete"                  return 3
               fi
           fi
 
           # Task already complete (--task specific)
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^TASK_ALREADY_COMPLETE'; then
               echo -e "  ''${YELLOW}⊘ ''${task_name}: already complete''${NC}"
-              save_state "$iteration" "task_already_complete" "$pending_before"
-              return 7
+              save_state "$iteration" "task_already_complete"              return 7
           fi
 
           # Task not found (--task specific)
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^TASK_NOT_FOUND'; then
               echo -e "  ''${RED}✗ ''${task_name}: not found in plan file''${NC}"
-              save_state "$iteration" "task_not_found" "$pending_before"
-              return 8
+              save_state "$iteration" "task_not_found"              return 8
           fi
 
           # PRIORITY 4: Success path - exit code 0 and type is "result" with subtype "success"
           if [[ $exit_code -eq 0 && "$json_type" == "result" && "$json_subtype" == "success" ]]; then
-              local pending_after=$(pending_count)
-              echo -e "  ''${GREEN}✓ ''${task_name} complete''${NC} (''${pending_before} → ''${pending_after} pending)"
-              save_state "$iteration" "complete" "$pending_after"
-              return 0
+              local actionable_after=$(actionable_count)
+              echo -e "  ''${GREEN}✓ ''${task_name} complete''${NC} (''${actionable_before} → ''${actionable_after} actionable)"
+              save_state "$iteration" "complete"              return 0
           fi
 
           # PRIORITY 5: Non-zero exit code with valid JSON (task execution failed)
           if [[ $exit_code -ne 0 ]]; then
               echo -e "  ''${RED}✗ ''${task_name} failed''${NC} (exit: $exit_code)"
-              save_state "$iteration" "failed" "$pending_before"
-              return 1
+              save_state "$iteration" "failed"              return 1
           fi
 
           # FALLBACK: Unexpected state - treat as success if we got here with exit 0
-          local pending_after=$(pending_count)
+          local actionable_after=$(actionable_count)
           echo -e "  ''${YELLOW}? ''${task_name} completed (unexpected format)''${NC}"
-          save_state "$iteration" "complete_unexpected" "$pending_after"
-          return 0
+          save_state "$iteration" "complete_unexpected"          return 0
       }
 
       # Handle --list mode: show task status and optionally select with fzf
@@ -816,7 +859,9 @@ let
       fi
 
       INITIAL_PENDING=$(pending_count)
-      echo "Pending tasks: $INITIAL_PENDING"
+      INITIAL_IN_PROGRESS=$(in_progress_count)
+      INITIAL_ACTIONABLE=$(actionable_count)
+      echo "Actionable tasks: $INITIAL_ACTIONABLE (in-progress: $INITIAL_IN_PROGRESS, pending: $INITIAL_PENDING)"
       echo "Delay: ''${DELAY_BETWEEN_TASKS}s"
       echo "Safety limits: ''${MAX_ITERATIONS} iterations, ''${MAX_RUNTIME_HOURS}h runtime"
       echo ""
@@ -828,15 +873,15 @@ let
               echo "Use --list to see available tasks"
               exit 1
           fi
-          if ! is_task_pending "$TASK_ID"; then
-              echo -e "''${YELLOW}Warning: Task '$TASK_ID' is not PENDING (may already be complete)''${NC}"
+          if ! is_task_actionable "$TASK_ID"; then
+              echo -e "''${YELLOW}Warning: Task '$TASK_ID' is not PENDING or IN_PROGRESS (may already be complete)''${NC}"
           fi
       fi
 
       # Pre-flight validation
-      if [[ "$INITIAL_PENDING" == "0" ]]; then
-          echo -e "''${GREEN}No pending tasks found. Nothing to do.''${NC}"
-          save_state "0" "no_pending" "0"
+      if [[ "$INITIAL_ACTIONABLE" == "0" ]]; then
+          echo -e "''${GREEN}No actionable tasks found (no PENDING or IN_PROGRESS). Nothing to do.''${NC}"
+          save_state "0" "no_actionable"
           exit 0
       fi
 
@@ -845,7 +890,7 @@ let
           echo -e "''${YELLOW}Warning: Plan file may not have standard Progress Tracking table''${NC}"
       fi
 
-      if ${pkgs.ripgrep}/bin/rg -q '\|\s*Pending\s*\|' "$PLAN_FILE" && ! ${pkgs.ripgrep}/bin/rg -q '\|\s*TASK:PENDING\s*\|' "$PLAN_FILE"; then
+      if ${pkgs.ripgrep}/bin/rg -q '\|\s*Pending\s*\|' "$PLAN_FILE" && ! ${pkgs.ripgrep}/bin/rg -q '\|\s*TASK:(PENDING|IN_PROGRESS)\s*\|' "$PLAN_FILE"; then
           echo -e "''${YELLOW}Warning: Plan file uses 'Pending' instead of 'TASK:PENDING'''''${NC}"
           echo -e "''${YELLOW}Please update status tokens for reliable matching''${NC}"
       fi
@@ -899,7 +944,7 @@ let
       fi
 
       # Trap Ctrl+C
-      trap 'pending_now=$(pending_count); print_exit_summary "Interrupted by user (Ctrl+C)" "$task_counter" "$pending_now"; save_state "$task_counter" "interrupted"; exit 130' INT
+      trap 'print_exit_summary "Interrupted by user (Ctrl+C)" "$task_counter"; save_state "$task_counter" "interrupted"; exit 130' INT
 
       # Main loop
       task_counter=0
@@ -908,18 +953,18 @@ let
       specific_task_done=false  # Track if we've run the --task specified task
 
       while true; do
-          pending=$(pending_count)
+          actionable=$(actionable_count)
 
-          # Check: all complete
-          if [[ "$pending" == "0" ]]; then
-              print_exit_summary "All tasks completed successfully" "$task_counter" "0"
+          # Check: all complete (no PENDING or IN_PROGRESS tasks remain)
+          if [[ "$actionable" == "0" ]]; then
+              print_exit_summary "All tasks completed successfully" "$task_counter"
               save_state "$task_counter" "all_complete"
               exit 0
           fi
 
           # Check: max iterations
           if [[ $task_counter -ge $MAX_ITERATIONS ]]; then
-              print_exit_summary "Iteration limit reached (''${MAX_ITERATIONS} tasks)" "$task_counter" "$pending"
+              print_exit_summary "Iteration limit reached (''${MAX_ITERATIONS} tasks)" "$task_counter"
               save_state "$task_counter" "max_iterations"
               exit 1
           fi
@@ -928,7 +973,7 @@ let
           runtime=$(($(date +%s) - START_TIME))
           max_runtime_seconds=$((MAX_RUNTIME_HOURS * 3600))
           if [[ $runtime -ge $max_runtime_seconds ]]; then
-              print_exit_summary "Runtime limit reached (''${MAX_RUNTIME_HOURS} hours)" "$task_counter" "$pending"
+              print_exit_summary "Runtime limit reached (''${MAX_RUNTIME_HOURS} hours)" "$task_counter"
               save_state "$task_counter" "max_runtime"
               exit 1
           fi
@@ -946,7 +991,7 @@ let
 
           # Determine which task to run:
           # - First iteration with --task: run the specific task
-          # - Subsequent iterations: run next pending task
+          # - Subsequent iterations: run next actionable task (IN_PROGRESS > PENDING)
           current_task_id=""
           if [[ -n "$TASK_ID" && "$specific_task_done" == false ]]; then
               current_task_id="$TASK_ID"
@@ -968,56 +1013,49 @@ let
 
                   # Circuit breaker
                   if [[ $consecutive_rate_limits -ge $MAX_CONSECUTIVE_RATE_LIMITS ]]; then
-                      pending_now=$(pending_count)
-                      print_exit_summary "Rate limit circuit breaker (''${MAX_CONSECUTIVE_RATE_LIMITS} consecutive)" "$task_counter" "$pending_now"
+                      print_exit_summary "Rate limit circuit breaker (''${MAX_CONSECUTIVE_RATE_LIMITS} consecutive)" "$task_counter"
                       save_state "$task_counter" "rate_limit_circuit_breaker"
                       exit 1
                   fi
 
                   if [[ $retries -ge $MAX_RETRIES ]]; then
-                      pending_now=$(pending_count)
-                      print_exit_summary "Retry limit reached (''${MAX_RETRIES} attempts)" "$task_counter" "$pending_now"
+                      print_exit_summary "Retry limit reached (''${MAX_RETRIES} attempts)" "$task_counter"
                       save_state "$task_counter" "max_retries"
                       exit 1
                   fi
                   continue
                   ;;
               3)  # All complete
-                  print_exit_summary "All tasks completed (confirmed by Claude)" "$task_counter" "0"
+                  print_exit_summary "All tasks completed (confirmed by Claude)" "$task_counter"
                   exit 0
                   ;;
               4)  # Permission required - user interaction needed
                   task_counter=$((task_counter - 1))  # Don't count as attempt
-                  pending_now=$(pending_count)
-                  print_exit_summary "Stopped: Claude requires write permission" "$task_counter" "$pending_now"
+                  print_exit_summary "Stopped: Claude requires write permission" "$task_counter"
                   save_state "$task_counter" "permission_required"
                   exit 1
                   ;;
               5)  # Environment not capable - task requires different host
                   task_counter=$((task_counter - 1))  # Don't count as attempt
-                  pending_now=$(pending_count)
-                  print_exit_summary "Task requires different host (ENVIRONMENT_NOT_CAPABLE)" "$task_counter" "$pending_now"
+                  print_exit_summary "Task requires different host (ENVIRONMENT_NOT_CAPABLE)" "$task_counter"
                   save_state "$task_counter" "environment_not_capable"
                   exit 0  # Exit cleanly - user should run on appropriate host
                   ;;
               6)  # User input required - interactive task
                   task_counter=$((task_counter - 1))  # Don't count as attempt
-                  pending_now=$(pending_count)
-                  print_exit_summary "Task requires user input - run /next-task interactively" "$task_counter" "$pending_now"
+                  print_exit_summary "Task requires user input - run /next-task interactively" "$task_counter"
                   save_state "$task_counter" "user_input_required"
                   exit 0  # Exit cleanly - user should run /next-task manually
                   ;;
               7)  # Task already complete (--task specific)
                   task_counter=$((task_counter - 1))  # Don't count as attempt
-                  pending_now=$(pending_count)
-                  print_exit_summary "Specified task already complete" "$task_counter" "$pending_now"
+                  print_exit_summary "Specified task already complete" "$task_counter"
                   save_state "$task_counter" "task_already_complete"
                   exit 0  # Exit cleanly - task was already done
                   ;;
               8)  # Task not found (--task specific)
                   task_counter=$((task_counter - 1))  # Don't count as attempt
-                  pending_now=$(pending_count)
-                  print_exit_summary "Specified task not found in plan file" "$task_counter" "$pending_now"
+                  print_exit_summary "Specified task not found in plan file" "$task_counter"
                   save_state "$task_counter" "task_not_found"
                   exit 1  # Exit with error - task ID was invalid
                   ;;
@@ -1034,17 +1072,16 @@ let
           fi
 
           if [[ "$MODE" != "single" ]]; then
-              remaining=$(pending_count)
+              remaining=$(actionable_count)
               if [[ $remaining -gt 0 ]]; then
-                  echo -e "''${BLUE}Next task in ''${DELAY_BETWEEN_TASKS}s... ($remaining pending)''${NC}"
+                  echo -e "''${BLUE}Next task in ''${DELAY_BETWEEN_TASKS}s... ($remaining actionable)''${NC}"
                   sleep $DELAY_BETWEEN_TASKS
               fi
           fi
       done
 
       # Normal exit
-      remaining=$(pending_count)
-      print_exit_summary "Requested tasks completed" "$task_counter" "$remaining"
+      print_exit_summary "Requested tasks completed" "$task_counter"
     '';
 
 in
