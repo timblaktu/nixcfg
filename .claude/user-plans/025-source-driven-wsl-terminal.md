@@ -1,9 +1,14 @@
 # Plan 025: Source-Driven WSL Terminal Integration
 
 **Created**: 2026-02-15 19:48 PST
-**Branch**: `refactor/dendritic-pattern`
+**Branch**: `feature/source-driven-wsl-terminal` (EXCLUSIVE — all work for this plan happens on this branch only)
+**Worktree**: `/home/tim/src/nixcfg-wt` (this worktree is dedicated to this branch/plan)
 **Status**: PLANNING
 **Depends on**: Plan 024 (immediate fixes), Plan 023 (distributable images)
+
+> **SCOPE NOTICE**: This plan is exclusively tied to the `feature/source-driven-wsl-terminal`
+> branch. Do NOT work on this plan from `main` or any other branch. Switch to this branch
+> (or the nixcfg-wt worktree) before resuming any Phase 0–4 work.
 
 ## Vision
 
