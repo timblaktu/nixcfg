@@ -46,7 +46,16 @@ secrets.yaml
 !secrets/**/*.yaml  # Allow encrypted secrets in secrets/ directory
 !*.template         # Allow template files
 *.pcap
+
+# Large binary build artifacts
 *.wsl
+*.tar.gz
+*.tar.xz
+*.tar.zst
+*.img
+*.qcow2
+*.iso
+*.raw
 .serena/
 build-profiles/
 .archive/

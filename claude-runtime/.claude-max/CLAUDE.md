@@ -24,6 +24,7 @@
 - **ALWAYS stage changes before nix commands** - Nix only sees staged/committed changes
 - **Task summaries**: Be explicit about SCOPE, list ALL artifacts, state what was NOT done
 - **UPDATE MEMORY BEFORE SUMMARY** - update project memory first, then provide summary
+- **COMMIT DIAGRAM CHANGES IMMEDIATELY** - `.drawio.svg` files with uncommitted pages can be lost if `git checkout` is used; commit after each significant diagram edit
 
 ## Terminal-Width-Aware Output Formatting
 
@@ -105,6 +106,28 @@ nix build '.#checks.x86_64-linux.TEST_NAME'  # Specific test
 
 **Task Reset**: Update status to PENDING, delete artifacts, add reset note with date/reason
 
+**CRITICAL: Plan files must be self-contained** (learned 2026-02-12):
+- Save the FULL plan to disk, not a summary. New sessions cannot access previous session's chat input.
+- Every specification needed to execute remaining tasks MUST be in the plan file: file structure trees, rename tables, exclusion lists, documentation content specs, task DoDs.
+- The continuation prompt should reference ONLY files on disk, never "the original plan input from the previous session".
+- Test: Could a new Claude session execute the next task using ONLY the plan file + CLAUDE.md + codebase? If not, the plan file is incomplete.
+
+**Continuation Prompt Template**:
+```
+Continue Plan NNN: [Plan Name].
+
+Current status: Tasks 0-N complete. Tasks N+1-M pending.
+Last completed: [what was just finished]
+Next task: Task N+1: [task description]
+
+Persistent files:
+- Plan: .claude/user-plans/NNN-name.md (FULL specs for all remaining tasks)
+- Project memory: CLAUDE.md
+- [any other relevant files]
+```
+- NEVER reference "previous session context" or "original plan input"
+- The plan file path IS the context -- new session reads it to get all specs
+
 ## Universal Technical Learnings
 
 ### WSL Process Termination
@@ -149,6 +172,23 @@ Long-running tasks (>5 minutes expected duration) ARE allowed but require carefu
 - `.claude-task-logs/` and `.claude-task-state` are local session state
 - Should be gitignored (pattern `**/.claude` doesn't match `.claude-task-*`)
 - ALWAYS stage flake changes before nix commands
+
+## glab Credential Helper Username Mismatch (2026-02-13, RESOLVED)
+
+**Problem**: `git push` to `https://git.panasonic.aero/blackt1/hsw.git` failed because
+glab's `auth git-credential` helper validates the incoming git username against its own
+internal user (`tim` from whoami fallback) and rejects mismatches.
+
+**Root cause**: glab (unlike gh) enforces username matching in credential helper.
+When git pre-fills `username=X`, glab compares X against its own user and rejects if different.
+
+**Fix**: Set `gitAuth.gitlab.git.userName = null` in pa161878-nixos.nix (nixcfg commit `d1ae2d9`).
+This removes `credential.*.username` from git config entirely. Without a pre-filled username,
+glab skips the comparison and provides credentials directly. GitLab PAT auth is token-based,
+so the username glab returns (`tim`) is irrelevant.
+
+**Same commit also added**: `programs.git.includes` with `hasconfig:remote.*.url` conditional
+to set `user.email = timothy.black@panasonic.aero` for repos with Panasonic Aero remotes.
 
 ## Embedded Linux Tools Document Revision (2026-01-29)
 

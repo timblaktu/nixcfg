@@ -2,7 +2,7 @@
 # Tests full SOPS-NiX deployment on actual NixOS system
 { pkgs, lib, ... }:
 
-pkgs.nixosTest {
+pkgs.testers.nixosTest {
   name = "sops-nix-deployment-integration";
 
   nodes = {

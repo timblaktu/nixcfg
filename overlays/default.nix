@@ -1,6 +1,6 @@
 # Overlays for the Nix configuration
 { inputs }:
-final: prev:
+_final: prev:
 let
   customPkgs = import ../pkgs { pkgs = prev; };
 
@@ -13,17 +13,17 @@ let
 in
 {
   # Custom packages and overrides go here
-  markitdown = customPkgs.markitdown;
-  marker-pdf = customPkgs.marker-pdf;
+  inherit (customPkgs) markitdown;
+  inherit (customPkgs) marker-pdf;
 
   # ISOLATED: docling from custom nixpkgs (temporary until PR #184 merges)
-  docling = pkgsDocling.docling;
+  inherit (pkgsDocling) docling;
 
   # Fix watchfiles test failure that affects MCP servers
   # Fallback: Disable problematic tests while working on version update
   pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
-    (python-final: python-prev: {
-      watchfiles = python-prev.watchfiles.overridePythonAttrs (old: {
+    (_python-final: python-prev: {
+      watchfiles = python-prev.watchfiles.overridePythonAttrs (_old: {
         # Disable tests completely - environment-specific expectations
         doCheck = false;
         pytestFlagsArray = [ ];
@@ -33,8 +33,8 @@ in
 
   # Also override specific Python package sets directly
   python311Packages = prev.python311Packages.override {
-    overrides = self: super: {
-      watchfiles = super.watchfiles.overridePythonAttrs (old: {
+    overrides = _self: super: {
+      watchfiles = super.watchfiles.overridePythonAttrs (_old: {
         doCheck = false;
         pytestFlagsArray = [ ];
       });
@@ -42,8 +42,8 @@ in
   };
 
   python312Packages = prev.python312Packages.override {
-    overrides = self: super: {
-      watchfiles = super.watchfiles.overridePythonAttrs (old: {
+    overrides = _self: super: {
+      watchfiles = super.watchfiles.overridePythonAttrs (_old: {
         doCheck = false;
         pytestFlagsArray = [ ];
       });

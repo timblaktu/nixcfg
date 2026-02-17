@@ -264,15 +264,16 @@ let
     - **Restore backup**: Backups stored in ~/.nixvim-anywhere-backups/
   '';
 
-in stdenv.mkDerivation {
+in
+stdenv.mkDerivation {
   pname = "nixvim-anywhere";
   version = "1.0.0";
-  
+
   src = ./.;
-  
+
   dontConfigure = true;
   dontBuild = true;
-  
+
   installPhase = ''
     runHook preInstall
     
@@ -303,7 +304,7 @@ in stdenv.mkDerivation {
     
     runHook postInstall
   '';
-  
+
   meta = with lib; {
     description = "Convert any system to use nixvim via Nix + home-manager";
     longDescription = ''

@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Fast CPU and memory status for tmux with colored braille indicators
+# Usage: tmux-cpu-mem [narrow|medium|wide]
+
+# Colored braille characters (green -> yellow -> red progression)
+braille_chars=(
+    "#[fg=green]⢀#[default]"           #  0- 12%: Green
+    "#[fg=brightgreen]⣀#[default]"     # 13- 25%: Bright Green  
+    "#[fg=yellow]⣄#[default]"          # 26- 37%: Yellow
+    "#[fg=brightyellow]⣤#[default]"    # 38- 50%: Bright Yellow
+    "#[fg=magenta]⣦#[default]"         # 51- 62%: Magenta
+    "#[fg=red]⣶#[default]"             # 63- 75%: Red
+    "#[fg=brightred]⣷#[default]"       # 76- 87%: Bright Red
+    "#[fg=brightred,bold]⣿#[default]"  # 88-100%: Bold Bright Red
+)
+
+# Calculate CPU usage by comparing current /proc/stat with previous reading
+get_cpu_usage() {
+    local stat_file="/tmp/.tmux-cpu-stat-${USER}"
+    local current_stat
+    current_stat=$(grep '^cpu ' /proc/stat)
+    
+    # Parse current values (user nice system idle iowait irq softirq steal guest guest_nice)
+    local cpu_now
+    read -ra cpu_now <<< "$current_stat"
+    
+    # Calculate current totals
+    local cur_user="${cpu_now[1]}"
+    local cur_nice="${cpu_now[2]}"
+    local cur_system="${cpu_now[3]}"
+    local cur_idle="${cpu_now[4]}"
+    local cur_iowait="${cpu_now[5]:-0}"
+    local cur_irq="${cpu_now[6]:-0}"
+    local cur_softirq="${cpu_now[7]:-0}"
+    local cur_steal="${cpu_now[8]:-0}"
+    
+    # Total idle = idle + iowait
+    local cur_idle_total=$((cur_idle + cur_iowait))
+    # Total non-idle = user + nice + system + irq + softirq + steal
+    local cur_nonidle=$((cur_user + cur_nice + cur_system + cur_irq + cur_softirq + cur_steal))
+    # Total = idle + non-idle
+    local cur_total=$((cur_idle_total + cur_nonidle))
+    
+    # Check if we have a previous reading
+    if [[ -f "$stat_file" ]]; then
+        # Read previous values
+        local prev_stat
+        prev_stat=$(cat "$stat_file")
+        local cpu_prev
+        read -ra cpu_prev <<< "$prev_stat"
+        
+        # Parse previous values
+        local prev_user="${cpu_prev[1]}"
+        local prev_nice="${cpu_prev[2]}"
+        local prev_system="${cpu_prev[3]}"
+        local prev_idle="${cpu_prev[4]}"
+        local prev_iowait="${cpu_prev[5]:-0}"
+        local prev_irq="${cpu_prev[6]:-0}"
+        local prev_softirq="${cpu_prev[7]:-0}"
+        local prev_steal="${cpu_prev[8]:-0}"
+        
+        # Calculate previous totals
+        local prev_idle_total=$((prev_idle + prev_iowait))
+        local prev_nonidle=$((prev_user + prev_nice + prev_system + prev_irq + prev_softirq + prev_steal))
+        local prev_total=$((prev_idle_total + prev_nonidle))
+        
+        # Calculate differences
+        local totald=$((cur_total - prev_total))
+        local idled=$((cur_idle_total - prev_idle_total))
+        
+        # Calculate CPU usage percentage
+        local cpu_pct=0
+        if [[ $totald -gt 0 ]]; then
+            # CPU usage = (total - idle) / total * 100
+            cpu_pct=$(( ((totald - idled) * 100) / totald ))
+        fi
+        
+        # Store current reading for next time
+        echo "$current_stat" > "$stat_file"
+        
+        echo "$cpu_pct"
+    else
+        # First run - store current values and return 0
+        echo "$current_stat" > "$stat_file"
+        echo 0
+    fi
+}
+
+get_memory_usage() {
+    local memtotal=0
+    local memavail=0
+    while IFS=': ' read -r key value _; do
+        case $key in
+            MemTotal) memtotal=${value%% *} ;;
+            MemAvailable) memavail=${value%% *} ;;
+        esac
+        [[ $memtotal -gt 0 && $memavail -gt 0 ]] && break
+    done < /proc/meminfo
+    
+    # Calculate memory percentage
+    if [[ $memtotal -gt 0 ]]; then
+        local memused=$((memtotal - memavail))
+        echo $(( (memused * 100) / memtotal ))
+    else
+        echo 0
+    fi
+}
+
+cpu_pct=$(get_cpu_usage)
+mem_pct=$(get_memory_usage)
+cpu_icon=${braille_chars[$(( cpu_pct > 100 ? 7 : cpu_pct * 7 / 100 ))]}
+ram_icon=${braille_chars[$(( mem_pct > 100 ? 7 : mem_pct * 7 / 100 ))]}
+
+# all modes show CPU/RAM icons
+printf "%s %s" "$cpu_icon" "$ram_icon"    
+
+# wide mode appends loadavg
+[[ "$1" = "wide" ]] && printf " %b" "$(cut -d' ' -f1-3 /proc/loadavg)"
+#read -r load1 load5 load15 _ < /proc/loadavg
+#printf " %s %s %s" "$ram_icon" "$load1" "$load5" "$load15"

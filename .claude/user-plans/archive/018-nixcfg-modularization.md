@@ -1,0 +1,1031 @@
+# Plan 018: Nixcfg Modularization for Team Sharing
+
+**Status**: SUPERSEDED by Plan 019 (dendritic migration) — archived 2026-02-16
+**Branch**: `refactor/modularization`
+**Created**: 2026-02-01
+**Last Updated**: 2026-02-07
+
+---
+
+## Plan Status Summary
+
+**Phase 0 (Design + Cleanup)**: ✅ COMPLETE (5 of 6 tasks, 1 deferred)
+**Phases 1-4 (Extraction)**: SUPERSEDED by Plan 019
+
+### Decision (2026-02-07)
+
+Before proceeding with component extraction, nixcfg will undergo a major architectural refactoring using the **dendritic pattern with flake-parts** (see `~/src/nix-flake-parts-dendritic-pattern/`). This pattern will:
+
+1. Unify all Nix files as flake-parts modules
+2. Shift from host-centric to feature-centric organization
+3. Use `import-tree` for automatic module loading
+4. Enable cleaner extraction after refactoring
+
+**Next Step**: Create new plan for dendritic pattern migration, which will supersede Phases 1-4 of this plan.
+
+---
+
+## Overview
+
+Refactor the nixcfg repository to extract reusable components into shareable flake inputs, enabling teammates to adopt Nix-based developer shells, Claude/OpenCode tooling, and other infrastructure without inheriting personal configuration.
+
+**Goal**: Transform from monolithic personal config → composable library + personal config that imports it.
+
+---
+
+## Progress Tracking
+
+| Phase | Task | Status | Date |
+|-------|------|--------|------|
+| **0** | **Design Discovery** | | |
+| 0.1 | Audience and scope | `TASK:COMPLETE` | 2026-02-01 |
+| 0.2 | Extraction priorities | `TASK:COMPLETE` | 2026-02-01 |
+| 0.3 | Architecture decision | `TASK:COMPLETE` | 2026-02-01 |
+| — | **SESSION BOUNDARY** | | |
+| 0.4 | Naming conventions | `TASK:COMPLETE` | 2026-02-01 |
+| 0.5 | Design sign-off | `TASK:COMPLETE` | 2026-02-07 |
+| — | **SESSION BOUNDARY** | | |
+| **0.6** | **Internal Cleanup (Path B)** | | |
+| 0.6.1 | Consolidate podman-tools.nix | `TASK:COMPLETE` | 2026-02-07 |
+| 0.6.2 | Rename hardware-configuration.nix | `TASK:COMPLETE` | 2026-02-07 |
+| 0.6.3 | Unify MCP server adapters | `TASK:COMPLETE` | 2026-02-07 |
+| 0.6.4 | Consolidate modules/home/ directory | `TASK:COMPLETE` | 2026-02-07 |
+| 0.6.5 | Document module boundaries | `TASK:COMPLETE` | 2026-02-07 |
+| 0.6.6 | Evaluate TUR wrapper consolidation | `TASK:DEFERRED` | 2026-02-07 |
+| — | **PLAN PAUSED** | | |
+| **1** | **Foundation** | `BLOCKED` | |
+| 1.1 | Create shared flake | `TASK:BLOCKED` | |
+| 1.2 | Extract MCP servers | `TASK:BLOCKED` | |
+| 1.3 | Extract secrets helpers | `TASK:BLOCKED` | |
+| 1.4 | Validate: import into nixcfg | `TASK:BLOCKED` | |
+| **2** | **Modules** | `BLOCKED` | |
+| 2.1 | Extract Claude Code | `TASK:BLOCKED` | |
+| 2.2 | Extract OpenCode | `TASK:BLOCKED` | |
+| 2.3 | Extract dev shells | `TASK:BLOCKED` | |
+| 2.4 | Validate: home-manager switch | `TASK:BLOCKED` | |
+| **3** | **Documentation** | `BLOCKED` | |
+| 3.1 | Getting-started guide | `TASK:BLOCKED` | |
+| 3.2 | Customization docs | `TASK:BLOCKED` | |
+| 3.3 | Example flake | `TASK:BLOCKED` | |
+| **4** | **WSL Image Distribution** | `BLOCKED` | |
+| 4.1 | Create nix-wsl-builder repo | `TASK:BLOCKED` | |
+| 4.2 | Extract wsl-common module | `TASK:BLOCKED` | |
+| 4.3 | Extract wsl-tarball-checks | `TASK:BLOCKED` | |
+| 4.4 | Add CI/CD for tarball builds | `TASK:BLOCKED` | |
+| 4.5 | Create dev-team configuration | `TASK:BLOCKED` | |
+| 4.6 | WSL onboarding documentation | `TASK:BLOCKED` | | |
+
+---
+
+## Phase 0: Design Discovery
+
+### Task 0.1: Identify Sharing Scope and Audience
+
+**Status**: `TASK:COMPLETE` (2026-02-01)
+
+**Answers**:
+
+| Question | Answer |
+|----------|--------|
+| Audience | Work teammates + eventual open source |
+| Nix level | Beginners |
+| Existing config | Starting fresh |
+| Platforms | All: NixOS-WSL, macOS, Linux, WSL |
+| Visibility | Split (some private, some public) |
+| AI tools | Full modules + skills + all MCP servers |
+| Namespace | Shadow upstream (programs.claude-code) |
+
+**Delivery Model**:
+- NixOS-WSL machines for opinionated users
+- Nix-only solutions for macOS/Linux users
+- Dev shells for all platforms
+- Claude/OpenCode tooling for AI workflows
+
+**Architecture Preference**: Option C (two repos)
+- Public repo with shared components
+- Private nixcfg imports public repo as flake input
+- Both user and teammates consume same shared code
+
+**Public/Private Audit Summary**:
+
+| Tier | Content | Action |
+|------|---------|--------|
+| 1 | flake-modules, pkgs, overlays | Publish as-is |
+| 2 | claude/opencode modules | Redact names |
+| 3 | nixos auth modules | Rework first |
+| 4 | secrets, hosts | Never publish |
+
+---
+
+### Task 0.2: Catalog Extraction Candidates with Priorities
+
+**Status**: `TASK:COMPLETE` (2026-02-01)
+
+**Purpose**: Prioritize what to extract first based on Task 0.1 answers.
+
+**Current Candidate Inventory** (from codebase analysis):
+
+| Component | Location | LOC | Reusability | Complexity |
+|-----------|----------|-----|-------------|------------|
+| MCP server definitions | `shared/mcp-server-defs.nix` | 6632 | HIGH | LOW |
+| Wrapper script library | `claude-code/lib.nix` | 238 | HIGH | LOW |
+| Claude Code module | `claude-code.nix` + submodules | 4681 | HIGH | MEDIUM |
+| OpenCode module | `opencode.nix` + submodules | 8338 | HIGH | MEDIUM |
+| Secrets helpers | `secrets-management.nix` | 235 | MEDIUM | LOW |
+| GitHub auth | `github-auth.nix` | 495 | MEDIUM | LOW |
+| Dev shell | `flake-modules/dev-shells.nix` | 102 | MEDIUM | LOW |
+| Test infrastructure | `flake-modules/tests.nix` | 779 | MEDIUM | HIGH |
+| AI instructions | `shared/ai-instructions.nix` | 3878 | LOW | LOW |
+| Skills | `claude-code/skills/` | ~5000 | LOW | MEDIUM |
+
+**Priority Decision** (based on Task 0.1: beginners, fresh start, want AI tools):
+
+| Priority | Component | Rationale |
+|----------|-----------|-----------|
+| **P0** | MCP server definitions | Foundation for both Claude and OpenCode; teammates explicitly want this |
+| **P0** | Wrapper script library | Core building block; enables account switching without full module |
+| **P1** | Claude Code module | Primary AI tool; high teammate demand |
+| **P1** | OpenCode module | Alternative AI tool; shares MCP infrastructure |
+| **P2** | Dev shells | Nice-to-have; teammates can use simple `nix develop` without this |
+| **P3** | Secrets helpers | Only needed if using rbw/SOPS; beginners may use env vars instead |
+| **P3** | GitHub auth | Can be simplified; not core to AI workflow |
+| **SKIP** | AI instructions | Too personal; teammates should write their own CLAUDE.md |
+| **SKIP** | Skills | Too specialized (mikrotik, diagram); offer as opt-in examples |
+| **SKIP** | Test infrastructure | Internal; not needed by consumers |
+
+**Minimum Viable Extraction (MVE)**:
+- P0 components only: MCP servers + wrapper library
+- Provides: `lib.mkMcpServer`, `lib.mkClaudeWrapper`, server definitions
+- Enables: basic Claude Code with MCP servers, without full module complexity
+- Complexity: LOW (library functions, no module options)
+
+**Full Extraction Target**:
+- P0 + P1: MCP servers + wrapper library + Claude/OpenCode modules
+- Provides: `programs.claude-code.enable = true` experience
+- Enables: multi-account, hooks, statusline, all features
+- Complexity: MEDIUM (module options, but well-documented)
+
+**Components NOT Shared**:
+- Personal CLAUDE.md content (ai-instructions.nix)
+- Custom skills (mikrotik-management, diagram)
+- hosts/* and secrets/* (obviously)
+- home/common/* (too personal: aliases, zsh config, etc.)
+
+**Deliverable**: ✅ Prioritized extraction list with rationale
+
+---
+
+### Task 0.3: Define Flake Architecture
+
+**Status**: `TASK:COMPLETE` (2026-02-01)
+
+**Purpose**: Decide HOW to organize extracted components.
+
+**Architecture Decision**: **Option A (Single Library Flake)** with modular internal structure
+
+**Rationale**:
+- Task 0.1 indicated Option C preference (public shared + private nixcfg)
+- However, splitting library vs modules into two repos adds coordination overhead
+- A single repo with good internal modularity achieves the same goals:
+  - Public shared repo for teammates
+  - Private nixcfg imports it as single flake input
+  - Beginners only need one import to learn
+
+**Chosen Structure**:
+
+```
+github.com/timblaktu/nix-ai-dev/
+├── flake.nix                    # Main entry point
+├── lib/
+│   ├── default.nix              # lib.ai-dev.* namespace
+│   ├── mcp-servers.nix          # mkMcpServer, server definitions
+│   └── wrappers.nix             # mkClaudeWrapper, account helpers
+├── modules/
+│   ├── home-manager/
+│   │   ├── claude-code/         # programs.claude-code module
+│   │   └── opencode/            # programs.opencode module
+│   └── nixos/                   # Future: system-level modules
+├── templates/
+│   ├── minimal/                 # Just lib functions
+│   ├── home-manager/            # Full HM integration
+│   └── flake-parts/             # For existing flake-parts users
+├── examples/
+│   ├── simple-claude.nix        # Single account, basic config
+│   ├── multi-account.nix        # Max/Pro/Work pattern
+│   └── with-mcp-servers.nix     # Custom MCP server setup
+└── docs/
+    ├── getting-started.md
+    ├── customization.md
+    └── architecture.md
+```
+
+**Flake Outputs**:
+
+```nix
+{
+  # Library functions (no home-manager required)
+  lib.ai-dev = {
+    mkMcpServer = ...;
+    mkClaudeWrapper = ...;
+    mcpServers = { nixos = ...; context7 = ...; };
+  };
+
+  # Home Manager modules
+  homeManagerModules = {
+    claude-code = ./modules/home-manager/claude-code;
+    opencode = ./modules/home-manager/opencode;
+    default = { ... }: {
+      imports = [ self.homeManagerModules.claude-code ];
+    };
+  };
+
+  # Templates for new users
+  templates = {
+    minimal = { ... };
+    home-manager = { ... };
+    flake-parts = { ... };
+  };
+
+  # Overlay for custom packages
+  overlays.default = final: prev: { ... };
+}
+```
+
+**Consumer Usage Examples**:
+
+```nix
+# Minimal: just library functions
+{
+  inputs.ai-dev.url = "github:timblaktu/nix-ai-dev";
+  outputs = { ai-dev, ... }: {
+    # Use lib directly
+    myWrapper = ai-dev.lib.ai-dev.mkClaudeWrapper { ... };
+  };
+}
+
+# Full: Home Manager module
+{
+  inputs.ai-dev.url = "github:timblaktu/nix-ai-dev";
+  outputs = { ai-dev, home-manager, ... }: {
+    homeConfigurations.user = home-manager.lib.homeManagerConfiguration {
+      modules = [
+        ai-dev.homeManagerModules.claude-code
+        {
+          programs.claude-code.enable = true;
+          programs.claude-code.accounts.default = { ... };
+        }
+      ];
+    };
+  };
+}
+```
+
+**Version Strategy**:
+- **Rolling** (always use main) for teammates during development
+- **Tags** for stable releases (v1.0.0, v1.1.0) when ready
+- **No nixpkgs coupling** - works with any nixpkgs version
+
+**Migration Path for nixcfg**:
+1. Create `github.com/timblaktu/nix-ai-dev` repo
+2. Extract P0 components (MCP servers, wrapper lib)
+3. Add as flake input to nixcfg: `ai-dev.url = "github:timblaktu/nix-ai-dev";`
+4. Refactor nixcfg to import from ai-dev instead of local paths
+5. Gradually move P1 components (modules)
+
+**Deliverable**: ✅ Architecture decision with rationale
+
+---
+
+### Task 0.4: Establish Naming Conventions and Namespaces
+
+**Status**: `TASK:COMPLETE` (2026-02-01)
+
+**Purpose**: Define consistent naming for extracted components.
+
+**Current Namespaces in nixcfg**:
+- `programs.claude-code.*` (shadows upstream, uses `disabledModules`)
+- `programs.opencode.*` (shadows upstream)
+- `homeBase.*` (personal config options)
+
+**Decision Summary**:
+
+#### Q1: Module Namespaces
+
+**Choice**: Keep `programs.claude-code` and `programs.opencode` (shadow upstream)
+
+**Rationale**:
+- Upstream compatibility: consumers can switch between our module and upstream easily
+- Option familiarity: users already know `programs.claude-code.enable = true`
+- Superset design: our module provides ALL upstream options plus enhancements
+- Documentation: upstream docs still apply for basic usage
+
+**Trade-off Accepted**:
+- Consumers MUST use `disabledModules` to shadow upstream
+- Our module docs must explain this clearly
+- We commit to maintaining option compatibility with upstream
+
+**Consumer Pattern**:
+```nix
+# Consumer's home.nix
+{ ... }: {
+  disabledModules = [ "programs/claude-code.nix" ];
+  imports = [ inputs.ai-dev.homeManagerModules.claude-code ];
+
+  programs.claude-code = {
+    enable = true;
+    accounts.default = { ... };  # Our extension
+  };
+}
+```
+
+#### Q2: Library Function Naming
+
+**Choice**: `lib.ai-dev.*` namespace with descriptive function names
+
+**Structure**:
+```nix
+lib.ai-dev = {
+  # MCP server helpers
+  mkMcpServer = { ... }: { ... };
+  mcpServers = {
+    nixos = mkMcpServer { ... };
+    context7 = mkMcpServer { ... };
+    sequentialThinking = mkMcpServer { ... };
+    # ...
+  };
+
+  # Wrapper helpers
+  mkClaudeWrapper = { ... }: { ... };
+  mkOpenCodeWrapper = { ... }: { ... };
+
+  # Secrets helpers (P3)
+  secrets = {
+    mkRbwCommand = { ... }: { ... };
+    mkSopsSecret = { ... }: { ... };
+  };
+};
+```
+
+**Rationale**:
+- `ai-dev` matches repo name (nix-ai-dev)
+- Flat namespace is simpler than deeply nested (`lib.claude.mcp.mkServer`)
+- Descriptive function names (`mkClaudeWrapper` not just `mkWrapper`)
+- Grouped by concern (`mcpServers.*`, `secrets.*`)
+
+#### Q3: Flake Output Naming
+
+**Chosen Structure**:
+```nix
+{
+  # Follows home-manager convention
+  homeManagerModules = {
+    claude-code = ./modules/home-manager/claude-code;
+    opencode = ./modules/home-manager/opencode;
+    default = self.homeManagerModules.claude-code;
+  };
+
+  # Library under flake lib output
+  lib.ai-dev = { ... };  # NOT lib.claude-code
+
+  # Overlay for any custom packages
+  overlays.default = final: prev: { ... };
+
+  # Templates for beginners
+  templates = {
+    minimal = { path = ./templates/minimal; description = "Library-only usage"; };
+    home-manager = { path = ./templates/home-manager; description = "Full HM module"; };
+  };
+}
+```
+
+**Rationale**:
+- `homeManagerModules` matches home-manager flake convention
+- `lib.ai-dev` avoids conflict with `lib.claude-code` (could be confusing)
+- `overlays.default` is standard pattern
+- Templates provide copy-paste starting points
+
+#### Internal Naming Conventions
+
+**File Naming**:
+- Kebab-case for directories: `home-manager/`, `mcp-servers/`
+- Kebab-case for files: `claude-code.nix`, `mcp-server-defs.nix`
+- Exception: `lib.nix`, `default.nix` (Nix conventions)
+
+**Option Naming**:
+- camelCase for option names: `enableMcpIntegration`, `defaultModel`
+- Matches upstream home-manager patterns
+- Matches current nixcfg patterns
+
+**Internal Variable Naming**:
+- `cfg = config.programs.claude-code` (standard pattern)
+- Descriptive let bindings: `mcpServerConfig`, `wrapperScript`
+
+**Deliverable**: ✅ Naming convention document complete
+
+---
+
+### Task 0.5: Design Discussion Sign-Off
+
+**Status**: `TASK:PENDING`
+
+**Purpose**: Confirm design decisions before implementation.
+
+**Sign-off Checklist**:
+- [x] Audience and scope defined (0.1)
+- [x] Extraction priorities set (0.2)
+- [x] Architecture chosen (0.3)
+- [x] Naming conventions established (0.4)
+- [ ] User approves proceeding to Phase 1
+
+**Design Summary for Review**:
+
+| Decision | Choice |
+|----------|--------|
+| **Target Audience** | Work teammates (Nix beginners) + eventual open source |
+| **Repo Structure** | Single flake: `github.com/timblaktu/nix-ai-dev` |
+| **P0 Extraction** | MCP server defs + wrapper library |
+| **P1 Extraction** | Claude Code + OpenCode modules |
+| **Module Namespace** | `programs.claude-code` (shadow upstream with disabledModules) |
+| **Library Namespace** | `lib.ai-dev.*` |
+| **Flake Outputs** | `homeManagerModules.{claude-code,opencode}`, `lib.ai-dev`, `templates.*` |
+
+**User Action Required**: Review decisions above and confirm to proceed to Phase 0.6 (Internal Cleanup).
+
+---
+
+## Phase 0.6: Internal Cleanup (Path B)
+
+**Decision**: Path B — Full internal cleanup before extraction. Ensures clean boundaries and no duplication before components are moved to a shared repo.
+
+**Execution Order**: 0.6.1 → 0.6.4 → 0.6.2 → 0.6.3 → 0.6.5 (0.6.6 deferred)
+
+**Success Criteria** (all must pass before Phase 1):
+- [x] No duplicate files between `modules/home/` and `home/modules/` (0.6.1/0.6.4: deleted)
+- [x] Consistent hardware config naming across all hosts (0.6.2: mbp renamed)
+- [x] MCP adapter code exists in ONE place, consumed by both claude/opencode (0.6.3: mcp-server-defs.nix)
+- [x] `nix flake check` passes (verified after each task)
+- [x] `home-manager switch --dry-run` succeeds (verified: tim@pa161878-nixos)
+
+### Task 0.6.1: Consolidate podman-tools.nix
+
+**Status**: `TASK:COMPLETE` (2026-02-07)
+
+**Problem**: Two copies existed with minor differences:
+- `home/modules/podman-tools.nix` (52 LOC) — actively imported in base.nix
+- `modules/home/podman-tools.nix` (57 LOC) — never imported (dead code)
+
+**Finding**: The `modules/home/` version was dead code. Its docker alias logic referenced `config.virtualisation.podman.dockerCompat` (a NixOS option) from a Home Manager context, which wouldn't work anyway.
+
+**Resolution**: Deleted `modules/home/podman-tools.nix`. No merge needed since the file was never used.
+
+**Verification**: `nix flake check --no-build` passed
+
+---
+
+### Task 0.6.2: Rename hardware-configuration.nix
+
+**Status**: `TASK:COMPLETE` (2026-02-07)
+
+**Problem**: `hosts/mbp/hardware-configuration.nix` was inconsistent with all other hosts using `hardware-config.nix`
+
+**Resolution**:
+1. Renamed `hosts/mbp/hardware-configuration.nix` → `hardware-config.nix`
+2. Updated import in `hosts/mbp/default.nix`
+
+**Verification**: `nix flake check --no-build` passed
+
+**Commit**: `f24558b` - "Rename mbp hardware-configuration.nix for consistency"
+
+---
+
+### Task 0.6.3: Unify MCP Server Adapters
+
+**Status**: `TASK:COMPLETE` (2026-02-07) - Accepted as appropriate design
+
+**Original Problem**: Two MCP integration modules appeared ~80% duplicated:
+- `home/modules/claude-code/mcp-servers.nix` (246 LOC)
+- `home/modules/opencode/mcp-servers.nix` (227 LOC)
+
+**Analysis Findings**:
+1. **Already shared**: Both import `shared/mcp-server-defs.nix` (6632 LOC) for core definitions
+2. **Necessarily different**: Output formats differ
+   - Claude: `{ command, args, env, timeout, retries }`
+   - OpenCode: `{ type = "local"; command = [...]; environment; enabled }`
+3. **Subtle option differences**: Claude has extra servers (cliMcpServer, sequentialThinkingPython),
+   OpenCode has typed custom submodule, different defaults
+4. **Pattern differences**: Claude uses `optionalAttrs`, OpenCode uses `if-then-else`
+   (required for JSON serialization)
+
+**Decision**: Accept current design as appropriate. The meaningful sharing (server definitions)
+already exists. The "duplication" is format-specific adaptation that MUST differ. Further
+abstraction would add complexity without clear benefit and violate "avoid over-engineering" principle.
+
+**No code changes required** - current architecture is sound.
+
+---
+
+### Task 0.6.4: Consolidate modules/home/ Directory
+
+**Status**: `TASK:COMPLETE` (2026-02-07)
+
+**Depends On**: 0.6.1 (completed in same session)
+
+**Problem**: Home Manager modules existed in two places:
+- `home/modules/` (primary, 21+ files) — actively used
+- `modules/home/` (2 files: `podman-tools.nix`, `custom-tool.nix`) — both dead code
+
+**Finding**: Both files in `modules/home/` were never imported anywhere:
+- `podman-tools.nix`: Dead duplicate (see 0.6.1)
+- `custom-tool.nix`: Example template wrapping `pkgs.hello`, never used
+
+**Resolution**: Deleted entire `modules/home/` directory. No files needed to be moved since both were dead code.
+
+**Verification**: `nix flake check --no-build` passed
+
+**Commit**: `2ad5d0c` - "Remove dead modules/home directory"
+
+---
+
+### Task 0.6.5: Document Module Boundaries
+
+**Status**: `TASK:COMPLETE` (2026-02-07)
+
+**Problem**: `modules/` vs `home/` distinction was unclear
+
+**Resolution**: Added "Module Directory Conventions" section to `docs/ARCHITECTURE.md`:
+- `modules/` = NixOS system modules (base.nix, wsl-common.nix)
+- `modules/nixos/` = NixOS-specific features (sops-nix, wsl-cuda)
+- `home/modules/` = Home Manager modules (claude-code, opencode, etc.)
+- `home/common/` = Shared HM config fragments (git, zsh, tmux)
+- Documented flake output conventions for extraction
+
+**Commit**: `b473926` - "Document module directory conventions in ARCHITECTURE.md"
+
+---
+
+### Task 0.6.6: Evaluate TUR Wrapper Consolidation
+
+**Status**: `TASK:DEFERRED` (2026-02-07)
+
+**Problem**: TUR package wrappers ~90% identical between claude and opencode
+- `tur-package/claude-wrappers/` and `tur-package/opencode-wrappers/`
+- ~900 lines total, differing only by s/claude/opencode/ substitutions
+
+**Analysis Completed**: Three options identified (template generation, accept duplication, shared library)
+
+**Deferral Reason**: Will be revisited after dendritic pattern refactoring of nixcfg. The TUR packages may need restructuring based on the new architecture.
+
+**Location**: `~/src/nixcfg/tur-package/` (source files committed to TUR fork at `timblaktu/tur`)
+
+---
+
+## Phase 1: Foundation Extraction
+
+*(Tasks defined after Phase 0 completion)*
+
+### Task 1.1: Create Shared Library Flake Structure
+
+**Status**: `TASK:PENDING`
+
+**Depends On**: Tasks 0.1-0.5
+
+**Scope**: TBD based on architecture decision
+
+---
+
+### Task 1.2: Extract MCP Server Definitions
+
+**Status**: `TASK:PENDING`
+
+**Current Location**: `home/modules/shared/mcp-server-defs.nix` (6632 LOC)
+
+**Extraction Notes**:
+- `mkMcpServer` helper function
+- Individual server definitions (nixos, sequentialThinking, context7, etc.)
+- Currently used by both claude-code and opencode modules
+
+---
+
+### Task 1.3: Extract Secrets Management Helpers
+
+**Status**: `TASK:PENDING`
+
+**Current Locations**:
+- `home/modules/secrets-management.nix` (235 LOC)
+- `home/modules/github-auth.nix` (495 LOC)
+- `home/modules/claude-code/lib.nix` (rbw commands)
+
+**Extraction Notes**:
+- rbw (Bitwarden CLI) integration
+- SOPS-nix patterns
+- GitHub/GitLab token retrieval
+
+---
+
+### Task 1.4: Validation - Import Library into nixcfg
+
+**Status**: `TASK:PENDING`
+
+**Purpose**: Prove extraction works by consuming it in original repo.
+
+**Success Criteria**:
+- nixcfg imports extracted library as flake input
+- `nix flake check` passes
+- `home-manager switch` succeeds
+- No functionality regression
+
+---
+
+## Phase 2: Module Extraction
+
+*(Tasks defined after Phase 1 completion)*
+
+---
+
+## Phase 3: Documentation & Onboarding
+
+*(Tasks defined after Phase 2 completion)*
+
+---
+
+## Phase 4: WSL Image Distribution Infrastructure
+
+**Purpose**: Enable automated building and distribution of pre-configured NixOS-WSL tarballs for team onboarding.
+
+**Architecture Decision**: Separate `nix-wsl-builder` repository (not bundled with nix-ai-dev)
+
+**Rationale**:
+- Clear separation between AI tooling and infrastructure
+- Focused scope for WSL-specific concerns
+- Independent release cycle for WSL images
+- Teammates who want WSL images may not want AI tooling (and vice versa)
+
+### Task 4.1: Create nix-wsl-builder Repository
+
+**Status**: `TASK:PENDING`
+
+**Scope**: Initialize new repository with flake structure
+
+**Target Structure**:
+```
+github.com/timblaktu/nix-wsl-builder/
+├── flake.nix
+├── lib/
+│   ├── default.nix
+│   └── tarball.nix           # mkWslConfiguration helper
+├── modules/
+│   ├── wsl-common.nix        # Extracted from nixcfg
+│   ├── wsl-tarball-checks.nix
+│   └── wsl-cuda.nix          # Optional CUDA support
+├── configurations/
+│   ├── minimal.nix           # Generic distribution config
+│   └── dev-team.nix          # Team's opinionated config
+├── templates/
+│   └── basic/                # Simple WSL NixOS config
+└── docs/
+    └── getting-started.md
+```
+
+**Flake Outputs**:
+```nix
+{
+  nixosModules = {
+    wsl-common = ./modules/wsl-common.nix;
+    wsl-tarball-checks = ./modules/wsl-tarball-checks.nix;
+    wsl-cuda = ./modules/wsl-cuda.nix;
+  };
+
+  nixosConfigurations = {
+    minimal = ...;
+    dev-team = ...;
+  };
+
+  packages.x86_64-linux = {
+    tarball-minimal = ...;
+    tarball-dev-team = ...;
+  };
+
+  templates.basic = { ... };
+}
+```
+
+**Definition of Done**:
+- [ ] Repository created on GitHub
+- [ ] Basic flake.nix with nixos-wsl input
+- [ ] Empty module structure in place
+- [ ] `nix flake check` passes
+
+---
+
+### Task 4.2: Extract wsl-common Module
+
+**Status**: `TASK:PENDING`
+
+**Current Location**: `modules/wsl-common.nix` (143 LOC)
+
+**Extraction Notes**:
+- Parameterized options for hostname, defaultUser, interop settings
+- SSH configuration
+- Windows PATH integration
+- Runtime assertions for validation
+
+**Definition of Done**:
+- [ ] Module copied to nix-wsl-builder
+- [ ] Any nixcfg-specific references removed
+- [ ] Test configuration using extracted module
+- [ ] `nix flake check` passes
+
+---
+
+### Task 4.3: Extract wsl-tarball-checks Module
+
+**Status**: `TASK:PENDING`
+
+**Current Location**: `modules/wsl-tarball-checks.nix`
+
+**Extraction Notes**:
+- Security validation for distribution tarballs
+- Personal identifier detection
+- Sensitive environment variable checking
+- Bypass mechanism for development
+
+**Definition of Done**:
+- [ ] Module copied to nix-wsl-builder
+- [ ] Configurable personal identifiers (not hardcoded)
+- [ ] Test security check script generation
+- [ ] `nix flake check` passes
+
+---
+
+### Task 4.4: Add CI/CD for Tarball Builds
+
+**Status**: `TASK:PENDING`
+
+**Scope**: GitHub Actions workflow for automated tarball building
+
+**Workflow Design**:
+```yaml
+name: Build WSL Tarballs
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Configuration to build'
+        required: true
+        default: 'minimal'
+        type: choice
+        options: [minimal, dev-team]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: DeterminateSystems/nix-installer-action@v9
+      - uses: DeterminateSystems/magic-nix-cache-action@v2
+      - name: Build tarball
+        run: nix build .#tarball-${{ inputs.configuration }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nixos-wsl-${{ inputs.configuration }}
+          path: result/nixos.wsl
+```
+
+**Definition of Done**:
+- [ ] Workflow file created
+- [ ] Manual trigger works
+- [ ] Tag-based releases work
+- [ ] Artifacts downloadable from Actions
+
+---
+
+### Task 4.5: Create dev-team Configuration
+
+**Status**: `TASK:PENDING`
+
+**Scope**: Opinionated NixOS-WSL configuration for your team
+
+**Configuration Features**:
+- Standard dev tools (git, vim, curl, htop)
+- Nix flakes enabled
+- Optional: CUDA support
+- Optional: Import nix-ai-dev for Claude/OpenCode tooling
+- Generic user setup (teammates customize after import)
+
+**Definition of Done**:
+- [ ] Configuration builds successfully
+- [ ] Tarball imports into WSL
+- [ ] Basic functionality verified
+- [ ] Documentation for customization
+
+---
+
+### Task 4.6: WSL Onboarding Documentation
+
+**Status**: `TASK:PENDING`
+
+**Scope**: Getting-started guide for teammates
+
+**Content Outline**:
+1. Prerequisites (Windows 11, WSL2 enabled)
+2. Download tarball from GitHub releases
+3. Import into WSL: `wsl --import NixOS C:\wsl\NixOS .\nixos.wsl`
+4. First login and password change
+5. Customization options
+6. Upgrading to newer releases
+
+**Definition of Done**:
+- [ ] docs/getting-started.md complete
+- [ ] Tested by someone unfamiliar with NixOS
+- [ ] Screenshots/examples included
+
+---
+
+## Design Session Log
+
+*(Record outcomes of each design discussion session here)*
+
+### Session 1 (2026-02-01): Initial Plan Creation
+
+**Topics**: Repository structure analysis, extraction candidate identification
+
+**Codebase Analysis Summary**:
+
+```
+nixcfg structure:
+├── flake-modules/     # 9 files, 1736 LOC (flake-parts outputs)
+├── home/modules/      # 21 files, ~4700 LOC (Home Manager modules)
+├── home/common/       # 13 files, ~190 KB (shared home config)
+├── modules/           # 16 files (NixOS/HM mixins)
+├── pkgs/              # 4 custom packages
+└── overlays/          # 2 overlay files
+```
+
+**Key Findings**:
+1. Already has good separation: `shared/` directory with MCP defs and AI instructions
+2. Multi-account pattern well-designed in both claude-code and opencode
+3. `disabledModules` pattern used to shadow upstream modules
+4. Library functions isolated in `lib.nix` files
+5. Repeated patterns could be abstracted (account module type, secrets access)
+
+**Identified Extraction Tiers**:
+
+| Tier | Components | Rationale |
+|------|------------|-----------|
+| 1 (High) | MCP servers, wrapper lib, account module pattern | Already library-like, high reuse |
+| 2 (Medium) | Secrets helpers, dev shells, test infra | Useful but needs abstraction |
+| 3 (Low) | Personal configs (nixvim, tmux, zsh) | Too customized for generic use |
+
+**Next Session**: Answer Task 0.1 questions (audience, scope)
+
+---
+
+### Session 2 (2026-02-04): WSL Builder Research & Phase 4 Design
+
+**Topics**: NixOS WSL build capabilities research, Phase 4 task definition
+
+**Branch**: `research/nixos-wsl-build` (worktree: `/home/tim/src/nixcfg-wsl-research`)
+
+**Research Findings**:
+
+1. **NixOS-WSL is the primary mechanism** for building WSL tarballs
+   - `system.build.tarballBuilder` attribute
+   - Supports `--extra-files` and `--chown` options
+   - Requires sudo for tarball creation
+
+2. **nixos-generators does NOT support WSL format**
+   - 32 formats available, but no WSL
+   - WSL requires specific boot config that NixOS-WSL handles internally
+
+3. **Current nixcfg already has working infrastructure**
+   - `nixos-wsl-minimal` configuration for generic distribution
+   - `wsl-tarball-checks.nix` for security validation
+   - `wsl-common.nix` with parameterized options (143 LOC)
+
+**Architecture Decision**: Separate `nix-wsl-builder` repository
+
+**Rationale**:
+- Clear separation between AI tooling (nix-ai-dev) and infrastructure
+- Focused scope for WSL-specific concerns
+- Independent release cycle for WSL images
+- Teammates can use WSL images without AI tooling
+
+**Artifacts Created**:
+- `docs/NIXOS-WSL-BUILD-CAPABILITIES.md` - Comprehensive research documentation
+- Phase 4 tasks added to this plan (6 tasks with definitions of done)
+
+**Next Session**: Begin Task 4.1 (create nix-wsl-builder repo) or continue with Phase 0.5 sign-off
+
+---
+
+### Session 3 (2026-02-05): Scope Revision & Structural Analysis
+
+**Topics**: Plan scope discussion, dead code cleanup, breadth-first structural analysis
+
+**Key Decision**: Pivot from "extract for sharing" to "internal cleanup first, then extraction"
+
+**Scope Clarification**:
+- Include shell environment (nvim, tmux, zsh) as shareable defaults
+- "Too personal" = only PII (not preferences)
+- Secrets management should be modularized with rbw as default but configurable
+- Focus on internal consistency to make extraction easier later
+
+**Dead Code Removed**:
+- `ROS_211025_0809_10218-markdown/` (empty)
+- `ROS_211025_0809_10218-md/` (empty)
+- `marker_output/` (empty)
+- `GIT-REPO-STATUS.md` (outdated snapshot)
+- `fix-systemd-user.sh` (redundant - fix automated in hosts/common/default.nix)
+
+**Files Moved**:
+- 2 git-worktree design docs → `~/src/git-worktree-superproject/`
+- `FLAKE-PARTS-QUICK-REFERENCE.md` → `docs/`
+
+**Pattern Noted for Future**: `github-actions.nix` at top level is an opt-in user config pattern
+- Module logic in `flake-modules/github-actions.nix` with defaults
+- User creates `github-actions.nix` at top level to override/enable
+- Useful pattern for new repos with optional CI validation
+
+**Structural Analysis Findings** (not yet addressed):
+
+*Top Naming Inconsistencies*:
+1. `hardware-configuration.nix` (mbp) vs `hardware-config.nix` (others)
+2. `modules/home/` vs `home/modules/` both have HM modules
+3. Mixed namespaces: `homeBase`, `programs.*`, `secretsManagement`
+
+*Top DRY Violations*:
+1. MCP server config 80% duplicated in claude-code + opencode (473 lines)
+2. `podman-tools.nix` exists in TWO places (58 lines each)
+3. TUR wrapper build.sh ~90% identical between claude and opencode
+
+*Top Structural Concerns*:
+1. `modules/` vs `home/` boundary unclear - which to copy for extraction?
+2. Custom options embedded in home-configurations.nix, not in reusable modules
+3. Runtime dirs (claude-runtime, opencode-runtime) not generated from Nix
+
+**Next Session**: Address structural issues, starting with quick wins or as prioritized by user
+
+---
+
+### Session 4 (2026-02-07): Path B Decision & Cleanup Task Planning
+
+**Topics**: Cleanup approach decision, task definition for internal cleanup phase
+
+**Key Decision**: **Path B** — Full internal cleanup before extraction
+
+**Three Paths Evaluated**:
+- Path A: Skip cleanup, extract immediately → rejected (carries tech debt into shared repo)
+- Path B: Full internal cleanup first → **selected** (cleaner extraction, less refactoring later)
+- Path C: Hybrid quick wins + extract → not selected
+
+**Cleanup Tasks Defined** (Phase 0.6):
+1. Consolidate podman-tools.nix (2 files → 1)
+2. Rename hardware-configuration.nix (mbp naming consistency)
+3. Unify MCP server adapters (473 LOC duplication → shared module)
+4. Consolidate modules/home/ directory (eliminate split location)
+5. Document module boundaries (clarify modules/ vs home/ convention)
+6. Evaluate TUR wrapper consolidation (deferred — external repo)
+
+**Execution Order**: 0.6.1 → 0.6.4 → 0.6.2 → 0.6.3 → 0.6.5
+
+**Note**: Session conducted from Termux (no Nix available). Implementation to resume on laptop.
+
+---
+
+## Reference: Current Repository Structure
+
+```
+nixcfg/
+├── flake.nix                           # Main entry (flake-parts)
+├── flake-modules/
+│   ├── systems.nix                     # x86_64-linux, aarch64-linux
+│   ├── overlays.nix                    # Custom overlays
+│   ├── packages.nix                    # Custom packages
+│   ├── dev-shells.nix                  # Development environments
+│   ├── home-configurations.nix         # 5 home-manager configs
+│   ├── nixos-configurations.nix        # NixOS systems
+│   ├── darwin-configurations.nix       # macOS systems
+│   ├── termux-outputs.nix              # Termux scripts
+│   ├── tests.nix                       # Test suite
+│   └── github-actions.nix              # CI/CD
+├── home/
+│   ├── modules/
+│   │   ├── base.nix                    # Root module (735 LOC)
+│   │   ├── claude-code.nix             # Claude wrapper (866 LOC)
+│   │   ├── claude-code/                # Submodules (3815 LOC)
+│   │   ├── opencode.nix                # OpenCode wrapper (708 LOC)
+│   │   ├── opencode/                   # Submodules (7630 LOC)
+│   │   ├── shared/
+│   │   │   ├── mcp-server-defs.nix     # MCP definitions (6632 LOC)
+│   │   │   └── ai-instructions.nix     # AI prompts (3878 LOC)
+│   │   ├── secrets-management.nix      # SOPS/Bitwarden (235 LOC)
+│   │   ├── github-auth.nix             # Auth helpers (495 LOC)
+│   │   └── ...                         # Other modules
+│   └── common/                         # Shared config (aliases, git, etc.)
+├── modules/                            # NixOS/HM mixins
+├── pkgs/                               # Custom packages
+├── overlays/                           # Nixpkgs overlays
+└── docs/                               # Documentation
+```

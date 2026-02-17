@@ -17,6 +17,9 @@
     # flake-parts for modular flake organization
     flake-parts.url = "github:hercules-ci/flake-parts";
 
+    # import-tree for automatic module loading (dendritic pattern)
+    import-tree.url = "github:vic/import-tree";
+
     nixvim = {
       url = "github:nix-community/nixvim";
       # Use nixpkgs-unstable which has postgres-lsp and other packages
@@ -56,31 +59,30 @@
 
     # Documentation tooling
     drawio-svg-sync.url = "github:timblaktu/drawio-svg-sync";
+
   };
 
-  outputs = inputs@{ flake-parts, ... }:
+  outputs = inputs@{ flake-parts, import-tree, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       # Import our modular flake structure
       imports = [
-        ./flake-modules/systems.nix
-        ./flake-modules/overlays.nix
-        ./flake-modules/packages.nix
-        ./flake-modules/dev-shells.nix
-        ./flake-modules/nixos-configurations.nix
-        ./flake-modules/darwin-configurations.nix
-        ./flake-modules/home-configurations.nix
-        ./flake-modules/shared-modules.nix # Exports for sharing with colleagues
-        ./flake-modules/templates.nix # Flake templates for easy onboarding
-        ./flake-modules/termux-outputs.nix # Termux Claude Code wrapper scripts
-        ./flake-modules/tests.nix # All checks and tests consolidated here
-        ./flake-modules/github-actions.nix # Configurable GitHub Actions validation
+        # Dendritic pattern: auto-import all flake-parts modules
+        # Each directory contains modules that export to flake.modules.*
+        (import-tree [
+          ./modules/flake-parts
+          ./modules/meta
+          ./modules/programs
+          ./modules/system
+          ./modules/hosts
+        ])
+
+        # All flake-modules migrated to modules/flake-parts/ (Phase 6 complete)
+        # import-tree auto-loads: systems, overlays, packages, dev-shells,
+        # shared-modules, templates, termux-outputs, nixos-configurations,
+        # darwin-configurations, home-configurations, tests, github-actions
       ];
 
-      # Support these systems across all modules
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux" # For Termux on Android
-      ];
+      # systems defined in modules/flake-parts/systems.nix
 
       # Per-system configuration
       perSystem = { config, self', inputs', pkgs, system, ... }: {

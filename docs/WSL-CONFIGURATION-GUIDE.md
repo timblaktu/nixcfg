@@ -3,15 +3,121 @@
 ## Overview
 
 This guide documents the comprehensive WSL-specific configuration in this NixOS setup, covering:
+- **Distributable team WSL images** (build, import, personalize)
 - Current WSL configuration architecture
 - Microsoft Terminal settings.json management
 - Font configuration and installation
 - Home Manager WSL target module integration
 - Recommendations for managing Terminal settings declaratively
 
-**Last Updated**: 2025-11-25
-**Target Audience**: WSL NixOS system administrators
-**Status**: ✅ **IMPLEMENTED - Windows Terminal Management via home-manager**
+**Last Updated**: 2026-02-14
+**Target Audience**: WSL NixOS system administrators and team members
+
+---
+
+## Distributable NixOS-WSL Images (Plan 023)
+
+### Architecture
+
+Four-layer module system for team-distributable WSL images:
+
+```
+Layer 1: wsl-enterprise     -- Company-wide base (CLI tools, WSL integration)
+Layer 2: wsl-tiger-team     -- Team dev stack (Podman, Claude Code, GitLab)
+Layer 3: nixos-wsl-tiger-team -- Host config producing .wsl tarball
+Layer 4: pa161878-nixos     -- Personal machine (layers + personal config)
+```
+
+Layers are **convenience bundles** of dendritic feature modules, not gatekeepers.
+Any host can compose layers or cherry-pick individual modules.
+
+### Building the Tarball (Linux side)
+
+From any NixOS-WSL instance with this flake checked out:
+
+```bash
+# Build the tarball builder
+nix build '.#nixosConfigurations.nixos-wsl-tiger-team.config.system.build.tarballBuilder'
+
+# Run it (requires sudo -- runs nixos-install + compression)
+sudo ./result/bin/nixos-wsl-tarball-builder
+
+# Result: nixos.wsl (~1.8 GB) in current directory
+```
+
+Or use the helper script (if installed via Home Manager):
+
+```bash
+build-wsl-tarball nixos-wsl-tiger-team
+```
+
+### Importing on Windows (PowerShell)
+
+**Automated** (recommended):
+
+```powershell
+# From PowerShell (no admin required)
+# Specify -TarballPath explicitly (auto-detection of UNC paths is unreliable)
+& \\wsl$\<build-distro>\home\<user>\src\nixcfg\docs\tools\Import-NixOSWSL.ps1 `
+    -TarballPath \\wsl$\<build-distro>\home\<user>\src\nixcfg\nixos.wsl
+```
+
+Replace `<build-distro>` with the WSL distro where you built the tarball
+(run `wsl --list --quiet` to see distro names), and `<user>` with your
+Linux username. If you built in a worktree, adjust the path accordingly
+(e.g., `nixcfg-dendritic` instead of `nixcfg`).
+
+The script handles:
+- Detecting where your existing WSL distros are stored (registry lookup)
+- Prompting to replace if the distro name already exists
+- Importing and verifying the new instance
+
+**Manual**:
+
+```powershell
+# Find where existing distros live
+Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss" |
+  ForEach-Object { "$((Get-ItemProperty $_.PSPath).DistributionName): $((Get-ItemProperty $_.PSPath).BasePath)" }
+
+# Import (use same parent directory as existing distros)
+wsl --import nixos-wsl-tiger-team <parent-dir>\nixos-wsl-tiger-team \\wsl$\<distro>\path\to\nixos.wsl
+
+# Launch
+wsl -d nixos-wsl-tiger-team
+```
+
+### Post-Import Setup
+
+**Windows Terminal**: Close and reopen Windows Terminal after import.
+Terminal auto-detects new WSL distributions on launch. If the distro
+still doesn't appear as a tab option, verify it's registered:
+
+```powershell
+wsl --list --verbose    # should show nixos-wsl-tiger-team
+```
+
+If listed but not in Terminal: Settings > Add new profile > select the distro.
+
+**First launch** (inside the new instance):
+
+```bash
+# 1. Verify the instance
+whoami          # should be: dev
+hostname        # should be: nixos-wsl-tiger
+
+# 2. Personalize your username
+setup-username  # interactive rename from 'dev' to your name
+
+# 3. Apply after username change
+sudo nixos-rebuild switch
+```
+
+### Removing / Reinstalling
+
+```powershell
+wsl --unregister nixos-wsl-tiger-team   # removes distro + vhdx
+# Then re-import with the script
+```
 
 ---
 

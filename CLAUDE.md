@@ -1,3 +1,52 @@
+# 🔄 SESSION WORKFLOW PROTOCOL
+
+## Starting a New Session
+When user says **"resume"**, **"continue"**, or **"next task"**:
+1. Check `.claude/user-plans/` for any plans with PENDING tasks
+2. Find the first PENDING task (or continue IN_PROGRESS task)
+3. State the task scope concisely and ask for confirmation before proceeding
+
+## Task Execution Pattern (5 Steps)
+Every task follows this pattern - adapt depth based on complexity:
+
+### 1. **Research** (if needed)
+- Review relevant files, understand current state
+- Skip if prior session already documented findings
+- Document any new discoveries in plan or CLAUDE.md
+
+### 2. **Present**
+- State task scope in 2-3 sentences
+- List specific files to be modified/created
+- Note any ambiguities or decision points
+- **STOP and wait for user confirmation**
+
+### 3. **Approve**
+- User confirms scope OR asks for clarification
+- Resolve any ambiguities before proceeding
+- If scope changes significantly, update plan file first
+
+### 4. **Execute**
+- Make changes following completion standard
+- Commit at logical inflection points
+- Keep user informed of progress on longer tasks
+
+### 5. **Validate**
+- Run `nix flake check --no-build`
+- For HM changes: `home-manager switch --flake '.#TARGET' --dry-run`
+- Verify expected behavior
+- **Only mark COMPLETE after validation passes**
+
+## End of Session
+Always provide continuation prompt:
+```
+Continue Plan 019.
+Last completed: [task ID and brief description]
+Next task: [task ID] - [one-line description]
+Check: [relevant file path]
+```
+
+---
+
 # ⚠️ CRITICAL PROJECT-SPECIFIC RULES ⚠️
 - **SESSION CONTINUITY**: Update this CLAUDE.md file with task progress and provide end-of-response summary of changes made
 - **COMPLETION STANDARD**: Tasks complete ONLY when: (1) `git add` all files, (2) `nix flake check` passes, (3) `nix run home-manager -- switch --flake '.#TARGET' --dry-run` succeeds, (4) end-to-end functionality demonstrated. **Writing code ≠ Working system**
@@ -9,21 +58,26 @@
 - **DEPENDENCY ANALYSIS BOUNDARY**: When hitting build system complexity (Nix dependency injection, flake outputs), document the issue and recommend next steps rather than deep-diving into the build system
 - **NIX FLAKE CHECK DEBUGGING**: When `nix flake check` fails, debug in-place using: (1) `nix log /nix/store/...` for detailed failure logs, (2) `nix flake check --verbose --debug --print-build-logs`, (3) `nix build .#checks.SYSTEM.TEST_NAME` for individual test execution, (4) `nix repl` + `:lf .` for interactive flake exploration. NEVER waste time on manual test reproduction - use Nix's built-in debugging tools.
 - **RAPID ITERATION = FREQUENT CHECK-INS**: When user says "rapid iteration" or "quick/short responses", this means STOP AFTER EACH SMALL STEP and report back for guidance. Do NOT interpret as "work faster" - it means "communicate more frequently". After each change, explain what you did and ask what to do next.
-- **MODULE NAMING CONVENTION**: Use standard `programs.claude-code` and `programs.opencode` namespaces. Upstream home-manager modules are disabled via `disabledModules` in base.nix to avoid conflicts. Our enhanced implementations provide multi-account support, categorized hooks, statusline variants, MCP helpers, and WSL integration.
+- **DENDRITIC MODULE PATTERN**: All feature modules use `flake.modules.homeManager.*` namespace (e.g., `modules.homeManager.claude-code`). Upstream home-manager modules are disabled via `disabledModules` INSIDE each dendritic module's deferredModule content. Enhanced implementations provide multi-account support, categorized hooks, statusline variants, MCP helpers, and WSL integration.
+- **HOME-MANAGER FILE CONFLICTS**: When `home-manager switch` reports "Existing file would be clobbered":
+  1. **COMPARE**: Show both the existing file and the nix-generated file
+  2. **ANALYZE**: Find the Nix config that generates it; determine if this is conventional (new Nix-managed file) or unexpected
+  3. **INTEGRATE**: If conventional, ensure important content from manual file is added to Nix config BEFORE proceeding
+  4. **PROCEED**: Only then use `-b backup` flag. If not conventional, STOP and report findings to user.
 
 # 🔧 **DEVELOPMENT ENVIRONMENT**
 - Claude code may be running in the terminal or the web. Both use the same .claude/ and CLAUDE.md files in the repo.
 - We define a session startup hook to ensure nix is installed in the environment.
   - **Web** environments are ephemeral, so nix will always need to be installed every session startup
   - **Local** environments already have nix, so hook should be a no-op (fast)
-- **Environment config**: `flake-modules/dev-shells.nix` defines tooling
+- **Environment config**: `modules/flake-parts/dev-shells.nix` defines tooling
 
 # CLAUDE-CODE CONFIGURATION AND STATE MANAGEMENT
 
 **Local sessions:**
 - Use `CLAUDE_CONFIG_DIR` → `claude-runtime/.claude-{account}/`
 - Never touch `.claude/`
-- Hook script at `home/files/bin/ensure-nix.sh` is fine (not web-specific)
+- Hook script at `modules/programs/files [nd]/files/bin/ensure-nix.sh`
 
 **Web sessions:**
 - Use `.claude/settings.json` for hooks
@@ -34,7 +88,7 @@
 
 ```
 nixcfg/
-├── home/files/bin/
+├── modules/programs/files [nd]/files/bin/
 │   └── ensure-nix.sh          # Shared hook script
 ├── claude-runtime/
 │   ├── .claude-default/
@@ -72,124 +126,81 @@ home-manager switch --flake ".#${USER}@$(hostname)"
 
 ## 📋 **ACTIVE WORK**
 
-### 🔨 **In Progress: Cross-Platform Architecture Planning** (2025-12-15)
-**Branch**: `refactor/consolidate-wsl-config` (pending doc fixes before merge)
-**Goal**: Design comprehensive platform support strategy for colleague sharing
+### ✅ **Dendritic Migration Complete** (2026-02-08)
+**Branch**: `refactor/dendritic-pattern`
+**Status**: Plan 019 complete - all Phases (0-6) done
 
-**Context**: Recent WSL consolidation work (templates, base modules) is just ONE slice of a larger cross-platform vision. Need to ensure nixcfg provides solid foundation for extracting shareable components to separate flake repo(s).
+The repository has been migrated from host-centric to feature-centric (dendritic) organization:
 
-**Platform Support Matrix**:
-| Host Platform | Native nix develop | NixOS VM | Current Status |
-|--------------|-------------------|-----------|----------------|
-| Bare-metal Linux (x86_64, aarch64) | ✅ Excellent | ✅ Native KVM/QEMU | ✅ Working |
-| Windows 11 + WSL2 (x86_64) | ✅ Via WSL | ✅ QEMU in WSL | ✅ Consolidated (recent work) |
-| macOS Darwin (M3-4 aarch64) | ⚠️ Lagging/broken | ✅ Fallback option | 🟡 Template exists, needs VM config |
+- **Pattern**: flake-parts + import-tree for auto-discovery
+- **Structure**: All features in `modules/programs/`, hosts in `modules/hosts/`
+- **System types**: 4-layer hierarchy (minimal → default → cli → desktop)
+- **Documentation**: Updated ARCHITECTURE.md reflects new patterns
 
-**Deployment Mode Decision Tree**:
-- **Use nix develop when**: Fast iteration needed, CI/CD pipelines, lightweight tooling, host integration desired
-- **Use NixOS VM when**: Full system isolation needed, Darwin workarounds required, consistent test environments, reproducible builds at OS level
+**Key Directories** (post-migration):
+| Purpose | Location |
+|---------|----------|
+| Feature modules | `modules/programs/` (22 modules) |
+| Host configs | `modules/hosts/` (7 hosts) |
+| System types | `modules/system/types/` (4 layers) |
+| Flake infrastructure | `modules/flake-parts/` (14 modules) |
+| Shared libraries | `modules/lib/` |
+| Custom packages | `pkgs/` |
 
-**Architecture Phases**:
-1. ✅ **WSL Consolidation** - Templates + base modules for WSL scenarios (DONE, pending doc fixes)
-2. 📍 **Cross-Platform Documentation** - Platform matrix, decision tree, VM architecture (CURRENT)
-3. 🔜 **NixOS VM Configurations** - Generic VMs for all platforms (headless + GUI variants, x86_64 + aarch64)
-4. 🔜 **Extraction Planning** - Identify shareable vs personal components, design shared flake structure
-5. 🔜 **Shared Flake Creation** - New repo with extracted components, colleague testing
+**Two WSL Scenarios** (still applicable):
+1. **NixOS-WSL** (`modules/system/settings/wsl/`) - Full NixOS distro on WSL
+2. **Home Manager on ANY WSL** (`modules/system/settings/wsl-home/`) - Portable to vanilla distros
 
-**Key Architectural Insights**:
-- **Layered Modularity**: Platform-agnostic base → Platform adapters → Personal configs → Colleague configs
-- **Two Distinct WSL Scenarios**: NixOS-WSL (full distro) vs Home Manager on vanilla WSL (portable)
-- **Hybrid Image Strategy**: Pre-built images for bootstrapping (WSL tarball CRITICAL) + live building for iteration
-- **Image Matrix Building**: One config → multiple formats (WSL tarball, qcow2, ISO, Docker) via nixos-generators
-- **CI/CD Consideration**: Dev shells must work headless on GitHub Actions (Linux x86_64, macOS Intel/Apple Silicon)
+For migration details, see: `.claude/user-plans/019-dendritic-migration.md`
 
-**Previous WSL Work** (2025-12-13):
-- Templates committed (22aae74)
-- Base modules generalized (6d81a00)
-- `nix flake check` passes
-- Review identified documentation fixes needed (see review findings below)
+### ✅ **Distributable NixOS-WSL Images** (COMPLETED - 2026-02-14)
+**Branch**: `refactor/dendritic-pattern`
+**Plan**: `.claude/user-plans/023-distributable-wsl-images.md`
+**Status**: Plan 023 complete - all Tasks (0-5) done
 
-**Next**: Apply documentation fixes, update ARCHITECTURE.md with platform matrix, then merge to main
+Four-layer architecture for distributable team WSL images:
 
-#### 📋 **REVIEW FINDINGS** (2025-12-13)
+```
+Layer 1: wsl-enterprise (module)     -- Company-wide base (system-cli + WSL)
+Layer 2: wsl-tiger-team (module)     -- Team dev stack (Podman, Claude Code, GitLab)
+Layer 3: nixos-wsl-tiger-team (host) -- Thin host producing .wsl tarball
+Layer 4: pa161878-nixos (host)       -- Personal machine (uses team layers + personal config)
+```
 
-**Overall Grade**: Good - code works, documentation has naming inconsistencies
+**Key modules created**:
+- `modules/system/settings/wsl-enterprise/` -- NixOS (`wsl-enterprise`) + HM (`home-enterprise`)
+- `modules/system/settings/wsl-tiger-team/` -- NixOS (`wsl-tiger-team`) + HM (`home-tiger-team`)
+- `modules/hosts/nixos-wsl-tiger-team [N]/` -- Distributable host config
 
-##### 🔴 CRITICAL: Naming Inconsistency in Documentation
-The Home Manager module is exported as `homeManagerModules.wsl-home-base` but several docs incorrectly reference `homeManagerModules.wsl-base`:
+**Design principles**:
+- Layers are convenience bundles, not gatekeepers (no exclusivity)
+- Dual-registration: each layer provides both NixOS and HM modules
+- Generic user `dev` with `setup-username` script for personalization
+- Tarball security check validates no personal data leaks
+- `pa161878-nixos` refactored to import `wsl-tiger-team` + personal-only modules
 
-| File | Line | Status |
-|------|------|--------|
-| `docs/CONSOLIDATION-PLAN.md` | 93 | ❌ Uses `wsl-base` |
-| `docs/ARCHITECTURE.md` | 984, 1088 | ❌ Uses `wsl-base` |
-| `docs/CONSOLIDATION-VALIDATION-REPORT.md` | 151 | ❌ Uses `wsl-base` |
-
-##### 🟡 BUG: Darwin template hardcodes x86_64
-`templates/darwin/flake.nix:50` hardcodes `x86_64-darwin` in systemPackages despite supporting Apple Silicon.
-
-##### 🟡 OPPORTUNITY: tim@thinky-ubuntu doesn't use wsl-home-base
-Could benefit from shared module instead of manual WSL config duplication.
-
-##### 🟢 HARMLESS WARNING
-`warning: unknown flake output 'homeManagerModules'` - flake-parts doesn't recognize this output but module works correctly.
-
-#### 🎯 **ARCHITECTURAL INSIGHT**
-
-**Key Finding**: TWO distinct WSL scenarios with different module requirements:
-
-1. **NixOS-WSL** (`hosts/common/wsl-base.nix`) - NixOS system module
-   - Requires: Full NixOS-WSL distribution
-   - **Cannot work on vanilla Ubuntu/Debian/Alpine WSL**
-
-2. **Home Manager on ANY WSL** (`home/common/wsl-home-base.nix`) - Home Manager module
-   - Requires: ANY WSL distro + Nix + home-manager
-   - **Works on NixOS-WSL AND vanilla Ubuntu/Debian/Alpine WSL** ✅
-
-**Critical for Sharing**: Colleagues on vanilla WSL can use `homeManagerModules.wsl-home-base` but NOT `nixosModules.wsl-base`
-
-For completed work history, see git log on `dev` and `main` branches.
+**Build**: `nix build '.#nixosConfigurations.nixos-wsl-tiger-team.config.system.build.tarballBuilder'`
+**Run** (requires sudo): `sudo ./result/bin/nixos-wsl-tarball-builder`
+**Import**: `wsl --import nixos-wsl-tiger-team <location> nixos.wsl`
 
 ### ✅ **OpenCode Branch Validation** (COMPLETED - 2026-01-17)
 
-**Branch**: `opencode`
-**Status**: All validation tests passed, ready for merge or SOPS integration
+**Branch**: `opencode` (merged into dendritic migration)
+**Status**: Completed - now part of dendritic module structure
 
-**Completed Work**:
-- ✅ Fixed Bitwarden configuration (item: "PAC Code Companion v2", field: "API Key")
-- ✅ Fixed CRITICAL BUG: Missing `--field` flag in rbw get command (lib.nix + opencode.nix)
-- ✅ Removed file fallback logic (requires rbw, fails fast with clear error if not available)
-- ✅ Fixed wrapper naming: `opencodework`, `opencodemax`, `opencodepro` (no hyphens, matches claude pattern)
-- ✅ Updated authentication to use ANTHROPIC_AUTH_TOKEN (not ANTHROPIC_API_KEY) per Code-Companion docs
-- ✅ Added explicit ANTHROPIC_API_KEY="" to prevent conflicts with bearer auth
-- ✅ Documented SOPS integration plan (docs/claude-opencode-sops-integration-plan.md)
-- ✅ **VALIDATED**: Both `claudework` and `opencodework` successfully connect to Code-Companion proxy
-
-**Key Technical Fix**:
+**Key Technical Fix** (rbw command syntax):
 ```nix
 # Before (BROKEN): rbw get "ITEM" "FIELD"
 # After (FIXED):   rbw get "ITEM" --field "FIELD"
 ```
 
-**Files Modified**:
-- `home/modules/claude-code/lib.nix:65` - Added `--field` flag to rbw command
-- `home/modules/opencode.nix:539` - Already had correct syntax
-- `home/modules/base.nix:376-379,529-532` - Fixed Bitwarden item/field references
-- `home/common/development.nix:135-142` - Fixed claudework wrapper config
-- `docs/claude-opencode-sops-integration-plan.md` - Comprehensive 3-week SOPS plan
-- `opencode-runtime/.opencode-work/*` - Generated work account configurations
+**Current File Locations** (post-dendritic migration):
+- `modules/lib/rbw.nix` - Bitwarden CLI helpers
+- `modules/programs/claude-code/` - Claude Code dendritic module
+- `modules/programs/opencode/` - OpenCode dendritic module
+- `modules/flake-parts/lib.nix` - Preset configurations (claudeCode, openCode)
 
-**Commit**: `9530a1f` - "Fix rbw command syntax and add opencode-work configuration"
-
-**Decision Point**: Choose next action:
-- **Option A**: Merge `opencode` branch to `main` (validation complete, working system)
-- **Option B**: Continue with SOPS integration on `opencode` branch (3-week plan ready)
-- **Option C**: Test additional scenarios before deciding
-
-**SOPS Integration Plan** (ready when approved):
-- Plan: `docs/claude-opencode-sops-integration-plan.md`
-- Features: Dual-mode (runtime rbw + build-time sops-nix)
-- Timeline: 3 weeks (module options, SOPS setup, docs, testing)
-- Benefit: No rbw unlock required, faster launch, offline support
+**SOPS Integration Plan**: `docs/claude-opencode-sops-integration-plan.md`
 
 ### ✅ **Termux Package Building - TUR Integration** (COMPLETED - 2026-01-20)
 
@@ -490,8 +501,9 @@ which opencodemax opencodepro opencodework
 - .rsc format: Plain text RouterOS scripting (human-readable, editable)
 - .backup format: Binary (device flash only, disaster recovery)
 
-**Files Modified**:
-- `home/modules/claude-code/skills/mikrotik-management/SKILL.md` - v2.2.0 (2608 lines, +885 total additions)
+**Current Location**: `modules/programs/claude-code/_hm/skills/mikrotik-management/SKILL.md`
+
+**Skill Version**: 2.2.0 (Local Design + Configuration Management)
 
 **Network Configuration** (L1.0 ready to deploy):
 ```yaml
@@ -499,30 +511,31 @@ Bridge: bridge-attic (flat, no VLAN tagging)
 Ports: ether1-ether8
 Gateway: 10.0.0.1/24
 DHCP Pool: 10.0.0.100-200
-DHCP Domain: attic.local
-DNS Upstream: 1.1.1.1, 8.8.8.8
-NUC Static Lease: 10.0.0.10 (MAC-based)
-DNS Entries: nux.attic.local, attic.local → 10.0.0.10
 ```
 
-**Skill Version**: 2.2.0 (Local Design + Configuration Management)
+---
 
-**Commits**:
-- `4c02117` - Fix YAML frontmatter for skill registration
-- `94fcc2e` - Add configuration management (sections 8-10, +416 lines)
-- `4a3f1f9` - Add local configuration design (section 11, +469 lines)
+### ✅ **Plan 024: Terminal Fragment Integration** (COMPLETED - 2026-02-16)
 
-**Next Steps**:
-1. Run `home-manager switch` to deploy skill v2.2.0
-2. Restart claudepro to reload skill
-3. Test local design workflow:
-   - `config_design_local "test-L1.0" "L1.0"` (creates ~/.config/mikrotik/local-designs/test-L1.0.rsc)
-   - `config_parse_rsc ~/.config/mikrotik/local-designs/test-L1.0.rsc` (validates locally)
-4. At hardware: Deploy with `config_deploy_from_rsc 192.168.88.1 ~/.config/mikrotik/local-designs/test-L1.0.rsc "replace"`
+**Branch**: `refactor/dendritic-pattern`
+**Plan**: `.claude/user-plans/024-terminal-fragment-integration.md`
+**Status**: All tasks complete — 21 commits
 
-**Key Files**:
-- Skill: `home/modules/claude-code/skills/mikrotik-management/SKILL.md` (v2.2.0, 2608 lines)
-- Workflows: Lines 606-778 (L1.0), 1842-1891 (reset-and-configure), 2077-2510 (local design)
+**Summary**: Import-NixOSWSL.ps1 creates Terminal fragment files to work around WSL bugs
+(microsoft/WSL#13064, #13129, #13339) where `wsl --import` fails to create fragments.
+
+**Key Discoveries**:
+- Two-tier GUID system: Terminal's `WslDistroGenerator` (Tier 1) vs WSL's `Microsoft.WSL` (Tier 2)
+- WSL Tier 2 namespace: `{BE9372FE-...}` + UTF-16LE(registryGuidString)
+- Ghost profile root cause: `wsl --import` re-adds to state.json; orphan sweep needed post-import
+- Tarball size: Mesa/LLVM (~800 MiB) unnecessary for CLI-only WSL; disabled via conditional override
+
+**Tarball optimization** (commit `7743bc5`):
+- `hardware.graphics.enable = lib.mkOverride 90 config.wsl-settings.cuda.enable;`
+- Closure: 2.6 GiB → 1.8 GiB (31% reduction)
+- CUDA auto-enables graphics + `wsl.useWindowsDriver` when `wsl-settings.cuda.enable = true`
+
+**Source repos**: `~/src/terminal` (Tier 1), `~/src/WSL` (Tier 2)
 
 ---
 
@@ -530,20 +543,9 @@ DNS Entries: nux.attic.local, attic.local → 10.0.0.10
 
 #### ✅ **OpenCode Vision Support Configuration** (COMPLETED - 2026-01-20)
 
-**Branch**: `opencode`
-**Status**: ✅ Fixed, tested, and verified (commits c2ec743, ad71afc, 010f38f)
+**Status**: Merged into dendritic migration
 
-**Problem Resolved**:
-- OpenCode was failing to read local image files with error "model may not be able to read images"
-- Root cause: Missing `modalities` configuration for custom qwen-a3b model
-
-**Investigation Journey**:
-1. ✅ Permissions were already correctly configured (commit c2ec743)
-2. ❌ Initially tried `supports_vision: true` (hallucinated from LiteLLM docs)
-3. ✅ Found actual OpenCode requirement: `modalities` object via [issue #3084](https://github.com/anomalyco/opencode/issues/3084)
-
-**Solution Implemented**:
-- Added modalities to qwen-a3b model in codecompanion provider (base.nix:534-537):
+**Solution** (vision modalities for custom models):
 ```nix
 modalities = {
   input = [ "text" "image" ];
@@ -551,17 +553,9 @@ modalities = {
 };
 ```
 
-**Files Modified**:
-- `home/modules/base.nix:534-537` - Added modalities configuration
-- `opencode-runtime/.opencode-*/opencode.json` - Regenerated with modalities
+**Current location**: `modules/flake-parts/lib.nix` (openCode.workProvider)
 
-**Verification & Testing**:
-✅ **PASSED**: opencodework successfully read local JPG image and performed OCR to sum numbers correctly
-
-**Key Learnings**:
-1. OpenCode custom models require explicit modalities declarations, not `supports_vision` flags (LiteLLM-specific)
-2. Qwen3-VL-30B-A3B is vision-language model: inputs images, outputs text only (not image generation)
-3. Model is ready for mkb integration for PDF OCR workload
+**Key Learning**: OpenCode custom models require explicit `modalities` declarations
 
 ---
 
@@ -600,7 +594,7 @@ modalities = {
 3. **NixOS-WSL** (`plugin-shim-integration` branch): VSOCK + bare mount
 
 #### **Claude Code Upstream Contributions** (PLANNED)
-**See**: `home/modules/claude-code/UPSTREAM-CONTRIBUTION-PLAN.md`
+**Location**: `modules/programs/claude-code/_hm/` (create UPSTREAM-CONTRIBUTION-PLAN.md when ready)
 - Phase 2 (2-4 weeks): Statusline styles, MCP helpers PRs
 - Phase 3 (1-2 months): Categorized hooks PR
 - Phase 4 (quarter): Multi-account RFC

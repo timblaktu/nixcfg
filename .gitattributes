@@ -1,0 +1,13 @@
+# PowerShell scripts require UTF-8 BOM for Windows PowerShell 5.1 compatibility.
+#
+# Without BOM, PS 5.1 reads .ps1 files as Windows-1252 (system default).
+# Non-ASCII characters (em dashes, etc.) get mangled: UTF-8 byte 0x94
+# maps to U+201D (right double quote) in Windows-1252, and PowerShell
+# treats smart quotes as string delimiters — causing silent parse failures
+# with misleading error messages.
+#
+# NOTE: git's working-tree-encoding=UTF-8-BOM requires iconv support for
+# that encoding name, which NixOS's glibc does not provide. Instead, the
+# BOM is committed directly and enforced by a nix flake check
+# (lint-ps1-encoding) that validates BOM presence on all .ps1 files.
+*.ps1 text

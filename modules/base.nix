@@ -1,4 +1,73 @@
-# Parameterized base module for NixOS systems
+# DEPRECATED: Parameterized base module for NixOS systems
+#
+# This module is DEPRECATED in favor of the dendritic system type layers:
+#   - inputs.self.modules.nixos.system-minimal   (1-minimal: nix settings, store, GC)
+#   - inputs.self.modules.nixos.system-default   (2-default: users, locale, SSH)
+#   - inputs.self.modules.nixos.system-cli       (3-cli: dev tools, containers, SSH keys)
+#   - inputs.self.modules.nixos.system-desktop   (4-desktop: DE, audio, printing)
+#
+# Migration guide:
+#
+# BEFORE (old pattern):
+#   imports = [ ../../modules/base.nix ];
+#   base = {
+#     userName = "tim";
+#     userGroups = [ "wheel" ];
+#     sshPasswordAuth = true;
+#     requireWheelPassword = false;
+#     nixMaxJobs = 8;
+#     nixCores = 0;
+#     enableBinaryCache = true;
+#     cacheTimeout = 10;
+#     additionalShellAliases = { foo = "bar"; };
+#   };
+#
+# AFTER (new pattern):
+#   imports = [ inputs.self.modules.nixos.system-cli ];  # or system-default, system-desktop
+#   systemMinimal = {
+#     nixMaxJobs = 8;
+#     nixCores = 0;
+#     enableBinaryCache = true;
+#     cacheTimeout = 10;
+#   };
+#   systemDefault = {
+#     userName = "tim";
+#     userGroups = [ "wheel" ];
+#     sshPasswordAuth = true;
+#     wheelNeedsPassword = false;
+#     extraShellAliases = { foo = "bar"; };
+#   };
+#   systemCli = {
+#     enablePodman = true;  # replaces containerSupport
+#   };
+#
+# Option mapping:
+#   base.userName             -> systemDefault.userName
+#   base.userGroups           -> systemDefault.userGroups
+#   base.userShell            -> systemDefault.userShell
+#   base.userPackages         -> systemDefault.userPackages
+#   base.sshPasswordAuth      -> systemDefault.sshPasswordAuth
+#   base.sshRootLogin         -> systemDefault.sshRootLogin
+#   base.sshKeys              -> systemCli.sshAuthorizedKeys
+#   base.timeZone             -> systemDefault.timeZone
+#   base.locale               -> systemDefault.locale
+#   base.consoleFont          -> systemDefault.consoleFont
+#   base.consoleKeyMap        -> systemDefault.consoleKeyMap
+#   base.consolePackages      -> systemDefault.consolePackages
+#   base.requireWheelPassword -> systemDefault.wheelNeedsPassword
+#   base.gcDates              -> systemMinimal.gcDates
+#   base.gcOptions            -> systemMinimal.gcOptions
+#   base.nixMaxJobs           -> systemMinimal.nixMaxJobs
+#   base.nixCores             -> systemMinimal.nixCores
+#   base.enableBinaryCache    -> systemMinimal.enableBinaryCache
+#   base.cacheTimeout         -> systemMinimal.cacheTimeout
+#   base.additionalShellAliases -> systemDefault.extraShellAliases
+#   base.systemEnvironmentVariables -> systemDefault.extraEnvironment
+#   base.additionalPackages   -> systemDefault.additionalPackages
+#   base.containerSupport     -> systemCli.enablePodman
+#   base.enableClaudeCodeEnterprise -> systemCli.enableClaudeCodeEnterprise
+#
+# This file will be removed in a future release.
 { config, lib, pkgs, ... }:
 
 # Import the lib for easier option definitions
@@ -174,9 +243,23 @@ in
     };
   };
 
-  # Actual configuration based on the options  
+  # Actual configuration based on the options
   config = lib.mkMerge [
     {
+      # Emit deprecation warning
+      warnings = [
+        ''
+          modules/base.nix is DEPRECATED and will be removed in a future release.
+          Please migrate to the dendritic system type layers:
+            - inputs.self.modules.nixos.system-minimal
+            - inputs.self.modules.nixos.system-default
+            - inputs.self.modules.nixos.system-cli
+            - inputs.self.modules.nixos.system-desktop
+
+          See the comment at the top of modules/base.nix for migration guide.
+        ''
+      ];
+
       # Runtime assertions for configuration validation
       assertions = [
         {
