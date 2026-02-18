@@ -389,7 +389,8 @@
             # Hostname
             networking.hostName = cfg.hostname;
 
-            # User configuration
+            # User configuration — fully declarative (no imperative useradd/passwd)
+            users.mutableUsers = lib.mkDefault false;
             users.users.${cfg.defaultUser} = {
               isNormalUser = lib.mkDefault true;
               extraGroups = lib.mkDefault cfg.userGroups;
