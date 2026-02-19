@@ -393,7 +393,11 @@
             users.mutableUsers = lib.mkDefault false;
             users.users.${cfg.defaultUser} = {
               isNormalUser = lib.mkDefault true;
-              extraGroups = lib.mkDefault cfg.userGroups;
+              # mkOverride 90: NixOS-WSL's wsl-distro.nix sets extraGroups = [ "wheel" ]
+              # as a bare value (priority 100), which silently overrides mkDefault (1000).
+              # We need priority < 100 so host userGroups (e.g., [ "wheel" "dialout" ])
+              # actually take effect. Hosts can still use mkForce (50) to override.
+              extraGroups = lib.mkOverride 90 cfg.userGroups;
               hashedPassword = lib.mkDefault ""; # No password needed in WSL
               openssh.authorizedKeys.keys = lib.mkIf (cfg.sshAuthorizedKeys != [ ]) cfg.sshAuthorizedKeys;
             };
