@@ -27,7 +27,7 @@
 #
 # Or compose with higher layers:
 #   imports = [ inputs.self.modules.nixos.system-cli ];  # inherits minimal -> default -> cli
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 {
   flake.modules = {
     # === NixOS Minimal Module ===
@@ -125,10 +125,28 @@
           };
 
           # Minimal system packages - just enough to bootstrap
+          # nano is included by NixOS defaults; neovim is added at the cli layer
           environment.systemPackages = with pkgs; [
-            vim # Basic editor for emergency recovery
             git # Required for flake operations
           ];
+
+          # Disable documentation outputs to reduce closure size.
+          # Saves ~77 MiB: nixos-manual-html (27), nix-manual + /share/doc (36), texinfo (14).
+          # Man pages (documentation.man.enable) are kept — those are actually useful.
+          # Hosts can override with lib.mkForce true if needed.
+          documentation.nixos.enable = lib.mkDefault false;
+          documentation.doc.enable = lib.mkDefault false;
+          documentation.info.enable = lib.mkDefault false;
+
+          # Pin nix registry to GitHub ref instead of storing nixpkgs source in closure.
+          # Saves ~186 MiB. Ad-hoc commands (nix run nixpkgs#foo) require a one-time
+          # ~30 MB fetch instead of resolving instantly; flake-based workflows are unaffected.
+          nix.registry.nixpkgs.to = {
+            type = "github";
+            owner = "NixOS";
+            repo = "nixpkgs";
+            rev = inputs.nixpkgs.rev;
+          };
 
           # System state version - should be overridden by host
           # Default to current stable; hosts should pin their version
@@ -232,7 +250,6 @@
 
           # Minimal system packages - just enough to bootstrap
           environment.systemPackages = with pkgs; [
-            vim # Basic editor for emergency recovery
             git # Required for flake operations
           ];
 

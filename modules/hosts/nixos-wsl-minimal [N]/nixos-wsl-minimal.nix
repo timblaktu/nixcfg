@@ -145,13 +145,8 @@ in
         keyMap = "us";
       };
 
-      # Documentation
-      documentation = {
-        enable = true;
-        man.enable = true;
-        info.enable = true;
-        doc.enable = true;
-      };
+      # Documentation: inherits minimal layer defaults (man only, no info/doc/nixos-manual)
+      # Override with lib.mkForce true to re-enable specific documentation outputs.
 
       # OpenSSH for remote access (disabled by default)
       services.openssh = {

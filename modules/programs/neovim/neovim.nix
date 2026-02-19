@@ -1289,6 +1289,7 @@
         defaultEditor = lib.mkDefault true;
         viAlias = lib.mkDefault true;
         vimAlias = lib.mkDefault true;
+        withRuby = false; # Saves ~34 MiB — no ruby neovim plugins in use
       };
     };
 
