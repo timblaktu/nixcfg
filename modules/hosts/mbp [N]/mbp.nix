@@ -231,14 +231,10 @@ in
     programs.tmux.autoReload.enable = true;
 
     # Container tools (podman-tui, podman-compose)
+    # Aliases default to docker→podman on Linux (platform-aware module)
     programs.podman-tools = {
       enable = true;
       enableCompose = true;
-      aliases = {
-        docker = "podman";
-        d = "podman";
-        dc = "podman-compose";
-      };
     };
 
     # Secrets management (dendritic module)

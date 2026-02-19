@@ -134,14 +134,10 @@ in
     programs.tmux.autoReload.enable = true;
 
     # Container tools (podman-tui, podman-compose)
+    # Aliases are platform-aware: no docker→podman on Darwin (Docker Desktop is the engine)
     programs.podman-tools = {
       enable = true;
       enableCompose = true;
-      aliases = {
-        docker = "podman";
-        d = "podman";
-        dc = "podman-compose";
-      };
     };
 
     # Secrets management (dendritic module)

@@ -214,15 +214,10 @@
       };
 
       # === Podman Tools ===
-      # Team-standard container aliases.
+      # Aliases default to docker→podman on Linux (platform-aware module).
       programs.podman-tools = {
         enable = lib.mkDefault true;
         enableCompose = lib.mkDefault true;
-        aliases = lib.mkDefault {
-          docker = "podman";
-          d = "podman";
-          dc = "podman-compose";
-        };
       };
 
       # === Tmux ===

@@ -8,14 +8,15 @@
 #   - podman-tui for container management
 #   - podman-compose for multi-container workflows
 #   - Container registry configuration
-#   - Shell aliases (docker → podman)
+#   - Platform-aware shell aliases:
+#       Linux:  docker → podman (podman is the system container engine)
+#       Darwin: no docker alias (Docker Desktop provides docker)
 #
 # Usage in host config:
 #   imports = [ inputs.self.modules.homeManager.podman ];
-#   programs.podman-tools = {
-#     enable = true;
-#     aliases.docker = "podman";
-#   };
+#   programs.podman-tools.enable = true;
+#   # Aliases are platform-aware by default; override if needed:
+#   # programs.podman-tools.aliases = { docker = "podman"; };
 { config, lib, inputs, ... }:
 {
   flake.modules = {
@@ -24,6 +25,20 @@
       with lib;
       let
         cfg = config.programs.podman-tools;
+
+        # Platform-aware default aliases:
+        # - Linux: podman is the system container engine, so alias docker→podman
+        #   for compatibility with scripts/docs that reference docker.
+        # - Darwin: Docker Desktop provides the 'docker' command and daemon
+        #   (via a hidden Linux VM). Aliasing docker→podman would break it
+        #   since podman has no daemon on macOS without Podman Desktop.
+        defaultAliases = if pkgs.stdenv.isDarwin then {
+          # No docker→podman alias on Darwin (Docker Desktop is the engine)
+        } else {
+          docker = "podman";
+          d = "podman";
+          dc = "podman-compose";
+        };
       in
       {
         options.programs.podman-tools = {
@@ -43,8 +58,12 @@
 
           aliases = mkOption {
             type = types.attrsOf types.str;
-            default = { };
-            description = "Shell aliases for podman commands";
+            default = defaultAliases;
+            description = ''
+              Shell aliases for podman commands.
+              On Linux, defaults to docker=podman, d=podman, dc=podman-compose.
+              On Darwin, defaults to empty (Docker Desktop provides docker).
+            '';
             example = {
               docker = "podman";
               d = "podman";
