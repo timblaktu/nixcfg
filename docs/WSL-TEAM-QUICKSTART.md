@@ -50,23 +50,14 @@ Windows 11 laptop.
 
 1. Open the **NixOS Tiger Team** tab in Windows Terminal.
 
-2. You are logged in as the default `dev` user. Personalize your username:
+2. You are logged in as user `dev`. Configure your git identity:
    ```bash
-   setup-username yourname
-   ```
-   Use lowercase letters, numbers, hyphens, or underscores (e.g. `jsmith`, `alice`).
-   Confirm with `y` when prompted.
-
-3. After the rename completes, shut down the distro. In PowerShell:
-   ```powershell
-   wsl --shutdown
+   git config --global user.name "Your Name"
+   git config --global user.email "you@company.com"
    ```
 
-4. Reopen the NixOS Tiger Team tab. Verify your new identity:
-   ```bash
-   whoami      # should show your chosen username
-   hostname    # nixos-wsl-tiger
-   ```
+> **Optional**: To rename the `dev` user, run `setup-username <yourname>`, then
+> `wsl --shutdown` and reopen. This is cosmetic — all tooling works as `dev`.
 
 ## What's Included
 
@@ -95,7 +86,6 @@ When a new tarball is distributed:
    ```powershell
    .\Import-NixOSWSL.ps1 -TarballPath .\nixos.wsl
    ```
-3. After import, run `setup-username` again to personalize.
 
 > Your home directory is reset on reimport. Back up any local work (committed git repos
 > are safe if pushed to a remote).
@@ -119,13 +109,10 @@ your WSL distros are stored (usually `%LOCALAPPDATA%\WSL`).
 **Import failed with "WSL is not installed"**
 Run `wsl --install --no-distribution` from an admin PowerShell and reboot.
 
-**`setup-username` says "can only be run by the 'dev' user"**
-The username has already been changed from the default. You can verify with `whoami`.
-
-**Distro starts as `root` instead of your user**
-The `wsl.conf` default user may not have been updated. Fix it manually:
+**Distro starts as `root` instead of `dev`**
+Check `/etc/wsl.conf` has `default=dev` under `[user]`. Fix if needed:
 ```bash
-sudo sed -i 's/^default=.*/default=yourname/' /etc/wsl.conf
+sudo sed -i 's/^default=.*/default=dev/' /etc/wsl.conf
 ```
 Then `wsl --shutdown` and reopen.
 

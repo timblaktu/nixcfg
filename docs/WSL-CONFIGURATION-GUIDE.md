@@ -102,7 +102,7 @@ WSL_TARBALL_SKIP_CHECKS=1 build-wsl-tarball nixos-wsl-tiger-team
 |------|-------|
 | Output file | `nixos.wsl` (in current directory) |
 | Size | ~1.8 GB |
-| Default user | `dev` (renamed post-import via `setup-username`) |
+| Default user | `dev` |
 | Hostname | `nixos-wsl-tiger` |
 
 ---
