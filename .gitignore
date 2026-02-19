@@ -90,6 +90,7 @@ claude-runtime/*/skills/**
 
 # Runtime cache/state (always changing, causes merge conflicts)
 claude-runtime/*/stats-cache.json
+claude-runtime/*/cache/
 claude-runtime/*/paste-cache/
 claude-runtime/*/tasks/
 
