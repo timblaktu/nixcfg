@@ -413,6 +413,14 @@
               wslu # WSL utilities
             ];
 
+            # Disable Mesa/LLVM graphics drivers unless CUDA is needed (~791 MiB savings).
+            # NixOS-WSL's wsl-distro.nix unconditionally sets hardware.graphics.enable = true
+            # (bare value, priority 100). For CLI-only WSL images this is unnecessary — WSLg
+            # provides its own drivers. mkOverride 90 beats upstream's bare value.
+            # When wsl-settings.cuda.enable is true, this automatically re-enables graphics.
+            # Hosts needing graphics without CUDA can use mkForce true.
+            hardware.graphics.enable = lib.mkOverride 90 cfg.cuda.enable;
+
             # Disable services that don't make sense in WSL
             services.xserver.enable = lib.mkDefault false;
             services.printing.enable = lib.mkDefault false;

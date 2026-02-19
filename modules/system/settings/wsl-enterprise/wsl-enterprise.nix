@@ -172,12 +172,8 @@
               # This stub prevents the zsh-newuser-install wizard on first login.
             '';
 
-            # Disable Mesa/LLVM graphics drivers unless CUDA is needed (~791 MiB savings).
-            # NixOS-WSL unconditionally enables hardware.graphics (Mesa + LLVM).
-            # For CLI-only WSL images this is unnecessary — WSLg provides its own drivers.
-            # When wsl-settings.cuda.enable is true, this automatically re-enables graphics.
-            # Personal hosts needing graphics without CUDA can use mkForce true.
-            hardware.graphics.enable = lib.mkOverride 90 config.wsl-settings.cuda.enable;
+            # NOTE: hardware.graphics.enable override moved to wsl.nix (applies to all
+            # hosts importing the wsl module, not just enterprise). See wsl.nix for details.
 
             # Enterprise FOSS-clean: allowUnfree false
             # Team modules override this if they need unfree packages

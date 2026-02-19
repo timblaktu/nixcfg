@@ -63,6 +63,12 @@ in
       # Keep it free for distribution
       nixpkgs.config.allowUnfree = false;
 
+      # Disable Mesa/LLVM graphics drivers (~791 MiB savings).
+      # NixOS-WSL upstream unconditionally enables hardware.graphics.
+      # This host imports NixOS-WSL directly (not our wsl module), so
+      # the override in wsl.nix doesn't apply here.
+      hardware.graphics.enable = lib.mkOverride 90 false;
+
       # WSL configuration
       wsl = {
         enable = true;
