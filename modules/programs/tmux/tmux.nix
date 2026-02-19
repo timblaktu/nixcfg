@@ -218,9 +218,9 @@ in
                 bind-key -n M-h previous-window
                 bind-key -n M-l next-window
 
-                # Window reordering
-                bind-key -n M-C-H swap-window -t -1\; select-window -t -1
-                bind-key -n M-C-L swap-window -t +1\; select-window -t +1
+                # Window reordering - use prefix-based bindings (more reliable in Windows Terminal)
+                bind-key < swap-window -t -1\; select-window -t -1
+                bind-key > swap-window -t +1\; select-window -t +1
 
                 # Pane resizing
                 bind-key -r j resize-pane -D
