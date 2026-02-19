@@ -1050,6 +1050,10 @@
           self.modules.nixos.wsl
           {
             extraConfig = {
+              # WSL module requires system-cli co-imported (for containerRuntime.enablePodman)
+              imports = [ self.modules.nixos.system-cli ];
+              # system-cli imports system-default which asserts userName != ""
+              systemDefault.userName = "testuser";
               # WSL module asserts hostname, defaultUser, and sshPort
               wsl-settings = {
                 hostname = "test-wsl";

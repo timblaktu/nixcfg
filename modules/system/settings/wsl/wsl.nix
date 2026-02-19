@@ -291,6 +291,33 @@
             };
           };
 
+          # === Container Runtime ===
+          containerRuntime = {
+            enablePodman = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Enable Podman container runtime at the NixOS system level.
+                Required for ISAR/kas builds and general container workflows.
+
+                This sets virtualisation.podman.enable via the system-cli layer,
+                which provides the podman daemon, container storage, subuid/subgid
+                mapping, and cgroup delegation that rootless and privileged
+                containers require. The Nix devshell can provide the podman
+                binary, but system-level infrastructure is not possible to
+                provision from a devshell.
+
+                On Darwin, container runtimes are managed externally (Docker
+                Desktop) and this option has no counterpart. The n3x devshell
+                detects Darwin and uses docker with clear error messaging when
+                Docker Desktop is not installed.
+
+                Requires the system-cli layer to be imported alongside this
+                module (per standard WSL module usage).
+              '';
+            };
+          };
+
           # === Cross-Architecture Build Support (binfmt + QEMU) ===
           binfmt = {
             enable = lib.mkOption {
@@ -497,6 +524,15 @@
                 - WSL CUDA stubs are at: ${cfg.cuda.libraryPath}
               ''
             ];
+          })
+
+          # === Container Runtime ===
+          # WSL hosts are development machines that need container runtimes
+          # for ISAR/kas builds and general container workflows. This delegates
+          # to system-cli's enablePodman which configures virtualisation.podman
+          # with daemon, storage, subuid/subgid, and auto-prune.
+          (lib.mkIf cfg.containerRuntime.enablePodman {
+            systemCli.enablePodman = true;
           })
 
           # === Cross-Architecture Build Support (binfmt + QEMU) ===
