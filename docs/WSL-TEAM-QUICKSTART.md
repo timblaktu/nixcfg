@@ -113,7 +113,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 ```
 
 **Import failed with "not enough disk space"**
-The tarball is approximately 1.5 GB and expands on disk. Free up space on the drive where
+The tarball is approximately 1.8 GB and expands on disk. Free up space on the drive where
 your WSL distros are stored (usually `%LOCALAPPDATA%\WSL`).
 
 **Import failed with "WSL is not installed"**

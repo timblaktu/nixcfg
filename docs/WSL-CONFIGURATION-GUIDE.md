@@ -1,1070 +1,212 @@
-# WSL Configuration Guide
+# WSL Image Builder & Admin Guide
 
-## Overview
+Builder/maintainer reference for building, distributing, and customizing NixOS-WSL
+team images. For end-user setup, see [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md).
 
-This guide documents the comprehensive WSL-specific configuration in this NixOS setup, covering:
-- **Distributable team WSL images** (build, import, personalize)
-- Current WSL configuration architecture
-- Microsoft Terminal settings.json management
-- Font configuration and installation
-- Home Manager WSL target module integration
-- Recommendations for managing Terminal settings declaratively
-
-**Last Updated**: 2026-02-14
-**Target Audience**: WSL NixOS system administrators and team members
+**Last Updated**: 2026-02-19
 
 ---
 
-## Distributable NixOS-WSL Images (Plan 023)
+## Architecture
 
-### Architecture
+The distributable WSL image is composed from four module layers. Each layer is a
+convenience bundle of dendritic feature modules — not a gatekeeper. Any host can
+import layers wholesale or cherry-pick individual modules.
 
-Four-layer module system for team-distributable WSL images:
+```mermaid
+graph TD
+    subgraph "Layer 1: wsl-enterprise"
+        E_NixOS["NixOS: wsl-enterprise<br/><i>system-cli + wsl + enterprise defaults</i>"]
+        E_HM["HM: home-enterprise<br/><i>shell, git, tmux, neovim, direnv, CLI tools</i>"]
+    end
 
+    subgraph "Layer 2: wsl-tiger-team"
+        T_NixOS["NixOS: wsl-tiger-team<br/><i>binfmt (aarch64), unfree, setup-username</i>"]
+        T_HM["HM: home-tiger-team<br/><i>Claude Code, OpenCode, Podman, glab, GitLab auth</i>"]
+    end
+
+    subgraph "Layer 3: nixos-wsl-tiger-team (host)"
+        Host["Thin host config<br/><i>Produces .wsl tarball</i>"]
+    end
+
+    subgraph "Layer 4: pa161878-nixos (personal)"
+        Personal["Personal host<br/><i>Team layers + CUDA, personal modules</i>"]
+    end
+
+    E_NixOS --> T_NixOS
+    E_HM --> T_HM
+    T_NixOS --> Host
+    T_NixOS --> Personal
 ```
-Layer 1: wsl-enterprise     -- Company-wide base (CLI tools, WSL integration)
-Layer 2: wsl-tiger-team     -- Team dev stack (Podman, Claude Code, GitLab)
-Layer 3: nixos-wsl-tiger-team -- Host config producing .wsl tarball
-Layer 4: pa161878-nixos     -- Personal machine (layers + personal config)
-```
 
-Layers are **convenience bundles** of dendritic feature modules, not gatekeepers.
-Any host can compose layers or cherry-pick individual modules.
+Each layer provides **both** a NixOS module and a Home Manager module (dual registration).
+Priority layering: Enterprise (`mkDefault`) < Tiger-team (bare) < Host (`mkForce`).
 
-### Building the Tarball (Linux side)
+For the full dendritic pattern and repository structure, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-From any NixOS-WSL instance with this flake checked out:
+### Module file locations
 
-```bash
-# Build the tarball builder
-nix build '.#nixosConfigurations.nixos-wsl-tiger-team.config.system.build.tarballBuilder'
+| Layer | NixOS module | HM module | File |
+|-------|-------------|-----------|------|
+| Enterprise | `wsl-enterprise` | `home-enterprise` | `modules/system/settings/wsl-enterprise/wsl-enterprise.nix` |
+| Tiger-team | `wsl-tiger-team` | `home-tiger-team` | `modules/system/settings/wsl-tiger-team/wsl-tiger-team.nix` |
+| Host | — | — | `modules/hosts/nixos-wsl-tiger-team [N]/nixos-wsl-tiger-team.nix` |
+| Personal | — | — | `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix` |
 
-# Run it (requires sudo -- runs nixos-install + compression)
-sudo ./result/bin/nixos-wsl-tarball-builder
+---
 
-# Result: nixos.wsl (~1.8 GB) in current directory
-```
+## Building the Tarball
 
-Or use the helper script (if installed via Home Manager):
+### Prerequisites
+
+- A running NixOS-WSL instance (or any Linux with Nix) with this flake checked out
+- `sudo` access (the tarball builder runs `nixos-install` + compression)
+- All changes staged or committed (Nix only sees staged/committed files)
+
+### Build commands
+
+Using the helper script (installed via Home Manager):
 
 ```bash
 build-wsl-tarball nixos-wsl-tiger-team
 ```
 
-### Importing on Windows (PowerShell)
-
-**Automated** (recommended):
-
-```powershell
-# From PowerShell (no admin required)
-# Specify -TarballPath explicitly (auto-detection of UNC paths is unreliable)
-& \\wsl$\<build-distro>\home\<user>\src\nixcfg\docs\tools\Import-NixOSWSL.ps1 `
-    -TarballPath \\wsl$\<build-distro>\home\<user>\src\nixcfg\nixos.wsl
-```
-
-Replace `<build-distro>` with the WSL distro where you built the tarball
-(run `wsl --list --quiet` to see distro names), and `<user>` with your
-Linux username. If you built in a worktree, adjust the path accordingly
-(e.g., `nixcfg-dendritic` instead of `nixcfg`).
-
-The script handles:
-- Detecting where your existing WSL distros are stored (registry lookup)
-- Prompting to replace if the distro name already exists
-- Importing and verifying the new instance
-
-**Manual**:
-
-```powershell
-# Find where existing distros live
-Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss" |
-  ForEach-Object { "$((Get-ItemProperty $_.PSPath).DistributionName): $((Get-ItemProperty $_.PSPath).BasePath)" }
-
-# Import (use same parent directory as existing distros)
-wsl --import nixos-wsl-tiger-team <parent-dir>\nixos-wsl-tiger-team \\wsl$\<distro>\path\to\nixos.wsl
-
-# Launch
-wsl -d nixos-wsl-tiger-team
-```
-
-### Post-Import Setup
-
-**Windows Terminal**: Close and reopen Windows Terminal after import.
-Terminal auto-detects new WSL distributions on launch. If the distro
-still doesn't appear as a tab option, verify it's registered:
-
-```powershell
-wsl --list --verbose    # should show nixos-wsl-tiger-team
-```
-
-If listed but not in Terminal: Settings > Add new profile > select the distro.
-
-**First launch** (inside the new instance):
+Or manually:
 
 ```bash
-# 1. Verify the instance
-whoami          # should be: dev
-hostname        # should be: nixos-wsl-tiger
+# Build the tarball builder derivation
+nix build '.#nixosConfigurations.nixos-wsl-tiger-team.config.system.build.tarballBuilder'
 
-# 2. Personalize your username
-setup-username  # interactive rename from 'dev' to your name
+# Run it (requires sudo)
+sudo ./result/bin/nixos-wsl-tarball-builder
 
-# 3. Apply after username change
-sudo nixos-rebuild switch
+# Result: nixos.wsl (~1.8 GB) in current directory
 ```
 
-### Removing / Reinstalling
+### Security checks
 
-```powershell
-wsl --unregister nixos-wsl-tiger-team   # removes distro + vhdx
-# Then re-import with the script
-```
+The build process automatically runs `wsl-tarball-checks` before producing the tarball.
+These checks validate that no personal data (SSH keys, API tokens, user-specific config)
+leaked into the distributable image. The generic `dev` user should be the only user
+present.
 
----
+To bypass checks during development (not recommended for distribution):
 
-## ✅ Implementation Summary (2025-11-25)
-
-**Decision**: Home Manager `targets.wsl` approach (not NixOS module)
-**Branch**: `wsl-windows-terminal` in `/home/tim/src/home-manager`
-**Status**: Working and validated
-
-### What Was Built
-
-**Module Location**: `modules/targets/wsl/default.nix` (extended)
-
-**New Options**:
-```nix
-targets.wsl.windowsTerminal = {
-  enable = true;
-  colorSchemes = [ ... ];      # Array of color scheme definitions
-  defaultColorScheme = "...";  # Name of default scheme
-  font = { face = "..."; size = 11; };  # Font configuration
-  keybindings = [ ... ];       # Keybinding definitions
-};
-```
-
-**Features**:
-- ✅ Color scheme management (merge into settings.json schemes array)
-- ✅ Default color scheme configuration (profiles.defaults.colorScheme)
-- ✅ Font management (profiles.defaults.font)
-- ✅ Keybinding management (merge into actions array)
-- ✅ Automatic PowerShell enablement
-- ✅ Timestamped backups before modification
-- ✅ Idempotent (safe to run multiple times)
-- ✅ Error handling with automatic rollback
-
-**Implementation Details**:
-- PowerShell script generated at activation time
-- Uses `ConvertFrom-Json` for safe JSON manipulation
-- Preserves existing user customizations
-- Works with both stable and preview versions of Windows Terminal
-
-**Tested Configuration** (tim@pa161878-nixos):
-```nix
-targets.wsl.windowsTerminal = {
-  enable = true;
-  colorSchemes = [{
-    name = "Solarized Dark (Correct)";
-    background = "#002b36";
-    foreground = "#839496";
-    # ... 16 canonical Solarized colors
-  }];
-  defaultColorScheme = "Solarized Dark (Correct)";
-  font = {
-    face = "CaskaydiaMono Nerd Font Mono, Noto Color Emoji";
-    size = 11;
-  };
-};
-```
-
-**Validation**:
-- ✅ Activation successful (2025-11-25)
-- ✅ Color scheme added to settings.json
-- ✅ Default color scheme set correctly
-- ✅ Font configuration applied correctly
-
----
-
-## Quick Reference: Task Status
-
-### Current State Summary
-
-| Feature | Status | Location |
-|---------|--------|----------|
-| Font management | ✅ Working | `targets.wsl.windowsTerminal.font` |
-| Font verification | ✅ Working | PowerShell interop via activation |
-| PowerShell activation access | ✅ Working | home-manager fork `wsl-windows-terminal` |
-| Keybinding management | ✅ Working | `targets.wsl.windowsTerminal.keybindings` |
-| Color scheme management | ✅ Working | `targets.wsl.windowsTerminal.colorSchemes` |
-| Declarative settings.json | ✅ Working | `targets.wsl.windowsTerminal.*` |
-
-### Implementation Tasks (Self-Contained Checklist)
-
-**Phase 1: Foundation** (Priority: High)
-- [ ] Create `modules/nixos/windows-terminal.nix` skeleton
-- [ ] Implement options for profiles.defaults, keybindings, colorSchemes
-- [ ] Create PowerShell script for settings.json merge/update
-- [ ] Add NixOS activation script
-- [ ] Test on current WSL instance
-- [ ] Add host configuration to `hosts/thinky-nixos/default.nix`
-
-**Phase 2: Enhancement** (Priority: Medium)
-- [ ] Implement WSL instance detection for profile auto-generation
-- [ ] Add settings merge modes (overlay/replace/backup)
-- [ ] Improve backup and recovery mechanisms
-- [ ] Test on multiple WSL instances
-
-**Phase 3: Integration** (Priority: Low)
-- [ ] Extend `targets.wsl` in home-manager fork with Terminal options
-- [ ] Create user override mechanism
-- [ ] Prepare for upstream contribution
-
-**Phase 4: Polish** (Priority: Future)
-- [ ] Theme import/export functionality
-- [ ] Advanced keybinding presets
-- [ ] Community testing and upstream PR
-
-### Next Session Prompt
-
-```
-Continue implementing WSL Terminal settings management. Review
-docs/WSL-CONFIGURATION-GUIDE.md for context and task list.
-Start with Phase 1: Create modules/nixos/windows-terminal.nix
-with basic keybinding and color scheme support.
-```
-
----
-
-## Table of Contents
-
-1. [Current WSL Configuration Architecture](#current-wsl-configuration-architecture)
-2. [Microsoft Terminal Settings Management](#microsoft-terminal-settings-management)
-3. [Font Configuration System](#font-configuration-system)
-4. [Home Manager WSL Target Module](#home-manager-wsl-target-module)
-5. [Scope Analysis: NixOS vs Home Manager](#scope-analysis-nixos-vs-home-manager)
-6. [Recommendations and Action Plan](#recommendations-and-action-plan)
-7. [Implementation Roadmap](#implementation-roadmap)
-
----
-
-## Current WSL Configuration Architecture
-
-### Module Hierarchy
-
-```
-NixOS Layer (System-wide):
-├── modules/wsl-common.nix           # Base WSL configuration
-├── modules/nixos/wsl-storage-mount.nix  # Bare mount support
-└── modules/wsl-tarball-checks.nix   # Distribution validation
-
-Home Manager Layer (User-specific):
-├── home/common/terminal.nix         # Terminal utilities
-├── home/modules/terminal-verification.nix  # Font verification
-└── home/migration/wsl-home-files.nix  # WSL-specific files
-
-Home Manager Fork:
-└── modules/targets/wsl/default.nix  # PowerShell activation access
-```
-
-### Key Configuration Files
-
-#### 1. `modules/wsl-common.nix`
-**Scope**: NixOS system-level
-**Purpose**: Common WSL configuration across all instances
-
-**Features**:
-- Hostname and user configuration
-- Windows interop settings
-- SSH configuration
-- Windows PATH integration
-- Shell aliases for Windows tools
-
-**Configuration Options**:
-```nix
-wslCommon = {
-  enable = true;
-  hostname = "hostname";
-  defaultUser = "username";
-  sshPort = 2223;
-  interopRegister = true;
-  interopIncludePath = true;
-  appendWindowsPath = true;
-  enableWindowsTools = true;
-};
-```
-
-#### 2. `home/modules/terminal-verification.nix`
-**Scope**: Home Manager (user-level)
-**Purpose**: Terminal font verification and Windows Terminal alignment
-
-**Features**:
-- Automatic font installation (CaskaydiaMono Nerd Font, Noto Color Emoji)
-- Windows Terminal settings.json verification
-- Activation-time checks for font configuration
-- WSL tools verification (wslpath, clip.exe, powershell.exe)
-
-**Configuration Options**:
-```nix
-terminalVerification = {
-  enable = true;
-  verbose = false;
-  warnOnMisconfiguration = true;
-  terminalFont = "CaskaydiaMono Nerd Font";
-};
-```
-
-**Current Limitations**:
-- ⚠️ **Read-only**: Only *verifies* Terminal settings, doesn't *manage* them
-- ⚠️ Manual intervention required for Terminal configuration changes
-- ⚠️ No keybinding or color scheme management
-- ⚠️ Settings only applied via PowerShell scripts
-
-#### 3. `modules/nixos/wsl-storage-mount.nix`
-**Scope**: NixOS system-level
-**Purpose**: Bare disk mounting for Nix store on external storage
-
-**Features**:
-- PowerShell-based disk mounting via WSL interop
-- Automatic retry logic
-- Systemd integration
-- Per-instance directory management
-
----
-
-## Microsoft Terminal Settings Management
-
-### Current State: Font Configuration Only
-
-**What Currently Works**:
-1. **Font Verification** (`terminal-verification.nix:76-134`)
-   - Detects Windows Terminal settings.json location
-   - Reads current font configuration via PowerShell
-   - Compares against expected font face
-   - Warns if configuration doesn't match
-
-2. **Font Installation** (`install-terminal-fonts.ps1`)
-   - Downloads and installs fonts (CaskaydiaMono NF, Noto Color Emoji)
-   - Updates `profiles.defaults.font.face` in settings.json
-   - Sets `profiles.defaults.intenseTextStyle = "all"`
-   - Creates backup before modification
-
-**What's Missing** (User's Request):
-- ❌ Keybinding management (e.g., tab navigation)
-- ❌ Color scheme management (e.g., NixOS profile colors)
-- ❌ Profile-specific settings (per-distro configuration)
-- ❌ Declarative full settings.json management
-
-### Windows Terminal Settings.json Structure
-
-**Location**:
-```
-%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
-%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json
-```
-
-**WSL Access Path**:
 ```bash
-/mnt/c/Users/$USERNAME/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
+WSL_TARBALL_SKIP_CHECKS=1 build-wsl-tarball nixos-wsl-tiger-team
 ```
 
-**Key Settings Structure**:
-```json
-{
-  "profiles": {
-    "defaults": {
-      "font": {
-        "face": "CaskaydiaMono Nerd Font Mono, Noto Color Emoji"
-      },
-      "intenseTextStyle": "all"
-    },
-    "list": [
-      {
-        "guid": "{...}",
-        "name": "NixOS",
-        "source": "Windows.Terminal.Wsl",
-        "colorScheme": "CustomScheme",
-        "font": { "face": "..." }
-      }
-    ]
-  },
-  "schemes": [
-    {
-      "name": "CustomScheme",
-      "foreground": "#...",
-      "background": "#..."
-    }
-  ],
-  "keybindings": [
-    { "command": "nextTab", "keys": "ctrl+tab" },
-    { "command": "prevTab", "keys": "ctrl+shift+tab" }
-  ]
-}
-```
+### Expected output
 
-### Current Font Management Workflow
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ home-manager activation                                      │
-│ ├─ terminal-verification.nix activation script             │
-│ │  ├─ Detect Windows Terminal                              │
-│ │  ├─ Read settings.json via PowerShell                    │
-│ │  ├─ Compare fonts                                         │
-│ │  └─ Warn if mismatch                                      │
-│ └─ User runs setup-terminal-fonts                           │
-│    └─ install-terminal-fonts.ps1                            │
-│       ├─ Install fonts to Windows                           │
-│       ├─ Update settings.json                               │
-│       └─ Backup original                                    │
-└─────────────────────────────────────────────────────────────┘
-```
+| Item | Value |
+|------|-------|
+| Output file | `nixos.wsl` (in current directory) |
+| Size | ~1.8 GB |
+| Default user | `dev` (renamed post-import via `setup-username`) |
+| Hostname | `nixos-wsl-tiger` |
 
 ---
 
-## Font Configuration System
+## Distributing
 
-### Architecture
+Give teammates two files:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Font Configuration Flow                                      │
-├─────────────────────────────────────────────────────────────┤
-│ NixOS/WSL (Linux side):                                     │
-│ ├─ home/modules/terminal-verification.nix                   │
-│ │  ├─ Installs Nerd Fonts via home.packages                │
-│ │  ├─ Configures fontconfig                                │
-│ │  └─ Provides verification scripts                         │
-│ └─ home/common/terminal.nix                                 │
-│    └─ Provides font setup utilities                         │
-│                                                              │
-│ Windows (Windows side):                                     │
-│ ├─ install-terminal-fonts.ps1                               │
-│ │  ├─ Downloads fonts from GitHub                           │
-│ │  ├─ Installs to Windows fonts directory                   │
-│ │  └─ Registers in Windows Registry                         │
-│ └─ fix-terminal-fonts.ps1                                   │
-│    └─ Updates Terminal settings.json                        │
-└─────────────────────────────────────────────────────────────┘
-```
+1. **`nixos.wsl`** — the tarball (built above)
+2. **`Import-NixOSWSL.ps1`** — the import script (from `docs/tools/`)
 
-### Font Detection Functions
-
-**Robust Font Detection** (`font-detection-functions.ps1`):
-- `Find-InstalledFonts`: Searches all installed fonts
-- `Get-BestCascadiaFont`: Prioritizes Nerd Font variants
-- `Get-BestEmojiFont`: Detects emoji font availability
-- `Get-OptimalTerminalFontConfig`: Generates optimal font stack
-
-**Font Stack Priority**:
-1. CaskaydiaMono Nerd Font Mono (preferred)
-2. CaskaydiaMono NF / CaskaydiaMono NFM (aliases)
-3. Cascadia Mono (fallback)
-4. Noto Color Emoji (emoji support)
-5. Segoe UI Emoji (Windows fallback)
-
-### Scripts
-
-#### 1. `setup-terminal-fonts` (Bash wrapper)
-**Location**: `home/files/bin/setup-terminal-fonts`
-**Purpose**: Interactive font installation from WSL
-
-**Workflow**:
-1. Analyzes current configuration (Windows + NixOS fonts)
-2. Checks Windows Terminal settings
-3. Shows what will be changed
-4. Prompts for confirmation
-5. Runs PowerShell installer
-6. Optionally restarts Terminal
-
-#### 2. `install-terminal-fonts.ps1` (PowerShell)
-**Location**: `home/files/bin/install-terminal-fonts.ps1`
-**Purpose**: Automated font download, installation, and Terminal configuration
-
-**Features**:
-- Detects existing fonts (avoids re-download)
-- Searches Downloads folder first
-- Falls back to online download
-- Installs system-wide (admin) or per-user
-- Updates settings.json with backup
-- Dynamic font detection for optimal configuration
-
-#### 3. `check-windows-terminal` (Verification)
-**Location**: Generated by `terminal-verification.nix`
-**Purpose**: Verify Terminal configuration matches expectations
+Transfer options: shared drive, Teams/Slack file upload, USB stick, `\\wsl$` UNC path
+from the build machine. The end-user import process is documented in
+[WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md).
 
 ---
 
-## Home Manager WSL Target Module
+## Import Script Internals
 
-### Overview
+`docs/tools/Import-NixOSWSL.ps1` automates the import process and works around
+several WSL bugs (microsoft/WSL#13064, #13129, #13339). Key operations:
 
-**Repository**: `/home/tim/src/home-manager` (fork)
-**Branch**: `wsl-target-module`
-**Status**: Implemented, pending upstream contribution
+- **Terminal fragment creation** — WSL's `wsl --import` fails to create Terminal
+  fragment files, so the script creates them manually in `%LOCALAPPDATA%\Microsoft\
+  Windows Terminal\Fragments\`.
+- **Two-tier GUID handling** — Terminal uses its own GUID namespace
+  (`WslDistroGenerator`) separate from WSL's registry GUIDs. The script generates
+  the correct Terminal-tier GUID for fragment files.
+- **Stale artifact cleanup** — removes orphan Terminal profiles and state.json
+  entries left by previous imports.
+- **Existing distro replacement** — detects and offers to unregister an existing
+  distro with the same name before reimporting.
 
-**Documentation**: `/home/tim/src/home-manager/WSL-TARGETS-IMPLEMENTATION.md`
-
-### Purpose
-
-Solves the **PowerShell activation environment access problem**:
-- Home Manager activation runs in minimal environment
-- Windows mount paths (`/mnt/c`) not in PATH during activation
-- Windows tools (PowerShell, cmd.exe) not accessible
-- Prevents Windows integration during home-manager activation
-
-### Implementation
-
-**Module**: `modules/targets/wsl/default.nix`
-
-**Configuration**:
-```nix
-targets.wsl = {
-  enable = true;  # Auto-detected in WSL environments
-
-  windowsTools = {
-    enablePowerShell = true;
-    powerShellPath = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
-
-    enableCmd = false;
-    cmdPath = "/mnt/c/Windows/System32/cmd.exe";
-
-    enableWslPath = false;
-    wslPathPath = "/usr/bin/wslpath";
-  };
-};
-```
-
-**How It Works**:
-1. Creates Nix wrapper packages with symlinks to Windows executables
-2. Adds wrappers to `home.extraActivationPath`
-3. Makes Windows tools available during activation via standard command detection
-4. Validates tools at activation time
-
-**Benefits**:
-- Enables Windows interop during home-manager activation
-- Required for any feature that needs PowerShell during activation
-- Foundation for advanced WSL integration features
-
-**Upstream Status**:
-- Ready for contribution to home-manager
-- Fills gap (home-manager has `targets.darwin` but no `targets.wsl`)
-- Benefits entire Nix community
+For the deep technical reference on the GUID system and Terminal integration, see
+[tools/TERMINAL-PROFILE-ARCHITECTURE.md](tools/TERMINAL-PROFILE-ARCHITECTURE.md).
 
 ---
 
-## Scope Analysis: NixOS vs Home Manager
+## Customization
 
-### The Question
+### Adding or removing tools
 
-**Should Microsoft Terminal settings management live in NixOS or Home Manager?**
+Tools are organized as dendritic feature modules in `modules/programs/`. To add a
+tool to the team image:
 
-User's observation:
-> "at least the Microsoft Terminal settings related features, are really WSL machine specific and not linux user-specific, so as such should reside at the NixOS level/layer"
+1. Create or identify the dendritic module (e.g., `modules/programs/my-tool/`)
+2. Import it in the appropriate layer's HM bundle:
+   - Enterprise-wide: add to `home-enterprise` imports in `wsl-enterprise.nix`
+   - Team-specific: add to `home-tiger-team` imports in `wsl-tiger-team.nix`
+3. Stage changes and rebuild: `build-wsl-tarball nixos-wsl-tiger-team`
 
-### Analysis
+### Changing team branding
 
-| Aspect | NixOS System Layer | Home Manager User Layer |
-|--------|-------------------|------------------------|
-| **Scope** | Machine-wide, all users | Per-user configuration |
-| **Files** | System files (`/etc`, `/nix/store`) | User files (`~/.config`, `~/.local`) |
-| **Privileges** | Root required | User-level only |
-| **Activation** | System rebuild | User home-manager switch |
-| **Target** | Windows host environment | WSL user environment |
+The team image name, Terminal profile name, and hostname are set in the enterprise
+and tiger-team modules:
 
-### Windows Terminal Settings Reality
+- **Distro name** (for `wsl --import`): set in the host config's `wsl.defaultUser`
+  and `networking.hostName`
+- **Terminal profile name**: `enterprise.terminal.profileName` in `wsl-enterprise.nix`
+- **Terminal icon/color**: `enterprise.terminal.icon` and `enterprise.terminal.colorScheme`
 
-**Key Insight**: Windows Terminal settings.json is **per-Windows-user**, not per-WSL-instance!
+### Creating a new team layer
 
-**Location**:
-```
-C:\Users\{WINDOWS_USER}\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
-```
+To create a layer for a different team (e.g., `wsl-alpha-team`):
 
-**Implications**:
-1. ✅ One settings.json serves **all WSL distributions** for that Windows user
-2. ✅ Multiple NixOS-WSL instances share the same Terminal settings
-3. ✅ Different Windows users have separate Terminal configurations
-4. ⚠️ But: Multiple Linux users in one WSL instance would share Terminal settings
-
-### Recommendation: Hybrid Approach
-
-**For Terminal settings.json management**:
-
-#### Option A: NixOS Module (Recommended for your use case)
-**Reasoning**:
-- You typically run one primary WSL instance (thinky-nixos) per Windows user
-- Terminal settings affect the Windows host environment, not just one Linux user
-- Centralized management at system level makes sense
-- Can be reused across multiple WSL instances with same needs
-
-**Implementation Location**: `modules/nixos/windows-terminal.nix`
-
-**Benefits**:
-- ✅ One source of truth per WSL machine
-- ✅ Works for single or multiple Linux users
-- ✅ Consistent with other Windows host integration (mounts, etc.)
-- ✅ Natural location for Windows-side configuration
-
-**Drawbacks**:
-- ⚠️ Requires root for system rebuild
-- ⚠️ Harder to share config across multiple machines
-- ⚠️ Not portable to other NixOS-WSL setups
-
-#### Option B: Home Manager Module (Traditional Nix approach)
-**Reasoning**:
-- Most Terminal configuration is user preference (colors, fonts, keybindings)
-- Home Manager configs are more portable
-- User-level activation is faster
-- Aligns with home-manager's terminal emulator configuration patterns
-
-**Implementation Location**: Home manager fork `modules/targets/wsl/windows-terminal.nix`
-
-**Benefits**:
-- ✅ User-level control
-- ✅ Portable across machines
-- ✅ Fast activation (no sudo)
-- ✅ Consistent with alacritty/kitty module patterns in home-manager
-
-**Drawbacks**:
-- ⚠️ Multiple users would fight over same settings.json
-- ⚠️ Complexity in multi-user scenarios
-
-#### Option C: Hybrid (Most Flexible)
-**Recommended for this project**:
-
-1. **NixOS module** (`modules/nixos/windows-terminal.nix`):
-   - Machine-specific settings (default profile, auto-generated profiles)
-   - Windows host integration
-   - System-wide defaults
-
-2. **Home Manager integration** (via `targets.wsl`):
-   - User font preferences
-   - User color schemes
-   - User keybindings
-   - PowerShell activation access for updates
-
-**Configuration Flow**:
-```nix
-# NixOS system level (hosts/thinky-nixos/default.nix)
-windowsTerminal = {
-  enable = true;
-  manageSettings = true;
-  profiles = {
-    defaults = {
-      # System-wide defaults
-    };
-    # Auto-generate profiles for all WSL instances
-  };
-};
-
-# Home Manager user level (home/wsl.nix)
-targets.wsl = {
-  enable = true;
-  windowsTerminal = {
-    font = "CaskaydiaMono Nerd Font";
-    colorScheme = "Dracula";
-    keybindings = [ ... ];
-  };
-};
-```
-
-**Implementation**: NixOS module generates base configuration, Home Manager adds user preferences.
+1. Copy `modules/system/settings/wsl-tiger-team/` to `wsl-alpha-team/`
+2. Rename module registrations (`wsl-alpha-team`, `home-alpha-team`)
+3. Adjust imports — keep `wsl-enterprise` as base, swap in team-specific tools
+4. Create a new thin host config in `modules/hosts/` that imports your team layer
+5. Build: `build-wsl-tarball nixos-wsl-alpha-team`
 
 ---
 
-## Recommendations and Action Plan
+## Troubleshooting
 
-### Immediate Improvements (Phase 1)
+### Build fails with "configuration not found"
 
-#### 1. Create NixOS Windows Terminal Module
-**Priority**: High
-**Complexity**: Medium
-**Benefit**: Solves user's immediate problem
+Verify the host name matches a `nixosConfigurations` entry:
 
-**Implementation**:
-```nix
-# modules/nixos/windows-terminal.nix
-{ config, lib, pkgs, ... }:
-
-let
-  cfg = config.windowsTerminal;
-
-  # Generate settings.json from NixOS options
-  settingsJson = pkgs.writeText "windows-terminal-settings.json" (builtins.toJSON {
-    profiles = {
-      defaults = cfg.profiles.defaults;
-      list = cfg.profiles.list;
-    };
-    schemes = cfg.colorSchemes;
-    keybindings = cfg.keybindings;
-    # ... other settings
-  });
-
-  # PowerShell script to update settings.json
-  updateScript = pkgs.writeScript "update-windows-terminal.ps1" ''
-    # Backup, merge, and apply settings
-    # ...
-  '';
-
-in {
-  options.windowsTerminal = {
-    enable = mkEnableOption "Windows Terminal settings management";
-
-    manageSettings = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Manage settings.json from NixOS";
-    };
-
-    profiles = {
-      defaults = mkOption {
-        type = types.attrs;
-        description = "Default profile settings";
-      };
-      list = mkOption {
-        type = types.listOf types.attrs;
-        description = "Profile definitions";
-      };
-    };
-
-    colorSchemes = mkOption {
-      type = types.listOf types.attrs;
-      description = "Color scheme definitions";
-    };
-
-    keybindings = mkOption {
-      type = types.listOf types.attrs;
-      description = "Keybinding definitions";
-    };
-  };
-
-  config = mkIf cfg.enable {
-    # System activation script
-    system.activationScripts.windowsTerminalSettings = {
-      text = ''
-        # Run PowerShell script to update settings
-        if [[ -n "''${WSL_DISTRO_NAME:-}" ]]; then
-          # Copy generated settings to temp location
-          # Run PowerShell script to merge
-          ${pkgs.powershell}/bin/pwsh ${updateScript}
-        fi
-      '';
-    };
-  };
-}
-```
-
-**Usage**:
-```nix
-# hosts/thinky-nixos/default.nix
-windowsTerminal = {
-  enable = true;
-
-  profiles.defaults = {
-    font.face = "CaskaydiaMono Nerd Font Mono, Noto Color Emoji";
-    intenseTextStyle = "all";
-  };
-
-  keybindings = [
-    { command = "nextTab"; keys = "ctrl+tab"; }
-    { command = "prevTab"; keys = "ctrl+shift+tab"; }
-  ];
-
-  colorSchemes = [
-    {
-      name = "NixOS Dark";
-      foreground = "#839496";
-      background = "#002b36";
-      # ... other colors
-    }
-  ];
-};
-```
-
-#### 2. Integrate with targets.wsl
-**Priority**: Medium
-**Complexity**: Low
-**Benefit**: Ensures PowerShell access during activation
-
-**Change**: Merge Windows Terminal functionality into `targets.wsl` module in home-manager fork.
-
-#### 3. Enhance Font Management
-**Priority**: Low
-**Complexity**: Low
-**Benefit**: More robust font detection and installation
-
-**Improvements**:
-- Detect and preserve user customizations
-- Support font fallback chains
-- Better error handling for font installation
-
-### Future Enhancements (Phase 2)
-
-#### 1. Profile Auto-Generation
-**Feature**: Automatically generate Terminal profiles for all WSL instances
-
-**Implementation**:
-```nix
-# Detect all WSL instances and generate profiles
-profiles.list = map (instance: {
-  name = instance.name;
-  source = "Windows.Terminal.Wsl";
-  hidden = false;
-  guid = generateGuid instance.name;
-}) config.wsl.instances;
-```
-
-#### 2. Settings Merging Strategy
-**Feature**: Intelligent merge of NixOS-managed and user-customized settings
-
-**Strategies**:
-- Overlay mode: NixOS provides base, user additions preserved
-- Replace mode: NixOS fully manages specific sections
-- Backup mode: Always preserve user settings before modification
-
-#### 3. Integration with Windows Terminal Themes
-**Feature**: Import and manage Windows Terminal theme collections
-
-**Sources**:
-- Windows Terminal Themes website
-- Custom theme definitions
-- Per-profile theme selection
-
-#### 4. Advanced Keybinding Management
-**Feature**: Comprehensive keybinding configuration
-
-**Capabilities**:
-- Conditional keybindings (per-profile)
-- Keybinding conflicts detection
-- Common preset bundles (vim-style, emacs-style)
-
-### Testing Strategy
-
-#### 1. Multi-Instance Testing
-**Test**: Multiple WSL instances (thinky-nixos, nixos-wsl-minimal)
-**Verify**: Settings correctly shared across instances
-**Edge Cases**: Different NixOS configurations generating conflicting settings
-
-#### 2. Multi-User Testing
-**Test**: Multiple Linux users in same WSL instance
-**Verify**: Last writer wins, no corruption
-**Edge Cases**: Concurrent home-manager activation
-
-#### 3. Upgrade Testing
-**Test**: Windows Terminal version upgrades
-**Verify**: Settings schema compatibility
-**Edge Cases**: Deprecated settings fields
-
-#### 4. Rollback Testing
-**Test**: NixOS rollback
-**Verify**: Terminal settings rollback possible
-**Edge Cases**: Windows-side changes not captured in generation
-
----
-
-## Implementation Roadmap
-
-### Phase 1: Foundation (Weeks 1-2)
-
-**Goals**:
-- Basic NixOS module for Terminal settings
-- Integration with existing font management
-- Keybindings and color schemes support
-
-**Tasks**:
-1. Create `modules/nixos/windows-terminal.nix`
-2. Implement settings.json generation
-3. Create PowerShell update script with merging logic
-4. Add activation script
-5. Test on thinky-nixos
-
-**Deliverables**:
-- Working module with example configuration
-- Documentation for usage
-- Test results
-
-### Phase 2: Enhancement (Weeks 3-4)
-
-**Goals**:
-- Profile auto-generation
-- Settings merging strategies
-- Enhanced error handling
-
-**Tasks**:
-1. Implement WSL instance detection
-2. Create profile generation logic
-3. Add settings merge modes
-4. Improve backup and recovery
-5. Test on multiple instances
-
-**Deliverables**:
-- Auto-generation feature
-- Merge strategies documentation
-- Multi-instance test results
-
-### Phase 3: Integration (Weeks 5-6)
-
-**Goals**:
-- Home Manager integration via targets.wsl
-- User-level overrides
-- Complete documentation
-
-**Tasks**:
-1. Extend targets.wsl with Terminal options
-2. Create user override mechanism
-3. Write comprehensive guide
-4. Prepare for upstream contribution
-
-**Deliverables**:
-- Complete hybrid implementation
-- User guide with examples
-- Upstream contribution plan
-
-### Phase 4: Polish (Weeks 7-8)
-
-**Goals**:
-- Advanced features
-- Community feedback
-- Upstream submission
-
-**Tasks**:
-1. Theme import/export
-2. Advanced keybinding management
-3. Community testing
-4. Submit to nixpkgs/home-manager
-
-**Deliverables**:
-- Feature-complete implementation
-- Community-tested configuration
-- Upstream PR
-
----
-
-## Appendices
-
-### A. File Locations Reference
-
-**NixOS Configuration**:
-```
-modules/
-├── wsl-common.nix                    # Base WSL configuration
-├── nixos/
-│   ├── windows-terminal.nix         # [TO BE CREATED] Terminal management
-│   └── wsl-storage-mount.nix        # Bare mount support
-└── wsl-tarball-checks.nix           # Distribution validation
-```
-
-**Home Manager Configuration**:
-```
-home/
-├── common/
-│   └── terminal.nix                  # Terminal utilities
-├── modules/
-│   └── terminal-verification.nix    # Font verification
-└── files/bin/
-    ├── setup-terminal-fonts          # Interactive font setup (Bash)
-    ├── install-terminal-fonts.ps1   # Font installer (PowerShell)
-    ├── fix-terminal-fonts.ps1       # Settings updater (PowerShell)
-    └── font-detection-functions.ps1 # Font detection library
-```
-
-**Home Manager Fork**:
-```
-/home/tim/src/home-manager/
-├── modules/targets/wsl/
-│   ├── default.nix                   # WSL target module
-│   └── tests.nix                     # Test cases
-└── WSL-TARGETS-IMPLEMENTATION.md     # Documentation
-```
-
-### B. PowerShell Script Locations
-
-All PowerShell scripts are deployed to Windows-accessible locations:
-
-**Deployment Path**:
-```
-$HOME/bin/  →  /home/tim/bin/  →  /mnt/c/Users/$WINDOWS_USER/.../bin/
-```
-
-**Windows Path**:
-```
-C:\Users\{WINDOWS_USER}\...\bin\*.ps1
-```
-
-**Execution from WSL**:
 ```bash
-powershell.exe -ExecutionPolicy Bypass -File "$HOME/bin/install-terminal-fonts.ps1"
+nix eval '.#nixosConfigurations' --apply 'c: builtins.attrNames c'
 ```
 
-### C. Windows Terminal Settings.json Schema
+### Build fails with "doesn't have a tarballBuilder"
 
-**Official Schema**:
-```
-https://aka.ms/terminal-profiles-schema
-```
+The host config must import NixOS-WSL (`wsl.enable = true`). Only WSL configurations
+produce tarball builders.
 
-**Key Sections**:
-- `profiles.defaults`: Default settings for all profiles
-- `profiles.list`: Array of profile definitions
-- `schemes`: Color scheme definitions
-- `keybindings`: Keyboard shortcut definitions
-- `actions`: Custom actions
-- `themes`: UI theme definitions (Terminal v1.12+)
+### Security check fails
 
-**Example Profile**:
-```json
-{
-  "guid": "{...}",
-  "name": "NixOS",
-  "source": "Windows.Terminal.Wsl",
-  "hidden": false,
-  "icon": "ms-appx:///ProfileIcons/{...}.png",
-  "colorScheme": "Campbell",
-  "font": {
-    "face": "CaskaydiaMono Nerd Font Mono",
-    "size": 11
-  },
-  "padding": "8, 8, 8, 8",
-  "scrollbarState": "visible",
-  "snapOnInput": true,
-  "historySize": 9001,
-  "intenseTextStyle": "all"
-}
-```
+The check found personal data in the image closure. Common causes:
+- A module references a user-specific path or secret
+- `allowUnfree` leaked a package with embedded credentials
+- A home-manager module includes user-specific API tokens
 
-### D. Related Documentation
+Fix the offending module, or bypass with `WSL_TARBALL_SKIP_CHECKS=1` for testing only.
 
-**NixOS-WSL**:
-- Official: https://nix-community.github.io/NixOS-WSL/
-- Local fork: /home/tim/src/NixOS-WSL
+### Tarball much larger than expected
 
-**Home Manager**:
-- Official: https://nix-community.github.io/home-manager/
-- Local fork: /home/tim/src/home-manager (branch: wsl-target-module)
+The default tiger-team image is ~1.8 GB. If significantly larger:
+- Check if `hardware.graphics.enable` is true (adds ~800 MB of Mesa/LLVM).
+  For CLI-only WSL images, this should be false unless CUDA is needed.
+- Review unfree packages — some pull large dependency trees.
 
-**Windows Terminal**:
-- Official docs: https://learn.microsoft.com/en-us/windows/terminal/
-- Settings reference: https://learn.microsoft.com/en-us/windows/terminal/customize-settings/
-- Color schemes: https://windowsterminalthemes.dev/
+### Import script errors on Windows
 
-**Related Docs in This Repo**:
-- `docs/NIXOS-WSL-BARE-MOUNT-CONTRIBUTION-PLAN.md`
-- `docs/NIXOS-WSL-BARE-MOUNT-TESTING.md`
-- `/home/tim/src/home-manager/WSL-TARGETS-IMPLEMENTATION.md`
-
----
-
-## Conclusion
-
-This guide provides a comprehensive overview of WSL configuration in this NixOS setup, with specific focus on Microsoft Terminal settings management. The recommended hybrid approach (NixOS module + Home Manager integration) provides the best balance of flexibility, usability, and alignment with NixOS/home-manager architecture patterns.
-
-**Next Steps**:
-1. Review this guide and approve the recommended approach
-2. Begin Phase 1 implementation of `windows-terminal.nix` module
-3. Test on current machine (nixos-wsl instance "nixos")
-4. Extend to other WSL instances (thinky-nixos)
-5. Contribute improvements back to NixOS-WSL and home-manager communities
-
-**Questions or Feedback**:
-- Review the Scope Analysis section for architectural decisions
-- Consult the Implementation Roadmap for timeline
-- Refer to Appendices for technical details
+See the troubleshooting section in [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md).
