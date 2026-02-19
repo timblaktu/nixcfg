@@ -88,6 +88,11 @@ claude-runtime/*/statsig/**
 claude-runtime/*/todos/**
 claude-runtime/*/skills/**
 
+# Runtime cache/state (always changing, causes merge conflicts)
+claude-runtime/*/stats-cache.json
+claude-runtime/*/paste-cache/
+claude-runtime/*/tasks/
+
 # Nix-generated slash commands (contain nix store paths)
 claude-runtime/.claude-*/commands/nixmemory.*
 claude-runtime/.claude-*/commands/usermemory.*
@@ -98,6 +103,11 @@ claude-runtime/.claude-*/commands/next-task.*
 # Nix-managed slash command subdirectories (symlinks to nix store)
 # Source files live in home/modules/claude-code/commands/ (not in claude-runtime)
 claude-runtime/.claude-*/commands/*/
+
+# === OpenCode Configuration ===
+# opencode.json is Nix-generated (copy_template) but mutated by OpenCode at runtime.
+# Nix module is the source of truth; deployed files are ephemeral.
+opencode-runtime/**/opencode.json
 
 # Web session runtime (.claude/ in repo root)
 .claude/*
