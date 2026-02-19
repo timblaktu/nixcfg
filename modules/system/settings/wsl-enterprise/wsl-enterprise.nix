@@ -278,55 +278,26 @@
             '';
           }
 
-          # First-login welcome message
-          (lib.mkIf cfg.welcomeMessage.enable {
-            # Show welcome in both bash and zsh since we don't know which shell the user will use
-            programs.bash.interactiveShellInit = ''
-              if [ -f ~/.enterprise-first-login ]; then
-                echo "======================================"
-                echo "Welcome to NixOS-WSL (Enterprise)"
-                echo ""
-                echo "Quick start:"
-                echo "  1. Personalize:     setup-username"
-                echo "  2. Set your git identity:"
-                echo "     git config --global user.name \"Your Name\""
-                echo "     git config --global user.email \"you@company.com\""
-                echo "  3. Rebuild system:  sudo nixos-rebuild switch"
-                echo ""
-                echo "Your team may have additional setup instructions."
-                echo "======================================"
-                rm ~/.enterprise-first-login
-              fi
-            '';
-
-            programs.zsh.interactiveShellInit = lib.mkAfter ''
-              if [ -f ~/.enterprise-first-login ]; then
-                echo "======================================"
-                echo "Welcome to NixOS-WSL (Enterprise)"
-                echo ""
-                echo "Quick start:"
-                echo "  1. Personalize:     setup-username"
-                echo "  2. Set your git identity:"
-                echo "     git config --global user.name \"Your Name\""
-                echo "     git config --global user.email \"you@company.com\""
-                echo "  3. Rebuild system:  sudo nixos-rebuild switch"
-                echo ""
-                echo "Your team may have additional setup instructions."
-                echo "======================================"
-                rm ~/.enterprise-first-login
-              fi
-            '';
-
-            system.activationScripts.enterpriseFirstLogin = ''
-              USER_HOME="/home/${config.wsl-settings.defaultUser}"
-              if [ ! -f "$USER_HOME/.enterprise-first-login-done" ]; then
-                touch "$USER_HOME/.enterprise-first-login"
-                touch "$USER_HOME/.enterprise-first-login-done"
-                chown ${config.wsl-settings.defaultUser}:users "$USER_HOME/.enterprise-first-login"
-                chown ${config.wsl-settings.defaultUser}:users "$USER_HOME/.enterprise-first-login-done"
-              fi
-            '';
-          })
+          # Git identity reminder — shown until user configures git
+          (lib.mkIf cfg.welcomeMessage.enable (
+            let
+              gitIdentityCheck = ''
+                if [ -z "$(git config --global user.name 2>/dev/null)" ] || \
+                   [ -z "$(git config --global user.email 2>/dev/null)" ]; then
+                  echo "======================================="
+                  echo "NixOS-WSL: git identity not configured"
+                  echo ""
+                  echo "  git config --global user.name \"Your Name\""
+                  echo "  git config --global user.email \"you@company.com\""
+                  echo "======================================="
+                fi
+              '';
+            in
+            {
+              programs.bash.interactiveShellInit = gitIdentityCheck;
+              programs.zsh.interactiveShellInit = lib.mkAfter gitIdentityCheck;
+            }
+          ))
         ];
       };
 
