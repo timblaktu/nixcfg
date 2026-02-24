@@ -179,12 +179,44 @@
 
         # ===== GitHub CLI wrappers =====
 
-        # GitHub CLI wrapper with Bitwarden token injection and subcommand overrides
+        # Per-org credential helper scripts (for git credential, independent of gh wrapper)
+        orgCredentialHelpers = mapAttrs (orgName: orgCfg:
+          let bwCfg = resolveBwConfig orgCfg.bitwarden;
+          in pkgs.writeShellScript "gh-credential-${orgName}" ''
+            ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
+            export GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwCfg) item field; }} 2>/dev/null)"
+            exec ${pkgs.gh}/bin/gh auth git-credential "$@"
+          '') cfg.orgs;
+
+        # GitHub CLI wrapper with Bitwarden token injection, org detection, and subcommand overrides
         gh-with-auth =
           let
             bwConfig = resolveBwConfig cfg.bitwarden;
 
-            # Generate shell case branches for each override
+            # Org detection: check git remote URL against configured orgs
+            orgDetection =
+              if cfg.orgs == { } then ""
+              else
+                let
+                  orgCaseBranches = concatStringsSep "\n" (mapAttrsToList
+                    (orgName: orgCfg:
+                      let bwCfg = resolveBwConfig orgCfg.bitwarden;
+                      in ''
+                        *github.com[:/]${orgName}/*)
+                          GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwCfg) item field; }} 2>/dev/null)"
+                          _GH_ORG_MATCH=1
+                          ;;'')
+                    cfg.orgs);
+                in ''
+                  # Org detection: check git remote URL against configured orgs
+                  _GH_ORG_MATCH=""
+                  if _GH_REMOTE=$(${pkgs.git}/bin/git remote get-url origin 2>/dev/null); then
+                    case "$_GH_REMOTE" in
+                  ${orgCaseBranches}
+                    esac
+                  fi'';
+
+            # Generate shell case branches for each subcommand override
             overrideCases = concatStringsSep "\n      " (mapAttrsToList
               (subcommand: override: ''
                 ${subcommand})
@@ -213,7 +245,12 @@
           pkgs.writeShellScriptBin "gh" ''
             ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
             ${rbwLib.mkClearGitCredentialCache}
-            ${tokenSelection}
+            ${orgDetection}
+            ${if cfg.orgs == { } then tokenSelection
+              else ''
+              if [ -z "$_GH_ORG_MATCH" ]; then
+                ${tokenSelection}
+              fi''}
             export GH_TOKEN
             exec ${pkgs.gh}/bin/gh "$@"
           '';
@@ -319,6 +356,39 @@
               '';
             };
           };
+
+          orgs = mkOption {
+            type = types.attrsOf (types.submodule {
+              options = {
+                bitwarden = mkBitwardenOptions {
+                  defaultTokenName = "github-org-token";
+                  exampleItem = "github.com";
+                };
+              };
+            });
+            default = { };
+            description = ''
+              Organization-specific token configuration. Maps GitHub org names
+              to Bitwarden credentials.
+
+              For git operations: Uses URL-prefix matching so that repos under
+              github.com/<org>/ use the org token automatically.
+
+              For gh CLI: The wrapper detects the current repo's remote URL and
+              uses the org token when it matches github.com[:/]<org>/.
+              Org detection takes priority over subcommand overrides.
+            '';
+            example = literalExpression ''
+              {
+                my-org = {
+                  bitwarden = {
+                    item = "github.com";
+                    field = "PAT-my-org";
+                  };
+                };
+              }
+            '';
+          };
         };
 
         config = mkIf cfg.enable {
@@ -344,19 +414,28 @@
 
           # Git credential configuration for GitHub
           programs.git.settings = mkIf cfg.git.enableCredentialHelper {
-            credential = {
-              "https://github.com" = mkMerge [
-                {
-                  helper = mkForce "!${ghWrapper}/bin/gh auth git-credential";
+            credential = mkMerge [
+              # Per-org credential helpers (more specific URL prefix wins in git)
+              (mapAttrs' (orgName: _orgCfg:
+                nameValuePair "https://github.com/${orgName}" {
+                  helper = mkForce "!${orgCredentialHelpers.${orgName}}";
                 }
-                (mkIf (cfg.git.userName != null) {
-                  username = cfg.git.userName;
-                })
-              ];
-              "https://gist.github.com" = {
-                helper = mkForce "!${ghWrapper}/bin/gh auth git-credential";
-              };
-            };
+              ) cfg.orgs)
+              # Default credential helpers
+              {
+                "https://github.com" = mkMerge [
+                  {
+                    helper = mkForce "!${ghWrapper}/bin/gh auth git-credential";
+                  }
+                  (mkIf (cfg.git.userName != null) {
+                    username = cfg.git.userName;
+                  })
+                ];
+                "https://gist.github.com" = {
+                  helper = mkForce "!${ghWrapper}/bin/gh auth git-credential";
+                };
+              }
+            ];
           };
 
           # Bitwarden mode: informational activation check

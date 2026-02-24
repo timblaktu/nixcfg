@@ -75,7 +75,7 @@ in
       rbw.email = "timblaktu@gmail.com";
     };
 
-    # GitHub authentication (personal PATs)
+    # GitHub authentication (personal PATs + org tokens)
     gitAuth.github = {
       enable = true;
       mode = "bitwarden";
@@ -86,6 +86,12 @@ in
       cli.tokenOverrides.pr = {
         item = "github.com";
         field = "PAT-pubclassic";
+      };
+      orgs.kyosaku-kai = {
+        bitwarden = {
+          item = "github.com";
+          field = "kyosaku-kai-2026";
+        };
       };
     };
 
