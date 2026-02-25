@@ -177,6 +177,11 @@
         inputs.self.modules.homeManager.windows-terminal
       ];
 
+      # === Development Tools ===
+      # Enable the development toolchain bundle (Python, Rust, Node, Go, etc.)
+      # Imported above but mkEnableOption defaults to false.
+      developmentTools.enable = lib.mkDefault true;
+
       # === Claude Code Configuration ===
       # Team-shared config: work account (Code Companion proxy) + enterprise defaults.
       # Hosts ADD personal accounts (max, pro) via module system merging --
