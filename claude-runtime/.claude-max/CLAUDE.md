@@ -173,6 +173,16 @@ Long-running tasks (>5 minutes expected duration) ARE allowed but require carefu
 - Should be gitignored (pattern `**/.claude` doesn't match `.claude-task-*`)
 - ALWAYS stage flake changes before nix commands
 
+### Claude Code Multi-Account Memory Architecture (2026-03-01)
+
+**`~/.claude`** is a home-manager `mkOutOfStoreSymlink` → nix store → `nixcfg/claude-runtime/.claude-{defaultAccount}/`. With `defaultAccount = "max"`, `~/.claude` IS `.claude-max` (same inode).
+
+**Each account has independent CLAUDE.md**: `.claude-max/CLAUDE.md`, `.claude-pro/CLAUDE.md`, `.claude-work/CLAUDE.md` are separate files with different content. The activation script preserves existing CLAUDE.md files and only creates from template if missing.
+
+**Double-display in system prompt**: Claude Code displays `$CLAUDE_CONFIG_DIR/CLAUDE.md` content AND `~/.claude/CLAUDE.md` content separately, not realizing they're the same inode. This doubles the context cost of the global memory file. Not fixable from user side — would require Claude Code to deduplicate by inode.
+
+**Slash commands are on-demand**: Command content (`.claude/commands/*.md`) is only loaded when invoked via `/command`. The system-reminder lists all command NAMES (short descriptions), but the full content stays out of context until invoked. Do NOT remove commands to save context — they cost almost nothing until used.
+
 ## Session Workflow Protocol (CRITICAL - 2026-01-31)
 
 **ONE TASK PER SESSION is mandatory** - violated in session 2026-01-31 by completing 4 tasks without stopping
