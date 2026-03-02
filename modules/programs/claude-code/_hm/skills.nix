@@ -53,6 +53,7 @@ let
       files = {
         "SKILL.md" = ./skills/diagram/SKILL.md;
         "REFERENCE.md" = ./skills/diagram/REFERENCE.md;
+        "drawio_gen.py" = ./skills/diagram/drawio_gen.py;
       };
     };
   };
@@ -219,11 +220,13 @@ in
               let
                 # Handle both path (builtins) and derivation (custom) files
                 sourceFile = if isPath filePath then filePath else filePath;
+                # Python scripts need executable permission
+                fileMode = if hasSuffix ".py" fileName then "755" else "644";
               in ''
                 # Create parent directories if needed (for nested paths like templates/foo.md)
                 $DRY_RUN_CMD mkdir -p "$(dirname "$skillDir/${fileName}")"
                 $DRY_RUN_CMD cp "${sourceFile}" "$skillDir/${fileName}"
-                $DRY_RUN_CMD chmod 644 "$skillDir/${fileName}"
+                $DRY_RUN_CMD chmod ${fileMode} "$skillDir/${fileName}"
               ''
             ) skillDef.files)}
 
@@ -241,10 +244,13 @@ in
           skillDir="$baseSkillsDir/${skillName}"
           $DRY_RUN_CMD mkdir -p "$skillDir"
 
-          ${concatStringsSep "\n" (mapAttrsToList (fileName: filePath: ''
+          ${concatStringsSep "\n" (mapAttrsToList (fileName: filePath:
+            let
+              fileMode = if hasSuffix ".py" fileName then "755" else "644";
+            in ''
             $DRY_RUN_CMD mkdir -p "$(dirname "$skillDir/${fileName}")"
             $DRY_RUN_CMD cp "${filePath}" "$skillDir/${fileName}"
-            $DRY_RUN_CMD chmod 644 "$skillDir/${fileName}"
+            $DRY_RUN_CMD chmod ${fileMode} "$skillDir/${fileName}"
           '') skillDef.files)}
 
           echo "  ✅ Deployed skill: ${skillName} to base"

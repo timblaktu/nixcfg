@@ -2931,3 +2931,69 @@ check_drawio_svg() {
 - **View-only**: File without `content` attribute is just an image - no editing possible
 - **Version control**: Changes to the embedded mxFile XML are what you want to track
 - **Collaboration**: Other users need the embedded source to continue editing
+
+---
+
+## Section 31: DrawIO Generator Tool (drawio_gen.py)
+
+A Python CLI tool that generates `.drawio.svg` files from compact JSON specs, eliminating the need to construct verbose mxGraphModel XML inline. Located alongside this skill at `drawio_gen.py`.
+
+### When to Use
+
+- **New diagrams**: Describe layout as JSON, let the tool handle XML generation and encoding
+- **Manual XML**: Still preferred for small edits to existing diagrams (Section 10)
+
+### CLI Reference
+
+```bash
+# Generate .drawio.svg from JSON spec (stdin or --input)
+python3 drawio_gen.py generate [--input spec.json] [--output diagram.drawio.svg] [--render]
+
+# Extract decoded mxFile XML from existing .drawio.svg
+python3 drawio_gen.py extract diagram.drawio.svg
+
+# Inject mxFile XML (stdin) as content attribute
+python3 drawio_gen.py inject diagram.drawio.svg < mxfile.xml
+
+# Verify file integrity (content attr, required cells, dangling refs)
+python3 drawio_gen.py verify diagram.drawio.svg
+
+# HTML-encode mxFile XML (stdin) for manual content attribute insertion
+python3 drawio_gen.py encode < mxfile.xml
+
+# List all style presets (text or --format json)
+python3 drawio_gen.py presets [--format json]
+```
+
+The `--render` flag on `generate` runs `drawio-svg-sync`, re-injects content if stripped, and verifies the result.
+
+### JSON Spec Format
+
+```json
+{
+  "page": {"width": 1000, "height": 780, "name": "Page-1", "background": "#ffffff"},
+  "cells": [
+    {"id": "b1", "type": "box", "label": "<b>Title</b>", "x": 100, "y": 100, "w": 120, "h": 60, "preset": "blue"},
+    {"id": "c1", "type": "container", "label": "Group", "x": 50, "y": 50, "w": 300, "h": 200, "preset": "dark-blue"},
+    {"id": "t1", "type": "text", "label": "Note", "x": 200, "y": 300, "w": 100, "h": 30},
+    {"id": "e1", "type": "edge", "source": "b1", "target": "b2", "label": "flow",
+     "exit": [1, 0.5], "entry": [0, 0.5], "preset": "blue-arrow"}
+  ]
+}
+```
+
+**Cell types**: `box` (default), `container`, `text`, `edge`
+
+**Parenting**: Set `"parent": "container-id"` to nest cells inside containers.
+
+**Style overrides**: Any `"style": {"key": "value"}` dict merges over preset defaults.
+
+### Box/Container Presets
+
+`green`, `dark-green`, `red`, `dark-red`, `blue`, `dark-blue`, `purple`, `dark-purple`, `yellow`, `dark-yellow`, `orange`, `dark-bg`, `dark-fg`, `white`, `none`
+
+### Edge Presets
+
+`blue-arrow`, `purple-arrow`, `green-arrow`, `green-dashed`, `red-arrow`, `orange-arrow`, `no-arrow`, `dashed`
+
+Run `python3 drawio_gen.py presets` for colors and details.

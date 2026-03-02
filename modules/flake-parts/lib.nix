@@ -367,6 +367,7 @@ in
             DISABLE_TELEMETRY = "1";
             CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
             DISABLE_ERROR_REPORTING = "1";
+            CLAUDE_CODE_MAX_OUTPUT_TOKENS = "65536";
           };
         };
         pro = {
@@ -377,6 +378,7 @@ in
             DISABLE_TELEMETRY = "1";
             CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
             DISABLE_ERROR_REPORTING = "1";
+            CLAUDE_CODE_MAX_OUTPUT_TOKENS = "65536";
           };
         };
       };
