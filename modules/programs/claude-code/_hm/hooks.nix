@@ -106,7 +106,7 @@ in
       };
       logPath = mkOption {
         type = types.str;
-        default = "$HOME/.claude/logs/tool-usage.log";
+        default = "$CLAUDE_CONFIG_DIR/logs/tool-usage.log";
         description = "Path to log file";
       };
       verbose = mkEnableOption "include tool inputs in logs";

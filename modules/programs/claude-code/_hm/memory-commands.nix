@@ -176,14 +176,8 @@ in
         fi
       '') cfg.accounts)}
       
-      # Update base directory if needed
-      ${optionalString (cfg.defaultAccount != null) ''
-        baseDir="${cfg.nixcfgPath}/claude-runtime/.claude"
-        if [[ -f "$baseDir/CLAUDE.md" ]]; then
-          $DRY_RUN_CMD chmod 644 "$baseDir/CLAUDE.md"  
-          echo "✅ Made writable: $baseDir/CLAUDE.md"
-        fi
-      ''}
+      # NOTE: Base directory (.claude) chmod removed -- bare 'claude' wrapper
+      # now uses defaultAccount's directory directly, no separate base dir.
     '');
 
     # Deploy command files to each account's commands directory
