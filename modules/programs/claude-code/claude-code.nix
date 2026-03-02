@@ -444,10 +444,36 @@
               )
               (lib.filterAttrs (_n: a: a.enable) cfg.accounts);
 
+            # Bare 'claude' wrapper that routes to defaultAccount's config dir,
+            # preventing Claude Code from falling back to ~/.claude (which caused
+            # double-loading of CLAUDE.md and cross-account contamination).
+            defaultWrapper = lib.optional (cfg.defaultAccount != null) (
+              let
+                defaultAcct = cfg.accounts.${cfg.defaultAccount};
+              in
+              pkgs.writers.writeBashBin "claude" (
+                claudeLib.mkClaudeWrapperScript {
+                  account = cfg.defaultAccount;
+                  inherit (defaultAcct) displayName;
+                  configDir = "${runtimePath}/.claude-${cfg.defaultAccount}";
+                  claudeBin = "${pkgs.claude-code}/bin/claude";
+                  api = defaultAcct.api or { };
+                  secrets = defaultAcct.secrets or { };
+                  extraEnvVars = {
+                    DISABLE_TELEMETRY = "1";
+                    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+                    DISABLE_ERROR_REPORTING = "1";
+                  } // (defaultAcct.extraEnvVars or { });
+                }
+              )
+            );
+
           in
           mkIf cfg.enable {
             home.packages = with pkgs; [
-              claude-code
+              # Only include raw claude-code when no defaultAccount wrapper replaces it
+            ] ++ optional (cfg.defaultAccount == null) pkgs.claude-code
+            ++ (with pkgs; [
               nodejs_22
               git
               ripgrep
@@ -455,7 +481,7 @@
               jq
               uv
               memoryUpdateScript
-            ] ++ optionals (cfg.mcpServers.sequentialThinkingPython.enable or false) [
+            ]) ++ optionals (cfg.mcpServers.sequentialThinkingPython.enable or false) [
               (pkgs.writers.writeBashBin "sequential-thinking-mcp" ''
                 exec ${nixmcp.packages.${pkgs.stdenv.hostPlatform.system}.sequential-thinking-mcp}/bin/sequential-thinking-mcp "$@"
               '')
@@ -472,7 +498,8 @@
               shellcheck
             ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
               libnotify
-            ] ++ wrapperScripts;
+            ] ++ wrapperScripts
+            ++ defaultWrapper;
 
             home.file = mkMerge [
               (mkMerge (mapAttrsToList
@@ -481,9 +508,9 @@
                 })
                 cfg.accounts))
 
-              (mkIf (cfg.defaultAccount != null) {
-                ".claude".source = config.lib.file.mkOutOfStoreSymlink "${runtimePath}/.claude-${cfg.defaultAccount}";
-              })
+              # NOTE: ~/.claude symlink intentionally removed to prevent Claude Code
+              # from loading CLAUDE.md twice (once via CLAUDE_CONFIG_DIR, once via
+              # ~/.claude fallback). Bare 'claude' now uses defaultWrapper instead.
 
               (mkIf (cfg._internal.mcpServers != { }) {
                 "claude-mcp-config.json".text = builtins.toJSON { mcpServers = claudeDesktopMcpServers; };
@@ -595,66 +622,10 @@
                 fi
               '') cfg.accounts)}
 
-              ${optionalString (cfg.defaultAccount != null) ''
-              baseDir="${runtimePath}/.claude"
-              echo "Setting up fallback base directory"
-
-              $DRY_RUN_CMD mkdir -p "$baseDir"/{logs,projects,shell-snapshots,statsig,todos,commands}
-
-              copy_template "${settingsTemplate}" "$baseDir/settings.json"
-
-              copy_template "${mcpTemplate}" "$baseDir/.mcp.json"
-              echo "Updated MCP servers configuration: $baseDir/.mcp.json"
-
-              if [[ -f "$baseDir/CLAUDE.md" ]]; then
-                echo "Preserved existing memory file: $baseDir/CLAUDE.md"
-                $DRY_RUN_CMD chmod ${if cfg.memoryCommands.makeWritable then "644" else "444"} "$baseDir/CLAUDE.md"
-              else
-                copy_template "${claudeMdTemplate}" "$baseDir/CLAUDE.md"
-                $DRY_RUN_CMD chmod ${if cfg.memoryCommands.makeWritable then "644" else "444"} "$baseDir/CLAUDE.md"
-                echo "Created memory file: $baseDir/CLAUDE.md"
-              fi
-
-              if [[ -f "$baseDir/.claude.json" ]]; then
-                echo "Enforcing Nix-managed settings in .claude.json..."
-
-                jq_args=(--argjson permissions '${builtins.toJSON {
-                  inherit (cfg.permissions) allow;
-                  inherit (cfg.permissions) deny;
-                  inherit (cfg.permissions) ask;
-                  inherit (cfg.permissions) defaultMode;
-                  inherit (cfg.permissions) additionalDirectories;
-                }}')
-                ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
-                ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
-                ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (_n: v: v != null) cfg._internal.hooks)}')''}
-
-                $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
-                  '. |
-                  .permissions = $permissions
-                  ${optionalString (cfg.environmentVariables != {}) ''| .env = $env''}
-                  ${optionalString (cfg._internal.statuslineSettings != {}) ''| .statusLine = $statusLine''}
-                  ${optionalString (cfg._internal.hooks != {}) ''| .hooks = $hooks''}
-                  ' "$baseDir/.claude.json" > "$baseDir/.claude.json.tmp"
-
-                $DRY_RUN_CMD mv "$baseDir/.claude.json.tmp" "$baseDir/.claude.json"
-                echo "Nix-managed settings enforced in .claude.json"
-              else
-                echo '{}' > "$baseDir/.claude.json"
-                $DRY_RUN_CMD chmod 644 "$baseDir/.claude.json"
-                echo "Created minimal runtime config: $baseDir/.claude.json"
-              fi
-
-              ${optionalString (cfg._internal.subAgentFiles != {}) ''
-              $DRY_RUN_CMD mkdir -p "$baseDir/agents"
-              ${concatStringsSep "\n" (mapAttrsToList (_path: template: ''
-              copy_template "${template}" "$baseDir/agents/${builtins.baseNameOf _path}"
-              '') agentTemplates)}
-              echo "Deployed ${toString (length (attrNames cfg._internal.subAgentFiles))} sub-agent(s)"
-              ''}
-
-              echo "Base directory configured with statusline support"
-              ''}
+              # NOTE: Base fallback directory (${runtimePath}/.claude) is no longer
+              # created. Bare 'claude' wrapper now uses the defaultAccount's directory
+              # directly. If an orphaned .claude directory exists on disk from a
+              # previous activation, it can be safely removed.
             '';
 
             programs.bash.initExtra = mkIf (cfg.accounts != { }) (mkAfter ''
