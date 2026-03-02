@@ -9,6 +9,7 @@
 - ALWAYS use rg and fd for file searching (never grep/find or Search/Find tools)
 - ALWAYS ensure shell commands support both bash AND zsh
 - ALWAYS properly escape or quote special shell characters
+- **WSL interop**: Windows executables are callable directly from WSL (e.g., `usbipd.exe list`, `powershell.exe -c "command"`). NEVER tell user to "open PowerShell" or "run from Windows" — call the `.exe` directly from the current shell. Windows PATH is on `$PATH` via `appendWindowsPath` (wsl module default).
 - **Screenshots (WSL)**: Find dynamically with `fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-`
 - NEVER create files unless absolutely necessary - prefer editing existing files
 - ALWAYS add documentation to existing markdown files - ASK where if ambiguous

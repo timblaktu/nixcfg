@@ -44,7 +44,26 @@ in
       sshAuthorizedKeys = [ sshKeys.timblaktu ];
       # binfmt.enable: inherited from tiger-team (true)
       # cuda.enable: inherited from enterprise (false)
+
+      # USB/IP auto-attach ports for Jetson development
+      # TODO: Add bus IDs when Jetson Orin Nano is connected (run: usbipd.exe list)
+      usbip.autoAttach = [ ];
     };
+
+    # Jetson Orin Nano USB device rules
+    services.udev.packages = [
+      (pkgs.writeTextFile {
+        name = "10-jetson-usb";
+        destination = "/etc/udev/rules.d/10-jetson-usb.rules";
+        text = ''
+          # NVIDIA Jetson Recovery Mode (APX) — USB flashing via sdkmanager/initrd flash
+          SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7523", MODE="0666", GROUP="dialout"
+
+          # NVIDIA Jetson Orin Nano (L4T running) — ADB/serial over USB
+          SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7020", MODE="0666", GROUP="dialout"
+        '';
+      })
+    ];
   };
 
   # === Home Manager Module ===
@@ -73,6 +92,7 @@ in
     secretsManagement = {
       enable = true;
       rbw.email = "timblaktu@gmail.com";
+      rbw.lockTimeout = 28800; # 8 hours
     };
 
     # GitHub authentication (personal PATs + org tokens)
