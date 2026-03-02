@@ -78,6 +78,7 @@ in
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.esp-idf
+      inputs.self.modules.homeManager.awscli
     ];
 
     # Required by system types
@@ -124,6 +125,15 @@ in
         field = "lord (access token)";
       };
       cli.apiUser = "blackt1";
+    };
+
+    # AWS CLI with Azure AD SSO (personal -- needs secretsManagement for rbw)
+    awscli = {
+      enable = true;
+      azureAuth.enable = true;
+      # Bitwarden defaults match: item="Azure AD", fields="Azure Tenant ID"/"Azure App ID URI"
+      # defaultRegion, outputFormat, defaultDurationHours use sensible defaults
+      # Set azureAuth.defaultRoleArn when you know your IAM role ARN
     };
 
     # Claude Code: add personal accounts (tiger-team provides work + base config;
