@@ -175,11 +175,11 @@ Long-running tasks (>5 minutes expected duration) ARE allowed but require carefu
 
 ### Claude Code Multi-Account Memory Architecture (2026-03-01)
 
-**`~/.claude`** is a home-manager `mkOutOfStoreSymlink` → nix store → `nixcfg/claude-runtime/.claude-{defaultAccount}/`. With `defaultAccount = "max"`, `~/.claude` IS `.claude-max` (same inode).
+**`~/.claude` symlink removed** (2026-03-01): Previously a home-manager `mkOutOfStoreSymlink` → `claude-runtime/.claude-{defaultAccount}/`, causing Claude Code to load CLAUDE.md twice (via `$CLAUDE_CONFIG_DIR` and `~/.claude` fallback). Fixed by making bare `claude` a wrapper (like `claudemax`/`claudepro`) that sets `CLAUDE_CONFIG_DIR` directly. No more `~/.claude` symlink needed.
 
 **Each account has independent CLAUDE.md**: `.claude-max/CLAUDE.md`, `.claude-pro/CLAUDE.md`, `.claude-work/CLAUDE.md` are separate files with different content. The activation script preserves existing CLAUDE.md files and only creates from template if missing.
 
-**Double-display in system prompt**: Claude Code displays `$CLAUDE_CONFIG_DIR/CLAUDE.md` content AND `~/.claude/CLAUDE.md` content separately, not realizing they're the same inode. This doubles the context cost of the global memory file. Not fixable from user side — would require Claude Code to deduplicate by inode.
+**Per-account symlinks still exist**: `~/.claude-max`, `~/.claude-pro`, etc. remain as convenience symlinks to `claude-runtime/.claude-{account}/`.
 
 **Slash commands are on-demand**: Command content (`.claude/commands/*.md`) is only loaded when invoked via `/command`. The system-reminder lists all command NAMES (short descriptions), but the full content stays out of context until invoked. Do NOT remove commands to save context — they cost almost nothing until used.
 
