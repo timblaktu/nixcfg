@@ -60,7 +60,8 @@ in
           SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7523", MODE="0666", GROUP="dialout"
 
           # NVIDIA Jetson Orin Nano (L4T running) — ADB/serial over USB
-          SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7020", MODE="0666", GROUP="dialout"
+          # Commented: PID 7020 is unverified for Orin Nano; confirm with usbipd.exe list when booted
+          # SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7020", MODE="0666", GROUP="dialout"
         '';
       })
     ];
