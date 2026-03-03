@@ -78,7 +78,7 @@ in
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.esp-idf
-      inputs.self.modules.homeManager.awscli
+      # awscli: imported via home-tiger-team; azureAuth configured below
     ];
 
     # Required by system types

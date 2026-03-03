@@ -175,6 +175,8 @@
         inputs.self.modules.homeManager.development-tools
         # Terminal appearance
         inputs.self.modules.homeManager.windows-terminal
+        # AWS CLI with Azure AD SSO
+        inputs.self.modules.homeManager.awscli
       ];
 
       # === Development Tools ===
@@ -246,6 +248,12 @@
         ];
       };
 
+      # === AWS CLI ===
+      # Team-standard AWS CLI v2. Only the base CLI is enabled here;
+      # azureAuth requires secretsManagement (Bitwarden) which is personal.
+      # Hosts with secretsManagement enable azureAuth themselves.
+      awscli.enable = lib.mkDefault true;
+
       # Does NOT configure (left to host):
       # - homeMinimal.username / homeMinimal.homeDirectory
       # - secretsManagement.* (personal bitwarden email)
@@ -253,6 +261,7 @@
       # - gitAuth.gitlab.bitwarden.* (personal credential details)
       # - gitAuth.gitlab.mode (bitwarden vs token -- personal choice)
       # - gitAuth.gitlab.cli.apiUser (personal GitLab username)
+      # - awscli.azureAuth.* (requires secretsManagement for Bitwarden)
     };
 
   };
