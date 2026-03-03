@@ -78,6 +78,7 @@ in
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.esp-idf
+      inputs.self.modules.homeManager.pulumi
       # awscli: imported via home-tiger-team; azureAuth configured below
     ];
 
@@ -89,6 +90,7 @@ in
     # Host-specific overrides
     homeDefault.enableLocalAI = false;
     espIdf.enable = true;
+    pulumi.enable = true;
 
     # Secrets management (personal bitwarden)
     secretsManagement = {
