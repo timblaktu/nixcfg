@@ -269,7 +269,7 @@ in
           model = "pac-bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0";
           secrets.envTokens = {
             BEDROCK_API_TOKEN = {
-              bitwarden = { item = "PAC Code Companion v2"; field = "Bedrock API Token"; };
+              bitwarden = { item = "PAC Code Companion v2"; field = "Bedrock API Key"; };
             };
             CODECOMPANION_API_KEY = {
               bitwarden = { item = "PAC Code Companion v2"; field = "API Key"; };
@@ -413,7 +413,7 @@ in
           };
           secrets.bearerToken.bitwarden = {
             item = "PAC Code Companion v2";
-            field = "Bedrock API Token";
+            field = "Bedrock API Key";
           };
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";
