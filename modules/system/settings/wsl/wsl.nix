@@ -453,6 +453,65 @@
             services.printing.enable = lib.mkDefault false;
           }
 
+          # === Windows Drive Mount Recovery ===
+          # WSL generates fstab entries like "C:134 /mnt/c 9p" at boot using internal
+          # 9p tag IDs. If a process unmounts these drives (e.g., n3x kas-build prevents
+          # sgdisk sync() hangs by temporarily unmounting /mnt/c) and gets killed before
+          # remounting, the 9p tag is invalidated. The systemd mount unit then fails with
+          # "special device C:134 does not exist" because the tag no longer matches.
+          # This service detects missing Windows drive mounts and remounts them using the
+          # drvfs device name (e.g., "C:") which always works regardless of tag state.
+          {
+            systemd.services."wsl-recover-windows-mounts" = {
+              description = "Recover unmounted Windows drive mounts in WSL";
+              before = [ "local-fs.target" ];
+              wantedBy = [ "local-fs.target" ];
+              unitConfig = {
+                DefaultDependencies = false;
+                ConditionPathExists = cfg.automountRoot;
+              };
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+                ExecStart = pkgs.writeShellScript "wsl-recover-windows-mounts" ''
+                  automount_root="${cfg.automountRoot}"
+                  recovered=0
+
+                  # Parse /etc/fstab for 9p mounts under the automount root
+                  while IFS=' ' read -r device mountpoint fstype _rest; do
+                    # Skip comments and non-9p entries
+                    [[ "$device" == \#* ]] && continue
+                    [[ "$fstype" != "9p" ]] && continue
+                    # Only recover /mnt/[a-z] Windows drive mounts
+                    [[ "$mountpoint" != "$automount_root"/[a-z] ]] && continue
+
+                    # Check if already mounted
+                    if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint" 2>/dev/null; then
+                      continue
+                    fi
+
+                    # Extract drive letter from mount point (e.g., /mnt/c -> C)
+                    drive_letter="''${mountpoint##*/}"
+                    drive_letter="$(echo "$drive_letter" | tr '[:lower:]' '[:upper:]')"
+
+                    echo "Recovering mount: $mountpoint (drive $drive_letter:)"
+                    drvfs_opts="metadata,uid=${toString config.users.users.${cfg.defaultUser}.uid},gid=${toString config.users.groups.users.gid}"
+                    if ${pkgs.util-linux}/bin/mount -t drvfs "''${drive_letter}:" "$mountpoint" -o "$drvfs_opts" 2>&1; then
+                      echo "Recovered: $mountpoint"
+                      recovered=$((recovered + 1))
+                    else
+                      echo "Failed to recover $mountpoint — may need: wsl --shutdown" >&2
+                    fi
+                  done < /etc/fstab
+
+                  if [ "$recovered" -gt 0 ]; then
+                    echo "Recovered $recovered Windows drive mount(s)"
+                  fi
+                '';
+              };
+            };
+          }
+
           # === USBIP Configuration ===
           (lib.mkIf cfg.usbip.enable {
             wsl.usbip = {
