@@ -356,6 +356,15 @@
             };
           };
 
+          # === Environment Capture for Systemd-spawned Shells ===
+          envCapture = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Capture Windows PATH and WSLg variables at boot for systemd-spawned shells";
+            };
+          };
+
           # === Tarball Security Checks ===
           tarballChecks = {
             enable = lib.mkOption {
@@ -660,6 +669,99 @@
           # User linger for persistent user session
           (lib.mkIf cfg.systemdUserSession.enableLinger {
             users.users.${cfg.defaultUser}.linger = true;
+          })
+
+          # === WSL Environment Capture for Systemd-spawned Shells ===
+          # UPSTREAM-WORTHY: nix-community/NixOS-WSL#171, #375
+          #
+          # PROBLEM: WSL injects environment variables (Windows PATH, WSLg display
+          # vars, WSL_INTEROP) into Relay-spawned login shells only. Processes spawned
+          # by systemd (tmux, SSH, user services) never receive these because systemd
+          # starts at VM boot before any Windows Terminal session exists. NixOS-WSL's
+          # split-path is a classifier, not a provider: it cannot discover missing paths.
+          #
+          # SOLUTION: A oneshot boot service queries Windows PATH via cmd.exe (binfmt
+          # interop), probes filesystem for WSLg state, and writes a sourceable cache
+          # to /run/wsl-env. An environment.extraInit snippet (mkAfter split-path)
+          # sources the cache only when WSLPATH is empty (systemd-spawned shells).
+          #
+          # REFERENCES: microsoft/WSL#8842, #9213, #10205
+          (lib.mkIf cfg.envCapture.enable {
+            systemd.services."wsl-env-capture" = {
+              description = "Capture Windows PATH and WSLg variables for systemd-spawned shells";
+              after = [ "local-fs.target" "systemd-binfmt.service" "wsl-recover-windows-mounts.service" ];
+              before = [ "multi-user.target" ];
+              wantedBy = [ "multi-user.target" ];
+              unitConfig = {
+                ConditionPathExists = "${cfg.automountRoot}/c/WINDOWS/system32/cmd.exe";
+              };
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+                ExecStart = pkgs.writeShellScript "wsl-env-capture" ''
+                  automount_root="${cfg.automountRoot}"
+
+                  # Query Windows PATH via binfmt interop
+                  # Use printf throughout: Windows paths contain \U, \W, \v which echo
+                  # interprets as escape sequences
+                  if win_path=$("''${automount_root}/c/WINDOWS/system32/cmd.exe" /c "echo %PATH%" 2>/dev/null); then
+                    # Remove trailing carriage return from cmd.exe output
+                    win_path=$(printf '%s' "$win_path" | tr -d '\r')
+                  else
+                    echo "WARNING: Could not query Windows PATH via cmd.exe" >&2
+                    win_path=""
+                  fi
+
+                  # Convert Windows paths to WSL mount paths
+                  # Windows PATH is semicolon-separated: C:\foo;D:\bar
+                  # Result: /mnt/c/foo:/mnt/d/bar
+                  wsl_path=""
+                  IFS=';' read -ra win_entries <<< "$win_path"
+                  for entry in "''${win_entries[@]}"; do
+                    [ -z "$entry" ] && continue
+                    # Match drive letter prefix (C:, D:, etc.)
+                    if [[ "$entry" =~ ^([A-Za-z]): ]]; then
+                      drive_lower=$(printf '%s' "''${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
+                      rest="''${entry#[A-Za-z]:}"
+                      rest=$(printf '%s' "$rest" | tr '\\' '/')
+                      linux_path="''${automount_root}/''${drive_lower}''${rest}"
+                      linux_path="''${linux_path%/}"
+                      if [ -n "$wsl_path" ]; then
+                        wsl_path="''${wsl_path}:''${linux_path}"
+                      else
+                        wsl_path="$linux_path"
+                      fi
+                    fi
+                  done
+
+                  # Probe filesystem for WSLg state (stable paths, no cmd.exe needed)
+                  display=""
+                  wayland_display=""
+                  pulse_server=""
+                  [ -e /tmp/.X11-unix/X0 ] && display=":0"
+                  [ -e /mnt/wslg/runtime-dir/wayland-0 ] && wayland_display="wayland-0"
+                  [ -e /mnt/wslg/PulseServer ] && pulse_server="/mnt/wslg/PulseServer"
+
+                  # Write sourceable cache (printf, not echo, for safety)
+                  {
+                    printf 'WSLPATH="%s"\nexport WSLPATH\n' "$wsl_path"
+                    [ -n "$display" ] && printf 'DISPLAY="%s"\nexport DISPLAY\n' "$display"
+                    [ -n "$wayland_display" ] && printf 'WAYLAND_DISPLAY="%s"\nexport WAYLAND_DISPLAY\n' "$wayland_display"
+                    [ -n "$pulse_server" ] && printf 'PULSE_SERVER="%s"\nexport PULSE_SERVER\n' "$pulse_server"
+                    ${lib.optionalString cfg.interop.includePath ''printf 'PATH="''${PATH:+$PATH:}$WSLPATH"\nexport PATH\n' ''}
+                  } > /run/wsl-env
+
+                  chmod 644 /run/wsl-env
+                  echo "WSL environment captured to /run/wsl-env ($(wc -c < /run/wsl-env) bytes)"
+                '';
+              };
+            };
+
+            environment.extraInit = lib.mkAfter ''
+              if [ -z "''${WSLPATH-}" ] && [ -f /run/wsl-env ]; then
+                . /run/wsl-env
+              fi
+            '';
           })
 
           # === Tarball Security Checks ===

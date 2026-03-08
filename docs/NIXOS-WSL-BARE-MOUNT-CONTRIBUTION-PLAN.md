@@ -251,6 +251,29 @@ warnings = [
 
 **Note**: A NixOS `warnings` entry fires at evaluation time (every build), so it's informational rather than a runtime check. A runtime `system.activationScripts` check would be more precise but NixOS-WSL doesn't use that pattern for validation. Consider proposing both options in the issue/PR discussion.
 
+### wsl-env-capture: Boot-time environment capture for systemd-spawned shells
+
+**Status**: Implemented locally (`modules/system/settings/wsl/wsl.nix`, `wsl-settings.envCapture`)
+**Date identified**: 2026-03-08
+**Upstream context**:
+- [Issue #171](https://github.com/nix-community/NixOS-WSL/issues/171) (assigned K900): Environment/PAM problems, references microsoft/WSL#9213
+- [Issue #375](https://github.com/nix-community/NixOS-WSL/issues/375) (wontfix): Maintainer nzbr acknowledges workarounds possible
+- microsoft/WSL#8842, #9213, #10205: Upstream WSL bugs, unresolved
+- Shell-wrapper PRs (#452, #464, #561) fix login shells only, not systemd-spawned sessions
+
+**Problem**: WSL injects environment variables (Windows PATH, WSLg display vars, WSL_INTEROP)
+into Relay-spawned login shells only. Processes spawned by systemd (tmux, SSH, user services)
+never receive these. NixOS-WSL's `split-path` is a classifier, not a provider.
+
+**Proposed change**: Two components:
+1. `wsl-env-capture.service` — oneshot boot service that queries Windows PATH via `cmd.exe`,
+   probes filesystem for WSLg state, writes sourceable cache to `/run/wsl-env`
+2. `environment.extraInit` (mkAfter) — sources cache when WSLPATH is empty (systemd-spawned shells)
+
+**Note**: Novel approach not proposed upstream. Boot-time capture fills the gap between
+WSL's per-session injection and systemd's early boot context. Enabled by default, <1KB cache,
+~100ms service, single `[ -z ]` shell init check.
+
 ---
 
 *Created: 2025-09-20*
