@@ -230,6 +230,29 @@ Start with: "I'm ready to implement the NixOS-WSL bare mount feature. I'll begin
 
 ---
 
+## Other Upstream Contribution Opportunities
+
+### usbip.nix: Add `usbipd-win` prerequisite warning
+
+**Status**: Deferred (local activation check implemented in `modules/system/settings/wsl/wsl.nix`)
+**Date identified**: 2026-03-08
+**Upstream context**:
+- `modules/usbip.nix` has no validation that `usbipd-win` is installed on Windows
+- [Issue #662](https://github.com/nix-community/NixOS-WSL/issues/662) and [Issue #111](https://github.com/nix-community/NixOS-WSL/issues/111) show users repeatedly hitting this
+- [PR #524](https://github.com/nix-community/NixOS-WSL/pull/524) (open, by @terlar) addresses related `vhci-hcd` module loading — coordinate with this
+- NixOS-WSL uses `warnings` (not assertions) for this class of problem (see `wsl-distro.nix`, `interop.nix`, `wsl-conf.nix`)
+
+**Proposed change**: Add a static `warnings` entry to `usbip.nix` when `wsl.usbip.enable = true`:
+```nix
+warnings = [
+  "wsl.usbip is enabled. Requires usbipd-win on Windows: winget install -e --id dorssel.usbipd-win"
+];
+```
+
+**Note**: A NixOS `warnings` entry fires at evaluation time (every build), so it's informational rather than a runtime check. A runtime `system.activationScripts` check would be more precise but NixOS-WSL doesn't use that pattern for validation. Consider proposing both options in the issue/PR discussion.
+
+---
+
 *Created: 2025-09-20*
 *Purpose: Guide upstream contribution of bare mount support to NixOS-WSL*
 *Status: Ready for implementation*

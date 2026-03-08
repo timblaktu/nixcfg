@@ -460,6 +460,13 @@
               inherit (cfg.usbip) autoAttach;
               inherit (cfg.usbip) snippetIpAddress;
             };
+
+            # Runtime check for Windows-side usbipd-win dependency
+            system.activationScripts.checkUsbipd = lib.stringAfter [ ] ''
+              if ! PATH="$PATH:/mnt/c/Windows/System32:/mnt/c/Windows" command -v usbipd.exe >/dev/null 2>&1; then
+                echo "usbipd.exe not found. Install from admin PowerShell: winget install -e --id dorssel.usbipd-win"
+              fi
+            '';
           })
 
           # === Windows Aliases ===
