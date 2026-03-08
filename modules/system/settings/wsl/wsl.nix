@@ -520,10 +520,12 @@
               inherit (cfg.usbip) snippetIpAddress;
             };
 
-            # Runtime check for Windows-side usbipd-win dependency
+            # Runtime check for Windows-side usbipd-win dependency.
+            # During activation (root/systemd context), appendWindowsPath interop
+            # isn't active, so we must explicitly add the winget install location.
             system.activationScripts.checkUsbipd = lib.stringAfter [ ] ''
-              if ! PATH="$PATH:/mnt/c/Windows/System32:/mnt/c/Windows" command -v usbipd.exe >/dev/null 2>&1; then
-                echo "usbipd.exe not found. Install from admin PowerShell: winget install -e --id dorssel.usbipd-win"
+              if ! PATH="$PATH:${cfg.automountRoot}/c/Program Files/usbipd-win" command -v usbipd.exe >/dev/null 2>&1; then
+                echo -e "\033[1;31mWARNING: usbipd.exe not found. Install from admin PowerShell: winget install -e --id dorssel.usbipd-win\033[0m"
               fi
             '';
           })
