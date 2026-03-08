@@ -259,21 +259,21 @@ in
         };
       };
 
-      # Work account (Code-Companion proxy) - only for work machines with VPN access
+      # Work account (Bedrock + Code-Companion) - only for work machines with VPN access
+      # Two tokens: Bedrock API Token for Anthropic models, API Key for non-Anthropic models
       workAccount = {
         work = {
           enable = true;
-          displayName = "OpenCode Work Code-Companion";
+          displayName = "OpenCode Work";
           provider = "custom";
-          model = "codecompanion/qwen-a3b";
-          # API config is in the top-level codecompanion provider block
-          # We still need the env var name for the wrapper script
-          api = {
-            apiKeyEnvVar = "ANTHROPIC_API_KEY";
-          };
-          secrets.bearerToken.bitwarden = {
-            item = "PAC Code Companion v2";
-            field = "API Key";
+          model = "pac-bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+          secrets.envTokens = {
+            BEDROCK_API_TOKEN = {
+              bitwarden = { item = "PAC Code Companion v2"; field = "Bedrock API Token"; };
+            };
+            CODECOMPANION_API_KEY = {
+              bitwarden = { item = "PAC Code Companion v2"; field = "API Key"; };
+            };
           };
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";
@@ -281,15 +281,27 @@ in
         };
       };
 
-      # Work provider config (Code-Companion via OpenAI-compatible API)
-      # Merge this into baseConfig.provider for work machines
+      # Work provider configs - two providers for Bedrock (Anthropic models) and
+      # Code-Companion (non-Anthropic models). Merge into baseConfig.provider for work machines.
       workProvider = {
-        codecompanion = {
+        pac-bedrock = {
           npm = "@ai-sdk/openai-compatible";
-          name = "Code Companion V2";
+          name = "PAC Bedrock";
+          options = {
+            baseURL = "https://ai-platform-bedrockapis.d-dp.nextcloud.aero/api/v1";
+            apiKey = "{env:BEDROCK_API_TOKEN}";
+          };
+          models = {
+            "us.anthropic.claude-sonnet-4-5-20250929-v1:0" = { name = "Claude Sonnet 4.5"; };
+            "us.anthropic.claude-opus-4-5-20251101-v1:0" = { name = "Claude Opus 4.5"; };
+          };
+        };
+        pac-codecompanion = {
+          npm = "@ai-sdk/openai-compatible";
+          name = "PAC Code Companion";
           options = {
             baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
-            apiKey = "{env:ANTHROPIC_API_KEY}";
+            apiKey = "{env:CODECOMPANION_API_KEY}";
           };
           models = {
             "qwen-a3b" = {
@@ -383,16 +395,16 @@ in
         };
       };
 
-      # Work account (Code-Companion proxy) - only for work machines with VPN access
+      # Work account (Bedrock proxy via Code-Companion) - only for work machines with VPN access
+      # Uses ANTHROPIC_AUTH_TOKEN for Bedrock bearer auth, ANTHROPIC_API_KEY cleared
       workAccount = {
         work = {
           enable = true;
-          displayName = "Work Code-Companion";
+          displayName = "Work Bedrock";
           model = "sonnet";
           api = {
             baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
-            authMethod = "bearer";
-            disableApiKey = true;
+            authMethod = "bedrock";
             modelMappings = {
               haiku = "devstral";
               sonnet = "qwen-a3b";
@@ -401,15 +413,12 @@ in
           };
           secrets.bearerToken.bitwarden = {
             item = "PAC Code Companion v2";
-            field = "API Key";
+            field = "Bedrock API Token";
           };
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";
             CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
             DISABLE_ERROR_REPORTING = "1";
-            ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
-            ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
-            ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
           };
         };
       };

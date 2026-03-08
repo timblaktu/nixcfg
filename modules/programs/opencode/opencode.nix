@@ -226,6 +226,35 @@
                         default = { };
                         description = "Bearer token configuration for API authentication";
                       };
+
+                      envTokens = mkOption {
+                        type = types.attrsOf (types.submodule {
+                          options = {
+                            bitwarden = mkOption {
+                              type = types.submodule {
+                                options = {
+                                  item = mkOption {
+                                    type = types.str;
+                                    description = "Bitwarden item name";
+                                  };
+                                  field = mkOption {
+                                    type = types.str;
+                                    default = "Password";
+                                    description = "Field name in Bitwarden item";
+                                  };
+                                };
+                              };
+                              description = "Bitwarden reference for this token";
+                            };
+                          };
+                        });
+                        default = { };
+                        description = ''
+                          Named environment variables to export from Bitwarden at runtime.
+                          Key = env var name, value = Bitwarden source.
+                          Use this for multi-provider setups needing multiple tokens.
+                        '';
+                      };
                     };
                   };
                   default = { };
@@ -563,9 +592,19 @@
                     item = bwItem;
                     field = if bwField == "" then null else bwField;
                     varName = accountCfg.api.apiKeyEnvVar;
-                    # Use default 300s staleness; could make configurable via account.rbwSyncInterval
                   }
                 );
+
+                # Multi-token fetch via envTokens (for multi-provider setups)
+                envTokenFetches = concatStringsSep "\n" (mapAttrsToList
+                  (envVarName: tokenCfg:
+                    rbwLib.mkRbwExportWithDiagnostics {
+                      item = tokenCfg.bitwarden.item;
+                      field = let f = tokenCfg.bitwarden.field; in if f == "" then null else f;
+                      varName = envVarName;
+                    }
+                  )
+                  accountCfg.secrets.envTokens);
               in
               pkgs.writeShellScriptBin "opencode${accountName}" ''
                 #!/usr/bin/env bash
@@ -575,6 +614,7 @@
 
                 ${envExports}
                 ${bitwardenFetch}
+                ${envTokenFetches}
 
                 exec ${cfg.package}/bin/opencode "$@"
               '';

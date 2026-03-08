@@ -72,8 +72,25 @@ in
           }
         ))
 
-        # ANTHROPIC_API_KEY - set to empty string only if disableApiKey is true AND no bearer auth
-        (lib.optionalString (disableApiKey && authMethod != "bearer") ''
+        # ANTHROPIC_AUTH_TOKEN - retrieve via rbw for Bedrock proxy auth
+        # CC v2 Bedrock guide: ANTHROPIC_AUTH_TOKEN for bearer, ANTHROPIC_API_KEY=""
+        (lib.optionalString (authMethod == "bedrock" && bearerToken != null && bearerToken.bitwarden or null != null) (
+          let
+            bwItem = bearerToken.bitwarden.item;
+            bwField = bearerToken.bitwarden.field or null;
+          in
+          ''
+            ${rbwLib.mkRbwExportWithDiagnostics {
+              item = bwItem;
+              field = if bwField == "" then null else bwField;
+              varName = "ANTHROPIC_AUTH_TOKEN";
+            }}
+            export ANTHROPIC_API_KEY=""
+          ''
+        ))
+
+        # ANTHROPIC_API_KEY - set to empty string only if disableApiKey is true AND no bearer/bedrock auth
+        (lib.optionalString (disableApiKey && authMethod != "bearer" && authMethod != "bedrock") ''
           export ANTHROPIC_API_KEY=""'')
       ]);
 
