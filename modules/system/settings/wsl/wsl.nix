@@ -757,7 +757,11 @@
               };
             };
 
-            environment.extraInit = lib.mkAfter ''
+            # Use interactiveShellInit (goes into /etc/bashrc + /etc/zshrc) rather
+            # than extraInit (goes into /etc/set-environment).  tmux panes inherit
+            # __NIXOS_SET_ENVIRONMENT_DONE from the server, which causes
+            # /etc/set-environment to be skipped entirely in new panes.
+            environment.interactiveShellInit = lib.mkAfter ''
               if [ -z "''${WSLPATH-}" ] && [ -f /run/wsl-env ]; then
                 . /run/wsl-env
               fi
