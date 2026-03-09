@@ -73,7 +73,9 @@
           # Performs imperative user rename from default 'dev' to chosen username.
           # This is a one-time bootstrap operation -- NixOS declarative user config
           # takes over after the user clones the flake and rebuilds.
-          environment.systemPackages = [
+          environment.systemPackages = with pkgs; [
+            usbutils # lsusb — USB device enumeration (Jetson flashing, usbipd workflows)
+
             (pkgs.writeShellScriptBin "setup-username" ''
               set -euo pipefail
 
