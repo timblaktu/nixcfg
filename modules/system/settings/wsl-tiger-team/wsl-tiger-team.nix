@@ -75,6 +75,7 @@
           # takes over after the user clones the flake and rebuilds.
           environment.systemPackages = with pkgs; [
             usbutils # lsusb — USB device enumeration (Jetson flashing, usbipd workflows)
+            kmod # lsmod, modprobe, modinfo — kernel module management
 
             (pkgs.writeShellScriptBin "setup-username" ''
               set -euo pipefail
