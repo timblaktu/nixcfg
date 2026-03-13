@@ -138,11 +138,14 @@ in
       # Set azureAuth.defaultRoleArn when you know your IAM role ARN
     };
 
-    # Claude Code: add personal accounts (tiger-team provides work + base config;
-    # accounts is attrsOf submodule, so these merge with tiger-team's work account)
+    # Claude Code: add personal accounts and override team default to personal.
+    # Tiger-team sets defaultAccount="work"; mkForce (50) overrides bare value (100).
+    # accounts is attrsOf submodule, so these merge with tiger-team's work account.
+    programs.claude-code.defaultAccount = lib.mkForce "max";
     programs.claude-code.accounts = inputs.self.lib.claudeCode.personalAccounts;
 
-    # OpenCode: add personal accounts (same merging pattern)
+    # OpenCode: same pattern — personal accounts + personal default.
+    programs.opencode.defaultAccount = lib.mkForce "max";
     programs.opencode.accounts = inputs.self.lib.openCode.personalAccounts;
   };
 

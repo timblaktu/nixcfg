@@ -192,6 +192,7 @@
       # Hosts ADD personal accounts (max, pro) via module system merging --
       # accounts is attrsOf submodule, so tiger-team's work + host's max/pro coexist.
       programs.claude-code = inputs.self.lib.claudeCode.baseConfig // {
+        defaultAccount = "work";
         accounts = inputs.self.lib.claudeCode.workAccount;
         statusline = inputs.self.lib.claudeCode.defaultStatusline;
         mcpServers = inputs.self.lib.claudeCode.defaultMcpServers;
@@ -202,6 +203,7 @@
       # Team-shared config: work account (Code Companion proxy) + base settings.
       # Same merging pattern as claude-code for host personal accounts.
       programs.opencode = inputs.self.lib.openCode.baseConfig // {
+        defaultAccount = "work";
         accounts = inputs.self.lib.openCode.workAccount;
         provider = inputs.self.lib.openCode.baseConfig.provider
           // inputs.self.lib.openCode.workProvider;
