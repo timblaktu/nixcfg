@@ -31,7 +31,7 @@ manager for the ~8 scripts that don't belong to any feature module.
 | 0 | TASK:COMPLETE | Audit verification & baseline |
 | 1 | TASK:COMPLETE | Remove 4 orphaned exclusion entries |
 | 2 | TASK:COMPLETE | Remove duplicate scripts (shell-utils batch: 8 scripts) |
-| 3 | TASK:PENDING | Remove duplicate scripts (tmux batch: 7 scripts) |
+| 3 | TASK:COMPLETE | Remove duplicate scripts (tmux batch: 7 scripts) |
 | 4 | TASK:PENDING | Remove duplicate libraries (9 .bash files) |
 | 5 | TASK:PENDING | Move terminal scripts to terminal module (4 scripts) |
 | 6 | TASK:PENDING | Move development-tools scripts (4 scripts) |
