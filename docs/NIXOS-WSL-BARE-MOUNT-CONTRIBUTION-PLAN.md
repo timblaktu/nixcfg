@@ -251,6 +251,109 @@ warnings = [
 
 **Note**: A NixOS `warnings` entry fires at evaluation time (every build), so it's informational rather than a runtime check. A runtime `system.activationScripts` check would be more precise but NixOS-WSL doesn't use that pattern for validation. Consider proposing both options in the issue/PR discussion.
 
+### usbip.nix: Modernize for usbipd-win v5.x + hardware-ID auto-attach
+
+**Status**: Research complete, ready for upstream PR
+**Date identified**: 2026-03-14
+**Priority**: HIGH — current NixOS-WSL module will break when users update usbipd-win
+
+**Current upstream state** (`modules/usbip.nix` on main as of 2026-03-14):
+- Fetches `auto-attach.sh` from dorssel/usbipd-win **v4.2.0** (June 2023)
+- Creates templated systemd services (`usbip-auto-attach@<busid>.service`) that run
+  the bash script inside WSL, polling every 1s with Linux-side `usbip attach`
+- Identifies devices by **bus ID** only (port-dependent, e.g., "3-1")
+- `wsl.extraBin` provides cat/ls/modprobe to `/bin` for `usbipd.exe` to invoke from Windows
+
+**What changed in usbipd-win v5.x**:
+- **v5.0.0**: `auto-attach.sh` still present, ARM64 support added
+- **v5.1.0**: `auto-attach.sh` replaced by **native binary** `usbip-auto-attach` (C project
+  by @andrewleech: https://github.com/andrewleech/usbip-auto-attach). Added `--host-ip`
+  and `--unplugged` options
+- **v5.2.0**: **Non-FHS distribution support** (NixOS!) — uses `shell-type standard` instead
+  of `--exec`, honoring root's `$PATH`. This may eliminate the need for `wsl.extraBin`
+  workarounds (cat, ls, usbip symlinks)
+- **v5.3.0**: `auto-attach.sh` **removed entirely** (HTTP 404 on GitHub). Only native binary
+  `usbip-auto-attach` + `usbip` shipped per architecture (x64/arm64)
+
+**Impact**: NixOS-WSL's `usbip.nix` fetches from v4.2.0 via hash-pinned URL, so it won't
+break immediately. But:
+1. It's stale (2+ years behind, missing `--host-ip`, `--unplugged`, non-FHS support)
+2. Users who manually follow usbipd-win docs find outdated NixOS-WSL behavior
+3. The Linux-side polling approach is inferior to Windows-side `usbipd.exe attach --auto-attach`
+
+**Two auto-attach mechanisms** (important architectural distinction):
+| Aspect | Mechanism A (current) | Mechanism B (proposed) |
+|---|---|---|
+| Where it runs | Linux systemd service | Windows-side usbipd.exe |
+| Invocation | `usbip attach --remote=HOST --busid=BID` | `usbipd.exe attach --wsl --hardware-id VID:PID --auto-attach` |
+| Device ID | Bus ID (port-dependent) | Hardware ID VID:PID (port-independent) |
+| Reconnect | Polls /sys every 1s | Native OS event-driven |
+| Script | Bash (auto-attach.sh, removed in v5.3) | None (compiled into usbipd.exe) |
+| Dependencies | usbip package, iproute2, IP discovery | Windows interop PATH |
+| Networking | Requires knowing host IP (shell snippet) | Automatic (same as manual attach) |
+
+**Proposed upstream changes** (single PR with 3 parts):
+
+1. **Update auto-attach mechanism**: Either use shipped native `usbip-auto-attach` binary
+   from usbipd-win installation, or switch to Windows-side `usbipd.exe attach --auto-attach`.
+   The Windows-side approach is simpler (no IP discovery needed, event-driven) but requires
+   Windows interop PATH. The native binary approach keeps current architecture but needs
+   path to `C:\Program Files\usbipd-win\WSL\<arch>\usbip-auto-attach`.
+
+2. **Add `autoAttachByHardwareId` option**: New option complementing existing bus-ID
+   mechanism. Creates systemd services that run `usbipd.exe attach --wsl --hardware-id VID:PID
+   --auto-attach` from WSL via Windows interop:
+   ```nix
+   autoAttachByHardwareId = lib.mkOption {
+     type = with lib.types; listOf (submodule {
+       options = {
+         hardwareId = lib.mkOption { type = str; example = "0403:6001"; };
+         description = lib.mkOption { type = str; default = ""; };
+       };
+     });
+     default = [ ];
+     description = "Auto-attach USB devices by hardware ID (VID:PID) via usbipd.exe";
+   };
+   ```
+   Advantages: port-independent, survives replug to different USB port, matches
+   usbipd-win's recommended workflow.
+
+3. **Test v5.2.0+ non-FHS support**: Verify whether `wsl.extraBin` entries for cat/ls/usbip
+   are still needed with usbipd-win v5.2.0+. If not, gate them behind a version check or
+   remove them.
+
+**Coordinate with**:
+- [PR #524](https://github.com/nix-community/NixOS-WSL/pull/524) (open, by @terlar):
+  kernel module loading for `vhci-hcd`. Rebased Jan 2026, WSL 2.5.7+ ships 6.6 kernel
+  where modules are loadable. This PR is prerequisite for usbip on newer kernels.
+- [Issue #662](https://github.com/nix-community/NixOS-WSL/issues/662): User unable to use
+  usbipd — closed by #665 (extraBin fix) but underlying architecture still outdated.
+- [Issue #594](https://github.com/nix-community/NixOS-WSL/issues/594): auto-attach broken
+  by v4.2.0's `./usbip` relative path — fixed by patching, but moot with native binary.
+- [Issue #111](https://github.com/nix-community/NixOS-WSL/issues/111): Long-running thread
+  showing users struggling with usbip setup. Every workaround eventually broke.
+
+**Maintainer context**:
+- **nzbr** (main maintainer): Responsive, merged original usbip module
+- **SuperSandro2000**: Active reviewer, approved usbip PRs, pragmatic about fixes
+- **terlar**: Original usbip module author, still active (Jan 2026 rebase on PR #524)
+- **K900**: Technical reviewer, asks probing questions about correctness
+- PRs with tests and clean implementation get merged within weeks
+- Project actively maintained (pushed today)
+
+**User's confirmed working workflow** (2026-03-14):
+```powershell
+# From PowerShell (non-admin, with usbipd policy configured):
+Start-Process -WindowStyle Hidden usbipd.exe -ArgumentList "attach --wsl --hardware-id 0403:6001 --auto-attach"
+Start-Process -WindowStyle Hidden usbipd.exe -ArgumentList "attach --wsl --hardware-id 0955:7523 --auto-attach"
+```
+Devices: FTDI USB-UART adapter (0403:6001), NVIDIA Jetson Recovery Mode APX (0955:7523).
+
+**Local implementation** (interim, in `wsl-settings.usbip` / tiger-team module):
+Will implement hardware-ID auto-attach locally first, then extract as upstream PR.
+The local version creates systemd services that call `usbipd.exe` via Windows interop.
+Tiger-team module sets the two team device hardware IDs.
+
 ### wsl-env-capture: Boot-time environment capture for systemd-spawned shells
 
 **Status**: Implemented locally (`modules/system/settings/wsl/wsl.nix`, `wsl-settings.envCapture`)

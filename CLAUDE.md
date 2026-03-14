@@ -539,6 +539,41 @@ DHCP Pool: 10.0.0.100-200
 
 ---
 
+### 🚧 **USB/IP + Jetson Orin Nano Development** (IN PROGRESS)
+
+**Branch**: `feat/usb-jetson-pa161878`
+**Status**: USB infrastructure complete, upstream contribution research done (2026-03-14)
+
+**What's implemented locally** (13 commits on branch):
+- `wsl-settings.usbip` options in `modules/system/settings/wsl/wsl.nix` (enable, autoAttach, snippetIpAddress)
+- Activation script checking for `usbipd.exe` on Windows side (with corrected PATH)
+- Jetson Recovery Mode (APX) udev rule: VID:0955 PID:7523 (active)
+- Jetson L4T running udev rule: VID:0955 PID:7020 (commented out, needs verification)
+- `usbip.autoAttach = [ ]` placeholder in `pa161878-nixos.nix`
+- `usbutils` + `kmod` in tiger-team layer
+- WSL environment capture for systemd-spawned shells
+- Windows drive mount recovery service
+- `restart-usb` + `restart-usb-v4.ps1` recovery scripts
+
+**Windows-side confirmed working** (2026-03-14):
+- usbipd-win v5.3.0 installed, policy configured for non-admin attach
+- Manual `usbipd attach --wsl --hardware-id VID:PID --auto-attach` works
+- Devices: FTDI USB-UART (0403:6001), Jetson APX (0955:7523)
+
+**Upstream contribution opportunity** (HIGH PRIORITY):
+NixOS-WSL's `modules/usbip.nix` is outdated — fetches `auto-attach.sh` from usbipd-win
+v4.2.0 (removed in v5.3.0). Module needs modernization for v5.x + hardware-ID auto-attach.
+Full research documented in `docs/NIXOS-WSL-BARE-MOUNT-CONTRIBUTION-PLAN.md` under
+"usbip.nix: Modernize for usbipd-win v5.x + hardware-ID auto-attach".
+
+**Remaining work**:
+1. Implement `autoAttachByHardwareId` locally in `wsl.nix` + tiger-team module (interim)
+2. Prepare upstream PR for NixOS-WSL `modules/usbip.nix` modernization
+3. Verify Jetson L4T PID 7020 when hardware boots into Linux
+4. Jetson flashing workflow (sdkmanager or initrd flash via WSL)
+
+---
+
 ### 🔧 **Pending Tasks**
 
 #### ✅ **OpenCode Vision Support Configuration** (COMPLETED - 2026-01-20)
