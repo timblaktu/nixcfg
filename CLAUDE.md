@@ -77,19 +77,17 @@ Check: [relevant file path]
 **Local sessions:**
 - Use `CLAUDE_CONFIG_DIR` → `claude-runtime/.claude-{account}/`
 - Never touch `.claude/`
-- Hook script at `modules/programs/files [nd]/files/bin/ensure-nix.sh`
+- Hook script at `.claude/SessionStart` (web sessions only)
 
 **Web sessions:**
 - Use `.claude/settings.json` for hooks
 - Create runtime state in `.claude/` (all ignored except settings.json)
-- Hook runs `bin/ensure-nix.sh` (same script, works in both contexts)
+- Hook runs `.claude/SessionStart` (installs nix in ephemeral web environments)
 
 ## Filesystem View of Claude Configuration and Runtime State
 
 ```
 nixcfg/
-├── modules/programs/files [nd]/files/bin/
-│   └── ensure-nix.sh          # Shared hook script
 ├── claude-runtime/
 │   ├── .claude-default/
 │   │   ├── settings.json      # ✅ Checked in (Nix-managed)
