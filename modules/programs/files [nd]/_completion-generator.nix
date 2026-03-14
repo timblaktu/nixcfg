@@ -405,13 +405,6 @@ in
           recursive = true;
         };
       }
-      # Library directory (for bash utility functions)
-      {
-        "lib" = {
-          source = filesDir + "/lib";
-          recursive = true;
-        };
-      }
       # Auto-generated completions for all scripts
       mkBashCompletionFiles
       mkZshCompletionFiles

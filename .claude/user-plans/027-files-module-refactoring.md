@@ -32,7 +32,7 @@ manager for the ~8 scripts that don't belong to any feature module.
 | 1 | TASK:COMPLETE | Remove 4 orphaned exclusion entries |
 | 2 | TASK:COMPLETE | Remove duplicate scripts (shell-utils batch: 8 scripts) |
 | 3 | TASK:COMPLETE | Remove duplicate scripts (tmux batch: 7 scripts) |
-| 4 | TASK:PENDING | Remove duplicate libraries (9 .bash files) |
+| 4 | TASK:COMPLETE | Remove duplicate libraries (9 .bash files) |
 | 5 | TASK:PENDING | Move terminal scripts to terminal module (4 scripts) |
 | 6 | TASK:PENDING | Move development-tools scripts (4 scripts) |
 | 7 | TASK:PENDING | Move system-tools scripts (5 scripts) |

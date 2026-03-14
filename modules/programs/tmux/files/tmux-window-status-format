@@ -18,7 +18,7 @@ if [[ $# -ne 3 ]]; then
     exit 1
 fi
 
-source "${HOME}/lib/general-utils.bash"
+source "$HOME/.local/lib/general-utils.bash"
 
 client_width=$1
 one_based_window_index=$2

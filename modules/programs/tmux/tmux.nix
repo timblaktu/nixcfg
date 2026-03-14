@@ -19,8 +19,8 @@
 #   imports = [ inputs.self.modules.homeManager.tmux ];
 { config, lib, inputs, ... }:
 let
-  # Library files for scripts (shared with other modules)
-  libPath = ../../.. + "/modules/programs/files [nd]/files/lib";
+  # Library files for scripts (shared from shell-utils)
+  libPath = ../../.. + "/modules/programs/shell-utils/files/lib";
 in
 {
   flake.modules = {
@@ -494,11 +494,9 @@ in
               })
 
               # Window status format script
-              (pkgs.writers.writeBashBin "tmux-window-status-format" (builtins.replaceStrings
-                [ ''source "''${HOME}/lib/general-utils.bash"'' ]
-                [ "source \"${config.home.homeDirectory}/.local/lib/general-utils.bash\"" ]
+              (pkgs.writers.writeBashBin "tmux-window-status-format"
                 (builtins.readFile ./files/tmux-window-status-format)
-              ))
+              )
 
               # Tmux resurrect cleanup script
               (pkgs.writers.writeBashBin "tmux-resurrect-cleanup" ''
