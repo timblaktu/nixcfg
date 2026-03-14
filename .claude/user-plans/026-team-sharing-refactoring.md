@@ -1,4 +1,4 @@
-# Plan 026: Team-Sharing Refactoring — Files Module, Username DRY, Repo Separation
+# Plan 026: Team-Sharing Refactoring — Files, Username, CrowdStrike, Repo Split, Distribution
 
 **Branch**: TBD (create from main at task start)
 **Created**: 2026-03-14
@@ -7,9 +7,10 @@
 
 ## Objective
 
-Complete the remaining refactoring needed to make nixcfg's shared modules
-cleanly consumable by tiger-team members. Addresses internal anti-patterns
-first (Tasks 1-2), then structural separation and team infrastructure (Tasks 3-5).
+Complete the remaining refactoring and feature work needed to make nixcfg's
+shared modules cleanly consumable by tiger-team members, including a
+production-ready CrowdStrike Falcon integration. Culminates in a
+demonstration to IT showing the team WSL image with Falcon baked in.
 
 ## Progress Table
 
@@ -17,16 +18,17 @@ first (Tasks 1-2), then structural separation and team infrastructure (Tasks 3-5
 |------|----------|--------|------------|-------------|
 | 1 | Files Module | TASK:PENDING | `nix flake check --no-build` + HM dry-run | Refactor files module anti-patterns (F5) |
 | 2 | Username DRY | TASK:PENDING | `nix flake check --no-build` + HM dry-run | Centralize hardcoded username refs (F1) |
-| 3 | Repo Separation | TASK:PENDING | Both flakes pass `nix flake check --no-build` | Split shared modules into separate flake |
-| 4 | CrowdStrike | TASK:PENDING | Enterprise module activates without warnings | Fill CrowdStrike stub when IT provides package |
+| 3 | CrowdStrike | TASK:PENDING | Module evals, service activates in VM test | Build Falcon sensor dendritic module |
+| 4 | Repo Separation | TASK:PENDING | Both flakes pass `nix flake check --no-build` | Split shared modules into separate flake |
 | 5 | Tarball Hosting | TASK:PENDING | Teammates can `nix build` or `wsl --import` | Establish distribution channel for team tarball |
+| 6 | IT Demo | TASK:PENDING | IT provides CID + provisioning token | Demonstrate Falcon-enabled WSL image to IT |
 
 ---
 
 ## Task 1: Files Module Refactoring (F5)
 
 **Status**: TASK:PENDING
-**Priority**: HIGH — blocks clean repo separation (Task 3)
+**Priority**: HIGH — blocks clean repo separation (Task 4)
 
 ### Problem Statement
 
@@ -177,7 +179,7 @@ distribution (generic user "dev"), `systemDefault.userName` is already the
 correct dynamic mechanism — hosts override it. The meta option represents
 the flake owner's identity, which is fine for personal configs.
 
-For repo separation (Task 3), the shared flake would NOT have `meta.username`
+For repo separation (Task 4), the shared flake would NOT have `meta.username`
 set to "tim" — it would be set by each consumer.
 
 ### Definition of Done
@@ -191,11 +193,217 @@ set to "tim" — it would be set by each consumer.
 
 ---
 
-## Task 3: Repository Separation
+## Task 3: CrowdStrike Falcon Sensor Module
+
+**Status**: TASK:PENDING
+**Priority**: HIGH — key enterprise compliance feature for WSL image
+**Depends on**: None (can proceed independently of Tasks 1-2)
+
+### Problem Statement
+
+The enterprise module has a CrowdStrike stub (`wsl-enterprise.nix:73-91`)
+with options for `enable`, `cid`, and `serverUrl`, but only emits a warning
+when enabled. We need a full dendritic module that packages the Falcon sensor,
+runs its systemd service, and exposes all relevant configuration knobs —
+without waiting for IT to tell us what their config is.
+
+### WSL2-Specific Context
+
+Two approaches exist for CrowdStrike on WSL2:
+
+1. **Windows-side Falcon plugin** (CS official, Falcon v7.23+, June 2025):
+   A Windows sensor plugin extends monitoring into WSL2 without installing
+   anything inside the distribution. This is CrowdStrike's recommended path.
+
+2. **Linux sensor inside WSL2** (problematic but sometimes required):
+   WSL2 runs `microsoft-standard-WSL2` kernel, which is NOT on CS's supported
+   kernel whitelist. Sensor enters **Reduced Functionality Mode (RFM)** — sends
+   heartbeats only, no detections. Some enterprises still require installation
+   for compliance inventory purposes.
+
+**Our module supports Approach 2** (Linux sensor inside WSL) because:
+- Enterprise compliance may mandate agent presence regardless of RFM
+- The module is general-purpose NixOS, not WSL-specific
+- Approach 1 is a Windows-side concern (outside our NixOS config)
+- The module should clearly document the RFM limitation for WSL users
+
+### Technical Architecture (proven community pattern)
+
+```
+Package layer:
+  falcon-sensor-unwrapped    .deb extraction via dpkg-deb + autoPatchelfHook
+                              Dependencies: openssl, libnl, zlib
+  falcon-sensor              buildFHSEnv wrapper (unsharePid = false)
+                              Exposes: falconctl, falcond, falcon-kernel-check
+
+Service layer:
+  systemd.tmpfiles.rules     Creates mutable /opt/CrowdStrike (0750 root root)
+  falcon-sensor.service      ExecStartPre: symlink binaries + falconctl -s --cid
+                              ExecStart: falcond (via FHS wrapper)
+                              Type=forking, PIDFile=/run/falcond.pid
+
+Config layer:
+  services.falcon-sensor     NixOS module options (see below)
+```
+
+### Module Options Interface
+
+```nix
+services.falcon-sensor = {
+  enable = lib.mkEnableOption "CrowdStrike Falcon sensor";
+
+  package = lib.mkOption {
+    type = lib.types.package;
+    description = "Falcon sensor package (.deb source)";
+    # No default — user must provide the .deb path or fetchurl
+  };
+
+  cid = lib.mkOption {
+    type = lib.types.str;
+    default = "";
+    description = "Customer ID (CID). Format: <hex>-<checksum>";
+  };
+
+  cidSecretFile = lib.mkOption {
+    type = lib.types.nullOr lib.types.path;
+    default = null;
+    description = ''
+      Path to file containing CID (alternative to plaintext cid option).
+      Use with SOPS/agenix for secret management.
+    '';
+  };
+
+  provisioningToken = lib.mkOption {
+    type = lib.types.str;
+    default = "";
+    description = "Installation/provisioning token for host registration";
+  };
+
+  provisioningTokenSecretFile = lib.mkOption {
+    type = lib.types.nullOr lib.types.path;
+    default = null;
+    description = "Path to file containing provisioning token";
+  };
+
+  tags = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [];
+    example = [ "Environment/Development" "Team/TigerTeam" ];
+    description = "Sensor grouping tags (max 256 chars combined)";
+  };
+
+  backend = lib.mkOption {
+    type = lib.types.enum [ "auto" "bpf" "kernel" ];
+    default = "bpf";
+    description = ''
+      Sensor backend. "bpf" recommended for NixOS/WSL (looser kernel
+      requirements). "kernel" requires supported kernel whitelist.
+    '';
+  };
+
+  cloudRegion = lib.mkOption {
+    type = lib.types.enum [ "us-1" "us-2" "eu-1" "us-gov-1" "us-gov-2" ];
+    default = "us-1";
+    description = "CrowdStrike cloud region";
+  };
+
+  proxy = {
+    enable = lib.mkEnableOption "proxy for Falcon cloud communication";
+    host = lib.mkOption { type = lib.types.str; default = ""; };
+    port = lib.mkOption { type = lib.types.port; default = 8080; };
+  };
+
+  trace = lib.mkOption {
+    type = lib.types.enum [ "none" "err" "warn" "info" "debug" ];
+    default = "warn";
+    description = "Sensor log/trace level";
+  };
+
+  autoRemoveAid = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      Remove Agent ID (AID) on service start. Enable for golden image
+      cloning so each instance gets a unique AID.
+    '';
+  };
+};
+```
+
+### File Layout (dendritic pattern)
+
+```
+modules/programs/crowdstrike-falcon/
+├── crowdstrike-falcon.nix       # Flake module registration
+├── _nixos/
+│   ├── module.nix               # NixOS service module (options + config)
+│   └── package.nix              # Package derivation (.deb extract + FHS)
+└── docs/
+    └── WSL-LIMITATIONS.md       # RFM warning, Windows plugin recommendation
+```
+
+### Integration into Enterprise Layer
+
+Update `wsl-enterprise.nix` to:
+1. Replace the 3 stub options (`crowdStrike.{enable,cid,serverUrl}`) with
+   imports of the new module: `inputs.self.modules.nixos.crowdstrike-falcon`
+2. Set enterprise defaults:
+   ```nix
+   services.falcon-sensor = {
+     enable = lib.mkDefault false;  # Opt-in per enterprise policy
+     backend = lib.mkDefault "bpf";
+     tags = lib.mkDefault [ "Environment/Enterprise" ];
+   };
+   ```
+3. Remove the warning stub (lines 256-267)
+
+Tiger-team layer can add its own tag:
+```nix
+services.falcon-sensor.tags = [ "Team/TigerTeam" ];
+```
+
+### Package Source Strategy
+
+The `.deb` is not publicly downloadable (requires Falcon Console auth).
+Three options for the `package` option:
+
+1. **`requireFile`** (nixpkgs pattern for proprietary software):
+   ```nix
+   package = pkgs.requireFile {
+     name = "falcon-sensor_7.18.0-17106_amd64.deb";
+     sha256 = "...";
+     url = "https://falcon.crowdstrike.com/hosts/sensor-downloads";
+   };
+   ```
+   User must manually download and `nix-store --add-fixed` the `.deb`.
+
+2. **Local path**: `package = /path/to/falcon-sensor.deb;`
+
+3. **Corporate artifact server**: `package = builtins.fetchurl { ... };`
+
+Option 1 is the most Nix-idiomatic for proprietary packages. The IT demo
+(Task 6) will determine which approach the enterprise prefers.
+
+### Definition of Done
+
+- [ ] `modules/programs/crowdstrike-falcon/` exists with dendritic structure
+- [ ] Package derivation extracts `.deb` and wraps with `buildFHSEnv`
+- [ ] NixOS module creates systemd service, tmpfiles, falconctl config
+- [ ] All options from interface above are implemented
+- [ ] `cidSecretFile`/`provisioningTokenSecretFile` work with SOPS paths
+- [ ] `autoRemoveAid = true` clears AID on start (golden image support)
+- [ ] `wsl-enterprise.nix` stub replaced with real module import
+- [ ] `docs/WSL-LIMITATIONS.md` documents RFM and Windows plugin alternative
+- [ ] Module evaluates cleanly: `nix flake check --no-build`
+- [ ] Service activates in VM test (even if sensor enters RFM)
+
+---
+
+## Task 4: Repository Separation
 
 **Status**: TASK:PENDING
 **Priority**: HIGH — the core enabler for team consumption
-**Depends on**: Tasks 1-2 (clean internal state first)
+**Depends on**: Tasks 1-3 (clean state + CrowdStrike module in place)
 
 ### Problem Statement
 
@@ -227,7 +435,7 @@ development-tools, etc.) remain private despite being consumed by tiger-team.
 - `modules/system/settings/wsl/`, `wsl-enterprise/`, `wsl-tiger-team/`
 - `modules/programs/` sharable subset: shell, git, tmux, neovim,
   claude-code, opencode, development-tools, system-tools, awscli,
-  onedrive, shell-utils, yazi, terminal
+  onedrive, shell-utils, yazi, terminal, crowdstrike-falcon
 - `modules/flake-parts/shared-modules.nix`, `lib.nix` (preset helpers)
 - `modules/meta/` (with `readOnly` removed from username, or made configurable)
 
@@ -252,12 +460,12 @@ development-tools, etc.) remain private despite being consumed by tiger-team.
 
 ### Refactoring Strategy
 
-**3a. Create shared flake** with import-tree structure mirroring current layout
-**3b. Move classified modules** (copy, not git-filter-branch — history stays)
-**3c. Update personal flake** to consume shared as `inputs.nixcfg-team`
-**3d. Update cross-references**: `inputs.self.modules.nixos.wsl-tiger-team`
+**4a. Create shared flake** with import-tree structure mirroring current layout
+**4b. Move classified modules** (copy, not git-filter-branch — history stays)
+**4c. Update personal flake** to consume shared as `inputs.nixcfg-team`
+**4d. Update cross-references**: `inputs.self.modules.nixos.wsl-tiger-team`
      becomes `inputs.nixcfg-team.modules.nixos.wsl-tiger-team`
-**3e. Split test infrastructure**: Shared flake gets module-level tests,
+**4e. Split test infrastructure**: Shared flake gets module-level tests,
      personal flake keeps host integration tests
 
 ### Definition of Done
@@ -272,39 +480,11 @@ development-tools, etc.) remain private despite being consumed by tiger-team.
 
 ---
 
-## Task 4: CrowdStrike Integration
-
-**Status**: TASK:PENDING
-**Priority**: LOW — blocked on IT providing package
-**Depends on**: Task 3 (should be in shared flake)
-
-### Current State
-
-Enterprise module has options defined (`enterprise.crowdStrike.{enable,cid,serverUrl}`)
-at `wsl-enterprise.nix:73-91`. Implementation shows a warning when enabled
-(lines 256-267) because no package exists yet.
-
-### What's Needed (when IT provides)
-
-1. Package derivation (or fetchurl of binary)
-2. Systemd service unit for falcon-sensor
-3. Configuration file generation (/etc/crowdstrike/)
-4. Sensor binary path integration
-
-### Definition of Done
-
-- [ ] `enterprise.crowdStrike.enable = true` activates sensor
-- [ ] Warning message removed
-- [ ] Service starts and reports healthy
-- [ ] CID and serverUrl configure sensor correctly
-
----
-
 ## Task 5: Tarball/Flake Hosting & Distribution
 
 **Status**: TASK:PENDING
 **Priority**: MEDIUM — enables teammate self-service
-**Depends on**: Task 3 (shared flake must exist first)
+**Depends on**: Task 4 (shared flake must exist first)
 
 ### Problem Statement
 
@@ -331,19 +511,85 @@ Plan 023 noted "Repo hosting: Deferred." Teammates need a way to:
 
 ---
 
+## Task 6: IT Demonstration & CrowdStrike Handoff
+
+**Status**: TASK:PENDING
+**Priority**: HIGH — gates production CrowdStrike activation
+**Depends on**: Tasks 3-5 (module built, image distributable)
+
+### Objective
+
+Demonstrate the Falcon-enabled NixOS-WSL tiger-team image to IT security.
+Show them what we've built and collect the enterprise-specific configuration
+they need to provide for production activation.
+
+### What We Demonstrate
+
+1. **The NixOS-WSL image** with CrowdStrike module baked in
+2. **Declarative configuration**: Show how `services.falcon-sensor.*` options
+   work — CID, tags, backend, proxy, provisioning token
+3. **Golden image support**: `autoRemoveAid = true` ensures unique AID per clone
+4. **SOPS integration**: CID and provisioning token can be encrypted at rest
+5. **Sensor grouping tags**: Team/environment tagging for policy assignment
+6. **RFM transparency**: Explain that WSL2's custom kernel causes RFM,
+   recommend their Windows-side Falcon plugin (v7.23+) for actual detection
+7. **The alternative**: Windows Falcon plugin approach for WSL2 visibility
+
+### What We Need From IT
+
+Prepare this checklist for the IT meeting:
+
+| Item | Description | How We Use It |
+|------|-------------|---------------|
+| **CID** | Customer ID for our Falcon tenant | `services.falcon-sensor.cid` or SOPS secret |
+| **Provisioning token** | Token for host registration | `services.falcon-sensor.provisioningToken` or SOPS |
+| **Cloud region** | Which CS cloud (us-1, us-2, eu-1, gov) | `services.falcon-sensor.cloudRegion` |
+| **Proxy config** | If CS traffic must traverse proxy | `services.falcon-sensor.proxy.*` |
+| **Sensor `.deb`** | Download URL or artifact path | `services.falcon-sensor.package` |
+| **Sensor version policy** | Pin to specific version or auto-update? | Package version in derivation |
+| **Tag conventions** | Required tags for compliance grouping | `services.falcon-sensor.tags` |
+| **Backend preference** | bpf vs kernel vs auto | `services.falcon-sensor.backend` |
+| **Windows plugin status** | Is Falcon v7.23+ deployed on Windows hosts? | Determines if Linux sensor is compliance-only |
+| **Maintenance token** | Anti-tamper token (v7.20+ if enabled) | Future option addition |
+
+### Preparation Artifacts
+
+- [ ] Slide deck or live-demo script showing the configuration flow
+- [ ] Running WSL instance with Falcon service active (even in RFM)
+- [ ] `falconctl -g --rfm-state --version --aid` output to show IT
+- [ ] `docs/WSL-LIMITATIONS.md` polished for IT audience
+- [ ] Configuration template showing what IT needs to fill in
+
+### Definition of Done
+
+- [ ] IT meeting completed
+- [ ] CID and provisioning token received (or SOPS-encrypted path agreed)
+- [ ] Cloud region and proxy config confirmed
+- [ ] Sensor `.deb` download path established
+- [ ] Tag conventions documented
+- [ ] Any follow-up items captured as new tasks
+
+---
+
 ## Execution Notes
 
 - **One task per session** per session workflow protocol
 - Tasks 1-2 are independent of each other (could parallelize across sessions)
-- Task 3 depends on Tasks 1-2 being complete
-- Task 4 is externally blocked (IT) — skip if package unavailable
-- Task 5 depends on Task 3
+- Task 3 can start during Tasks 1-2 (no hard dependency on files/username for module creation)
+- Task 4 depends on Tasks 1-3 being complete
+- Task 5 depends on Task 4
+- Task 6 depends on Tasks 3-5
 
 ### Dependency Graph
 
 ```
-Task 1 (Files) ──┐
-                  ├──> Task 3 (Repo Sep) ──> Task 5 (Hosting)
-Task 2 (Username)─┘
-                        Task 4 (CrowdStrike) ← blocked on IT
+Task 1 (Files) ──────┐
+                      ├──> Task 4 (Repo Sep) ──> Task 5 (Hosting) ──┐
+Task 2 (Username) ────┘                                              ├──> Task 6 (IT Demo)
+                                                                     │
+Task 3 (CrowdStrike) ── integrates into enterprise layer ───────────┘
 ```
+
+Task 3 (CrowdStrike) has no dependency on Tasks 1-2. It can proceed in
+parallel. However, the module must be in place before repo separation
+(Task 4) so it moves to the shared flake with everything else.
