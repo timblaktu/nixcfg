@@ -240,6 +240,35 @@
               default = "localhost";
               description = "IP address for USB/IP snippets";
             };
+
+            autoAttachByHardwareId = lib.mkOption {
+              type = lib.types.listOf (lib.types.submodule {
+                options = {
+                  hardwareId = lib.mkOption {
+                    type = lib.types.str;
+                    description = "USB hardware ID in VID:PID format (e.g., '0403:6001')";
+                    example = "0403:6001";
+                  };
+                  description = lib.mkOption {
+                    type = lib.types.str;
+                    default = "";
+                    description = "Human-readable description of the USB device";
+                    example = "FTDI USB-UART adapter";
+                  };
+                };
+              });
+              default = [ ];
+              description = ''
+                USB devices to auto-attach by hardware ID (VID:PID) using usbipd-win v5.x.
+                Creates one systemd service per device that runs
+                `usbipd.exe attach --wsl --hardware-id VID:PID --auto-attach`.
+                Hardware IDs are stable across USB ports, unlike bus IDs.
+              '';
+              example = [
+                { hardwareId = "0403:6001"; description = "FTDI USB-UART adapter"; }
+                { hardwareId = "0955:7523"; description = "NVIDIA Jetson Recovery Mode (APX)"; }
+              ];
+            };
           };
 
           # === Shell Aliases ===
@@ -537,6 +566,45 @@
                 echo -e "\033[1;31mWARNING: usbipd.exe not found. Install from admin PowerShell: winget install -e --id dorssel.usbipd-win\033[0m"
               fi
             '';
+          })
+
+          # === USBIP Hardware-ID Auto-Attach Services ===
+          # One systemd service per hardware ID, calling usbipd.exe via binfmt interop.
+          # Uses hardware IDs (VID:PID) which are stable across USB ports, unlike bus IDs.
+          # Requires usbipd-win v5.x on the Windows side.
+          (lib.mkIf (cfg.usbip.enable && cfg.usbip.autoAttachByHardwareId != [ ]) {
+            assertions = map
+              (dev: {
+                assertion = builtins.match "[0-9a-fA-F]{4}:[0-9a-fA-F]{4}" dev.hardwareId != null;
+                message = "wsl-settings.usbip.autoAttachByHardwareId: '${dev.hardwareId}' is not a valid VID:PID (expected format: 0403:6001)";
+              })
+              cfg.usbip.autoAttachByHardwareId;
+
+            systemd.services = lib.listToAttrs (map
+              (dev:
+                let
+                  safeName = builtins.replaceStrings [ ":" ] [ "-" ] dev.hardwareId;
+                  desc = if dev.description != "" then " (${dev.description})" else "";
+                in
+                lib.nameValuePair "usbipd-auto-attach-hwid-${safeName}" {
+                  description = "Auto-attach USB device ${dev.hardwareId}${desc} via usbipd-win";
+                  after = [ "local-fs.target" "systemd-binfmt.service" "wsl-recover-windows-mounts.service" ];
+                  wantedBy = [ "multi-user.target" ];
+                  unitConfig = {
+                    ConditionPathExists = "${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe";
+                  };
+                  serviceConfig = {
+                    Type = "simple";
+                    Restart = "on-failure";
+                    RestartSec = "5s";
+                    ExecStart = pkgs.writeShellScript "usbipd-auto-attach-${safeName}" ''
+                      echo "Auto-attaching USB device ${dev.hardwareId}${desc} via usbipd.exe"
+                      exec "${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe" \
+                        attach --wsl --hardware-id ${dev.hardwareId} --auto-attach
+                    '';
+                  };
+                })
+              cfg.usbip.autoAttachByHardwareId);
           })
 
           # === Windows Aliases ===

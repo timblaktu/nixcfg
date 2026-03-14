@@ -49,6 +49,12 @@
           # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
           wsl-settings.binfmt.enable = true;
 
+          # USB devices to auto-attach by hardware ID (VID:PID) via usbipd-win v5.x
+          wsl-settings.usbip.autoAttachByHardwareId = [
+            { hardwareId = "0403:6001"; description = "FTDI USB-UART adapter"; }
+            { hardwareId = "0955:7523"; description = "NVIDIA Jetson Recovery Mode (APX)"; }
+          ];
+
           # Team needs unfree packages (enterprise default: false)
           nixpkgs.config.allowUnfree = true;
 

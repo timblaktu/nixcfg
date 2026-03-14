@@ -44,10 +44,7 @@ in
       sshAuthorizedKeys = [ sshKeys.timblaktu ];
       # binfmt.enable: inherited from tiger-team (true)
       # cuda.enable: inherited from enterprise (false)
-
-      # USB/IP auto-attach ports for Jetson development
-      # TODO: Add bus IDs when Jetson Orin Nano is connected (run: usbipd.exe list)
-      usbip.autoAttach = [ ];
+      # usbip.autoAttachByHardwareId: inherited from tiger-team (FTDI, Jetson APX)
     };
 
     # Jetson Orin Nano USB device rules
