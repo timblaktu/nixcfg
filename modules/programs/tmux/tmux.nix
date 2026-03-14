@@ -354,6 +354,12 @@ in
               ];
             };
 
+            # Install tmux-auto-attach to ~/bin/ (sourced by shell.nix, not an executable command)
+            home.file."bin/tmux-auto-attach" = {
+              source = ./files/tmux-auto-attach;
+              executable = true;
+            };
+
             # Create persistent directory for tmux-resurrect saves
             home.file.".local/share/tmux/resurrect/.keep" = {
               text = ''

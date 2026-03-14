@@ -646,10 +646,10 @@ in
 
         # === VALIDATED SCRIPTS TESTS ===
         # Test that validates single source of truth implementation
-        # Script location: modules/programs/files [nd]/files/bin/tmux-session-picker
+        # Script location: modules/programs/tmux/files/tmux-session-picker
         tmux-picker-syntax =
           let
-            tmuxPickerPath = ../programs + "/files [nd]/files/bin/tmux-session-picker";
+            tmuxPickerPath = ../programs + "/tmux/files/tmux-session-picker";
           in
           pkgs.runCommand "test-tmux-session-picker-syntax"
             {
@@ -682,7 +682,7 @@ in
 
             echo "✅ tmux-session-picker single source of truth validation passed"
             echo "✅ Source file exists and contains valid bash script"
-            echo "✅ No duplication - scripts now in modules/programs/files [nd]/files/"
+            echo "✅ Script owned by tmux module in modules/programs/tmux/files/"
             touch $out
           '';
 

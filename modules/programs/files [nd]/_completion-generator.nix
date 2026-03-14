@@ -330,7 +330,6 @@ let
     "colorfuncs"
     "mergejson"
     "onedrive-status"
-    "tmux-session-picker" # This is the key one we want to exclude
   ];
 
   # Helper functions
