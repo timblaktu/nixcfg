@@ -346,8 +346,12 @@ let
     in
     fileEntries;
 
+  # Whether the bin directory exists (all scripts have been migrated to feature modules)
+  hasBinDir = builtins.pathExists (filesDir + "/bin");
+
   # Generate bash completion files automatically for all scripts (excluding validated-scripts)
   mkBashCompletionFiles =
+    if !hasBinDir then { } else
     let
       binDir = filesDir + "/bin";
       binContents = builtins.readDir binDir;
@@ -367,6 +371,7 @@ let
 
   # Generate zsh completion files automatically for all scripts (excluding validated-scripts)
   mkZshCompletionFiles =
+    if !hasBinDir then { } else
     let
       binDir = filesDir + "/bin";
       binContents = builtins.readDir binDir;
@@ -389,12 +394,12 @@ in
   config = {
     home.file = lib.mkMerge [
       # Executable scripts (excluding those managed by validated-scripts)
-      (mkHomeFiles {
+      (lib.optionalAttrs hasBinDir (mkHomeFiles {
         sourceDir = filesDir + "/bin";
         targetDir = "bin";
         executable = true;
         excludeNames = validatedScriptNames;
-      })
+      }))
       # Claude directory
       {
         "claude" = {
