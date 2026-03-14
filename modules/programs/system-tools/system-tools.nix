@@ -24,34 +24,34 @@
           # SOPS secret bootstrap from Bitwarden
           (pkgs.writeShellApplication {
             name = "bootstrap-secrets";
-            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/bootstrap-secrets.sh");
+            text = builtins.readFile ./files/bootstrap-secrets.sh;
             runtimeInputs = with pkgs; [ rbw nix coreutils age ];
           })
 
           # SSH key bootstrap from Bitwarden
           (pkgs.writeShellApplication {
             name = "bootstrap-ssh-keys";
-            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/bootstrap-ssh-keys.sh");
+            text = builtins.readFile ./files/bootstrap-ssh-keys.sh;
             runtimeInputs = with pkgs; [ rbw openssh coreutils util-linux ];
           })
 
           # WSL tarball builder for NixOS configurations
           (pkgs.writeShellApplication {
             name = "build-wsl-tarball";
-            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/build-wsl-tarball");
+            text = builtins.readFile ./files/build-wsl-tarball;
             runtimeInputs = with pkgs; [ nix coreutils util-linux ];
           })
 
           # USB device restart utilities
           (pkgs.writeShellApplication {
             name = "restart-usb";
-            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/restart-usb");
+            text = builtins.readFile ./files/restart-usb;
             runtimeInputs = with pkgs; [ coreutils util-linux usbutils ];
           })
 
           (pkgs.writeShellApplication {
             name = "restart-usb-improved";
-            text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/restart-usb-improved");
+            text = builtins.readFile ./files/restart-usb-improved;
             runtimeInputs = with pkgs; [ coreutils util-linux usbutils ];
           })
         ];
