@@ -1,6 +1,10 @@
 # modules/flake-parts/tests.nix
 # Comprehensive test suite for NixOS configurations
-{ inputs, self, ... }: {
+{ inputs, self, config, ... }:
+let
+  username = config.meta.username;
+in
+{
   perSystem = { config, self', inputs', pkgs, system, lib, ... }:
     let
       # Helper function to create configuration evaluation tests
@@ -181,7 +185,7 @@
         unified-files-diagnostic-test =
           let
             # Try to get scripts from unified files module (current architecture)
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
 
             # Check what's available in home packages (where scripts would be installed)
             homePackages = hmConfig.home.packages or [ ];
@@ -230,11 +234,11 @@
 
         # Home Manager configuration eval tests (x86_64-linux only)
         # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
-        eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "tim@thinky-nixos";
-        eval-hm-pa161878-nixos = mkHmEvalTest "pa161878-nixos" "tim@pa161878-nixos";
-        eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "tim@thinky-ubuntu";
-        eval-hm-mbp = mkHmEvalTest "mbp" "tim@mbp";
-        eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "tim@nixvim-minimal";
+        eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "${username}@thinky-nixos";
+        eval-hm-pa161878-nixos = mkHmEvalTest "pa161878-nixos" "${username}@pa161878-nixos";
+        eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "${username}@thinky-ubuntu";
+        eval-hm-mbp = mkHmEvalTest "mbp" "${username}@mbp";
+        eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "${username}@nixvim-minimal";
 
         # === MODULE INTEGRATION TESTS ===
         module-base-integration = mkModuleTest {
@@ -246,7 +250,7 @@
             userGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.systemDefault.userGroups;
           };
           checks = ''
-            [[ "$userName" == "tim" ]] || (echo "❌ Username not tim" && exit 1)
+            [[ "$userName" == "${username}" ]] || (echo "❌ Username not ${username}" && exit 1)
             echo "User name: $userName"
             echo "User groups: $userGroups"
           '';
@@ -328,24 +332,24 @@
         '';
 
         # === USER CONFIGURATION TESTS ===
-        user-tim-configured = pkgs.runCommand "user-tim-configured"
+        user-configured = pkgs.runCommand "user-configured"
           {
             meta = {
-              description = "Verify user tim is properly configured";
+              description = "Verify primary user is properly configured";
               maintainers = [ ];
               timeout = 30;
             };
             # Force evaluation by referencing configuration attributes
-            isNormalUser = if self.nixosConfigurations.thinky-nixos.config.users.users.tim.isNormalUser then "1" else "0";
-            extraGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.users.users.tim.extraGroups;
+            isNormalUser = if self.nixosConfigurations.thinky-nixos.config.users.users.${username}.isNormalUser then "1" else "0";
+            extraGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.users.users.${username}.extraGroups;
           } ''
-          echo "Testing user tim configuration..."
+          echo "Testing user ${username} configuration..."
           # If we got here, the configuration evaluated successfully
           [[ "$isNormalUser" == "1" ]] || (echo "❌ User not normal user" && exit 1)
           echo "$extraGroups" | grep -q "wheel" || (echo "❌ User not in wheel group" && exit 1)
           echo "User is normal user: $isNormalUser"
           echo "User groups: $extraGroups"
-          echo "✅ User tim configuration passed"
+          echo "✅ User ${username} configuration passed"
           touch $out
         '';
 
@@ -429,14 +433,14 @@
             # Check if SOPS is enabled via wsl-settings and user matches
             sopsEnabled = if self.nixosConfigurations.thinky-nixos.config.wsl-settings.sops.enable then "1" else "0";
             inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
-            userExists = if (builtins.hasAttr "tim" self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
+            userExists = if (builtins.hasAttr username self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
           } ''
           echo "Testing SOPS-NiX integration with base module..."
 
           [[ "$sopsEnabled" == "1" ]] || (echo "❌ SOPS-NiX not enabled" && exit 1)
           echo "✅ SOPS-NiX is enabled"
 
-          [[ "$userExists" == "1" ]] || (echo "❌ User tim not configured" && exit 1)
+          [[ "$userExists" == "1" ]] || (echo "❌ User ${username} not configured" && exit 1)
           echo "✅ User $userName exists in system configuration"
 
           echo "✅ SOPS-NiX and base module integration test passed"
@@ -689,7 +693,7 @@
         # Test OpenCode module generates valid configuration
         opencode-config-validation =
           let
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
             opencodeEnabled = hmConfig.programs.opencode-enhanced.enable or false;
             opencodeAccounts = hmConfig.programs.opencode-enhanced.accounts or { };
             enabledAccounts = lib.filterAttrs (_n: a: a.enable or false) opencodeAccounts;
@@ -714,7 +718,7 @@
 
             # Check module is enabled
             if [[ "$opencodeEnabled" != "1" ]]; then
-              echo "⚠️  OpenCode module not enabled in tim@thinky-nixos"
+              echo "⚠️  OpenCode module not enabled in ${username}@thinky-nixos"
               echo "This is expected if claude-code is disabled"
             else
               echo "✅ OpenCode module is enabled"
@@ -739,7 +743,7 @@
         # Test OpenCode JSON output is valid
         opencode-json-syntax =
           let
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
             # Build a sample config to test JSON generation
             sampleConfig = {
               "$schema" = "https://opencode.ai/config.json";
@@ -796,7 +800,7 @@
         # Test MCP server configuration structure
         opencode-mcp-structure =
           let
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
             mcpServers = hmConfig.programs.opencode-enhanced._internal.mcpServers or { };
           in
           pkgs.runCommand "opencode-mcp-structure"
@@ -1078,11 +1082,11 @@
             nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
             nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
             # Force evaluation of all 5 x86_64-linux Home Manager configurations
-            hmThinky = self.homeConfigurations."tim@thinky-nixos".config.home.homeDirectory;
-            hmPa161878 = self.homeConfigurations."tim@pa161878-nixos".config.home.homeDirectory;
-            hmUbuntu = self.homeConfigurations."tim@thinky-ubuntu".config.home.homeDirectory;
-            hmMbp = self.homeConfigurations."tim@mbp".config.home.homeDirectory;
-            hmNixvim = self.homeConfigurations."tim@nixvim-minimal".config.home.homeDirectory;
+            hmThinky = self.homeConfigurations."${username}@thinky-nixos".config.home.homeDirectory;
+            hmPa161878 = self.homeConfigurations."${username}@pa161878-nixos".config.home.homeDirectory;
+            hmUbuntu = self.homeConfigurations."${username}@thinky-ubuntu".config.home.homeDirectory;
+            hmMbp = self.homeConfigurations."${username}@mbp".config.home.homeDirectory;
+            hmNixvim = self.homeConfigurations."${username}@nixvim-minimal".config.home.homeDirectory;
           } ''
           echo "Regression test: evaluating all configurations..."
           echo ""
@@ -1094,11 +1098,11 @@
           echo "  nixos-wsl-minimal: stateVersion=$nixosWslMinimal"
           echo ""
           echo "Home Manager configurations:"
-          echo "  tim@thinky-nixos:   homeDir=$hmThinky"
-          echo "  tim@pa161878-nixos: homeDir=$hmPa161878"
-          echo "  tim@thinky-ubuntu:  homeDir=$hmUbuntu"
-          echo "  tim@mbp:            homeDir=$hmMbp"
-          echo "  tim@nixvim-minimal: homeDir=$hmNixvim"
+          echo "  ${username}@thinky-nixos:   homeDir=$hmThinky"
+          echo "  ${username}@pa161878-nixos: homeDir=$hmPa161878"
+          echo "  ${username}@thinky-ubuntu:  homeDir=$hmUbuntu"
+          echo "  ${username}@mbp:            homeDir=$hmMbp"
+          echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim"
           echo ""
           echo "All 10 configurations evaluated successfully"
           touch $out

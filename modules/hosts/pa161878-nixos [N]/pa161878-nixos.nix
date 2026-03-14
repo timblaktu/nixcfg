@@ -19,7 +19,7 @@ let
   };
 
   # Common user settings
-  username = "tim";
+  username = config.meta.username;
   homeDirectory = "/home/${username}";
 in
 {
@@ -65,7 +65,7 @@ in
   };
 
   # === Home Manager Module ===
-  flake.modules.homeManager."tim@pa161878-nixos" = { config, lib, pkgs, ... }: {
+  flake.modules.homeManager."${username}@pa161878-nixos" = { config, lib, pkgs, ... }: {
     imports = [
       # Tiger-team bundle (enterprise + team tools: claude-code, opencode,
       # gitlab-auth, podman, development-tools, windows-terminal, and all

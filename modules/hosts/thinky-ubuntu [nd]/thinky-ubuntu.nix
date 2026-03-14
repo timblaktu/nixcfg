@@ -9,13 +9,13 @@
 { config, lib, inputs, ... }:
 let
   # Common user settings
-  username = "tim";
+  username = config.meta.username;
   homeDirectory = "/home/${username}";
 in
 {
   # === Home Manager Module ===
   # Note: No NixOS module for this host - it's vanilla Ubuntu WSL
-  flake.modules.homeManager."tim@thinky-ubuntu" = { config, lib, pkgs, ... }: {
+  flake.modules.homeManager."${username}@thinky-ubuntu" = { config, lib, pkgs, ... }: {
     imports = [
       # Dendritic system type - provides home-default layer (includes home-minimal)
       inputs.self.modules.homeManager.home-default

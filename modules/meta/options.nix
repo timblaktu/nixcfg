@@ -16,7 +16,7 @@
 # Note: These are flake-level options, not NixOS/HM module options.
 # They are evaluated once at flake build time, making them suitable
 # for constants like the primary username.
-{ lib, ... }:
+{ lib, config, ... }:
 {
   options.meta = {
     username = lib.mkOption {
@@ -38,8 +38,8 @@
       type = lib.types.functionTo lib.types.str;
       default = system:
         if lib.hasInfix "darwin" system
-        then "/Users/tim"
-        else "/home/tim";
+        then "/Users/${config.meta.username}"
+        else "/home/${config.meta.username}";
       readOnly = true;
       description = ''
         Function to get home directory path based on system architecture.

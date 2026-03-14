@@ -2,7 +2,7 @@
 
 ## Critical Rules
 
-- **MANDATORY RESPONSE ENDING**: EVERY response MUST end with a ready-to-paste prompt for the next session after context is cleared. NO EXCEPTIONS.
+- **MANDATORY RESPONSE ENDING**: EVERY response MUST end with a ready-to-paste prompt for the next session after context is cleared. NO EXCEPTIONS. The continuation prompt must be **self-contained** — merge the task summary (what was done, commits, artifacts, what was NOT done) directly into the prompt block. No separate summary section above. The user copies ONE block into the next session and nothing is lost.
 - NEVER clutter this user-global CLAUDE.md with project- or session-specific content
 - **NEVER include AI attribution in commit messages** - NO "Generated with Claude Code", NO "Co-Authored-By: Claude", NO emoji robots. Commit messages must appear entirely human-authored.
 - ALWAYS use timestamp format: `date +%Y-%m-%d\ %H:%M:%S\ %Z`
@@ -23,9 +23,10 @@
 - Use `echo "$WSL_DISTRO_NAME"` to determine WSL instance; access others at `/mnt/wsl/$WSL_DISTRO_NAME/`
 - **ONE TASK PER SESSION** for multi-phase plans - stop after completing one task
 - **ALWAYS stage changes before nix commands** - Nix only sees staged/committed changes
-- **Task summaries**: Be explicit about SCOPE, list ALL artifacts, state what was NOT done
-- **UPDATE MEMORY BEFORE SUMMARY** - update project memory first, then provide summary
+- **Task summaries are INSIDE the continuation prompt** - Do NOT produce a separate summary section followed by a separate continuation prompt. Merge them: the continuation prompt IS the summary. Include scope, commits, artifacts, what was NOT done — all inside the single paste-ready block.
+- **UPDATE MEMORY BEFORE CONTINUATION PROMPT** - update project memory first, then provide the combined summary+prompt
 - **COMMIT DIAGRAM CHANGES IMMEDIATELY** - `.drawio.svg` files with uncommitted pages can be lost if `git checkout` is used; commit after each significant diagram edit
+- **LOCAL-FIRST RESEARCH** - When researching topics involving source code or repositories, ALWAYS start by looking in `~/src/` for existing clones. Most upstream repos are already cloned there. If a repo is not yet cloned locally, `git clone` it into `~/src/` rather than using web searches or WebFetch. Read source code directly from local checkouts — it's faster, more accurate, and avoids token-heavy web fetching. Web search is a last resort for non-code information (release notes, mailing list discussions, etc.).
 
 ## Terminal-Width-Aware Output Formatting
 

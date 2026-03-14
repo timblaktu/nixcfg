@@ -16,7 +16,7 @@ let
   };
 
   # Common user settings
-  username = "tim";
+  username = config.meta.username;
   homeDirectory = "/home/${username}";
 in
 {
@@ -78,7 +78,7 @@ in
   };
 
   # === Home Manager Module ===
-  flake.modules.homeManager."tim@thinky-nixos" = { config, lib, pkgs, ... }: {
+  flake.modules.homeManager."${username}@thinky-nixos" = { config, lib, pkgs, ... }: {
     imports = [
       # Dendritic system type - provides home-default layer (includes home-minimal)
       inputs.self.modules.homeManager.home-default
