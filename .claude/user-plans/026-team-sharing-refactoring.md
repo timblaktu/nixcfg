@@ -17,7 +17,7 @@ demonstration to IT showing the team WSL image with Falcon baked in.
 | Task | Category | Status | Validation | Description |
 |------|----------|--------|------------|-------------|
 | 1 | Files Module | TASK:PENDING | `nix flake check --no-build` + HM dry-run | Refactor files module anti-patterns (F5) |
-| 2 | Username DRY | TASK:PENDING | `nix flake check --no-build` + HM dry-run | Centralize hardcoded username refs (F1) |
+| 2 | Username DRY | TASK:COMPLETE | `nix flake check --no-build` + HM dry-run | Centralize hardcoded username refs (F1) |
 | 3 | CrowdStrike | TASK:PENDING | Module evals, service activates in VM test | Build Falcon sensor dendritic module |
 | 4 | Repo Separation | TASK:PENDING | Both flakes pass `nix flake check --no-build` | Split shared modules into separate flake |
 | 5 | Tarball Hosting | TASK:PENDING | Teammates can `nix build` or `wsl --import` | Establish distribution channel for team tarball |
