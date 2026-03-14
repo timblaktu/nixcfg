@@ -313,8 +313,6 @@ let
   #   3. Example: tmux-auto-attach was removed because it's just sourced, no special needs
   # ============================================================================
   validatedScriptNames = [
-    "simple-test"
-    "hello-validated"
     "smart-nvimdiff"
     # Terminal scripts moved to terminal.nix module:
     # "setup-terminal-fonts" - now in terminal.nix
@@ -327,8 +325,6 @@ let
     "esp-idf-shell"
     "esp-idf-export"
     "idf.py"
-    "claude-code-wrapper"
-    "claude-code-update"
     "onedrive-force-sync"
     # "tmux-auto-attach" - now installed normally, sourced by zsh.nix
     "colorfuncs"
