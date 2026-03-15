@@ -20,12 +20,12 @@ graph TD
         E_HM["HM: home-enterprise<br/><i>shell, git, tmux, neovim, direnv, CLI tools</i>"]
     end
 
-    subgraph "Layer 2: wsl-tiger-team"
-        T_NixOS["NixOS: wsl-tiger-team<br/><i>binfmt (aarch64), unfree, setup-username</i>"]
-        T_HM["HM: home-tiger-team<br/><i>Claude Code, OpenCode, Podman, glab, GitLab auth</i>"]
+    subgraph "Layer 2: wsl-dev-team"
+        T_NixOS["NixOS: wsl-dev-team<br/><i>binfmt (aarch64), unfree, setup-username</i>"]
+        T_HM["HM: home-dev-team<br/><i>Claude Code, OpenCode, Podman, glab, GitLab auth</i>"]
     end
 
-    subgraph "Layer 3: nixos-wsl-tiger-team (host)"
+    subgraph "Layer 3: nixos-wsl-dev-team (host)"
         Host["Thin host config<br/><i>Produces .wsl tarball</i>"]
     end
 
@@ -40,7 +40,7 @@ graph TD
 ```
 
 Each layer provides **both** a NixOS module and a Home Manager module (dual registration).
-Priority layering: Enterprise (`mkDefault`) < Tiger-team (bare) < Host (`mkForce`).
+Priority layering: Enterprise (`mkDefault`) < Dev-team (bare) < Host (`mkForce`).
 
 For the full dendritic pattern and repository structure, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -49,8 +49,8 @@ For the full dendritic pattern and repository structure, see [ARCHITECTURE.md](A
 | Layer | NixOS module | HM module | File |
 |-------|-------------|-----------|------|
 | Enterprise | `wsl-enterprise` | `home-enterprise` | `modules/system/settings/wsl-enterprise/wsl-enterprise.nix` |
-| Tiger-team | `wsl-tiger-team` | `home-tiger-team` | `modules/system/settings/wsl-tiger-team/wsl-tiger-team.nix` |
-| Host | — | — | `modules/hosts/nixos-wsl-tiger-team [N]/nixos-wsl-tiger-team.nix` |
+| Dev-team | `wsl-dev-team` | `home-dev-team` | `modules/system/settings/wsl-dev-team/wsl-dev-team.nix` |
+| Host | — | — | `modules/hosts/nixos-wsl-dev-team [N]/nixos-wsl-dev-team.nix` |
 | Personal | — | — | `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix` |
 
 ---
@@ -68,14 +68,14 @@ For the full dendritic pattern and repository structure, see [ARCHITECTURE.md](A
 Using the helper script (installed via Home Manager):
 
 ```bash
-build-wsl-tarball nixos-wsl-tiger-team
+build-wsl-tarball nixos-wsl-dev-team
 ```
 
 Or manually:
 
 ```bash
 # Build the tarball builder derivation
-nix build '.#nixosConfigurations.nixos-wsl-tiger-team.config.system.build.tarballBuilder'
+nix build '.#nixosConfigurations.nixos-wsl-dev-team.config.system.build.tarballBuilder'
 
 # Run it (requires sudo)
 sudo ./result/bin/nixos-wsl-tarball-builder
@@ -93,7 +93,7 @@ present.
 To bypass checks during development (not recommended for distribution):
 
 ```bash
-WSL_TARBALL_SKIP_CHECKS=1 build-wsl-tarball nixos-wsl-tiger-team
+WSL_TARBALL_SKIP_CHECKS=1 build-wsl-tarball nixos-wsl-dev-team
 ```
 
 ### Expected output
@@ -103,7 +103,7 @@ WSL_TARBALL_SKIP_CHECKS=1 build-wsl-tarball nixos-wsl-tiger-team
 | Output file | `nixos.wsl` (in current directory) |
 | Size | ~1.8 GB |
 | Default user | `dev` |
-| Hostname | `nixos-wsl-tiger` |
+| Hostname | `nixos-wsl-dev-team` |
 
 ---
 
@@ -151,13 +151,13 @@ tool to the team image:
 1. Create or identify the dendritic module (e.g., `modules/programs/my-tool/`)
 2. Import it in the appropriate layer's HM bundle:
    - Enterprise-wide: add to `home-enterprise` imports in `wsl-enterprise.nix`
-   - Team-specific: add to `home-tiger-team` imports in `wsl-tiger-team.nix`
-3. Stage changes and rebuild: `build-wsl-tarball nixos-wsl-tiger-team`
+   - Team-specific: add to `home-dev-team` imports in `wsl-dev-team.nix`
+3. Stage changes and rebuild: `build-wsl-tarball nixos-wsl-dev-team`
 
 ### Changing team branding
 
 The team image name, Terminal profile name, and hostname are set in the enterprise
-and tiger-team modules:
+and dev-team modules:
 
 - **Distro name** (for `wsl --import`): set in the host config's `wsl.defaultUser`
   and `networking.hostName`
@@ -168,7 +168,7 @@ and tiger-team modules:
 
 To create a layer for a different team (e.g., `wsl-alpha-team`):
 
-1. Copy `modules/system/settings/wsl-tiger-team/` to `wsl-alpha-team/`
+1. Copy `modules/system/settings/wsl-dev-team/` to `wsl-alpha-team/`
 2. Rename module registrations (`wsl-alpha-team`, `home-alpha-team`)
 3. Adjust imports — keep `wsl-enterprise` as base, swap in team-specific tools
 4. Create a new thin host config in `modules/hosts/` that imports your team layer
@@ -202,7 +202,7 @@ Fix the offending module, or bypass with `WSL_TARBALL_SKIP_CHECKS=1` for testing
 
 ### Tarball much larger than expected
 
-The default tiger-team image is ~1.8 GB. If significantly larger:
+The default dev-team image is ~1.8 GB. If significantly larger:
 - Check if `hardware.graphics.enable` is true (adds ~800 MB of Mesa/LLVM).
   For CLI-only WSL images, this should be false unless CUDA is needed.
 - Review unfree packages — some pull large dependency trees.

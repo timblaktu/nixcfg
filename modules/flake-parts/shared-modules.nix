@@ -5,15 +5,15 @@
 #   inputs.nixcfg.url = "github:timblaktu/nixcfg";
 #
 # Then import specific modules:
-#   imports = [ inputs.nixcfg.nixosModules.wsl-tiger-team ];
-#   imports = [ inputs.nixcfg.homeManagerModules.home-tiger-team ];
+#   imports = [ inputs.nixcfg.nixosModules.wsl-dev-team ];
+#   imports = [ inputs.nixcfg.homeManagerModules.home-dev-team ];
 #
 # Or cherry-pick individual feature modules:
 #   imports = [ inputs.nixcfg.homeManagerModules.shell ];
 #
 # Module naming convention:
 #   Export names match internal flake.modules.* registration names.
-#   Bundles: wsl-enterprise, home-tiger-team, system-cli, etc.
+#   Bundles: wsl-enterprise, home-dev-team, system-cli, etc.
 #   Features: shell, git, tmux, claude-code, etc.
 { inputs, self, ... }: {
   flake = {
@@ -51,8 +51,8 @@
       # Options: enterprise.{welcomeMessage, terminal.*} + wsl-settings.*
       wsl-enterprise = self.modules.nixos.wsl-enterprise;
 
-      # Tiger team WSL layer (enterprise + binfmt + Podman + Claude Code + USBIP)
-      wsl-tiger-team = self.modules.nixos.wsl-tiger-team;
+      # Dev team WSL layer (enterprise + binfmt + Podman + Claude Code + USBIP)
+      wsl-dev-team = self.modules.nixos.wsl-dev-team;
 
       # --- Feature Modules (NixOS) ---
 
@@ -107,8 +107,8 @@
       # Enterprise HM bundle (shell, git, tmux, neovim, yazi, files, onedrive, ...)
       home-enterprise = self.modules.homeManager.home-enterprise;
 
-      # Tiger team HM bundle (enterprise + claude-code, opencode, gitlab-auth, podman, ...)
-      home-tiger-team = self.modules.homeManager.home-tiger-team;
+      # Dev team HM bundle (enterprise + claude-code, opencode, gitlab-auth, podman, ...)
+      home-dev-team = self.modules.homeManager.home-dev-team;
 
       # --- Feature Modules (Home Manager) ---
 

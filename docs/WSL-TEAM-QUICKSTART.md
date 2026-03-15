@@ -1,4 +1,4 @@
-# NixOS-WSL Tiger Team Quickstart
+# NixOS-WSL Dev Team Quickstart
 
 This guide covers importing and setting up the pre-built NixOS-WSL image on your
 Windows 11 laptop.
@@ -40,7 +40,7 @@ Windows 11 laptop.
    - Create the Windows Terminal profile so it appears as a tab option
    - Verify the instance is responsive
 
-5. **Close and reopen Windows Terminal.** The new "NixOS Tiger Team" profile should
+5. **Close and reopen Windows Terminal.** The new "NixOS Dev Team" profile should
    appear in the tab dropdown.
 
 > **Replacing an existing install?** The script detects an existing distro with the
@@ -48,7 +48,7 @@ Windows 11 laptop.
 
 ## First Login
 
-1. Open the **NixOS Tiger Team** tab in Windows Terminal.
+1. Open the **NixOS Dev Team** tab in Windows Terminal.
 
 2. You are logged in as user `dev`. Configure your git identity:
    ```bash
@@ -120,7 +120,7 @@ Then `wsl --shutdown` and reopen.
 
 To remove the distro completely:
 ```powershell
-wsl --unregister nixos-wsl-tiger-team
+wsl --unregister nixos-wsl-dev-team
 ```
 
 Then re-import with the steps above.
@@ -133,5 +133,5 @@ If you want this to be the distro that opens when you type `wsl` in PowerShell:
 ```
 Or after import:
 ```powershell
-wsl --set-default nixos-wsl-tiger-team
+wsl --set-default nixos-wsl-dev-team
 ```

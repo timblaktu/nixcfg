@@ -6,7 +6,7 @@
 #   flake.modules.homeManager.home-enterprise - Company-wide HM feature bundle
 #
 # This is the foundational layer for all enterprise WSL images.
-# Team modules (wsl-tiger-team, etc.) import this to get the shared base.
+# Team modules (wsl-dev-team, etc.) import this to get the shared base.
 #
 # NixOS side: Imports system-cli + wsl, sets conservative enterprise defaults.
 # HM side: Bundles standard employee tools (shell, git, tmux, neovim, etc.).

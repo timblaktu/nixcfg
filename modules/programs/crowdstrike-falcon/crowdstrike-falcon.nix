@@ -206,7 +206,7 @@
           tags = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];
-            example = [ "Environment/Development" "Team/TigerTeam" ];
+            example = [ "Environment/Development" "Team/DevTeam" ];
             description = "Sensor grouping tags (max 256 chars combined).";
           };
 

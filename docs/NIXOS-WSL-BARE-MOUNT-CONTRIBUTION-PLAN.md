@@ -349,10 +349,10 @@ Start-Process -WindowStyle Hidden usbipd.exe -ArgumentList "attach --wsl --hardw
 ```
 Devices: FTDI USB-UART adapter (0403:6001), NVIDIA Jetson Recovery Mode APX (0955:7523).
 
-**Local implementation** (interim, in `wsl-settings.usbip` / tiger-team module):
+**Local implementation** (interim, in `wsl-settings.usbip` / dev-team module):
 Will implement hardware-ID auto-attach locally first, then extract as upstream PR.
 The local version creates systemd services that call `usbipd.exe` via Windows interop.
-Tiger-team module sets the two team device hardware IDs.
+Dev-team module sets the two team device hardware IDs.
 
 ### wsl-env-capture: Boot-time environment capture for systemd-spawned shells
 

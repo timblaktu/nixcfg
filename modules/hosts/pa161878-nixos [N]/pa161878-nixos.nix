@@ -2,12 +2,12 @@
 # Dendritic host composition for pa161878-nixos (WSL work environment)
 #
 # This module defines both NixOS system and Home Manager configurations
-# following the dendritic pattern. Uses the tiger-team layer modules as
+# following the dendritic pattern. Uses the dev-team layer modules as
 # base, adding only personal-specific configuration.
 #
 # Layer chain:
-#   NixOS:  wsl-tiger-team -> wsl-enterprise -> system-cli + wsl
-#   HM:     home-tiger-team -> home-enterprise -> home-default + all tools
+#   NixOS:  wsl-dev-team -> wsl-enterprise -> system-cli + wsl
+#   HM:     home-dev-team -> home-enterprise -> home-default + all tools
 #
 # Deploy NixOS: sudo nixos-rebuild switch --flake '.#pa161878-nixos'
 # Deploy HM:    home-manager switch --flake '.#tim@pa161878-nixos'
@@ -27,24 +27,24 @@ in
   flake.modules.nixos.pa161878-nixos = { config, lib, pkgs, ... }: {
     imports = [
       ./_hardware-config.nix
-      # Tiger-team layer (chains: wsl-enterprise -> system-cli + wsl)
-      inputs.self.modules.nixos.wsl-tiger-team
+      # Dev-team layer (chains: wsl-enterprise -> system-cli + wsl)
+      inputs.self.modules.nixos.wsl-dev-team
     ];
 
     # Personal overrides (bare values override enterprise mkDefault;
-    # mkForce where tiger-team sets bare values)
+    # mkForce where dev-team sets bare values)
     systemDefault.userName = username;
 
     wsl-settings = {
-      # mkForce: tiger-team sets "nixos-wsl-tiger" as bare value (priority 100)
+      # mkForce: dev-team sets "nixos-wsl-dev-team" as bare value (priority 100)
       hostname = lib.mkForce "pa161878-nixos";
       defaultUser = username;
       sshPort = 2223;
       userGroups = [ "wheel" "dialout" ];
       sshAuthorizedKeys = [ sshKeys.timblaktu ];
-      # binfmt.enable: inherited from tiger-team (true)
+      # binfmt.enable: inherited from dev-team (true)
       # cuda.enable: inherited from enterprise (false)
-      # usbip.autoAttachByHardwareId: inherited from tiger-team (FTDI, Jetson APX)
+      # usbip.autoAttachByHardwareId: inherited from dev-team (FTDI, Jetson APX)
     };
 
     # Jetson Orin Nano USB device rules
@@ -67,16 +67,16 @@ in
   # === Home Manager Module ===
   flake.modules.homeManager."${username}@pa161878-nixos" = { config, lib, pkgs, ... }: {
     imports = [
-      # Tiger-team bundle (enterprise + team tools: claude-code, opencode,
+      # Dev-team bundle (enterprise + team tools: claude-code, opencode,
       # gitlab-auth, podman, development-tools, windows-terminal, and all
       # enterprise modules: shell, git, tmux, neovim, wsl-home, etc.)
-      inputs.self.modules.homeManager.home-tiger-team
+      inputs.self.modules.homeManager.home-dev-team
       # Personal-only modules (not shared with team)
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.esp-idf
       inputs.self.modules.homeManager.pulumi
-      # awscli: imported via home-tiger-team; azureAuth configured below
+      # awscli: imported via home-dev-team; azureAuth configured below
     ];
 
     # Required by system types
@@ -142,7 +142,7 @@ in
     ];
 
     # === Claude Code: personal accounts + deployment-specific work config ===
-    # Tiger-team provides structural work account template; we fill in
+    # Dev-team provides structural work account template; we fill in
     # deployment values (baseUrl, bitwarden, modelMappings) and add personal accounts.
     programs.claude-code.defaultAccount = lib.mkForce "max";
     programs.claude-code.accounts = inputs.self.lib.claudeCode.personalAccounts // {

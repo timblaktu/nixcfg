@@ -214,7 +214,7 @@ in
     openCode = {
       # Base config (enable, defaults, common settings)
       # NOTE: defaultAccount intentionally omitted — each deployment layer sets its own.
-      # Tiger-team sets "work", personal hosts override to "max".
+      # Dev-team sets "work", personal hosts override to "max".
       baseConfig = {
         enable = true;
         defaultModel = "anthropic/claude-sonnet-4-5";
@@ -351,7 +351,7 @@ in
     claudeCode = {
       # Base config (enable, defaults, common settings)
       # NOTE: defaultAccount intentionally omitted — each deployment layer sets its own.
-      # Tiger-team sets "work", personal hosts override to "max".
+      # Dev-team sets "work", personal hosts override to "max".
       baseConfig = {
         enable = true;
         defaultModel = "opus";

@@ -1,38 +1,38 @@
-# modules/system/settings/wsl-tiger-team/wsl-tiger-team.nix
-# Tiger team WSL configuration layer [NDnd]
+# modules/system/settings/wsl-dev-team/wsl-dev-team.nix
+# Dev team WSL configuration layer [NDnd]
 #
 # Provides:
-#   flake.modules.nixos.wsl-tiger-team - Team-specific NixOS-WSL system config
-#   flake.modules.homeManager.home-tiger-team - Team-specific HM feature bundle
+#   flake.modules.nixos.wsl-dev-team - Team-specific NixOS-WSL system config
+#   flake.modules.homeManager.home-dev-team - Team-specific HM feature bundle
 #
 # This is a team-specific layer that imports the enterprise base and adds
-# development tooling for the tiger team's workflow: binfmt cross-compilation,
+# development tooling for the dev team's workflow: binfmt cross-compilation,
 # Podman containers, Claude Code enterprise, and unfree packages.
 #
 # NixOS side: Imports wsl-enterprise, overrides for dev workflow.
 # HM side: Imports home-enterprise + AI dev tools, GitLab, Podman, etc.
 #
 # Priority layering:
-#   Enterprise (mkDefault/1000) < Tiger-team (bare/100) < Host (mkForce/50)
-#   Tiger-team uses mkDefault for NEW options not set by enterprise.
+#   Enterprise (mkDefault/1000) < Dev-team (bare/100) < Host (mkForce/50)
+#   Dev-team uses mkDefault for NEW options not set by enterprise.
 #
 # Usage:
 #   # In a host module:
-#   imports = [ inputs.self.modules.nixos.wsl-tiger-team ];
+#   imports = [ inputs.self.modules.nixos.wsl-dev-team ];
 #
 #   # In a host HM config:
-#   imports = [ inputs.self.modules.homeManager.home-tiger-team ];
+#   imports = [ inputs.self.modules.homeManager.home-dev-team ];
 { config, lib, inputs, ... }:
 {
   flake.modules = {
 
     # =========================================================================
-    # NixOS Module: wsl-tiger-team
+    # NixOS Module: wsl-dev-team
     # =========================================================================
     # Team-specific WSL system config layered on enterprise base.
     # Enables binfmt (cross-arch builds), Podman, Claude Code enterprise,
     # and unfree packages. Adds setup-username bootstrap script.
-    nixos.wsl-tiger-team = { config, lib, pkgs, ... }: {
+    nixos.wsl-dev-team = { config, lib, pkgs, ... }: {
       imports = [
         # Enterprise base (chains: system-cli -> system-default -> system-minimal + wsl)
         inputs.self.modules.nixos.wsl-enterprise
@@ -44,7 +44,7 @@
         # Hosts use mkForce to override these if needed.
         {
           # Team hostname (enterprise default: "nixos-wsl")
-          wsl-settings.hostname = "nixos-wsl-tiger";
+          wsl-settings.hostname = "nixos-wsl-dev-team";
 
           # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
           wsl-settings.binfmt.enable = true;
@@ -60,7 +60,7 @@
           nixpkgs.config.allowUnfree = true;
 
           # Windows Terminal profile: team-branded name and font
-          enterprise.terminal.profileName = "NixOS Tiger Team";
+          enterprise.terminal.profileName = "NixOS Dev Team";
           enterprise.terminal.font = {
             face = "CaskaydiaMono Nerd Font";
             size = 11;
@@ -154,22 +154,22 @@
           # The HM gitlab-auth module handles credential setup comprehensively
           # (glab auth, credential helpers, CLI wrappers). System-level config
           # would duplicate and potentially conflict with HM-managed settings.
-          # Team members using HM get GitLab auth from home-tiger-team bundle.
+          # Team members using HM get GitLab auth from home-dev-team bundle.
         }
       ];
     };
 
     # =========================================================================
-    # Home Manager Module: home-tiger-team
+    # Home Manager Module: home-dev-team
     # =========================================================================
-    # Convenience bundle of HM feature modules for the tiger team's dev workflow.
+    # Convenience bundle of HM feature modules for the dev team's workflow.
     # Imports the enterprise bundle and adds AI dev tools, GitLab auth, Podman,
     # and standard team settings.
     #
     # Layers are convenience bundles, not gatekeepers:
     # - Another team can independently import claude-code, opencode, etc.
     # - Any host can cherry-pick individual modules instead of using this bundle.
-    homeManager.home-tiger-team = { config, lib, pkgs, ... }: {
+    homeManager.home-dev-team = { config, lib, pkgs, ... }: {
       imports = [
         # Enterprise HM bundle (home-default, shell, git, tmux, neovim, wsl-home,
         # terminal, shell-utils, system-tools, yazi, files, git-auth-helpers, onedrive)
@@ -197,7 +197,7 @@
       # === Claude Code Configuration ===
       # Team-shared structural config: work account template + enterprise defaults.
       # Hosts ADD personal accounts (max, pro) via module system merging --
-      # accounts is attrsOf submodule, so tiger-team's work + host's max/pro coexist.
+      # accounts is attrsOf submodule, so dev-team's work + host's max/pro coexist.
       #
       # Deployment-specific values (baseUrl, bitwarden items, modelMappings) must be
       # set by the host config or a private flake input overlay.

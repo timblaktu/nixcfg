@@ -79,14 +79,14 @@
         }
       );
 
-      # nixos-wsl-tiger-team: Tiger team distribution image
-      # module defined in modules/hosts/nixos-wsl-tiger-team [N]/
-      nixos-wsl-tiger-team = withSystem "x86_64-linux" ({ pkgs, ... }:
+      # nixos-wsl-dev-team: Dev team distribution image
+      # module defined in modules/hosts/nixos-wsl-dev-team [N]/
+      nixos-wsl-dev-team = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           modules = [
-            # allowUnfree set by wsl-tiger-team module (true)
-            self.modules.nixos.nixos-wsl-tiger-team
+            # allowUnfree set by wsl-dev-team module (true)
+            self.modules.nixos.nixos-wsl-dev-team
           ];
           specialArgs = {
             inherit inputs;
