@@ -73,7 +73,7 @@ in
         ))
 
         # ANTHROPIC_AUTH_TOKEN - retrieve via rbw for Bedrock proxy auth
-        # CC v2 Bedrock guide: ANTHROPIC_AUTH_TOKEN for bearer, ANTHROPIC_API_KEY=""
+        # CC v2 Bedrock guide: ANTHROPIC_AUTH_TOKEN for bearer, ANTHROPIC_API_KEY="" #gitleaks:allow
         (lib.optionalString (authMethod == "bedrock" && bearerToken != null && bearerToken.bitwarden or null != null) (
           let
             bwItem = bearerToken.bitwarden.item;
