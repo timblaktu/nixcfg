@@ -593,11 +593,15 @@
                   wantedBy = [ "multi-user.target" ];
                   unitConfig = {
                     ConditionPathExists = "${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe";
+                    # Transient devices (e.g., Jetson recovery mode) may not be connected at boot.
+                    # Allow retries but cap the restart rate to avoid journal flooding.
+                    StartLimitIntervalSec = 300;
+                    StartLimitBurst = 3;
                   };
                   serviceConfig = {
                     Type = "simple";
                     Restart = "on-failure";
-                    RestartSec = "5s";
+                    RestartSec = "30s";
                     ExecStart = pkgs.writeShellScript "usbipd-auto-attach-${safeName}" ''
                       echo "Auto-attaching USB device ${dev.hardwareId}${desc} via usbipd.exe"
                       exec "${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe" \
