@@ -53,6 +53,7 @@
           wsl-settings.usbip.autoAttachByHardwareId = [
             { hardwareId = "0403:6001"; description = "FTDI USB-UART adapter"; }
             { hardwareId = "0955:7523"; description = "NVIDIA Jetson Recovery Mode (APX)"; }
+            { hardwareId = "1d6b:0104"; description = "Linux USB Mass Storage Gadget (Jetson initrd-flash)"; }
           ];
 
           # Team needs unfree packages (enterprise default: false)

@@ -19,7 +19,7 @@ demonstration to IT showing the team WSL image with Falcon baked in.
 | 1 | Files Module | TASK:COMPLETE | `nix flake check --no-build` + HM dry-run | Refactor files module anti-patterns (F5) |
 | 2 | Username DRY | TASK:COMPLETE | `nix flake check --no-build` + HM dry-run | Centralize hardcoded username refs (F1) |
 | 3 | CrowdStrike | TASK:COMPLETE | Module evals, service activates in VM test | Build Falcon sensor dendritic module |
-| 4 | Repo Separation | TASK:PENDING | Both flakes pass `nix flake check --no-build` | Split shared modules into separate flake |
+| 4 | Module Exports | TASK:COMPLETE | `nix flake check --no-build` passes | Export all modules, remove [nd] tags (Option A: no repo split) |
 | 5 | Tarball Hosting | TASK:PENDING | Teammates can `nix build` or `wsl --import` | Establish distribution channel for team tarball |
 | 6 | IT Demo | TASK:PENDING | IT provides CID + provisioning token | Demonstrate Falcon-enabled WSL image to IT |
 
@@ -400,84 +400,77 @@ Option 1 is the most Nix-idiomatic for proprietary packages. The IT demo
 
 ---
 
-## Task 4: Repository Separation
+## Task 4: Module Exports & Tag Cleanup (was: Repository Separation)
 
-**Status**: TASK:PENDING
+**Status**: TASK:COMPLETE (2026-03-14)
 **Priority**: HIGH — the core enabler for team consumption
 **Depends on**: Tasks 1-3 (clean state + CrowdStrike module in place)
+**Commit**: `6e5da5e` on `feat/usb-jetson-pa161878`
 
-### Problem Statement
+### Decision: Option A (No Repo Split)
 
-Everything lives in one repo. Teammates cannot consume `wsl-enterprise` or
-`wsl-tiger-team` without also pulling personal configs, secrets references,
-and personal host definitions.
+After analysis, decided against repository separation in favor of expanding
+exports from the existing single repo. Rationale:
 
-### Current Export Surface
+- **Team size**: ~5 people, all direct communication — clean API boundary
+  adds overhead without proportional benefit
+- **Integration testing**: Personal hosts serve as free integration tests
+  for shared modules — single-repo keeps this advantage
+- **Maintenance**: No cross-repo lock file coordination, no two-CI-pipeline
+  overhead
+- **Module consumption works today**: Deferred modules carry their own
+  `inputs.self` context, so `inputs.nixcfg.nixosModules.wsl-tiger-team`
+  resolves its internal import chain correctly
+- **Revisit trigger**: Team grows beyond ~10 people, modules consumed by
+  teams outside direct communication, or compliance requires separation
 
-`modules/flake-parts/shared-modules.nix` currently exports only 4 modules:
+### What Was Done
+
+**1. Removed `[nd]` bracket tags from 8 directories**:
+- `files [nd]` → `files`
+- `git-auth-helpers [nd]` → `git-auth-helpers`
+- `github-auth [nd]` → `github-auth`
+- `gitlab-auth [nd]` → `gitlab-auth`
+- `podman [nd]` → `podman`
+- `secrets-management [NDnd]` → `secrets-management`
+- `windows-terminal [nd]` → `windows-terminal`
+- `thinky-ubuntu [nd]` → `thinky-ubuntu`
+
+The `[nd]` (no-distribute) tag was an obsolete distribution policy marker.
+Distribution policy is now determined by presence in `shared-modules.nix`.
+
+**2. Expanded shared-modules.nix from 5 to 47 exports**:
+- NixOS: 13 modules (system types, WSL settings, feature modules)
+- Home Manager: 25 modules (system type layers, bundles, feature modules)
+- Darwin: 9 modules (system types, cross-platform features)
+
+**3. Fixed 2 hardcoded path references** that would break from renames:
+- `tests.nix:589`: `"/files [nd]/_homefiles-module.nix"` → `"/files/_homefiles-module.nix"`
+- `default.nix:465`: `"/modules/programs/files [nd]/files/glow.yml"` → `"/modules/programs/files/files/glow.yml"`
+
+### Teammate Consumption
+
 ```nix
-nixosModules = { wsl-base, wsl-enterprise, wsl-tiger-team };
-homeManagerModules = { wsl-home-base };
+# In teammate's flake.nix:
+inputs.nixcfg.url = "github:timblaktu/nixcfg";
+
+# NixOS system config:
+imports = [ inputs.nixcfg.nixosModules.wsl-tiger-team ];
+
+# Home Manager config:
+imports = [ inputs.nixcfg.homeManagerModules.home-tiger-team ];
+
+# Or cherry-pick individual modules:
+imports = [ inputs.nixcfg.homeManagerModules.shell ];
 ```
-
-But 22+ feature modules (claude-code, opencode, shell, git, tmux, neovim,
-development-tools, etc.) remain private despite being consumed by tiger-team.
-
-### Cross-Reference Counts
-
-- 251 `inputs.self` references across modules
-- 182 internal `inputs.self.modules` cross-references within shared modules
-- 367 total `self.modules` or `self.lib` references
-
-### Module Classification
-
-**Would move to shared flake**:
-- `modules/system/types/` (minimal, default, cli, desktop)
-- `modules/system/settings/wsl/`, `wsl-enterprise/`, `wsl-tiger-team/`
-- `modules/programs/` sharable subset: shell, git, tmux, neovim,
-  claude-code, opencode, development-tools, system-tools, awscli,
-  onedrive, shell-utils, yazi, terminal, crowdstrike-falcon
-- `modules/flake-parts/shared-modules.nix`, `lib.nix` (preset helpers)
-- `modules/meta/` (with `readOnly` removed from username, or made configurable)
-
-**Would stay in personal flake**:
-- `modules/hosts/pa161878-nixos [N]/` and all other personal hosts
-- `modules/programs/` personal subset: secrets-management, github-auth,
-  esp-idf, pulumi, files (post-refactor), windows-terminal, git-auth-helpers,
-  podman, gitlab-auth
-- `modules/flake-parts/nixos-configurations.nix`, `home-configurations.nix`
-- Personal test suite
-
-### Key Decisions Required (at task start)
-
-1. **Shared repo location**: GitHub public vs internal GitLab?
-2. **Flake input name**: `nixcfg-shared`? `nixcfg-team`?
-3. **Versioning**: Pin to tags or follow main?
-4. **Which feature modules are shared vs personal?** (bracket tags help:
-   `[nd]` = no-distribute, but some `[nd]` modules like podman/gitlab-auth
-   ARE in tiger-team bundle — need reclassification)
-5. **Lib presets**: Do `claudeCode.personalAccounts` stay in personal flake?
-   (Yes — only `baseConfig` and `workAccount` go to shared)
-
-### Refactoring Strategy
-
-**4a. Create shared flake** with import-tree structure mirroring current layout
-**4b. Move classified modules** (copy, not git-filter-branch — history stays)
-**4c. Update personal flake** to consume shared as `inputs.nixcfg-team`
-**4d. Update cross-references**: `inputs.self.modules.nixos.wsl-tiger-team`
-     becomes `inputs.nixcfg-team.modules.nixos.wsl-tiger-team`
-**4e. Split test infrastructure**: Shared flake gets module-level tests,
-     personal flake keeps host integration tests
 
 ### Definition of Done
 
-- [ ] Shared flake exists in separate repository
-- [ ] `nix flake check --no-build` passes on shared flake
-- [ ] Personal flake consumes shared flake as input
-- [ ] `nix flake check --no-build` passes on personal flake
-- [ ] `nixos-wsl-tiger-team` tarball builds from shared flake
-- [ ] `pa161878-nixos` builds from personal flake (consumes shared)
-- [ ] No personal data (email, PATs, hostnames) in shared flake
+- [x] All modules exported in `shared-modules.nix` (47 total)
+- [x] `[nd]` tags removed from all directories
+- [x] Hardcoded path references fixed
+- [x] `nix flake check --no-build` passes
+- [x] Pre-commit hooks pass
 
 ---
 
