@@ -34,7 +34,7 @@ in
         }
       );
 
-      # tim@thinky-ubuntu: Dendritic pattern - module defined in modules/hosts/thinky-ubuntu [nd]/
+      # tim@thinky-ubuntu: Dendritic pattern - module defined in modules/hosts/thinky-ubuntu/
       "${username}@thinky-ubuntu" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;

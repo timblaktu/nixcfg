@@ -1,4 +1,4 @@
-# modules/programs/secrets-management [NDnd]/secrets-management.nix
+# modules/programs/secrets-management/secrets-management.nix
 # Secrets management configuration for NixOS, Darwin, and home-manager
 #
 # Provides:

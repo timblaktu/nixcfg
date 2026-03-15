@@ -1,4 +1,4 @@
-# modules/programs/windows-terminal [nd]/windows-terminal.nix
+# modules/programs/windows-terminal/windows-terminal.nix
 # Windows Terminal settings management for WSL
 #
 # Provides:

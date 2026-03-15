@@ -1,4 +1,4 @@
-# modules/programs/github-auth [nd]/github-auth.nix
+# modules/programs/github-auth/github-auth.nix
 # GitHub authentication configuration for home-manager
 #
 # Provides:

@@ -1,5 +1,5 @@
-# modules/programs/files [nd]/files.nix
-# Unified files management module [nd]
+# modules/programs/files/files.nix
+# Unified files management module
 #
 # Provides:
 #   flake.modules.homeManager.files - Unified file management with autoWriter

@@ -1,4 +1,4 @@
-# modules/programs/git-auth-helpers [nd]/git-auth-helpers.nix
+# modules/programs/git-auth-helpers/git-auth-helpers.nix
 # Git authentication helper utilities
 #
 # Provides:

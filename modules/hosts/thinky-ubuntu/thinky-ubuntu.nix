@@ -1,4 +1,4 @@
-# modules/hosts/thinky-ubuntu [nd]/thinky-ubuntu.nix
+# modules/hosts/thinky-ubuntu/thinky-ubuntu.nix
 # Dendritic host composition for thinky-ubuntu (vanilla WSL Ubuntu with Home Manager only)
 #
 # This module defines only the Home Manager configuration (no NixOS)

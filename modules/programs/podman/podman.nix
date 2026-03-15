@@ -1,4 +1,4 @@
-# modules/programs/podman [nd]/podman.nix
+# modules/programs/podman/podman.nix
 # Podman user tools for home-manager
 #
 # Provides:

@@ -1,4 +1,4 @@
-# modules/programs/gitlab-auth [nd]/gitlab-auth.nix
+# modules/programs/gitlab-auth/gitlab-auth.nix
 # GitLab authentication configuration for home-manager
 #
 # Provides:

@@ -582,11 +582,10 @@ in
 
         # === HYBRID UNIFIED FILES MODULE TEST ===
         # Tests the homeFiles module with autoWriter integration
-        # Module location: modules/programs/files [nd]/_homefiles-module.nix
+        # Module location: modules/programs/files/_homefiles-module.nix
         hybrid-files-module-test =
           let
-            # Reference the module using path concatenation to handle special characters
-            homefilesModulePath = ../programs + "/files [nd]/_homefiles-module.nix";
+            homefilesModulePath = ../programs + "/files/_homefiles-module.nix";
             moduleFile = import homefilesModulePath {
               config = { homeFiles = { }; };
               inherit lib pkgs;
