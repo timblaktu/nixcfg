@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    name: Flake evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Evaluate flake metadata
+        run: nix flake metadata
+      - name: Evaluate check names
+        run: nix eval '.#checks.x86_64-linux' --apply 'x: builtins.attrNames x'
+
+  lint:
+    name: Lint (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - lint-formatting
+          - lint-statix
+          - lint-deadnix
+          - lint-ps1-encoding
+          - lint-version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: ${{ matrix.check }}
+        run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
+
+  module-eval-hm:
+    name: HM module eval (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - eval-hm-module-shell
+          - eval-hm-module-git
+          - eval-hm-module-tmux
+          - eval-hm-module-neovim
+          - eval-hm-module-development-tools
+          - eval-hm-module-yazi
+          - eval-hm-module-shell-utils
+          - eval-hm-module-files
+          - eval-hm-module-podman
+          - eval-hm-module-terminal
+          - eval-hm-module-secrets-management
+          - eval-hm-module-claude-code
+          - eval-hm-module-opencode
+          - eval-hm-module-github-auth
+          - eval-hm-module-gitlab-auth
+          - eval-hm-module-git-auth-helpers
+          - eval-hm-module-esp-idf
+          - eval-hm-module-windows-terminal
+          - eval-hm-module-onedrive
+          - eval-hm-module-system-tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: ${{ matrix.check }}
+        run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
+
+  module-eval-nixos:
+    name: NixOS module eval (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - eval-nixos-module-system-minimal
+          - eval-nixos-module-system-default
+          - eval-nixos-module-system-cli
+          - eval-nixos-module-system-desktop
+          - eval-nixos-module-secrets-management
+          - eval-nixos-module-wsl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: ${{ matrix.check }}
+        run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
+
+  config-eval:
+    name: Config eval (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          # NixOS configs
+          - eval-thinky-nixos
+          - eval-pa161878-nixos
+          - eval-potato
+          - eval-nixos-wsl-minimal
+          - eval-mbp
+          - eval-nixos-wsl-dev-team
+          # HM configs
+          - eval-hm-thinky-nixos
+          - eval-hm-pa161878-nixos
+          - eval-hm-thinky-ubuntu
+          - eval-hm-mbp
+          - eval-hm-nixvim-minimal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: ${{ matrix.check }}
+        run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
+
+  integration:
+    name: Integration (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - flake-validation
+          - validated-scripts-module
+          - unified-files-diagnostic-test
+          - module-base-integration
+          - module-wsl-settings-integration
+          - module-binfmt-integration
+          - ssh-service-configured
+          - user-configured
+          - config-snapshot-validation
+          - cross-module-wsl-base
+          - cross-module-sops-base
+          - cross-module-home-manager
+          - ssh-public-keys-registry
+          - files-module-test
+          - hybrid-files-module-test
+          - tmux-picker-syntax
+          - opencode-config-validation
+          - opencode-json-syntax
+          - opencode-mcp-structure
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: ${{ matrix.check }}
+        run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs

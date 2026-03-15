@@ -231,6 +231,7 @@ in
         eval-potato = mkEvalTest "potato" "potato";
         eval-nixos-wsl-minimal = mkEvalTest "nixos-wsl-minimal" "nixos-wsl-minimal";
         eval-mbp = mkEvalTest "mbp" "mbp";
+        eval-nixos-wsl-dev-team = mkEvalTest "nixos-wsl-dev-team" "nixos-wsl-dev-team";
 
         # Home Manager configuration eval tests (x86_64-linux only)
         # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
