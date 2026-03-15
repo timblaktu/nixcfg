@@ -1806,6 +1806,123 @@ in
           '';
         };
 
+        # Dev Team Stack Integration Test: activates the actual nixos-dev-team host
+        # module (pure NixOS, no WSL) with HM dev tool modules. Validates that the
+        # non-WSL dev-team configuration boots, provides SSH, user management, and
+        # all expected dev tooling through HM integration.
+        # Tests the full module chain: system-cli + binfmt + podman + HM dev stack
+        vm-dev-team-stack = pkgs.testers.nixosTest {
+          name = "vm-dev-team-stack";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.nixos-dev-team
+              inputs.home-manager.nixosModules.home-manager
+            ];
+
+            # Override hardware config for VM test (nixos-dev-team has grub/disk)
+            boot.loader.grub.enable = lib.mkForce false;
+            boot.loader.grub.device = lib.mkForce "";
+            fileSystems."/" = lib.mkForce {
+              device = "none";
+              fsType = "tmpfs";
+            };
+
+            systemDefault.userName = testUsername;
+            systemDefault.wheelNeedsPassword = false;
+            networking.firewall.enable = false;
+            virtualisation.memorySize = 3072;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.${testUsername} = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.shell
+                  self.modules.homeManager.git
+                  self.modules.homeManager.tmux
+                  self.modules.homeManager.neovim
+                  self.modules.homeManager.development-tools
+                  self.modules.homeManager.yazi
+                  self.modules.homeManager.shell-utils
+                  self.modules.homeManager.files
+                  self.modules.homeManager.podman
+                ];
+
+                homeMinimal = {
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
+                };
+
+                developmentTools.enable = true;
+                programs.podman-tools.enable = true;
+
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
+
+            # === Section 1: Boot and user creation ===
+
+            machine.succeed("id ${testUsername}")
+            machine.succeed("id -nG ${testUsername} | grep -q wheel")
+
+            # === Section 2: Sudo works (wheelNeedsPassword = false) ===
+
+            machine.succeed("su - ${testUsername} -c 'sudo -n true'")
+
+            # === Section 3: SSH service running ===
+
+            machine.wait_for_unit("sshd.service")
+
+            # === Section 4: HM activation completed ===
+
+            # HM config files generated
+            machine.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
+            machine.succeed("test -f /home/${testUsername}/.config/git/config")
+            machine.succeed("test -d /home/${testUsername}/.config/nvim")
+            machine.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
+            machine.succeed("test -f /home/${testUsername}/.zshrc")
+
+            # === Section 5: Core binaries present ===
+
+            machine.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
+            machine.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
+            machine.succeed("su - ${testUsername} -c 'git --version'")
+            machine.succeed("su - ${testUsername} -c 'yazi --version'")
+            machine.succeed("su - ${testUsername} -c 'bat --version'")
+            machine.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+
+            # === Section 6: Cross-module integration — git + delta ===
+
+            machine.succeed("su - ${testUsername} -c 'git config core.pager' | grep -q delta")
+            machine.succeed("su - ${testUsername} -c 'delta --version'")
+
+            # === Section 7: Cross-module integration — zsh + git aliases ===
+
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+
+            # === Section 8: Development toolchains ===
+
+            machine.succeed("su - ${testUsername} -c 'rustc --version'")
+            machine.succeed("su - ${testUsername} -c 'node --version'")
+            machine.succeed("su - ${testUsername} -c 'python3 --version'")
+            machine.succeed("su - ${testUsername} -c 'go version'")
+
+            # === Section 9: User environment coherent ===
+
+            machine.succeed("su - ${testUsername} -c 'echo $EDITOR' | grep -q nvim")
+            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
+            machine.succeed("nix show-config | grep trusted-users | grep -q ${testUsername}")
+          '';
+        };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {

@@ -116,6 +116,7 @@ jobs:
           - eval-nixos-wsl-minimal
           - eval-mbp
           - eval-nixos-wsl-dev-team
+          - eval-nixos-dev-team
           # HM configs
           - eval-hm-thinky-nixos
           - eval-hm-pa161878-nixos
@@ -156,9 +157,45 @@ jobs:
           - opencode-config-validation
           - opencode-json-syntax
           - opencode-mcp-structure
+          # Tarball builder eval tests
+          - build-tarball-dev-team-dryrun
+          - build-tarball-pa161878-dryrun
+          - build-tarball-thinky-dryrun
+          # Non-WSL build eval
+          - build-nixos-dev-team-dryrun
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: ${{ matrix.check }}
         run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
+
+  tarball-build:
+    name: Tarball (${{ matrix.config }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: nixos-wsl-dev-team
+            artifact: nixcfg-wsl-dev-team
+          - config: pa161878-nixos
+            artifact: nixcfg-pa161878-nixos
+          - config: thinky-nixos
+            artifact: nixcfg-thinky-nixos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            system-features = kvm
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Build tarball builder
+        run: nix build '.#nixosConfigurations.${{ matrix.config }}.config.system.build.tarballBuilder' --print-build-logs
+      - name: Build tarball
+        run: sudo ./result/bin/nixos-wsl-tarball-builder nixos.wsl
+      - name: Verify tarball
+        run: |
+          ls -lh nixos.wsl
+          file nixos.wsl

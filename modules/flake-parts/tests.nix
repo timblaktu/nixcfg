@@ -232,6 +232,7 @@ in
         eval-nixos-wsl-minimal = mkEvalTest "nixos-wsl-minimal" "nixos-wsl-minimal";
         eval-mbp = mkEvalTest "mbp" "mbp";
         eval-nixos-wsl-dev-team = mkEvalTest "nixos-wsl-dev-team" "nixos-wsl-dev-team";
+        eval-nixos-dev-team = mkEvalTest "nixos-dev-team" "nixos-dev-team";
 
         # Home Manager configuration eval tests (x86_64-linux only)
         # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
@@ -560,6 +561,69 @@ in
           echo "Testing nixos-wsl-minimal build evaluation..."
           echo "Toplevel derivation: $toplevel"
           echo "nixos-wsl-minimal build evaluation passed"
+          touch $out
+        '';
+
+        # === TARBALL BUILDER EVALUATION TESTS ===
+        # Force evaluation of tarball builder derivations for all WSL configs
+        build-tarball-dev-team-dryrun = pkgs.runCommand "build-tarball-dev-team-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of nixos-wsl-dev-team tarball builder";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.nixos-wsl-dev-team.config.system.build) tarballBuilder;
+          } ''
+          echo "Testing nixos-wsl-dev-team tarball builder evaluation..."
+          echo "Tarball builder derivation: $tarballBuilder"
+          echo "nixos-wsl-dev-team tarball builder evaluation passed"
+          touch $out
+        '';
+
+        build-tarball-pa161878-dryrun = pkgs.runCommand "build-tarball-pa161878-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of pa161878-nixos tarball builder";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.pa161878-nixos.config.system.build) tarballBuilder;
+          } ''
+          echo "Testing pa161878-nixos tarball builder evaluation..."
+          echo "Tarball builder derivation: $tarballBuilder"
+          echo "pa161878-nixos tarball builder evaluation passed"
+          touch $out
+        '';
+
+        build-tarball-thinky-dryrun = pkgs.runCommand "build-tarball-thinky-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of thinky-nixos tarball builder";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.thinky-nixos.config.system.build) tarballBuilder;
+          } ''
+          echo "Testing thinky-nixos tarball builder evaluation..."
+          echo "Tarball builder derivation: $tarballBuilder"
+          echo "thinky-nixos tarball builder evaluation passed"
+          touch $out
+        '';
+
+        # === BUILD EVALUATION TEST: nixos-dev-team ===
+        build-nixos-dev-team-dryrun = pkgs.runCommand "build-nixos-dev-team-dryrun"
+          {
+            meta = {
+              description = "Dry-run build test for nixos-dev-team";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.nixos-dev-team.config.system.build) toplevel;
+          } ''
+          echo "Testing nixos-dev-team build evaluation..."
+          echo "Toplevel derivation: $toplevel"
+          echo "nixos-dev-team build evaluation passed"
           touch $out
         '';
 
@@ -1075,12 +1139,13 @@ in
               maintainers = [ ];
               timeout = 120;
             };
-            # Force evaluation of all 5 NixOS configurations
+            # Force evaluation of all NixOS configurations
             nixosThinky = self.nixosConfigurations.thinky-nixos.config.system.stateVersion;
             nixosPa161878 = self.nixosConfigurations.pa161878-nixos.config.system.stateVersion;
             nixosPotato = self.nixosConfigurations.potato.config.system.stateVersion;
             nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
             nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
+            nixosDevTeam = self.nixosConfigurations.nixos-dev-team.config.system.stateVersion;
             # Force evaluation of all 5 x86_64-linux Home Manager configurations
             hmThinky = self.homeConfigurations."${username}@thinky-nixos".config.home.homeDirectory;
             hmPa161878 = self.homeConfigurations."${username}@pa161878-nixos".config.home.homeDirectory;
@@ -1091,11 +1156,12 @@ in
           echo "Regression test: evaluating all configurations..."
           echo ""
           echo "NixOS configurations:"
-          echo "  thinky-nixos:      stateVersion=$nixosThinky"
-          echo "  pa161878-nixos:    stateVersion=$nixosPa161878"
-          echo "  potato:            stateVersion=$nixosPotato"
-          echo "  mbp:               stateVersion=$nixosMbp"
-          echo "  nixos-wsl-minimal: stateVersion=$nixosWslMinimal"
+          echo "  thinky-nixos:        stateVersion=$nixosThinky"
+          echo "  pa161878-nixos:      stateVersion=$nixosPa161878"
+          echo "  potato:              stateVersion=$nixosPotato"
+          echo "  mbp:                 stateVersion=$nixosMbp"
+          echo "  nixos-wsl-minimal:   stateVersion=$nixosWslMinimal"
+          echo "  nixos-dev-team:      stateVersion=$nixosDevTeam"
           echo ""
           echo "Home Manager configurations:"
           echo "  ${username}@thinky-nixos:   homeDir=$hmThinky"
@@ -1104,7 +1170,7 @@ in
           echo "  ${username}@mbp:            homeDir=$hmMbp"
           echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim"
           echo ""
-          echo "All 10 configurations evaluated successfully"
+          echo "All 11 configurations evaluated successfully"
           touch $out
         '';
       };

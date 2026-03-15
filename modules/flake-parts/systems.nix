@@ -89,6 +89,7 @@
         "pa161878-nixos" = "x86_64-linux";
         "nixos-wsl-minimal" = "x86_64-linux";
         "nixos-wsl-dev-team" = "x86_64-linux";
+        "nixos-dev-team" = "x86_64-linux";
         "potato" = "aarch64-linux";
         "mbp" = "x86_64-darwin";
         "macbook-air" = "aarch64-darwin";
