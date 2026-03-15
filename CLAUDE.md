@@ -160,26 +160,26 @@ Four-layer architecture for distributable team WSL images:
 
 ```
 Layer 1: wsl-enterprise (module)     -- Company-wide base (system-cli + WSL)
-Layer 2: wsl-tiger-team (module)     -- Team dev stack (Podman, Claude Code, GitLab)
-Layer 3: nixos-wsl-tiger-team (host) -- Thin host producing .wsl tarball
+Layer 2: wsl-dev-team (module)        -- Team dev stack (Podman, Claude Code, GitLab)
+Layer 3: nixos-wsl-dev-team (host)   -- Thin host producing .wsl tarball
 Layer 4: pa161878-nixos (host)       -- Personal machine (uses team layers + personal config)
 ```
 
 **Key modules created**:
 - `modules/system/settings/wsl-enterprise/` -- NixOS (`wsl-enterprise`) + HM (`home-enterprise`)
-- `modules/system/settings/wsl-tiger-team/` -- NixOS (`wsl-tiger-team`) + HM (`home-tiger-team`)
-- `modules/hosts/nixos-wsl-tiger-team [N]/` -- Distributable host config
+- `modules/system/settings/wsl-dev-team/` -- NixOS (`wsl-dev-team`) + HM (`home-dev-team`)
+- `modules/hosts/nixos-wsl-dev-team [N]/` -- Distributable host config
 
 **Design principles**:
 - Layers are convenience bundles, not gatekeepers (no exclusivity)
 - Dual-registration: each layer provides both NixOS and HM modules
 - Generic user `dev` with `setup-username` script for personalization
 - Tarball security check validates no personal data leaks
-- `pa161878-nixos` refactored to import `wsl-tiger-team` + personal-only modules
+- `pa161878-nixos` refactored to import `wsl-dev-team` + personal-only modules
 
-**Build**: `nix build '.#nixosConfigurations.nixos-wsl-tiger-team.config.system.build.tarballBuilder'`
+**Build**: `nix build '.#nixosConfigurations.nixos-wsl-dev-team.config.system.build.tarballBuilder'`
 **Run** (requires sudo): `sudo ./result/bin/nixos-wsl-tarball-builder`
-**Import**: `wsl --import nixos-wsl-tiger-team <location> nixos.wsl`
+**Import**: `wsl --import nixos-wsl-dev-team <location> nixos.wsl`
 
 ### ✅ **OpenCode Branch Validation** (COMPLETED - 2026-01-17)
 
@@ -548,7 +548,7 @@ DHCP Pool: 10.0.0.100-200
 - Jetson Recovery Mode (APX) udev rule: VID:0955 PID:7523 (active)
 - Jetson L4T running udev rule: VID:0955 PID:7020 (commented out, needs verification)
 - `usbip.autoAttach = [ ]` placeholder in `pa161878-nixos.nix`
-- `usbutils` + `kmod` in tiger-team layer
+- `usbutils` + `kmod` in dev-team layer
 - WSL environment capture for systemd-spawned shells
 - Windows drive mount recovery service
 - `restart-usb` + `restart-usb-v4.ps1` recovery scripts
@@ -565,7 +565,7 @@ Full research documented in `docs/NIXOS-WSL-BARE-MOUNT-CONTRIBUTION-PLAN.md` und
 "usbip.nix: Modernize for usbipd-win v5.x + hardware-ID auto-attach".
 
 **Remaining work**:
-1. Implement `autoAttachByHardwareId` locally in `wsl.nix` + tiger-team module (interim)
+1. Implement `autoAttachByHardwareId` locally in `wsl.nix` + dev-team module (interim)
 2. Prepare upstream PR for NixOS-WSL `modules/usbip.nix` modernization
 3. Verify Jetson L4T PID 7020 when hardware boots into Linux
 4. Jetson flashing workflow (sdkmanager or initrd flash via WSL)
