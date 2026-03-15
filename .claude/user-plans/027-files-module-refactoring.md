@@ -37,7 +37,7 @@ manager for the ~8 scripts that don't belong to any feature module.
 | 6 | TASK:COMPLETE | Move development-tools scripts (4 scripts) |
 | 7 | TASK:COMPLETE | Move system-tools scripts (5 scripts) |
 | 8 | TASK:COMPLETE | Handle remaining files-only scripts (~8 scripts) |
-| 9 | TASK:PENDING | Eliminate exclusion list + fix completion scope |
+| 9 | TASK:COMPLETE | Eliminate exclusion list + fix completion scope |
 | 10 | TASK:PENDING | Final validation & plan 026 update |
 
 ---
