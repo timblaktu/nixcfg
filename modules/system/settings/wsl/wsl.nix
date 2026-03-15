@@ -593,19 +593,25 @@
                   wantedBy = [ "multi-user.target" ];
                   unitConfig = {
                     ConditionPathExists = "${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe";
-                    # Transient devices (e.g., Jetson recovery mode) may not be connected at boot.
-                    # Allow retries but cap the restart rate to avoid journal flooding.
-                    StartLimitIntervalSec = 300;
-                    StartLimitBurst = 3;
                   };
                   serviceConfig = {
                     Type = "simple";
-                    Restart = "on-failure";
-                    RestartSec = "30s";
+                    Restart = "always";
+                    RestartSec = "5s";
                     ExecStart = pkgs.writeShellScript "usbipd-auto-attach-${safeName}" ''
-                      echo "Auto-attaching USB device ${dev.hardwareId}${desc} via usbipd.exe"
-                      exec "${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe" \
-                        attach --wsl --hardware-id ${dev.hardwareId} --auto-attach
+                      USBIPD="${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe"
+                      HWID="${dev.hardwareId}"
+
+                      # Poll until device appears on the Windows USB bus.
+                      # usbipd attach --auto-attach requires the device to be present
+                      # at invocation — it watches for reconnects, not first appearance.
+                      echo "Watching for USB device $HWID${desc}..."
+                      while ! "$USBIPD" list 2>/dev/null | grep -qi "$HWID"; do
+                        sleep 5
+                      done
+
+                      echo "Device $HWID found, attaching with auto-reattach..."
+                      exec "$USBIPD" attach --wsl --hardware-id "$HWID" --auto-attach
                     '';
                   };
                 })
