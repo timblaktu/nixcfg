@@ -273,67 +273,11 @@ let
       complete -F ${funcName} ${name}
     '';
 
-  # ============================================================================
-  # SCRIPT EXCLUSION LIST - Scripts Installed Elsewhere
-  # ============================================================================
-  #
-  # PURPOSE: Scripts listed here are EXCLUDED from:
-  #   1. Simple symlink installation to ~/bin/ (they're installed via home.packages instead)
-  #   2. Auto-generated bash/zsh completions (they handle completions differently)
-  #
-  # WHY EXCLUDE? These scripts need special handling that simple symlinks can't provide:
-  #   - Runtime dependency injection via wrapProgram (e.g., tmux-session-picker needs fzf, parallel)
-  #   - String substitution at build time (e.g., injecting nix store paths)
-  #   - Custom derivation wrapping (e.g., symlinkJoin with makeWrapper)
-  #   - Module-specific configuration injection
-  #
-  # WHERE ARE THEY INSTALLED?
-  #   - tmux-session-picker → tmux.nix via home.packages (needs fzf, parallel, library inlining)
-  #   - claude-code-* → claude-code module (needs API key injection)
-  #   - esp-idf-* → ESP-IDF module (needs FHS environment)
-  #   - Others → Various specialized modules
-  #
-  # INSTALLATION FLOW:
-  #   home/files/bin/script-name (source)
-  #           │
-  #           ├─ NOT in list ──► files/default.nix ──► ~/bin/script-name (symlink)
-  #           │                   Simple copy, chmod +x
-  #           │
-  #           └─ IN this list ──► Specialized module ──► home.packages ──► ~/.nix-profile/bin/
-  #                               wrapProgram, string substitution, deps injection
-  #
-  # TO ADD A SCRIPT HERE:
-  #   1. Script must be installed via home.packages in another module
-  #   2. That module must handle the script's special requirements
-  #   3. Add the script name to this list to prevent duplicate installation
-  #
-  # TO REMOVE A SCRIPT:
-  #   1. Ensure the script doesn't need special handling (no deps, no substitutions)
-  #   2. Remove from this list - it will then be installed as a simple symlink
-  #   3. Example: tmux-auto-attach was removed because it's just sourced, no special needs
-  # ============================================================================
-  validatedScriptNames = [
-    "smart-nvimdiff"
-    # Terminal scripts moved to terminal.nix module:
-    # "setup-terminal-fonts" - now in terminal.nix
-    # "diagnose-emoji-rendering" - now in terminal.nix
-    # System scripts moved to system-tools module (Steps 7/027)
-    "esp-idf-install"
-    "esp-idf-shell"
-    "esp-idf-export"
-    "idf.py"
-    "onedrive-force-sync"
-    # "tmux-auto-attach" - now installed normally, sourced by zsh.nix
-    "colorfuncs"
-    "mergejson"
-    "onedrive-status"
-  ];
-
   # Helper functions
-  mkHomeFiles = { sourceDir, targetDir, executable ? false, excludeNames ? [ ] }:
+  mkHomeFiles = { sourceDir, targetDir, executable ? false }:
     let
       dirContents = builtins.readDir sourceDir;
-      files = filterAttrs (name: type: type == "regular" && !(builtins.elem name excludeNames)) dirContents;
+      files = filterAttrs (_name: type: type == "regular") dirContents;
       fileEntries = mapAttrs'
         (name: _value: {
           name = "${targetDir}/${name}";
@@ -349,14 +293,13 @@ let
   # Whether the bin directory exists (all scripts have been migrated to feature modules)
   hasBinDir = builtins.pathExists (filesDir + "/bin");
 
-  # Generate bash completion files automatically for all scripts (excluding validated-scripts)
+  # Generate bash completion files for all scripts in bin/
   mkBashCompletionFiles =
     if !hasBinDir then { } else
     let
       binDir = filesDir + "/bin";
       binContents = builtins.readDir binDir;
-      allFiles = filterAttrs (_name: type: type == "regular") binContents;
-      executableFiles = filterAttrs (name: _: !(builtins.elem name validatedScriptNames)) allFiles;
+      executableFiles = filterAttrs (_name: type: type == "regular") binContents;
     in
     mapAttrs'
       (scriptName: _: {
@@ -369,14 +312,13 @@ let
       })
       executableFiles;
 
-  # Generate zsh completion files automatically for all scripts (excluding validated-scripts)
+  # Generate zsh completion files for all scripts in bin/
   mkZshCompletionFiles =
     if !hasBinDir then { } else
     let
       binDir = filesDir + "/bin";
       binContents = builtins.readDir binDir;
-      allFiles = filterAttrs (_name: type: type == "regular") binContents;
-      executableFiles = filterAttrs (name: _: !(builtins.elem name validatedScriptNames)) allFiles;
+      executableFiles = filterAttrs (_name: type: type == "regular") binContents;
     in
     mapAttrs'
       (scriptName: _: {
@@ -393,12 +335,11 @@ in
 {
   config = {
     home.file = lib.mkMerge [
-      # Executable scripts (excluding those managed by validated-scripts)
+      # Executable scripts from bin/ (if directory exists)
       (lib.optionalAttrs hasBinDir (mkHomeFiles {
         sourceDir = filesDir + "/bin";
         targetDir = "bin";
         executable = true;
-        excludeNames = validatedScriptNames;
       }))
       # Claude directory
       {
