@@ -66,30 +66,12 @@
           inputs.self.modules.nixos.system-cli
           # WSL integration (wsl.conf, users, SSH, SOPS, USBIP, etc.)
           inputs.self.modules.nixos.wsl
+          # CrowdStrike Falcon sensor (systemd service + FHS-wrapped package)
+          inputs.self.modules.nixos.crowdstrike-falcon
         ];
 
         # === Enterprise Options ===
         options.enterprise = {
-          crowdStrike = {
-            enable = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "Enable CrowdStrike Falcon sensor (package TBD from IT)";
-            };
-
-            cid = lib.mkOption {
-              type = lib.types.str;
-              default = "";
-              description = "CrowdStrike Customer ID";
-            };
-
-            serverUrl = lib.mkOption {
-              type = lib.types.str;
-              default = "";
-              description = "CrowdStrike server URL";
-            };
-          };
-
           welcomeMessage = {
             enable = lib.mkOption {
               type = lib.types.bool;
@@ -253,18 +235,16 @@
             });
           }
 
-          # CrowdStrike stub -- warns when enabled but no package available yet
-          (lib.mkIf cfg.crowdStrike.enable {
-            warnings = [
-              ''
-                enterprise.crowdStrike.enable is true, but no CrowdStrike Falcon
-                package is available yet. Contact IT for the CID and server URL,
-                then add the Falcon sensor package to this module.
-                  CID: ${if cfg.crowdStrike.cid != "" then cfg.crowdStrike.cid else "(not set)"}
-                  Server: ${if cfg.crowdStrike.serverUrl != "" then cfg.crowdStrike.serverUrl else "(not set)"}
-              ''
-            ];
-          })
+          # CrowdStrike Falcon sensor enterprise defaults (opt-in per policy).
+          # The actual module is in modules/programs/crowdstrike-falcon/.
+          # Teams and hosts set services.falcon-sensor.package + .cid to activate.
+          {
+            services.falcon-sensor = {
+              enable = lib.mkDefault false;
+              backend = lib.mkDefault "bpf";
+              tags = lib.mkDefault [ "Environment/Enterprise" ];
+            };
+          }
 
           # Ensure default user has .zshrc (prevents zsh-newuser-install wizard)
           # /etc/skel only applies to useradd; this covers the pre-created default user.

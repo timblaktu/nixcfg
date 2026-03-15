@@ -31,6 +31,13 @@
       # Provides: wsl-enterprise + binfmt + Podman + Claude Code enterprise + setup-username
       # Usage: Import in tiger team host configs
       wsl-tiger-team = self.modules.nixos.wsl-tiger-team;
+
+      # CrowdStrike Falcon sensor (dendritic pattern)
+      # Platform: NixOS (any, including WSL2)
+      # Provides: Falcon sensor systemd service + FHS-wrapped package
+      # Usage: Import in NixOS host configs, set services.falcon-sensor.{enable,package,cid}
+      # Note: On WSL2 kernel, sensor enters Reduced Functionality Mode (RFM)
+      crowdstrike-falcon = self.modules.nixos.crowdstrike-falcon;
     };
 
     # Home Manager modules for user-level configuration
