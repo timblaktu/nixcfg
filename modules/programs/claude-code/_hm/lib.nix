@@ -57,7 +57,7 @@ in
           export ANTHROPIC_BASE_URL="${baseUrl}"'')
 
         # ANTHROPIC_API_KEY - retrieve via rbw if bearer auth + bitwarden configured
-        # For third-party proxies (Code-Companion), use API_KEY for x-api-key header
+        # For third-party proxies, use API_KEY for x-api-key header
         # Uses shared rbw library with time-based sync (default 5 min staleness)
         (lib.optionalString (authMethod == "bearer" && bearerToken != null && bearerToken.bitwarden or null != null) (
           let

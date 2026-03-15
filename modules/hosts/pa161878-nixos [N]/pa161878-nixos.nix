@@ -116,8 +116,9 @@ in
       };
     };
 
-    # GitLab authentication (personal credentials -- host/cli/userName from tiger-team)
+    # GitLab authentication (host + personal credentials)
     gitAuth.gitlab = {
+      host = "git.panasonic.aero";
       mode = "bitwarden";
       bitwarden = {
         item = "GitLab git.panasonic.aero";
@@ -130,20 +131,77 @@ in
     awscli = {
       enable = true;
       azureAuth.enable = true;
-      # Bitwarden defaults match: item="Azure AD", fields="Azure Tenant ID"/"Azure App ID URI"
-      # defaultRegion, outputFormat, defaultDurationHours use sensible defaults
-      # Set azureAuth.defaultRoleArn when you know your IAM role ARN
     };
 
-    # Claude Code: add personal accounts and override team default to personal.
-    # Tiger-team sets defaultAccount="work"; mkForce (50) overrides bare value (100).
-    # accounts is attrsOf submodule, so these merge with tiger-team's work account.
-    programs.claude-code.defaultAccount = lib.mkForce "max";
-    programs.claude-code.accounts = inputs.self.lib.claudeCode.personalAccounts;
+    # Git: use work email for work GitLab repos
+    programs.git.includes = [
+      {
+        condition = "hasconfig:remote.*.url:https://git.panasonic.aero/**";
+        contents.user.email = "timothy.black@panasonic.aero";
+      }
+    ];
 
-    # OpenCode: same pattern — personal accounts + personal default.
+    # === Claude Code: personal accounts + deployment-specific work config ===
+    # Tiger-team provides structural work account template; we fill in
+    # deployment values (baseUrl, bitwarden, modelMappings) and add personal accounts.
+    programs.claude-code.defaultAccount = lib.mkForce "max";
+    programs.claude-code.accounts = inputs.self.lib.claudeCode.personalAccounts // {
+      work = (inputs.self.lib.claudeCode.workAccount.work or {}) // {
+        api = {
+          baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+          authMethod = "bedrock";
+          modelMappings = {
+            haiku = "devstral";
+            sonnet = "qwen-a3b";
+            opus = "claude-sonnet-4-5-20250929";
+          };
+        };
+        secrets.bearerToken.bitwarden = {
+          item = "PAC Code Companion v2";
+          field = "Bedrock API Key";
+        };
+      };
+    };
+
+    # === OpenCode: personal accounts + deployment-specific work config ===
     programs.opencode.defaultAccount = lib.mkForce "max";
-    programs.opencode.accounts = inputs.self.lib.openCode.personalAccounts;
+    programs.opencode.accounts = inputs.self.lib.openCode.personalAccounts // {
+      work = (inputs.self.lib.openCode.workAccount.work or {}) // {
+        model = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+        secrets.envTokens = {
+          BEDROCK_API_TOKEN = {
+            bitwarden = { item = "PAC Code Companion v2"; field = "Bedrock API Key"; };
+          };
+          AI_PROXY_API_KEY = {
+            bitwarden = { item = "PAC Code Companion v2"; field = "API Key"; };
+          };
+        };
+      };
+    };
+    programs.opencode.provider = {
+      bedrock = {
+        options.baseURL = "https://ai-platform-bedrockapis.d-dp.nextcloud.aero/api/v1";
+        models = {
+          "us.anthropic.claude-sonnet-4-5-20250929-v1:0" = { name = "Claude Sonnet 4.5"; };
+          "us.anthropic.claude-opus-4-5-20251101-v1:0" = { name = "Claude Opus 4.5"; };
+        };
+      };
+      ai-proxy = {
+        options.baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
+        models = {
+          "qwen-a3b" = {
+            name = "Qwen A3B";
+            modalities = {
+              input = [ "text" "image" ];
+              output = [ "text" ];
+            };
+          };
+          "devstral" = { name = "Devstral"; };
+          "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
+          "glm-47" = { name = "GLM 47"; };
+        };
+      };
+    };
   };
 
   # === Configuration Registration ===

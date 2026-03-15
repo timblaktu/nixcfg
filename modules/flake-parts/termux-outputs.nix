@@ -59,9 +59,9 @@
           };
           work = {
             enable = true;
-            displayName = "Work Code-Companion";
+            displayName = "Work";
             api = {
-              baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+              # baseUrl: set per-deployment (e.g., enterprise AI proxy endpoint)
               authMethod = "bearer";
               disableApiKey = true;
               modelMappings = {

@@ -242,7 +242,7 @@
                               item = mkOption {
                                 type = types.str;
                                 description = "Bitwarden item name containing the token";
-                                example = "Code-Companion";
+                                example = "AI-Proxy-Token";
                               };
                               field = mkOption {
                                 type = types.str;

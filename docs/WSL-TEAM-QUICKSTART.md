@@ -73,7 +73,7 @@ Companion enterprise proxy.
 
 **Network tools**: curl, httpie, nmap, tcpdump, iperf3, dig, traceroute.
 
-**GitLab integration**: `glab` CLI pre-configured for `git.panasonic.aero`.
+**GitLab integration**: `glab` CLI pre-configured for your team's GitLab instance.
 
 **Passwordless sudo** for the dev workflow (you are in the `wheel` group).
 

@@ -260,20 +260,21 @@ in
         };
       };
 
-      # Work account (Bedrock + Code-Companion) - only for work machines with VPN access
-      # Two tokens: Bedrock API Token for Anthropic models, API Key for non-Anthropic models
+      # Work account template - structural preset for enterprise AI proxy access.
+      # Deployment-specific values (bitwarden items, model names) are set in the
+      # team or host layer that consumes this preset.
       workAccount = {
         work = {
           enable = true;
           displayName = "OpenCode Work";
           provider = "custom";
-          model = "pac-bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+          # model: set by team/host layer (e.g., "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0")
           secrets.envTokens = {
             BEDROCK_API_TOKEN = {
-              bitwarden = { item = "PAC Code Companion v2"; field = "Bedrock API Key"; };
+              # bitwarden: set by team/host layer
             };
-            CODECOMPANION_API_KEY = {
-              bitwarden = { item = "PAC Code Companion v2"; field = "API Key"; };
+            AI_PROXY_API_KEY = {
+              # bitwarden: set by team/host layer
             };
           };
           extraEnvVars = {
@@ -282,40 +283,26 @@ in
         };
       };
 
-      # Work provider configs - two providers for Bedrock (Anthropic models) and
-      # Code-Companion (non-Anthropic models). Merge into baseConfig.provider for work machines.
+      # Work provider templates - structural presets for enterprise AI proxy providers.
+      # baseURL and model lists are deployment-specific; set by team/host layer.
       workProvider = {
-        pac-bedrock = {
+        bedrock = {
           npm = "@ai-sdk/openai-compatible";
-          name = "PAC Bedrock";
+          name = "Bedrock";
           options = {
-            baseURL = "https://ai-platform-bedrockapis.d-dp.nextcloud.aero/api/v1";
+            # baseURL: set by team/host layer
             apiKey = "{env:BEDROCK_API_TOKEN}";
           };
-          models = {
-            "us.anthropic.claude-sonnet-4-5-20250929-v1:0" = { name = "Claude Sonnet 4.5"; };
-            "us.anthropic.claude-opus-4-5-20251101-v1:0" = { name = "Claude Opus 4.5"; };
-          };
+          # models: set by team/host layer
         };
-        pac-codecompanion = {
+        ai-proxy = {
           npm = "@ai-sdk/openai-compatible";
-          name = "PAC Code Companion";
+          name = "AI Proxy";
           options = {
-            baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
-            apiKey = "{env:CODECOMPANION_API_KEY}";
+            # baseURL: set by team/host layer
+            apiKey = "{env:AI_PROXY_API_KEY}";
           };
-          models = {
-            "qwen-a3b" = {
-              name = "Qwen A3B";
-              modalities = {
-                input = [ "text" "image" ];
-                output = [ "text" ];
-              };
-            };
-            "devstral" = { name = "Devstral"; };
-            "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
-            "glm-47" = { name = "GLM 47"; };
-          };
+          # models: set by team/host layer
         };
       };
 
@@ -397,25 +384,21 @@ in
         };
       };
 
-      # Work account (Bedrock proxy via Code-Companion) - only for work machines with VPN access
-      # Uses ANTHROPIC_AUTH_TOKEN for Bedrock bearer auth, ANTHROPIC_API_KEY cleared
+      # Work account template - structural preset for enterprise AI proxy access.
+      # Deployment-specific values (baseUrl, bitwarden item, modelMappings) are
+      # set by the team or host layer that consumes this preset.
       workAccount = {
         work = {
           enable = true;
           displayName = "Work Bedrock";
           model = "sonnet";
           api = {
-            baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+            # baseUrl: set by team/host layer
             authMethod = "bedrock";
-            modelMappings = {
-              haiku = "devstral";
-              sonnet = "qwen-a3b";
-              opus = "claude-sonnet-4-5-20250929";
-            };
+            # modelMappings: set by team/host layer
           };
           secrets.bearerToken.bitwarden = {
-            item = "PAC Code Companion v2";
-            field = "Bedrock API Key";
+            # item + field: set by team/host layer
           };
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";

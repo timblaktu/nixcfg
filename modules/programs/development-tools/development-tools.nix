@@ -343,7 +343,7 @@
                     echo "Launch Claude Code with one of these wrappers:"
                     echo "  - claudemax   (Anthropic Max account)"
                     echo "  - claudepro   (Anthropic Pro account)"
-                    echo "  - claudework  (PAC Code-Companion)"
+                    echo "  - claudework  (Work account)"
                     exit 1
                   fi
 

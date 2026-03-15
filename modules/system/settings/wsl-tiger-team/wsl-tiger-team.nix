@@ -195,9 +195,12 @@
       developmentTools.enable = lib.mkDefault true;
 
       # === Claude Code Configuration ===
-      # Team-shared config: work account (Code Companion proxy) + enterprise defaults.
+      # Team-shared structural config: work account template + enterprise defaults.
       # Hosts ADD personal accounts (max, pro) via module system merging --
       # accounts is attrsOf submodule, so tiger-team's work + host's max/pro coexist.
+      #
+      # Deployment-specific values (baseUrl, bitwarden items, modelMappings) must be
+      # set by the host config or a private flake input overlay.
       programs.claude-code = inputs.self.lib.claudeCode.baseConfig // {
         defaultAccount = "work";
         accounts = inputs.self.lib.claudeCode.workAccount;
@@ -207,8 +210,11 @@
       };
 
       # === OpenCode Configuration ===
-      # Team-shared config: work account (Code Companion proxy) + base settings.
+      # Team-shared structural config: work account template + base settings.
       # Same merging pattern as claude-code for host personal accounts.
+      #
+      # Deployment-specific values (baseURL, bitwarden items, models) must be
+      # set by the host config or a private flake input overlay.
       programs.opencode = inputs.self.lib.openCode.baseConfig // {
         defaultAccount = "work";
         accounts = inputs.self.lib.openCode.workAccount;
@@ -219,11 +225,11 @@
       };
 
       # === GitLab Authentication ===
-      # Team-standard GitLab instance config. Personal credential details
-      # (bitwarden item/field, mode, apiUser) are left to hosts.
+      # Team GitLab config structure. Host must set gitAuth.gitlab.host to
+      # their GitLab instance. Personal credential details (bitwarden item/field,
+      # mode, apiUser) are also left to hosts.
       gitAuth.gitlab = {
         enable = lib.mkDefault true;
-        host = lib.mkDefault "git.panasonic.aero";
         cli.enable = lib.mkDefault true;
         # Don't pre-fill username in git credential config.
         # glab auth git-credential rejects username mismatches (compares against
