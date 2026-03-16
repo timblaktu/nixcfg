@@ -24,6 +24,15 @@
 #   nix build '.#nixosConfigurations.NAME.config.system.build.images.proxmox'
 # Import to Proxmox:
 #   qmrestore vzdump-qemu-*.vma.zst VMID --storage POOL
+#
+# KNOWN ISSUE: nixpkgs proxmox-image.nix emits a spurious deprecation warning:
+#   "Obsolete option `proxmox.qemuConf.diskSize' is used."
+# This is an upstream bug — proxmox-image.nix line 309 iterates ALL qemuConf
+# attrs (via cfg.qemuConf // cfg.qemuExtraConf) to build qemu-server.conf,
+# which touches the diskSize alias created by mkRenamedOptionModuleWith.
+# Our code never sets proxmox.qemuConf.diskSize; the warning is cosmetic.
+# Upstream fix: removeAttrs cfg.qemuConf ["diskSize"] // cfg.qemuExtraConf
+# TODO: File nixpkgs PR to fix this
 { ... }:
 {
   flake.modules.nixos.proxmox-image-config = { lib, ... }: {
