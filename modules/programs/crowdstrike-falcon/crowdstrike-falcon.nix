@@ -120,7 +120,7 @@
           ++ lib.optional (provisioningTokenValue != "") "--provisioning-token=${provisioningTokenValue}"
           ++ lib.optional (cfg.tags != [ ]) "--tags=${lib.concatStringsSep "," cfg.tags}"
           ++ lib.optional (cfg.backend != "auto") "--backend=${cfg.backend}"
-          ++ lib.optional (cfg.proxy.enable) "--apd=false --aph=${cfg.proxy.host} --app=${toString cfg.proxy.port}"
+          ++ lib.optional cfg.proxy.enable "--apd=false --aph=${cfg.proxy.host} --app=${toString cfg.proxy.port}"
           ++ lib.optional (cfg.trace != "none") "--trace=${cfg.trace}"
         );
 

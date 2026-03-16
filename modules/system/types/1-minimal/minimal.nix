@@ -145,7 +145,7 @@
             type = "github";
             owner = "NixOS";
             repo = "nixpkgs";
-            rev = inputs.nixpkgs.rev;
+            inherit (inputs.nixpkgs) rev;
           };
 
           # System state version - should be overridden by host

@@ -19,7 +19,7 @@ let
   };
 
   # Common user settings
-  username = config.meta.username;
+  inherit (config.meta) username;
   homeDirectory = "/home/${username}";
 in
 {
@@ -146,7 +146,7 @@ in
     # deployment values (baseUrl, bitwarden, modelMappings) and add personal accounts.
     programs.claude-code.defaultAccount = lib.mkForce "max";
     programs.claude-code.accounts = inputs.self.lib.claudeCode.personalAccounts // {
-      work = (inputs.self.lib.claudeCode.workAccount.work or {}) // {
+      work = (inputs.self.lib.claudeCode.workAccount.work or { }) // {
         api = {
           baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
           authMethod = "bedrock";
@@ -166,7 +166,7 @@ in
     # === OpenCode: personal accounts + deployment-specific work config ===
     programs.opencode.defaultAccount = lib.mkForce "max";
     programs.opencode.accounts = inputs.self.lib.openCode.personalAccounts // {
-      work = (inputs.self.lib.openCode.workAccount.work or {}) // {
+      work = (inputs.self.lib.openCode.workAccount.work or { }) // {
         model = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0";
         secrets.envTokens = {
           BEDROCK_API_TOKEN = {

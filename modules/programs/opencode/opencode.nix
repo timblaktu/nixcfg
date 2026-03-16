@@ -599,7 +599,7 @@
                 envTokenFetches = concatStringsSep "\n" (mapAttrsToList
                   (envVarName: tokenCfg:
                     rbwLib.mkRbwExportWithDiagnostics {
-                      item = tokenCfg.bitwarden.item;
+                      inherit (tokenCfg.bitwarden) item;
                       field = let f = tokenCfg.bitwarden.field; in if f == "" then null else f;
                       varName = envVarName;
                     }

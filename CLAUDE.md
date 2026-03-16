@@ -540,9 +540,9 @@ DHCP Pool: 10.0.0.100-200
 ### 🚧 **USB/IP + Jetson Orin Nano Development** (IN PROGRESS)
 
 **Branch**: `feat/usb-jetson-pa161878`
-**Status**: USB infrastructure complete, upstream contribution research done (2026-03-14)
+**Status**: USB infrastructure complete, CI/CD + nixos-dev-team config added (2026-03-14)
 
-**What's implemented locally** (13 commits on branch):
+**What's implemented locally** (15 commits on branch):
 - `wsl-settings.usbip` options in `modules/system/settings/wsl/wsl.nix` (enable, autoAttach, snippetIpAddress)
 - Activation script checking for `usbipd.exe` on Windows side (with corrected PATH)
 - Jetson Recovery Mode (APX) udev rule: VID:0955 PID:7523 (active)
@@ -552,6 +552,10 @@ DHCP Pool: 10.0.0.100-200
 - WSL environment capture for systemd-spawned shells
 - Windows drive mount recovery service
 - `restart-usb` + `restart-usb-v4.ps1` recovery scripts
+- GitHub Actions CI/CD pipeline (ci.yml + release.yml) with versioned releases
+- Pure NixOS `nixos-dev-team` host module (non-WSL, system-cli + binfmt + podman)
+- Tarball builder eval tests for all 3 WSL configs
+- VM test `vm-dev-team-stack` for the non-WSL dev-team config
 
 **Windows-side confirmed working** (2026-03-14):
 - usbipd-win v5.3.0 installed, policy configured for non-admin attach

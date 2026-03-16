@@ -32,13 +32,14 @@
         # - Darwin: Docker Desktop provides the 'docker' command and daemon
         #   (via a hidden Linux VM). Aliasing docker→podman would break it
         #   since podman has no daemon on macOS without Podman Desktop.
-        defaultAliases = if pkgs.stdenv.isDarwin then {
-          # No docker→podman alias on Darwin (Docker Desktop is the engine)
-        } else {
-          docker = "podman";
-          d = "podman";
-          dc = "podman-compose";
-        };
+        defaultAliases =
+          if pkgs.stdenv.isDarwin then {
+            # No docker→podman alias on Darwin (Docker Desktop is the engine)
+          } else {
+            docker = "podman";
+            d = "podman";
+            dc = "podman-compose";
+          };
       in
       {
         options.programs.podman-tools = {

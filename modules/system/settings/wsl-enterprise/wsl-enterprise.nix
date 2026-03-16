@@ -38,9 +38,9 @@
         # Terminal reads it when discovering WSL distros to set profile appearance.
         terminalProfileJson = builtins.toJSON (
           { name = cfg.terminal.profileName; }
-          // lib.optionalAttrs (cfg.terminal.icon != null) { icon = cfg.terminal.icon; }
-          // lib.optionalAttrs (cfg.terminal.colorScheme != null) { colorScheme = cfg.terminal.colorScheme; }
-          // lib.optionalAttrs (cfg.terminal.font != { }) { font = cfg.terminal.font; }
+          // lib.optionalAttrs (cfg.terminal.icon != null) { inherit (cfg.terminal) icon; }
+          // lib.optionalAttrs (cfg.terminal.colorScheme != null) { inherit (cfg.terminal) colorScheme; }
+          // lib.optionalAttrs (cfg.terminal.font != { }) { inherit (cfg.terminal) font; }
         );
 
         # WORKAROUND: NixOS-WSL build-tarball.nix hardcodes wsl-distribution.conf

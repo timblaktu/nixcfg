@@ -9,7 +9,7 @@
 { config, lib, inputs, ... }:
 let
   # Common user settings
-  username = config.meta.username;
+  inherit (config.meta) username;
   homeDirectory = "/home/${username}";
 in
 {

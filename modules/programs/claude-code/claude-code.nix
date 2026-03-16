@@ -406,8 +406,6 @@
               }
             ));
 
-            settingsTemplate = mkSettingsTemplate { model = cfg.defaultModel; };
-
             mcpTemplate = pkgs.writeText "claude-mcp.json" (builtins.toJSON {
               mcpServers = claudeCodeMcpServers;
             });
@@ -470,10 +468,8 @@
 
           in
           mkIf cfg.enable {
-            home.packages = with pkgs; [
-              # Only include raw claude-code when no defaultAccount wrapper replaces it
-            ] ++ optional (cfg.defaultAccount == null) pkgs.claude-code
-            ++ (with pkgs; [
+            home.packages = with pkgs; optional (cfg.defaultAccount == null) pkgs.claude-code
+              ++ (with pkgs; [
               nodejs_22
               git
               ripgrep
@@ -499,7 +495,7 @@
             ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
               libnotify
             ] ++ wrapperScripts
-            ++ defaultWrapper;
+              ++ defaultWrapper;
 
             home.file = mkMerge [
               (mkMerge (mapAttrsToList

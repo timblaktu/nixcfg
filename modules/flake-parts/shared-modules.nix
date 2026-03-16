@@ -26,19 +26,19 @@
       # --- System Type Layers (hierarchical: minimal -> default -> cli -> desktop) ---
 
       # Base system layer: Nix settings, locale, timezone, core packages
-      system-minimal = self.modules.nixos.system-minimal;
+      inherit (self.modules.nixos) system-minimal;
 
       # Default system layer: Users, networking, fonts, SSH client
       # Imports: system-minimal
-      system-default = self.modules.nixos.system-default;
+      inherit (self.modules.nixos) system-default;
 
       # CLI system layer: Dev tools, shell config, tmux, neovim system-level
       # Imports: system-default
-      system-cli = self.modules.nixos.system-cli;
+      inherit (self.modules.nixos) system-cli;
 
       # Desktop system layer: GUI, display manager, desktop environment
       # Imports: system-cli
-      system-desktop = self.modules.nixos.system-desktop;
+      inherit (self.modules.nixos) system-desktop;
 
       # --- WSL System Settings ---
 
@@ -49,31 +49,31 @@
 
       # Enterprise WSL base (system-cli + WSL + CrowdStrike + enterprise defaults)
       # Options: enterprise.{welcomeMessage, terminal.*} + wsl-settings.*
-      wsl-enterprise = self.modules.nixos.wsl-enterprise;
+      inherit (self.modules.nixos) wsl-enterprise;
 
       # Dev team WSL layer (enterprise + binfmt + Podman + Claude Code + USBIP)
-      wsl-dev-team = self.modules.nixos.wsl-dev-team;
+      inherit (self.modules.nixos) wsl-dev-team;
 
       # --- Feature Modules (NixOS) ---
 
       # CrowdStrike Falcon sensor (systemd service + FHS-wrapped .deb package)
       # Note: On WSL2 kernel, sensor enters Reduced Functionality Mode (RFM)
-      crowdstrike-falcon = self.modules.nixos.crowdstrike-falcon;
+      inherit (self.modules.nixos) crowdstrike-falcon;
 
       # Secrets management (sops-nix integration, Bitwarden helpers)
-      secrets-management = self.modules.nixos.secrets-management;
+      inherit (self.modules.nixos) secrets-management;
 
       # Shell configuration (system-level zsh/bash setup)
-      shell = self.modules.nixos.shell;
+      inherit (self.modules.nixos) shell;
 
       # Git configuration (system-level gitconfig)
-      git = self.modules.nixos.git;
+      inherit (self.modules.nixos) git;
 
       # Tmux configuration (system-level)
-      tmux = self.modules.nixos.tmux;
+      inherit (self.modules.nixos) tmux;
 
       # Neovim/Nixvim configuration (system-level)
-      neovim = self.modules.nixos.neovim;
+      inherit (self.modules.nixos) neovim;
     };
 
     # =========================================================================
@@ -84,19 +84,19 @@
       # --- System Type Layers (HM counterparts) ---
 
       # Minimal HM layer: username, homeDirectory, stateVersion
-      home-minimal = self.modules.homeManager.home-minimal;
+      inherit (self.modules.homeManager) home-minimal;
 
       # Default HM layer: XDG, fonts, basic programs
       # Imports: home-minimal
-      home-default = self.modules.homeManager.home-default;
+      inherit (self.modules.homeManager) home-default;
 
       # CLI HM layer: Full CLI tooling bundle
       # Imports: home-default
-      home-cli = self.modules.homeManager.home-cli;
+      inherit (self.modules.homeManager) home-cli;
 
       # Desktop HM layer: GUI applications
       # Imports: home-cli
-      home-desktop = self.modules.homeManager.home-desktop;
+      inherit (self.modules.homeManager) home-desktop;
 
       # --- WSL / Enterprise / Team Bundles ---
 
@@ -105,78 +105,78 @@
       wsl-home-base = self.modules.homeManager.wsl-home;
 
       # Enterprise HM bundle (shell, git, tmux, neovim, yazi, files, onedrive, ...)
-      home-enterprise = self.modules.homeManager.home-enterprise;
+      inherit (self.modules.homeManager) home-enterprise;
 
       # Dev team HM bundle (enterprise + claude-code, opencode, gitlab-auth, podman, ...)
-      home-dev-team = self.modules.homeManager.home-dev-team;
+      inherit (self.modules.homeManager) home-dev-team;
 
       # --- Feature Modules (Home Manager) ---
 
       # Shell (zsh/bash config, starship prompt, direnv, fzf)
-      shell = self.modules.homeManager.shell;
+      inherit (self.modules.homeManager) shell;
 
       # Git (user-level gitconfig, aliases, delta pager)
-      git = self.modules.homeManager.git;
+      inherit (self.modules.homeManager) git;
 
       # Tmux (config, plugins, auto-reload)
-      tmux = self.modules.homeManager.tmux;
+      inherit (self.modules.homeManager) tmux;
 
       # Neovim/Nixvim (plugins, LSP, keybindings)
-      neovim = self.modules.homeManager.neovim;
+      inherit (self.modules.homeManager) neovim;
 
       # Terminal (font detection, TERM config)
-      terminal = self.modules.homeManager.terminal;
+      inherit (self.modules.homeManager) terminal;
 
       # Shell utilities (custom shell functions and libraries)
-      shell-utils = self.modules.homeManager.shell-utils;
+      inherit (self.modules.homeManager) shell-utils;
 
       # System tools (bootstrap, admin utilities)
-      system-tools = self.modules.homeManager.system-tools;
+      inherit (self.modules.homeManager) system-tools;
 
       # Yazi (terminal file manager)
-      yazi = self.modules.homeManager.yazi;
+      inherit (self.modules.homeManager) yazi;
 
       # OneDrive utilities for WSL
-      onedrive = self.modules.homeManager.onedrive;
+      inherit (self.modules.homeManager) onedrive;
 
       # Files management (scripts, completions, autoWriter integration)
-      files = self.modules.homeManager.files;
+      inherit (self.modules.homeManager) files;
 
       # Git auth helpers (credential refresh utilities)
-      git-auth-helpers = self.modules.homeManager.git-auth-helpers;
+      inherit (self.modules.homeManager) git-auth-helpers;
 
       # Claude Code (multi-account AI coding assistant)
-      claude-code = self.modules.homeManager.claude-code;
+      inherit (self.modules.homeManager) claude-code;
 
       # OpenCode (multi-account AI coding assistant)
-      opencode = self.modules.homeManager.opencode;
+      inherit (self.modules.homeManager) opencode;
 
       # GitLab authentication (CLI + credential helpers + Bitwarden/SOPS)
-      gitlab-auth = self.modules.homeManager.gitlab-auth;
+      inherit (self.modules.homeManager) gitlab-auth;
 
       # GitHub authentication (CLI + credential helpers + Bitwarden/SOPS)
-      github-auth = self.modules.homeManager.github-auth;
+      inherit (self.modules.homeManager) github-auth;
 
       # Podman container tools (podman-tui, compose, docker aliases)
-      podman = self.modules.homeManager.podman;
+      inherit (self.modules.homeManager) podman;
 
       # Development tools (Python, Rust, Node, Go toolchains)
-      development-tools = self.modules.homeManager.development-tools;
+      inherit (self.modules.homeManager) development-tools;
 
       # Windows Terminal settings management for WSL
-      windows-terminal = self.modules.homeManager.windows-terminal;
+      inherit (self.modules.homeManager) windows-terminal;
 
       # AWS CLI v2 with Azure AD SSO support
-      awscli = self.modules.homeManager.awscli;
+      inherit (self.modules.homeManager) awscli;
 
       # Pulumi infrastructure-as-code CLI
-      pulumi = self.modules.homeManager.pulumi;
+      inherit (self.modules.homeManager) pulumi;
 
       # ESP-IDF embedded development environment
-      esp-idf = self.modules.homeManager.esp-idf;
+      inherit (self.modules.homeManager) esp-idf;
 
       # Secrets management (Bitwarden CLI, rbw helpers)
-      secrets-management = self.modules.homeManager.secrets-management;
+      inherit (self.modules.homeManager) secrets-management;
     };
 
     # =========================================================================
@@ -185,17 +185,17 @@
     darwinModules = {
 
       # System type layers
-      system-minimal = self.modules.darwin.system-minimal;
-      system-default = self.modules.darwin.system-default;
-      system-cli = self.modules.darwin.system-cli;
-      system-desktop = self.modules.darwin.system-desktop;
+      inherit (self.modules.darwin) system-minimal;
+      inherit (self.modules.darwin) system-default;
+      inherit (self.modules.darwin) system-cli;
+      inherit (self.modules.darwin) system-desktop;
 
       # Feature modules with Darwin support
-      shell = self.modules.darwin.shell;
-      git = self.modules.darwin.git;
-      tmux = self.modules.darwin.tmux;
-      neovim = self.modules.darwin.neovim;
-      secrets-management = self.modules.darwin.secrets-management;
+      inherit (self.modules.darwin) shell;
+      inherit (self.modules.darwin) git;
+      inherit (self.modules.darwin) tmux;
+      inherit (self.modules.darwin) neovim;
+      inherit (self.modules.darwin) secrets-management;
     };
   };
 }

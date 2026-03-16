@@ -72,7 +72,7 @@
           ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
 
           AZURE_TENANT_ID="$(${rbwLib.mkRbwGetCommand {
-            item = cfg.azureAuth.bitwarden.item;
+            inherit (cfg.azureAuth.bitwarden) item;
             field = cfg.azureAuth.bitwarden.tenantIdField;
           }} 2>/dev/null)" || {
             echo "Error: Failed to retrieve Azure Tenant ID from Bitwarden" >&2
@@ -84,7 +84,7 @@
           export AZURE_TENANT_ID
 
           AZURE_APP_ID_URI="$(${rbwLib.mkRbwGetCommand {
-            item = cfg.azureAuth.bitwarden.item;
+            inherit (cfg.azureAuth.bitwarden) item;
             field = cfg.azureAuth.bitwarden.appIdUriField;
           }} 2>/dev/null)" || {
             echo "Error: Failed to retrieve Azure App ID URI from Bitwarden" >&2

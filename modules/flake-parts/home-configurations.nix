@@ -2,7 +2,7 @@
 # Standalone-only home-manager configurations
 { inputs, self, config, withSystem, ... }:
 let
-  username = config.meta.username;
+  inherit (config.meta) username;
 in
 {
   flake = {
@@ -92,7 +92,7 @@ in
             {
               nixpkgs.config.allowUnfree = true;
               home = {
-                username = config.meta.username;
+                inherit (config.meta) username;
                 homeDirectory = "/home/${config.meta.username}";
                 stateVersion = "24.11";
               };

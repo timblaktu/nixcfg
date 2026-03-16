@@ -2,7 +2,7 @@
 # Comprehensive test suite for NixOS configurations
 { inputs, self, config, ... }:
 let
-  username = config.meta.username;
+  inherit (config.meta) username;
 in
 {
   perSystem = { config, self', inputs', pkgs, system, lib, ... }:

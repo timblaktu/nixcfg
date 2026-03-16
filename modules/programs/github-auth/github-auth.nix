@@ -180,13 +180,15 @@
         # ===== GitHub CLI wrappers =====
 
         # Per-org credential helper scripts (for git credential, independent of gh wrapper)
-        orgCredentialHelpers = mapAttrs (orgName: orgCfg:
-          let bwCfg = resolveBwConfig orgCfg.bitwarden;
-          in pkgs.writeShellScript "gh-credential-${orgName}" ''
-            ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
-            export GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwCfg) item field; }} 2>/dev/null)"
-            exec ${pkgs.gh}/bin/gh auth git-credential "$@"
-          '') cfg.orgs;
+        orgCredentialHelpers = mapAttrs
+          (orgName: orgCfg:
+            let bwCfg = resolveBwConfig orgCfg.bitwarden;
+            in pkgs.writeShellScript "gh-credential-${orgName}" ''
+              ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
+              export GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwCfg) item field; }} 2>/dev/null)"
+              exec ${pkgs.gh}/bin/gh auth git-credential "$@"
+            '')
+          cfg.orgs;
 
         # GitHub CLI wrapper with Bitwarden token injection, org detection, and subcommand overrides
         gh-with-auth =
@@ -207,7 +209,8 @@
                           _GH_ORG_MATCH=1
                           ;;'')
                     cfg.orgs);
-                in ''
+                in
+                ''
                   # Org detection: check git remote URL against configured orgs
                   _GH_ORG_MATCH=""
                   if _GH_REMOTE=$(${pkgs.git}/bin/git remote get-url origin 2>/dev/null); then
@@ -416,11 +419,13 @@
           programs.git.settings = mkIf cfg.git.enableCredentialHelper {
             credential = mkMerge [
               # Per-org credential helpers (more specific URL prefix wins in git)
-              (mapAttrs' (orgName: _orgCfg:
-                nameValuePair "https://github.com/${orgName}" {
-                  helper = mkForce "!${orgCredentialHelpers.${orgName}}";
-                }
-              ) cfg.orgs)
+              (mapAttrs'
+                (orgName: _orgCfg:
+                  nameValuePair "https://github.com/${orgName}" {
+                    helper = mkForce "!${orgCredentialHelpers.${orgName}}";
+                  }
+                )
+                cfg.orgs)
               # Default credential helpers
               {
                 "https://github.com" = mkMerge [
