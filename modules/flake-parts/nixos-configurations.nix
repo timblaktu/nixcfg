@@ -109,6 +109,36 @@
         }
       );
 
+      # nixos-dev-team-ec2: EC2 AMI for dev team (x86_64)
+      # module defined in modules/hosts/nixos-dev-team-ec2 [N]/
+      nixos-dev-team-ec2 = withSystem "x86_64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nixos-dev-team-ec2
+          ];
+          specialArgs = {
+            inherit inputs;
+          };
+        }
+      );
+
+      # nixos-dev-team-graviton: EC2 AMI for dev team (aarch64 Graviton)
+      # module defined in modules/hosts/nixos-dev-team-graviton [N]/
+      nixos-dev-team-graviton = withSystem "aarch64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nixos-dev-team-graviton
+          ];
+          specialArgs = {
+            inherit inputs;
+          };
+        }
+      );
+
     };
   };
 }

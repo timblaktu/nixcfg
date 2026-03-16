@@ -63,8 +63,12 @@
       # --- Image Configuration Modules (for image.modules framework) ---
 
       # Proxmox VE image defaults (UEFI, cloud-init, guest agent)
-      # Use as: image.modules.proxmox = inputs.nixcfg.nixosModules.proxmox-image-config;
+      # Use as: image.modules.proxmox = { imports = [ inputs.nixcfg.nixosModules.proxmox-image-config ]; };
       inherit (self.modules.nixos) proxmox-image-config;
+
+      # Amazon EC2 AMI defaults (raw format for coldsnap, 6 GiB disk)
+      # Use as: image.modules.amazon = { imports = [ inputs.nixcfg.nixosModules.amazon-image-config ]; };
+      inherit (self.modules.nixos) amazon-image-config;
 
       # --- Feature Modules (NixOS) ---
 

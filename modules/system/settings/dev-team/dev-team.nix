@@ -49,10 +49,18 @@
       system.stateVersion = lib.mkDefault "24.11";
 
       # === Cross-Architecture Build Support (binfmt + QEMU) ===
-      boot.binfmt.emulatedSystems = lib.mkDefault [ "aarch64-linux" ];
+      # Only emulate architectures that aren't the native system.
+      # On x86_64: emulate aarch64 (cross-build Graviton images).
+      # On aarch64: no emulation needed (native Graviton builds).
+      boot.binfmt.emulatedSystems = lib.mkDefault
+        (lib.optionals (pkgs.stdenv.hostPlatform.system != "aarch64-linux") [ "aarch64-linux" ]);
       boot.binfmt.preferStaticEmulators = lib.mkDefault true;
-      boot.binfmt.registrations.aarch64-linux.matchCredentials = lib.mkDefault true;
-      nix.settings.extra-platforms = lib.mkDefault [ "aarch64-linux" ];
+      # matchCredentials (C flag) enables credential pass-through for binfmt
+      # Only set when aarch64 emulation is active (not on native aarch64 hosts)
+      boot.binfmt.registrations.aarch64-linux.matchCredentials =
+        lib.mkIf (pkgs.stdenv.hostPlatform.system != "aarch64-linux") (lib.mkDefault true);
+      nix.settings.extra-platforms = lib.mkDefault
+        (lib.optionals (pkgs.stdenv.hostPlatform.system != "aarch64-linux") [ "aarch64-linux" ]);
 
       # === Feature Flags ===
       # Enable Podman container runtime

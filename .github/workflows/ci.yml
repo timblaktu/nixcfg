@@ -118,6 +118,8 @@ jobs:
           - eval-mbp
           - eval-nixos-wsl-dev-team
           - eval-nixos-dev-team
+          - eval-nixos-dev-team-ec2
+          - eval-nixos-dev-team-graviton
           # HM configs
           - eval-hm-thinky-nixos
           - eval-hm-pa161878-nixos
@@ -164,8 +166,10 @@ jobs:
           - build-tarball-thinky-dryrun
           # Non-WSL build eval
           - build-nixos-dev-team-dryrun
-          # Image outputs eval (Proxmox VMA via image.modules)
+          # Image outputs eval (Proxmox VMA + Amazon AMI via image.modules)
           - build-images-dev-team-dryrun
+          - build-images-ec2-dryrun
+          - build-images-graviton-dryrun
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31

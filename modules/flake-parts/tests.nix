@@ -233,6 +233,8 @@ in
         eval-mbp = mkEvalTest "mbp" "mbp";
         eval-nixos-wsl-dev-team = mkEvalTest "nixos-wsl-dev-team" "nixos-wsl-dev-team";
         eval-nixos-dev-team = mkEvalTest "nixos-dev-team" "nixos-dev-team";
+        eval-nixos-dev-team-ec2 = mkEvalTest "nixos-dev-team-ec2" "nixos-dev-team-ec2";
+        eval-nixos-dev-team-graviton = mkEvalTest "nixos-dev-team-graviton" "nixos-dev-team-graviton";
 
         # Home Manager configuration eval tests (x86_64-linux only)
         # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
@@ -647,6 +649,47 @@ in
           [[ "$hasProxmox" == "1" ]] || (echo "FAIL: proxmox image missing from system.build.images" && exit 1)
           echo "Proxmox image present in system.build.images"
           echo "nixos-dev-team image outputs evaluation passed"
+          touch $out
+        '';
+
+        # === IMAGE OUTPUTS EVALUATION TEST: EC2 AMI ===
+        # Verifies image.modules framework produces amazon image attributes
+        # on nixos-dev-team-ec2 (x86_64). Forces eval without building.
+        build-images-ec2-dryrun = pkgs.runCommand "build-images-ec2-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of nixos-dev-team-ec2 image.modules (Amazon AMI wiring)";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            imageNames = builtins.concatStringsSep " " (builtins.attrNames self.nixosConfigurations.nixos-dev-team-ec2.config.system.build.images);
+            hasAmazon = if (builtins.hasAttr "amazon" self.nixosConfigurations.nixos-dev-team-ec2.config.system.build.images) then "1" else "0";
+          } ''
+          echo "Testing nixos-dev-team-ec2 image outputs evaluation..."
+          echo "Available images: $imageNames"
+          [[ "$hasAmazon" == "1" ]] || (echo "FAIL: amazon image missing from system.build.images" && exit 1)
+          echo "Amazon image present in system.build.images"
+          echo "nixos-dev-team-ec2 image outputs evaluation passed"
+          touch $out
+        '';
+
+        # Verifies image.modules framework produces amazon image attributes
+        # on nixos-dev-team-graviton (aarch64). Forces eval without building.
+        build-images-graviton-dryrun = pkgs.runCommand "build-images-graviton-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of nixos-dev-team-graviton image.modules (Amazon AMI wiring)";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            imageNames = builtins.concatStringsSep " " (builtins.attrNames self.nixosConfigurations.nixos-dev-team-graviton.config.system.build.images);
+            hasAmazon = if (builtins.hasAttr "amazon" self.nixosConfigurations.nixos-dev-team-graviton.config.system.build.images) then "1" else "0";
+          } ''
+          echo "Testing nixos-dev-team-graviton image outputs evaluation..."
+          echo "Available images: $imageNames"
+          [[ "$hasAmazon" == "1" ]] || (echo "FAIL: amazon image missing from system.build.images" && exit 1)
+          echo "Amazon image present in system.build.images"
+          echo "nixos-dev-team-graviton image outputs evaluation passed"
           touch $out
         '';
 
@@ -1169,6 +1212,8 @@ in
             nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
             nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
             nixosDevTeam = self.nixosConfigurations.nixos-dev-team.config.system.stateVersion;
+            nixosDevTeamEc2 = self.nixosConfigurations.nixos-dev-team-ec2.config.system.stateVersion;
+            nixosDevTeamGraviton = self.nixosConfigurations.nixos-dev-team-graviton.config.system.stateVersion;
             # Force evaluation of all 5 x86_64-linux Home Manager configurations
             hmThinky = self.homeConfigurations."${username}@thinky-nixos".config.home.homeDirectory;
             hmPa161878 = self.homeConfigurations."${username}@pa161878-nixos".config.home.homeDirectory;
@@ -1185,6 +1230,8 @@ in
           echo "  mbp:                 stateVersion=$nixosMbp"
           echo "  nixos-wsl-minimal:   stateVersion=$nixosWslMinimal"
           echo "  nixos-dev-team:      stateVersion=$nixosDevTeam"
+          echo "  nixos-dev-team-ec2:  stateVersion=$nixosDevTeamEc2"
+          echo "  nixos-dev-team-graviton: stateVersion=$nixosDevTeamGraviton"
           echo ""
           echo "Home Manager configurations:"
           echo "  ${username}@thinky-nixos:   homeDir=$hmThinky"
@@ -1193,7 +1240,7 @@ in
           echo "  ${username}@mbp:            homeDir=$hmMbp"
           echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim"
           echo ""
-          echo "All 11 configurations evaluated successfully"
+          echo "All 13 configurations evaluated successfully"
           touch $out
         '';
       };
