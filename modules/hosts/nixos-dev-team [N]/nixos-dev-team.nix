@@ -2,13 +2,14 @@
 # Dendritic host composition for nixos-dev-team (pure NixOS, no WSL)
 #
 # This is a DISTRIBUTION configuration for the dev team's generic NixOS image.
-# It is a thin composition layer -- all real config lives in system-cli and
-# individual feature modules.
+# It is a thin composition layer -- all real config lives in the shared
+# dev-team module (binfmt, Podman, Claude Code, usbutils, kmod).
 #
-# Features:
+# Features (via dev-team module):
 # - Full CLI dev stack (system-cli -> system-default -> system-minimal)
 # - binfmt cross-compilation (aarch64)
 # - Podman containers
+# - Claude Code enterprise
 # - Generic 'dev' user with SSH access
 # - No WSL, no CrowdStrike, no Windows Terminal
 #
@@ -23,46 +24,18 @@
       ./_hardware-config.nix
       # System CLI layer (chains: system-minimal -> system-default -> system-cli)
       inputs.self.modules.nixos.system-cli
+      # Shared dev team base (binfmt + Podman + Claude Code + usbutils + kmod)
+      inputs.self.modules.nixos.dev-team
     ];
 
-    config = lib.mkMerge [
-      # === Core Configuration ===
-      {
-        networking.hostName = "nixos-dev-team";
+    config = {
+      networking.hostName = "nixos-dev-team";
 
-        # Generic username for distribution (not personal)
-        systemDefault.userName = lib.mkDefault "dev";
-
-        # Passwordless sudo for wheel group (standard for dev images)
-        security.sudo.wheelNeedsPassword = lib.mkDefault false;
-
-        # NOTE: nixpkgs.config.allowUnfree is set at the nixosConfiguration
-        # registration level (nixos-configurations.nix), not here. Setting it
-        # in the module causes assertion failures in VM tests where the test
-        # framework provides an externally-created pkgs instance.
-
-        # State version
-        system.stateVersion = lib.mkDefault "24.11";
-      }
-
-      # === Dev Team Feature Flags ===
-      {
-        # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
-        boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
-        boot.binfmt.preferStaticEmulators = true;
-        boot.binfmt.registrations.aarch64-linux.matchCredentials = true;
-        nix.settings.extra-platforms = [ "aarch64-linux" ];
-
-        # Enable Podman container runtime
-        systemCli.enablePodman = lib.mkDefault true;
-
-        # Development utilities
-        environment.systemPackages = with pkgs; [
-          usbutils # lsusb
-          kmod # lsmod, modprobe
-        ];
-      }
-    ];
+      # NOTE: nixpkgs.config.allowUnfree is set at the nixosConfiguration
+      # registration level (nixos-configurations.nix), not here. Setting it
+      # in the module causes assertion failures in VM tests where the test
+      # framework provides an externally-created pkgs instance.
+    };
   };
 
   # === Configuration Registration ===

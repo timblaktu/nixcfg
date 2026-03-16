@@ -54,6 +54,12 @@
       # Dev team WSL layer (enterprise + binfmt + Podman + Claude Code + USBIP)
       inherit (self.modules.nixos) wsl-dev-team;
 
+      # --- Platform-Agnostic Dev Team Base ---
+
+      # Dev team base (system-cli + binfmt + Podman + Claude Code + usbutils/kmod)
+      # Use this for non-WSL dev team hosts (VM, Proxmox, bare metal)
+      inherit (self.modules.nixos) dev-team;
+
       # --- Feature Modules (NixOS) ---
 
       # CrowdStrike Falcon sensor (systemd service + FHS-wrapped .deb package)

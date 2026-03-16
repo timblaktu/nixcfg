@@ -5,16 +5,18 @@
 #   flake.modules.nixos.wsl-dev-team - Team-specific NixOS-WSL system config
 #   flake.modules.homeManager.home-dev-team - Team-specific HM feature bundle
 #
-# This is a team-specific layer that imports the enterprise base and adds
-# development tooling for the dev team's workflow: binfmt cross-compilation,
-# Podman containers, Claude Code enterprise, and unfree packages.
+# This is a WSL-specific layer that composes wsl-enterprise + dev-team and
+# adds WSL-specific overrides (USBIP, terminal profile, setup-username).
 #
-# NixOS side: Imports wsl-enterprise, overrides for dev workflow.
+# Platform-agnostic dev tooling (binfmt, Podman, Claude Code enterprise,
+# usbutils, kmod) lives in the shared dev-team module.
+#
+# NixOS side: Imports wsl-enterprise + dev-team, adds WSL overrides.
 # HM side: Imports home-enterprise + AI dev tools, GitLab, Podman, etc.
 #
 # Priority layering:
-#   Enterprise (mkDefault/1000) < Dev-team (bare/100) < Host (mkForce/50)
-#   Dev-team uses mkDefault for NEW options not set by enterprise.
+#   Enterprise (mkDefault/1000) < Dev-team (mkDefault/1000) < WSL-dev-team (bare/100) < Host (mkForce/50)
+#   WSL-dev-team uses bare values to override enterprise/dev-team mkDefaults.
 #
 # Usage:
 #   # In a host module:
@@ -29,13 +31,18 @@
     # =========================================================================
     # NixOS Module: wsl-dev-team
     # =========================================================================
-    # Team-specific WSL system config layered on enterprise base.
-    # Enables binfmt (cross-arch builds), Podman, Claude Code enterprise,
-    # and unfree packages. Adds setup-username bootstrap script.
+    # WSL-specific dev team config composing wsl-enterprise + shared dev-team.
+    # Platform-agnostic dev tooling (binfmt, Podman, Claude Code enterprise,
+    # usbutils, kmod) comes from dev-team. This module adds WSL overrides.
+    #
+    # The double-import of system-cli (via dev-team AND wsl-enterprise) is
+    # safe -- NixOS deduplicates modules by reference identity.
     nixos.wsl-dev-team = { config, lib, pkgs, ... }: {
       imports = [
         # Enterprise base (chains: system-cli -> system-default -> system-minimal + wsl)
         inputs.self.modules.nixos.wsl-enterprise
+        # Platform-agnostic dev team base (binfmt, Podman, Claude Code, usbutils, kmod)
+        inputs.self.modules.nixos.dev-team
       ];
 
       config = lib.mkMerge [
@@ -45,9 +52,6 @@
         {
           # Team hostname (enterprise default: "nixos-wsl")
           wsl-settings.hostname = "nixos-wsl-dev-team";
-
-          # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
-          wsl-settings.binfmt.enable = true;
 
           # USB devices to auto-attach by hardware ID (VID:PID) via usbipd-win v5.x
           wsl-settings.usbip.autoAttachByHardwareId = [
@@ -67,23 +71,14 @@
           };
         }
 
-        # === Team-specific Options ===
-        # mkDefault (1000) for options enterprise doesn't set -- overridable by host.
+        # === WSL-specific Options ===
+        # mkDefault (1000) for WSL-only options -- overridable by host.
         {
-          # Enable Podman container runtime
-          systemCli.enablePodman = lib.mkDefault true;
-
-          # Enable Claude Code enterprise managed settings at /etc/claude-code/
-          systemCli.enableClaudeCodeEnterprise = lib.mkDefault true;
-
-          # setup-username: Bootstrap script for distributed images.
+          # setup-username: Bootstrap script for distributed WSL images.
           # Performs imperative user rename from default 'dev' to chosen username.
           # This is a one-time bootstrap operation -- NixOS declarative user config
           # takes over after the user clones the flake and rebuilds.
           environment.systemPackages = with pkgs; [
-            usbutils # lsusb — USB device enumeration (Jetson flashing, usbipd workflows)
-            kmod # lsmod, modprobe, modinfo — kernel module management
-
             (pkgs.writeShellScriptBin "setup-username" ''
               set -euo pipefail
 
