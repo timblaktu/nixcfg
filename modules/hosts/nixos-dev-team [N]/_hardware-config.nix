@@ -5,9 +5,12 @@
 {
   imports = [ ];
 
-  # Standard GRUB boot loader for VM/bare-metal
-  boot.loader.grub.enable = true;
-  boot.loader.grub.device = "/dev/vda";
+  # GRUB bootloader — mkDefault so image builders (proxmox-image.nix for
+  # EFI, amazon-image.nix, etc.) can override with their own boot config
+  boot.loader.grub.enable = lib.mkDefault true;
+  boot.loader.grub.device = lib.mkDefault "nodev";
+  boot.loader.grub.efiSupport = lib.mkDefault true;
+  boot.loader.grub.efiInstallAsRemovable = lib.mkDefault true;
 
   # Root filesystem (generic virtio disk)
   # mkDefault allows image builders (proxmox-image.nix, etc.) to override
