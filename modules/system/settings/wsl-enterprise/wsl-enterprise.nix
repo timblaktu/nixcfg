@@ -121,12 +121,12 @@
           # Core system defaults
           {
             # Generic username for distribution (not personal)
-            systemDefault.userName = lib.mkDefault "dev";
+            systemDefault.userName = lib.mkDefault "user";
 
             # WSL settings -- conservative enterprise defaults
             wsl-settings = {
               hostname = lib.mkDefault "nixos-wsl";
-              defaultUser = lib.mkDefault "dev";
+              defaultUser = lib.mkDefault "user";
               sshPort = lib.mkDefault 22;
               userGroups = lib.mkDefault [ "wheel" ];
               sshAuthorizedKeys = lib.mkDefault [ ];

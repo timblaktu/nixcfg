@@ -39,11 +39,19 @@
 
     config = {
       # === User & System Defaults ===
-      # Generic username for distribution (not personal)
-      systemDefault.userName = lib.mkDefault "dev";
+      # Generic username for distribution (default credential, users expected to change)
+      systemDefault.userName = lib.mkDefault "user";
+
+      # TODO: manage this secret via rbw (Bitwarden item: "dev-team VM Default User")
+      # Default password for initial access (hash of "pac123")
+      users.users.${config.systemDefault.userName}.hashedPassword = lib.mkDefault
+        "$6$2VLAqVZZHeMdVqhL$TLfROheuwsIheXUaz4CHuceiXmdsRdTVtmQUEGTgRrHpTUgr7aiMzq7vGGqdS62x7pDI1Ryhxd4DWDloeCRc0/";
 
       # Passwordless sudo for wheel group (standard for dev images)
       security.sudo.wheelNeedsPassword = lib.mkDefault false;
+
+      # Enable SSH password authentication (admin requirement)
+      systemCli.sshPasswordAuth = lib.mkDefault true;
 
       # State version
       system.stateVersion = lib.mkDefault "24.11";

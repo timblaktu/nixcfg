@@ -464,7 +464,7 @@
               # We need priority < 100 so host userGroups (e.g., [ "wheel" "dialout" ])
               # actually take effect. Hosts can still use mkForce (50) to override.
               extraGroups = lib.mkOverride 90 cfg.userGroups;
-              hashedPassword = lib.mkDefault ""; # No password needed in WSL
+              hashedPassword = lib.mkOverride 900 ""; # No password needed in WSL (overrides dev-team default)
               openssh.authorizedKeys.keys = lib.mkIf (cfg.sshAuthorizedKeys != [ ]) cfg.sshAuthorizedKeys;
             };
 
