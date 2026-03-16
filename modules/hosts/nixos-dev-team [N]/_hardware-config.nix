@@ -10,9 +10,10 @@
   boot.loader.grub.device = "/dev/vda";
 
   # Root filesystem (generic virtio disk)
+  # mkDefault allows image builders (proxmox-image.nix, etc.) to override
   fileSystems."/" = {
-    device = "/dev/vda1";
-    fsType = "ext4";
+    device = lib.mkDefault "/dev/vda1";
+    fsType = lib.mkDefault "ext4";
   };
 
   swapDevices = [ ];
