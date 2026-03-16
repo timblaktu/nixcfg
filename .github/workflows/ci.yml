@@ -23,7 +23,8 @@ jobs:
       - name: Evaluate flake metadata
         run: nix flake metadata
       - name: Evaluate check names
-        run: nix eval '.#checks.x86_64-linux' --apply 'x: builtins.attrNames x'
+        run: |
+          nix eval '.#checks.x86_64-linux' --apply 'x: builtins.attrNames x'
 
   lint:
     name: Lint (${{ matrix.check }})
