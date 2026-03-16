@@ -60,6 +60,12 @@
       # Use this for non-WSL dev team hosts (VM, Proxmox, bare metal)
       inherit (self.modules.nixos) dev-team;
 
+      # --- Proxmox VE Image Output ---
+
+      # Proxmox VE (VMA) image generation (UEFI, cloud-init, guest agent)
+      # Use alongside a system type for VM image output
+      inherit (self.modules.nixos) proxmox;
+
       # --- Feature Modules (NixOS) ---
 
       # CrowdStrike Falcon sensor (systemd service + FHS-wrapped .deb package)

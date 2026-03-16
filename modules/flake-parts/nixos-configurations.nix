@@ -108,6 +108,21 @@
           };
         }
       );
+
+      # nixos-proxmox-dev-team: Proxmox VE image for dev team
+      # module defined in modules/hosts/nixos-proxmox-dev-team [N]/
+      nixos-proxmox-dev-team = withSystem "x86_64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nixos-proxmox-dev-team
+          ];
+          specialArgs = {
+            inherit inputs;
+          };
+        }
+      );
     };
   };
 }
