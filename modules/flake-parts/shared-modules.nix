@@ -60,11 +60,11 @@
       # Use this for non-WSL dev team hosts (VM, Proxmox, bare metal)
       inherit (self.modules.nixos) dev-team;
 
-      # --- Proxmox VE Image Output ---
+      # --- Image Configuration Modules (for image.modules framework) ---
 
-      # Proxmox VE (VMA) image generation (UEFI, cloud-init, guest agent)
-      # Use alongside a system type for VM image output
-      inherit (self.modules.nixos) proxmox;
+      # Proxmox VE image defaults (UEFI, cloud-init, guest agent)
+      # Use as: image.modules.proxmox = inputs.nixcfg.nixosModules.proxmox-image-config;
+      inherit (self.modules.nixos) proxmox-image-config;
 
       # --- Feature Modules (NixOS) ---
 

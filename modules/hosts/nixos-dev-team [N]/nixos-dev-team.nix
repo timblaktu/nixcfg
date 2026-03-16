@@ -13,6 +13,10 @@
 # - Generic 'dev' user with SSH access
 # - No WSL, no CrowdStrike, no Windows Terminal
 #
+# Image outputs (via image.modules / system.build.images):
+# - Proxmox VMA: nix build '.#nixosConfigurations.nixos-dev-team.config.system.build.images.proxmox'
+#   Import: qmrestore vzdump-qemu-*.vma.zst VMID --storage POOL
+#
 # Deploy NixOS: sudo nixos-rebuild switch --flake '.#nixos-dev-team'
 # VM test: nix build '.#checks.x86_64-linux.vm-dev-team-stack'
 { config, lib, inputs, ... }:
@@ -35,6 +39,20 @@
       # registration level (nixos-configurations.nix), not here. Setting it
       # in the module causes assertion failures in VM tests where the test
       # framework provides an externally-created pkgs instance.
+
+      # === Image Outputs ===
+      # image.modules overlays produce format-specific images via
+      # system.build.images without polluting this base config.
+      # The builder modules (proxmox-image.nix, etc.) are registered
+      # automatically by nixpkgs' images.nix framework.
+
+      # Proxmox VE (VMA) image
+      image.modules.proxmox = {
+        imports = [ inputs.self.modules.nixos.proxmox-image-config ];
+        proxmox.qemuConf.cores = 4;
+        proxmox.qemuConf.memory = 4096;
+        proxmox.qemuConf.name = "nixos-dev-team";
+      };
     };
   };
 

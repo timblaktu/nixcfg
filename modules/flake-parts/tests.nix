@@ -233,7 +233,6 @@ in
         eval-mbp = mkEvalTest "mbp" "mbp";
         eval-nixos-wsl-dev-team = mkEvalTest "nixos-wsl-dev-team" "nixos-wsl-dev-team";
         eval-nixos-dev-team = mkEvalTest "nixos-dev-team" "nixos-dev-team";
-        eval-nixos-proxmox-dev-team = mkEvalTest "nixos-proxmox-dev-team" "nixos-proxmox-dev-team";
 
         # Home Manager configuration eval tests (x86_64-linux only)
         # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
@@ -628,25 +627,26 @@ in
           touch $out
         '';
 
-        # === PROXMOX VMA BUILDER EVALUATION TEST ===
-        # References toplevel (forces full config eval without building disk image).
-        # Also verifies VMA attribute exists. For full VMA build, use:
-        #   nix build '.#nixosConfigurations.nixos-proxmox-dev-team.config.system.build.VMA'
-        build-proxmox-dev-team-dryrun = pkgs.runCommand "build-proxmox-dev-team-dryrun"
+        # === IMAGE OUTPUTS EVALUATION TEST ===
+        # Verifies image.modules framework produces expected image attributes
+        # on nixos-dev-team. Forces eval of the images attrset without building.
+        # For full VMA build, use:
+        #   nix build '.#nixosConfigurations.nixos-dev-team.config.system.build.images.proxmox'
+        build-images-dev-team-dryrun = pkgs.runCommand "build-images-dev-team-dryrun"
           {
             meta = {
-              description = "Dry-run eval of nixos-proxmox-dev-team (config + VMA wiring)";
+              description = "Dry-run eval of nixos-dev-team image.modules (Proxmox VMA wiring)";
               maintainers = [ ];
               timeout = 30;
             };
-            inherit (self.nixosConfigurations.nixos-proxmox-dev-team.config.system.build) toplevel;
-            hasVMA = if (builtins.hasAttr "VMA" self.nixosConfigurations.nixos-proxmox-dev-team.config.system.build) then "1" else "0";
+            imageNames = builtins.concatStringsSep " " (builtins.attrNames self.nixosConfigurations.nixos-dev-team.config.system.build.images);
+            hasProxmox = if (builtins.hasAttr "proxmox" self.nixosConfigurations.nixos-dev-team.config.system.build.images) then "1" else "0";
           } ''
-          echo "Testing nixos-proxmox-dev-team build evaluation..."
-          echo "Toplevel derivation: $toplevel"
-          [[ "$hasVMA" == "1" ]] || (echo "FAIL: VMA attribute missing from system.build" && exit 1)
-          echo "VMA attribute present in system.build"
-          echo "nixos-proxmox-dev-team build evaluation passed"
+          echo "Testing nixos-dev-team image outputs evaluation..."
+          echo "Available images: $imageNames"
+          [[ "$hasProxmox" == "1" ]] || (echo "FAIL: proxmox image missing from system.build.images" && exit 1)
+          echo "Proxmox image present in system.build.images"
+          echo "nixos-dev-team image outputs evaluation passed"
           touch $out
         '';
 
@@ -1169,7 +1169,6 @@ in
             nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
             nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
             nixosDevTeam = self.nixosConfigurations.nixos-dev-team.config.system.stateVersion;
-            nixosProxmoxDevTeam = self.nixosConfigurations.nixos-proxmox-dev-team.config.system.stateVersion;
             # Force evaluation of all 5 x86_64-linux Home Manager configurations
             hmThinky = self.homeConfigurations."${username}@thinky-nixos".config.home.homeDirectory;
             hmPa161878 = self.homeConfigurations."${username}@pa161878-nixos".config.home.homeDirectory;
@@ -1186,7 +1185,6 @@ in
           echo "  mbp:                 stateVersion=$nixosMbp"
           echo "  nixos-wsl-minimal:   stateVersion=$nixosWslMinimal"
           echo "  nixos-dev-team:      stateVersion=$nixosDevTeam"
-          echo "  nixos-proxmox-dev-team: stateVersion=$nixosProxmoxDevTeam"
           echo ""
           echo "Home Manager configurations:"
           echo "  ${username}@thinky-nixos:   homeDir=$hmThinky"
@@ -1195,7 +1193,7 @@ in
           echo "  ${username}@mbp:            homeDir=$hmMbp"
           echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim"
           echo ""
-          echo "All 12 configurations evaluated successfully"
+          echo "All 11 configurations evaluated successfully"
           touch $out
         '';
       };
