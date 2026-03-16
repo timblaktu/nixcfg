@@ -1,0 +1,4 @@
+# Gitleaks fingerprint-based false positive ignores
+# Format: commit:file:rule:line
+# Comment explaining Bedrock auth env vars (not actual secrets)
+f8045d8b4f3e3a44f4c7eb407af6ffb350ebbe5a:modules/programs/claude-code/_hm/lib.nix:generic-api-key:76
