@@ -494,7 +494,7 @@
 
           # === Windows Drive Mount Recovery ===
           #
-          # Part of a three-layer defense against the WSL2 sgdisk sync() hang:
+          # Part of the defense against the WSL2 sgdisk sync() hang:
           #
           #   Layer 1 (n3x in-guest):  LD_PRELOAD nosync.so overrides sync() inside
           #                            ISAR build containers (gptfdisk-wsl-fix recipe).
@@ -502,9 +502,14 @@
           #                            builds, remounts via trap on exit. State file at
           #                            $XDG_RUNTIME_DIR/n3x-kas-build-unmounted-drives
           #                            enables recovery if the wrapper is SIGKILLed.
-          #   Layer 3 (this service):  Boot-time and switch-time recovery. Scans for
-          #                            unmounted drive directories under automountRoot
-          #                            and remounts via drvfs.
+          #   Layer 3 (this module):   Recovery at four trigger points:
+          #                            a) Boot: systemd oneshot Before=local-fs.target
+          #                            b) Switch: activation script during nixos-rebuild
+          #                            c) Shell: interactiveShellInit (terminals, tmux)
+          #                            d) Devshell: callable from n3x shellHook for
+          #                               nix develop -c (non-interactive) builds
+          #
+          # All four trigger points call the same wsl-recover-mounts script.
           #
           # Why drvfs, not 9p: WSL's kernel-level 9p tags (e.g. "C:\134") are ephemeral
           # and invalidated when a mount is lost mid-session. The drvfs device name
@@ -516,41 +521,79 @@
           # is the only reliable discovery method.
           (
             let
-              recoverScript = pkgs.writeShellScript "wsl-recover-windows-mounts" ''
-                automount_root="${cfg.automountRoot}"
+              uid = toString config.users.users.${cfg.defaultUser}.uid;
+              gid = toString config.users.groups.users.gid;
+              automountRoot = cfg.automountRoot;
+
+              # Core recovery script — used by systemd service, activation script,
+              # interactive shells, and devshell hooks. Runs as root (systemd/activation)
+              # or via sudo (interactive shells).
+              #
+              # Flags:
+              #   -q   Quiet mode: no output unless a mount is actually recovered.
+              #        Used in interactiveShellInit to avoid noise on every shell open.
+              #   -s   Sudo mode: invoke mount via sudo (for non-root callers).
+              recoverMountsScript = pkgs.writeShellScriptBin "wsl-recover-mounts" ''
+                quiet=false
+                use_sudo=false
+                for arg in "$@"; do
+                  case "$arg" in
+                    -q) quiet=true ;;
+                    -s) use_sudo=true ;;
+                  esac
+                done
+
+                automount_root="${automountRoot}"
                 recovered=0
-                drvfs_opts="metadata,uid=${toString config.users.users.${cfg.defaultUser}.uid},gid=${toString config.users.groups.users.gid}"
+                failed=0
+                drvfs_opts="metadata,uid=${uid},gid=${gid}"
+
+                do_mount() {
+                  if $use_sudo; then
+                    sudo ${pkgs.util-linux}/bin/mount "$@"
+                  else
+                    ${pkgs.util-linux}/bin/mount "$@"
+                  fi
+                }
 
                 # Scan single-letter directories under automount root. WSL's init creates
                 # these (e.g. /mnt/c, /mnt/d) before systemd starts. If the directory
                 # exists but isn't a mountpoint, the drive was unmounted and needs recovery.
-                for mountpoint in "$automount_root"/[a-z]; do
-                  [ -d "$mountpoint" ] || continue
+                for mp in "$automount_root"/[a-z]; do
+                  [ -d "$mp" ] || continue
 
                   # Skip if already mounted
-                  if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint" 2>/dev/null; then
+                  if ${pkgs.util-linux}/bin/mountpoint -q "$mp" 2>/dev/null; then
                     continue
                   fi
 
                   # Extract drive letter (e.g., /mnt/c -> C)
-                  drive_letter="''${mountpoint##*/}"
+                  drive_letter="''${mp##*/}"
                   drive_letter="$(echo "$drive_letter" | tr '[:lower:]' '[:upper:]')"
 
-                  echo "Recovering mount: $mountpoint (drive $drive_letter:)"
-                  if ${pkgs.util-linux}/bin/mount -t drvfs "''${drive_letter}:" "$mountpoint" -o "$drvfs_opts" 2>&1; then
-                    echo "Recovered: $mountpoint"
+                  $quiet || echo "Recovering mount: $mp (drive $drive_letter:)"
+                  if do_mount -t drvfs "''${drive_letter}:" "$mp" -o "$drvfs_opts" 2>/dev/null; then
+                    echo "Recovered: $mp"
                     recovered=$((recovered + 1))
                   else
-                    echo "Failed to recover $mountpoint — may need: wsl --shutdown" >&2
+                    $quiet || echo "Failed to recover $mp — may need: wsl --shutdown" >&2
+                    failed=$((failed + 1))
                   fi
                 done
 
                 if [ "$recovered" -gt 0 ]; then
                   echo "Recovered $recovered Windows drive mount(s)"
                 fi
+
+                [ "$failed" -eq 0 ]
               '';
             in
             {
+              # Put wsl-recover-mounts on PATH for all WSL hosts.
+              # Callable from: interactive shells, n3x devshell shellHook,
+              # kas-build wrappers, or manual recovery.
+              environment.systemPackages = [ recoverMountsScript ];
+
               # Boot-time recovery: runs early before local-fs.target to fix mounts
               # broken by a previous session (e.g., kas-build SIGKILLed mid-unmount).
               systemd.services."wsl-recover-windows-mounts" = {
@@ -559,12 +602,12 @@
                 wantedBy = [ "local-fs.target" ];
                 unitConfig = {
                   DefaultDependencies = false;
-                  ConditionPathExists = cfg.automountRoot;
+                  ConditionPathExists = automountRoot;
                 };
                 serviceConfig = {
                   Type = "oneshot";
                   RemainAfterExit = true;
-                  ExecStart = recoverScript;
+                  ExecStart = "${recoverMountsScript}/bin/wsl-recover-mounts";
                 };
               };
 
@@ -574,8 +617,23 @@
               # re-run because systemd considers it already active. This activation
               # script covers that gap.
               system.activationScripts.recoverWindowsMounts = lib.stringAfter [ ] ''
-                if [ -d "${cfg.automountRoot}" ]; then
-                  ${recoverScript}
+                if [ -d "${automountRoot}" ]; then
+                  ${recoverMountsScript}/bin/wsl-recover-mounts
+                fi
+              '';
+
+              # Shell-time recovery: every interactive shell (terminal, tmux pane, SSH)
+              # checks whether /mnt/c is mounted. Fast path: single mountpoint(1) call
+              # (~0.1ms) exits immediately when already mounted. Slow path: calls
+              # wsl-recover-mounts with sudo to remount any dropped drives.
+              # This covers the gap between kas-build unmounting /mnt/c and the next
+              # boot or nixos-rebuild switch.
+              #
+              # mkBefore ensures this runs BEFORE the wsl-env-capture snippet (mkAfter)
+              # which sources /run/wsl-env containing paths under /mnt/c.
+              environment.interactiveShellInit = lib.mkBefore ''
+                if [ -d "${automountRoot}/c" ] && ! ${pkgs.util-linux}/bin/mountpoint -q "${automountRoot}/c" 2>/dev/null; then
+                  ${recoverMountsScript}/bin/wsl-recover-mounts -q -s
                 fi
               '';
             }
