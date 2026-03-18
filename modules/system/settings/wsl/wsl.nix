@@ -493,63 +493,93 @@
           }
 
           # === Windows Drive Mount Recovery ===
-          # WSL generates fstab entries like "C:134 /mnt/c 9p" at boot using internal
-          # 9p tag IDs. If a process unmounts these drives (e.g., n3x kas-build prevents
-          # sgdisk sync() hangs by temporarily unmounting /mnt/c) and gets killed before
-          # remounting, the 9p tag is invalidated. The systemd mount unit then fails with
-          # "special device C:134 does not exist" because the tag no longer matches.
-          # This service detects missing Windows drive mounts and remounts them using the
-          # drvfs device name (e.g., "C:") which always works regardless of tag state.
-          {
-            systemd.services."wsl-recover-windows-mounts" = {
-              description = "Recover unmounted Windows drive mounts in WSL";
-              before = [ "local-fs.target" ];
-              wantedBy = [ "local-fs.target" ];
-              unitConfig = {
-                DefaultDependencies = false;
-                ConditionPathExists = cfg.automountRoot;
-              };
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                ExecStart = pkgs.writeShellScript "wsl-recover-windows-mounts" ''
-                  automount_root="${cfg.automountRoot}"
-                  recovered=0
+          #
+          # Part of a three-layer defense against the WSL2 sgdisk sync() hang:
+          #
+          #   Layer 1 (n3x in-guest):  LD_PRELOAD nosync.so overrides sync() inside
+          #                            ISAR build containers (gptfdisk-wsl-fix recipe).
+          #   Layer 2 (n3x host):      kas-build wrapper unmounts /mnt/[a-z] before
+          #                            builds, remounts via trap on exit. State file at
+          #                            $XDG_RUNTIME_DIR/n3x-kas-build-unmounted-drives
+          #                            enables recovery if the wrapper is SIGKILLed.
+          #   Layer 3 (this service):  Boot-time and switch-time recovery. Scans for
+          #                            unmounted drive directories under automountRoot
+          #                            and remounts via drvfs.
+          #
+          # Why drvfs, not 9p: WSL's kernel-level 9p tags (e.g. "C:\134") are ephemeral
+          # and invalidated when a mount is lost mid-session. The drvfs device name
+          # (e.g. "C:") is stable and always resolves correctly.
+          #
+          # Why directory scanning, not /etc/fstab: On NixOS, /etc/fstab is generated
+          # from fileSystems config at build time — WSL's runtime 9p entries never appear
+          # in it. Scanning /mnt/[a-z] directories (created by WSL init before systemd)
+          # is the only reliable discovery method.
+          (
+            let
+              recoverScript = pkgs.writeShellScript "wsl-recover-windows-mounts" ''
+                automount_root="${cfg.automountRoot}"
+                recovered=0
+                drvfs_opts="metadata,uid=${toString config.users.users.${cfg.defaultUser}.uid},gid=${toString config.users.groups.users.gid}"
 
-                  # Parse /etc/fstab for 9p mounts under the automount root
-                  while IFS=' ' read -r device mountpoint fstype _rest; do
-                    # Skip comments and non-9p entries
-                    [[ "$device" == \#* ]] && continue
-                    [[ "$fstype" != "9p" ]] && continue
-                    # Only recover /mnt/[a-z] Windows drive mounts
-                    [[ "$mountpoint" != "$automount_root"/[a-z] ]] && continue
+                # Scan single-letter directories under automount root. WSL's init creates
+                # these (e.g. /mnt/c, /mnt/d) before systemd starts. If the directory
+                # exists but isn't a mountpoint, the drive was unmounted and needs recovery.
+                for mountpoint in "$automount_root"/[a-z]; do
+                  [ -d "$mountpoint" ] || continue
 
-                    # Check if already mounted
-                    if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint" 2>/dev/null; then
-                      continue
-                    fi
-
-                    # Extract drive letter from mount point (e.g., /mnt/c -> C)
-                    drive_letter="''${mountpoint##*/}"
-                    drive_letter="$(echo "$drive_letter" | tr '[:lower:]' '[:upper:]')"
-
-                    echo "Recovering mount: $mountpoint (drive $drive_letter:)"
-                    drvfs_opts="metadata,uid=${toString config.users.users.${cfg.defaultUser}.uid},gid=${toString config.users.groups.users.gid}"
-                    if ${pkgs.util-linux}/bin/mount -t drvfs "''${drive_letter}:" "$mountpoint" -o "$drvfs_opts" 2>&1; then
-                      echo "Recovered: $mountpoint"
-                      recovered=$((recovered + 1))
-                    else
-                      echo "Failed to recover $mountpoint — may need: wsl --shutdown" >&2
-                    fi
-                  done < /etc/fstab
-
-                  if [ "$recovered" -gt 0 ]; then
-                    echo "Recovered $recovered Windows drive mount(s)"
+                  # Skip if already mounted
+                  if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint" 2>/dev/null; then
+                    continue
                   fi
-                '';
+
+                  # Extract drive letter (e.g., /mnt/c -> C)
+                  drive_letter="''${mountpoint##*/}"
+                  drive_letter="$(echo "$drive_letter" | tr '[:lower:]' '[:upper:]')"
+
+                  echo "Recovering mount: $mountpoint (drive $drive_letter:)"
+                  if ${pkgs.util-linux}/bin/mount -t drvfs "''${drive_letter}:" "$mountpoint" -o "$drvfs_opts" 2>&1; then
+                    echo "Recovered: $mountpoint"
+                    recovered=$((recovered + 1))
+                  else
+                    echo "Failed to recover $mountpoint — may need: wsl --shutdown" >&2
+                  fi
+                done
+
+                if [ "$recovered" -gt 0 ]; then
+                  echo "Recovered $recovered Windows drive mount(s)"
+                fi
+              '';
+            in
+            {
+              # Boot-time recovery: runs early before local-fs.target to fix mounts
+              # broken by a previous session (e.g., kas-build SIGKILLed mid-unmount).
+              systemd.services."wsl-recover-windows-mounts" = {
+                description = "Recover unmounted Windows drive mounts in WSL";
+                before = [ "local-fs.target" ];
+                wantedBy = [ "local-fs.target" ];
+                unitConfig = {
+                  DefaultDependencies = false;
+                  ConditionPathExists = cfg.automountRoot;
+                };
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  ExecStart = recoverScript;
+                };
               };
-            };
-          }
+
+              # Switch-time recovery: nixos-rebuild switch can stop mount units that
+              # tracked stale fileSystems entries (e.g., a 9p entry captured by
+              # nixos-generate-config then later removed). The boot-time service won't
+              # re-run because systemd considers it already active. This activation
+              # script covers that gap.
+              system.activationScripts.recoverWindowsMounts = lib.stringAfter [ ] ''
+                if [ -d "${cfg.automountRoot}" ]; then
+                  ${recoverScript}
+                fi
+              '';
+            }
+          )
 
           # === USBIP Configuration ===
           (lib.mkIf cfg.usbip.enable {
