@@ -550,7 +550,7 @@ DHCP Pool: 10.0.0.100-200
 - `usbip.autoAttach = [ ]` placeholder in `pa161878-nixos.nix`
 - `usbutils` + `kmod` in dev-team layer
 - WSL environment capture for systemd-spawned shells
-- Windows drive mount recovery service
+- `wsl-recover-mounts` script with 4 trigger points (boot, switch, shell, devshell)
 - `restart-usb` + `restart-usb-v4.ps1` recovery scripts
 - GitHub Actions CI/CD pipeline (ci.yml + release.yml) with versioned releases
 - Pure NixOS `nixos-dev-team` host module (non-WSL, system-cli + binfmt + podman)
