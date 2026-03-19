@@ -116,10 +116,10 @@ Every push to `main` and every pull request runs the full validation pipeline
 
 | Stage | What It Checks | Timeout |
 |-------|----------------|---------|
-| Flake evaluation | `nix flake metadata` + check name enumeration | 5 min |
-| Linting (4 parallel) | nixpkgs-fmt, statix, deadnix, PS1 encoding | 15 min each |
-| Module evaluations (25) | Each module in isolation with minimal base | 30 min each |
-| Config evaluations (15) | All nixos-\*, hm-\*, vm-test configs | 30 min each |
+| Flake evaluation | `nix flake metadata` + check name enumeration | 15 min |
+| Linting (5 parallel) | nixpkgs-fmt, statix, deadnix, PS1 encoding, version | 15 min each |
+| Module evaluations (26) | Each HM (20) and NixOS (6) module in isolation | 30 min each |
+| Config evaluations (14) | All nixos-\*, hm-\*, vm-test configs | 30 min each |
 | Integration tests (23) | Tarball dry-runs, image outputs, service tests | 30 min each |
 | Tarball builds (3) | Full `.wsl` builds, uploaded as artifacts | 120 min |
 

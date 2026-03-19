@@ -1,294 +1,148 @@
-# Unified Nix Configuration
+# nixcfg
 
-This repository contains my unified Nix configurations for multiple systems, built with [flake-parts](https://flake.parts) for modular, maintainable configuration management.
+Modular Nix configurations for NixOS, macOS, and WSL, built with
+[flake-parts](https://flake.parts) and
+[import-tree](https://github.com/vic/import-tree) for automatic module
+discovery. The repository produces **pre-built NixOS-WSL images** for team
+onboarding and exports **54 reusable modules** (NixOS, Home Manager, Darwin)
+that can be composed into any Nix configuration via flake input.
 
-- **NixOS** (x86_64, ARM, WSL)
-- **macOS** with nix-darwin  
-- **Linux** with Home Manager
-- **Cross-platform** development environments
+## Who This Is For
 
-## 🚀 Key Features
+| Audience | Start Here |
+|----------|------------|
+| **Team member** wanting a ready-to-use WSL dev environment | [WSL-TEAM-QUICKSTART.md](docs/WSL-TEAM-QUICKSTART.md) |
+| **IT / Security** reviewing what ships in the image | [DISTRIBUTION.md](docs/DISTRIBUTION.md), [CrowdStrike WSL2 Security Brief](docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) |
+| **Nix user** wanting to consume modules in their own flake | [SHARED-MODULES.md](docs/SHARED-MODULES.md) |
+| **Contributor** wanting to understand the codebase | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| **Maintainer** making a release | [RELEASE.md](RELEASE.md) |
 
-- **Modular Architecture**: Built with flake-parts for clean, maintainable configuration
-- **Multi-System Support**: Seamlessly manage different architectures and platforms
-- **WSL Integration**: Advanced WSL support with cross-instance mounting
-- **Development Ready**: Comprehensive development environments and tools
-- **Secrets Management**: Integrated sops-nix for secure secret handling
-
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 nixcfg/
-├── flake.nix                    # Main flake entry point (modular with flake-parts)
-├── flake.lock                   # Lock file
-├── FLAKE-PARTS-MIGRATION.md     # Migration documentation
-├── flake-modules/               # 🆕 Modular flake components
-│   ├── systems.nix              # System configuration and utilities
-│   ├── overlays.nix             # Package overlays
-│   ├── packages.nix             # Custom packages
-│   ├── dev-shells.nix           # Development environments  
-│   ├── nixos-configurations.nix # NixOS system configs
-│   ├── darwin-configurations.nix# macOS system configs
-│   └── home-configurations.nix  # Home Manager configs
-├── hosts/                       # Host-specific configurations
-│   ├── common/                  # Common configuration shared across hosts
-│   ├── mbp/                     # MacBook Pro configuration
-│   ├── potato/                  # ARM device (Le Potato SBC for Private CA)
-│   ├── thinky-nixos/           # Primary WSL NixOS development machine
-│   ├── thinky-ubuntu/          # Ubuntu WSL configuration
-│   ├── macbook-air/            # macOS configuration
-│   └── archived/               # Archived configurations (no longer in use)
-├── home/                        # Home-manager configurations
-│   ├── common/                  # Common home-manager modules
-│   ├── modules/                 # Structured home modules
-│   ├── files/                   # Static files and scripts
-│   └── nixvim-minimal.nix      # Minimal nixvim configuration
-├── modules/                     # Custom NixOS and Home-manager modules
-├── pkgs/                        # Custom packages (nixvim-anywhere, etc.)
+├── flake.nix                    # Entry point (~50 lines, uses import-tree)
+├── VERSION                      # Semver source of truth for releases
+├── modules/
+│   ├── flake-parts/             # Flake infrastructure (16 modules)
+│   ├── meta/                    # ReadOnly options (username, etc.)
+│   ├── lib/                     # Shared utility libraries
+│   ├── system/
+│   │   ├── types/               # 4-layer hierarchy (minimal → default → cli → desktop)
+│   │   └── settings/            # Platform settings (wsl, wsl-enterprise, wsl-dev-team, ...)
+│   ├── programs/                # 23 Home Manager feature modules
+│   └── hosts/                   # 11 host configurations
+├── pkgs/                        # Custom packages
 ├── overlays/                    # Nixpkgs overlays
-├── profiles/                    # Configuration profiles
-└── secrets/                     # Encrypted secrets (sops-nix)
+├── templates/                   # Flake templates (wsl-nixos, wsl-home, darwin)
+├── secrets/                     # SOPS-encrypted secrets (age)
+└── docs/                        # Documentation
 ```
 
-## 🛠️ Usage
-
-**⚠️ Important for zsh users**: All command examples use `\#` to escape the hash character for zsh compatibility. If you're using bash or other shells, you can use just `#`.
+## Configurations
 
 ### NixOS Systems
 
-**Note**: No new switching commands were added. Use the same commands as before:
+| Host | Purpose | Arch |
+|------|---------|------|
+| `thinky-nixos` | Primary WSL dev machine | x86_64 |
+| `pa161878-nixos` | Work WSL with CUDA + USB/IP | x86_64 |
+| `nixos-wsl-dev-team` | Distributable team WSL image | x86_64 |
+| `nixos-dev-team` | Non-WSL dev team (VM, bare metal) | x86_64 |
+| `nixos-dev-team-ec2` | EC2 AMI variant | x86_64 |
+| `nixos-dev-team-graviton` | EC2 Graviton variant | aarch64 |
+| `nixos-wsl-minimal` | Minimal WSL template | x86_64 |
+| `potato` | ARM SBC (Private CA) | aarch64 |
+| `mbp` | Intel MacBook Pro | x86_64 |
+
+### Home Manager
+
+| Config | Platform |
+|--------|----------|
+| `tim@thinky-nixos` | NixOS-WSL |
+| `tim@pa161878-nixos` | NixOS-WSL |
+| `tim@thinky-ubuntu` | Ubuntu WSL (HM only) |
+| `tim@mbp` | NixOS bare metal |
+| `tim@potato` | NixOS ARM |
+| `tim@macbook-air` | macOS (Darwin) |
+| `tim@nixvim-minimal` | Portable neovim |
+
+### Darwin
+
+| Host | Purpose |
+|------|---------|
+| `macbook-air` | Apple Silicon macOS |
+
+## Common Commands
 
 ```bash
-# Apply full system configuration (same as before)
-sudo nixos-rebuild switch --flake '.\\#hostname'
+# Validate flake (quick, no builds)
+nix flake check --no-build
 
-# Examples (in priority order):
-sudo nixos-rebuild switch --flake '.\\#thinky-nixos'   # Primary development machine
-sudo nixos-rebuild switch --flake '.\\#potato'        # Le Potato SBC (when configured)
-sudo nixos-rebuild switch --flake '.\\#mbp'           # MacBook Pro with NixOS
+# Deploy system
+sudo nixos-rebuild switch --flake ".#$(hostname)"
 
-# Dry run to test changes (recommended)
-sudo nixos-rebuild switch --flake '.\\#thinky-nixos' --dry-run
-```
+# Deploy user environment
+home-manager switch --flake ".#${USER}@$(hostname)"
 
-### Home Manager (Standalone)
+# Deploy macOS
+darwin-rebuild switch --flake '.#macbook-air'
 
-```bash
-# Apply user configuration (same as before)
-nix run home-manager -- switch --flake '.\\#username@hostname'
-
-# Examples (in priority order):
-nix run home-manager -- switch --flake '.\\#tim@thinky-nixos'    # Primary WSL NixOS
-nix run home-manager -- switch --flake '.\\#tim@potato'          # Le Potato SBC
-nix run home-manager -- switch --flake '.\\#tim@thinky-ubuntu'   # Ubuntu WSL
-nix run home-manager -- switch --flake '.\\#tim@nixvim-minimal'  # Minimal Neovim config
-
-# Dry run to test changes (recommended)
-nix run home-manager -- switch --flake '.\\#tim@thinky-nixos' --dry-run
-```
-
-### macOS (Darwin)
-
-```bash
-# Apply macOS system configuration (same as before)
-darwin-rebuild switch --flake '.\\#hostname'
-
-# Example:
-darwin-rebuild switch --flake '.\\#macbook-air'
-```
-
-### Development Environment
-
-```bash
-# Enter development shell with all tools
+# Enter dev shell
 nix develop
 
-# Or use specific development environments
-nix develop '.\\#esp32c5'  # ESP32-C5 development (when available)
+# Format Nix files
+nixpkgs-fmt modules/
 ```
 
-### 🆕 New Convenience Commands
+## Distribution
 
-These are **new additions** provided by the flake-parts migration:
+The `nixos-wsl-dev-team` host produces a `.wsl` tarball containing a
+complete NixOS development environment. The release pipeline builds the
+tarball automatically and publishes it as a GitHub Release asset alongside
+an `Import-NixOSWSL.ps1` script that handles import and Windows Terminal
+setup.
 
-```bash
-# Quick flake validation
-nix run '.\\#check'
+See [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the full lifecycle:
+layer architecture, CI/CD pipeline, consumption options, and tarball
+contents.
 
-# Update all flake inputs  
-nix run '.\\#update'
+## CI/CD
 
-# Build custom packages (same as before)
-nix build '.\\#nixvim-anywhere'
-```
+Every push to `main` and every PR runs the full validation pipeline:
 
-## 🎯 Available Configurations
+- Flake evaluation and metadata checks
+- Linting (nixpkgs-fmt, statix, deadnix, PS1 encoding, version format)
+- 20 Home Manager module isolation evaluations
+- 6 NixOS module isolation evaluations
+- 14 full configuration evaluations
+- 23 integration tests (tarball dry-runs, image outputs, service checks)
+- 3 full tarball builds (retained as artifacts for 5 days)
 
-### NixOS Systems
-- **thinky-nixos**: Primary WSL NixOS development machine
-- **potato**: Le Potato SBC (ARM64) for Private CA with Yubikey
-- **mbp**: Intel MacBook Pro with NixOS
-- **nixos-wsl-minimal**: Template for WSL distribution tarballs
+Releases are triggered by updating the `VERSION` file on `main`. See
+[RELEASE.md](RELEASE.md) for the process.
 
-### Home Manager Configurations  
-- **tim@thinky-nixos**: Primary NixOS WSL with ESP-IDF development tools
-- **tim@potato**: Le Potato SBC home configuration
-- **tim@thinky-ubuntu**: Ubuntu WSL with full tools
-- **tim@mbp**: MacBook Pro home configuration
-- **tim@nixvim-minimal**: Minimal Neovim-only configuration
+## Documentation
 
-### Darwin Systems
-- **macbook-air**: macOS configuration with homebrew integration
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Codebase structure, design patterns, module system |
+| [DISTRIBUTION.md](docs/DISTRIBUTION.md) | How images are built, released, and consumed |
+| [WSL-TEAM-QUICKSTART.md](docs/WSL-TEAM-QUICKSTART.md) | End-user import guide (no Nix knowledge needed) |
+| [SHARED-MODULES.md](docs/SHARED-MODULES.md) | Exported module catalog with usage examples |
+| [RELEASE.md](RELEASE.md) | Versioning policy and release pipeline |
+| [TESTS.md](TESTS.md) | Test infrastructure and execution |
+| [CrowdStrike WSL2 Brief](docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) | Security posture analysis for IT review |
 
-## ⚡ Benefits of Flake-Parts Migration
+## Secrets Management
 
-This repository was migrated from a monolithic 19,923-byte flake.nix to a modular flake-parts structure:
+Secrets are managed with [sops-nix](https://github.com/Mic92/sops-nix)
+using age encryption. See `secrets/` for encrypted files and
+`secrets/README.md` for setup instructions.
 
-### Before ❌
-- Single massive flake.nix file
-- Repetitive helper functions 
-- Complex system handling logic
-- Mixed concerns in one file
-- Hard to maintain and extend
+## Platform Support
 
-### After ✅  
-- **Modular structure** with focused files
-- **Eliminated boilerplate** through flake-parts abstractions
-- **Automatic system handling** via `perSystem`
-- **Clear separation** of concerns
-- **Easy to extend** and maintain
-- **Future-ready** for ecosystem modules
-
-See [FLAKE-PARTS-MIGRATION.md](./FLAKE-PARTS-MIGRATION.md) for detailed migration documentation.
-
-## 🔧 Custom Packages
-
-- **nixvim-anywhere**: Portable Neovim configuration deployment tool
-- **Custom overlays**: Package customizations and patches
-
-## 🔐 Secrets Management
-
-Secrets are managed using [sops-nix](https://github.com/Mic92/sops-nix) with age encryption:
-
-```bash
-# Edit secrets
-sops secrets/common/example.yaml
-
-# Secrets are automatically decrypted and available to configurations
-```
-
-## 🌍 Multi-Platform Support
-
-This configuration supports:
-- **x86_64-linux**: Intel/AMD Linux systems
-- **aarch64-linux**: ARM Linux systems (Raspberry Pi, etc.)  
-- **x86_64-darwin**: Intel macOS systems
-- **aarch64-darwin**: Apple Silicon macOS systems
-
-System-specific outputs are automatically generated using flake-parts `perSystem`.
-
-## 🆕 New Features Since Migration
-
-### Enhanced Development Shell
-```bash
-nix develop
-# Now shows helpful information about available commands
-```
-
-### Quick Commands
-```bash
-nix run '.\#check'     # Validate flake quickly
-nix run '.\#update'    # Update all inputs
-```
-
-### Better Organization
-- Each configuration type has its own file
-- Easier to find and modify settings
-- Better git diff readability
-- Reduced risk of breaking changes
-
-## ℹ️ Switching Commands: No Changes
-
-**The flake-parts migration did not change any switching commands.** All your existing workflows remain exactly the same:
-
-| System Type | Command Pattern | Example |
-|-------------|----------------|----------|
-| **NixOS** | `sudo nixos-rebuild switch --flake '.\#hostname'` | `sudo nixos-rebuild switch --flake '.\#thinky-nixos'` |
-| **Home Manager** | `nix run home-manager -- switch --flake '.\#user@host'` | `nix run home-manager -- switch --flake '.\#tim@thinky-nixos'` |
-| **macOS** | `darwin-rebuild switch --flake '.\#hostname'` | `darwin-rebuild switch --flake '.\#macbook-air'` |
-
-## 🤔 Potential Future Switching Improvements
-
-While no new switching commands were added in this migration, here are some potential improvements for the future:
-
-```bash
-# Potential convenience scripts (not implemented yet)
-./scripts/switch-nixos thinky-nixos
-./scripts/switch-home tim@thinky-nixos  
-./scripts/update-and-switch thinky-nixos
-
-# Or using nix apps (could be added)
-nix run '.\#switch-nixos' -- thinky-nixos
-nix run '.\#switch-home' -- tim@thinky-nixos
-```
-
-## 📚 Documentation
-
-- [Flake-Parts Migration Guide](./FLAKE-PARTS-MIGRATION.md)
-- [Implementation Summary](./IMPLEMENTATION-SUMMARY.md) 
-- [Migration Checklist](./MIGRATION-CHECKLIST.md)
-- [Quick Reference](./QUICK-REFERENCE.md)
-- [Detailed Configuration Documentation](./DOCUMENTATION.md)
-- [Files Module Testing](./FILES-MODULE-TESTING.md)
-
-## 🤝 Contributing
-
-When adding new functionality:
-
-1. Create focused modules in `flake-modules/`
-2. Add system-specific outputs to `perSystem`  
-3. Add system-agnostic outputs to `flake`
-4. Update documentation
-
-The modular flake-parts structure makes contributions easier and safer by isolating changes to relevant modules.
-
-## 🛠️ Troubleshooting
-
-### Validation
-```bash
-# Check flake validity
-nix flake check
-
-# Show all outputs  
-nix flake show
-
-# Run verification script
-bash verify-migration.sh  # or chmod +x first, then ./verify-migration.sh
-```
-
-### Common Issues
-- **Git tracking**: New files must be `git add`ed before Nix can see them
-- **System mismatch**: Verify system strings match your actual systems
-- **Path issues**: Ensure relative paths in modules are correct (`../`)
-
-### Debug Commands
-```bash
-# Test specific configurations
-nix eval '.\#nixosConfigurations.thinky-nixos.config.system.build.toplevel'
-nix eval '.\#homeConfigurations."tim@thinky-nixos".config.home.homeDirectory'
-```
-
-### Shell Compatibility
-**zsh users**: Must escape hash with `\#` (as shown in all examples)  
-**bash/fish users**: Can use either `#` or `\#`  
-**Trouble with commands?** Try single quotes: `'.\#hostname'` instead of double quotes
-
-## 🔍 Performance Profiling
-
-For optimizing build and evaluation performance, see **[NIX-PROFILING.md](NIX-PROFILING.md)**.
-
-Quick profiling:
-```bash
-./nix-profile-proper.sh  # Profile current config
-# Make changes, then profile again to compare
-```
+- **x86_64-linux**: NixOS, NixOS-WSL, Ubuntu WSL (HM only)
+- **aarch64-linux**: NixOS ARM (potato), EC2 Graviton
+- **x86_64-darwin**: Intel macOS
+- **aarch64-darwin**: Apple Silicon macOS

@@ -63,6 +63,12 @@ Windows 11 laptop.
 > **Optional**: To rename the `dev` user, run `setup-username <yourname>`, then
 > `wsl --shutdown` and reopen. This is cosmetic — all tooling works as `dev`.
 
+3. Generate an SSH key for connecting to remote git hosts:
+   ```bash
+   ssh-keygen -t ed25519 -C "you@company.com"
+   cat ~/.ssh/id_ed25519.pub   # Add this to GitHub/GitLab
+   ```
+
 ## What's Included
 
 **Development tools**: git, neovim, tmux, direnv, shellcheck, jq, fzf, and modern
@@ -80,6 +86,14 @@ wrapper scripts.
 **GitLab integration**: `glab` CLI with credential helpers.
 
 **Passwordless sudo** for the dev workflow (you are in the `wheel` group).
+
+**CrowdStrike Falcon**: Module is included but disabled by default. If your
+organization requires it, see the
+[CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) for
+enablement and WSL2 behavior details.
+
+For the full contents inventory, layer architecture, and alternative
+consumption options, see [DISTRIBUTION.md](DISTRIBUTION.md).
 
 ## Updating to a New Version
 

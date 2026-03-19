@@ -50,8 +50,11 @@ Each release builds and publishes the dev team WSL distribution image:
 | Asset | Description |
 |-------|-------------|
 | `nixcfg-wsl-dev-team-{version}.wsl` | NixOS-WSL distribution image for dev team onboarding |
+| `Import-NixOSWSL.ps1` | PowerShell script for importing the tarball and setting up Windows Terminal |
 
-**Install:** `wsl --import nixos-wsl-dev-team <location> nixcfg-wsl-dev-team-{version}.wsl`
+**Quick install:** See [docs/WSL-TEAM-QUICKSTART.md](docs/WSL-TEAM-QUICKSTART.md) for the full walkthrough.
+
+**Manual install:** `wsl --import nixos-wsl-dev-team <location> nixcfg-wsl-dev-team-{version}.wsl`
 
 ## Pipeline Details
 
