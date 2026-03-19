@@ -33,7 +33,7 @@
 #     inputs.self.modules.nixos.system-cli  # or wsl-enterprise, etc.
 #     inputs.self.modules.nixos.dev-team
 #   ];
-{ ... }:
+_:
 {
   flake.modules.nixos.dev-team = { config, lib, pkgs, inputs, ... }: {
 

@@ -523,7 +523,7 @@
             let
               uid = toString config.users.users.${cfg.defaultUser}.uid;
               gid = toString config.users.groups.users.gid;
-              automountRoot = cfg.automountRoot;
+              inherit (cfg) automountRoot;
 
               # Core recovery script — used by systemd service, activation script,
               # interactive shells, and devshell hooks. Runs as root (systemd/activation)

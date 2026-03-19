@@ -33,7 +33,7 @@
 # Our code never sets proxmox.qemuConf.diskSize; the warning is cosmetic.
 # Upstream fix: removeAttrs cfg.qemuConf ["diskSize"] // cfg.qemuExtraConf
 # TODO: File nixpkgs PR to fix this
-{ ... }:
+_:
 {
   flake.modules.nixos.proxmox-image-config = { lib, ... }: {
     # proxmox-image.nix is already registered as imageModules.proxmox

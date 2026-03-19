@@ -27,7 +27,7 @@
 #   coldsnap upload result/*.img --region REGION
 #   aws ec2 register-image --name NAME --root-device-name /dev/xvda \
 #     --block-device-mappings DeviceName=/dev/xvda,Ebs={SnapshotId=SNAP}
-{ ... }:
+_:
 {
   flake.modules.nixos.amazon-image-config = { lib, ... }: {
     # amazon-image.nix (maintainers/scripts/ec2/) is already registered as
