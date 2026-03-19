@@ -5,11 +5,15 @@
 .DESCRIPTION
     Automates the full Build -> Import -> Validate -> Cleanup pipeline for
     NixOS-WSL tarballs. Tests Import-NixOSWSL.ps1 end-to-end by:
-    - Building a tarball via Nix in a WSL build distro (or using a pre-built one)
+    - Cloning the nixcfg repo into a temp dir inside a Nix-enabled WSL distro
+    - Building a tarball via Nix (or using a pre-built one)
     - Importing it under a test-prefixed distro name for isolation
     - Validating the imported distro (user, hostname, services, Nix store)
     - Verifying Windows Terminal fragment GUID computation
-    - Cleaning up all test artifacts
+    - Cleaning up all test artifacts (temp clone, test distro, fragments)
+
+    This script is distributed as a GitHub release artifact and must work on
+    any Windows machine with WSL -- it does not assume any local repo checkout.
 
     Test distros use "test-" prefix (e.g., test-nixos-wsl-dev-team) to never
     interfere with real WSL distributions.
@@ -30,11 +34,15 @@
     Path to a pre-built .wsl tarball. Skips the build phase when provided.
 
 .PARAMETER BuildDistro
-    WSL distro with Nix installed, used for building. Auto-detected if omitted
-    (first running distro that has nix on PATH).
+    WSL distro with Nix and git installed, used for building and discovery.
+    Auto-detected if omitted (first running distro that has nix on PATH).
 
-.PARAMETER NixcfgPath
-    Path to the nixcfg repository inside the build distro. Default: ~/src/nixcfg
+.PARAMETER RepoUrl
+    Git URL of the nixcfg repository to clone for building.
+    Default: https://github.com/timblaktu/nixcfg.git
+
+.PARAMETER Branch
+    Branch or tag to checkout after cloning. Default: main
 
 .PARAMETER SkipBuild
     Skip the build phase entirely. Requires -TarballPath.
@@ -75,18 +83,18 @@
     # Leave test distro for manual inspection
 
 .EXAMPLE
-    .\Test-WslImport.ps1 -BuildDistro thinky-nixos -NixcfgPath /home/tim/src/nixcfg
-    # Specify build distro and repo path explicitly
+    .\Test-WslImport.ps1 -Branch feat/my-feature -BuildDistro nixos
+    # Build from a specific branch using a specific WSL distro
 
 .NOTES
     Prerequisites:
     - Windows 10/11 with WSL installed and responding
-    - For build phase: a WSL distro with Nix installed
+    - For build phase: a WSL distro with Nix and git installed
     - For build phase: passwordless sudo in the build distro (tarball builder needs it)
     - For terminal validation: Windows Terminal installed
 
-    The script uses test-prefixed distro names and cleans up after itself.
-    Use -SkipCleanup to keep the distro for debugging.
+    The script clones the repo into a temp directory (mktemp -d) inside the
+    build distro, so no pre-existing checkout is needed.
 
     Exit codes:
     0 = All checks passed
@@ -99,7 +107,8 @@ param(
     [switch]$All,
     [string]$TarballPath,
     [string]$BuildDistro,
-    [string]$NixcfgPath = "~/src/nixcfg",
+    [string]$RepoUrl = "https://github.com/timblaktu/nixcfg.git",
+    [string]$Branch = "main",
     [switch]$SkipBuild,
     [switch]$SkipCleanup,
     [switch]$SkipTerminalValidation,
@@ -124,12 +133,31 @@ function Write-Warn($msg)   { Write-Host "[!] $msg" -ForegroundColor Yellow }
 function Write-Err($msg)    { Write-Host "[-] $msg" -ForegroundColor Red }
 
 # ============================================================================
+# WSL output encoding helper
+# ============================================================================
+
+# wsl.exe outputs UTF-16LE text. PowerShell 5.1 often mishandles this, leaving
+# invisible NUL bytes in strings. This function strips them so distro names
+# can be used reliably as -d arguments.
+function Get-WslDistroNames {
+    $raw = wsl --list --quiet 2>$null
+    if (-not $raw) { return @() }
+    # Force to string array, strip NUL bytes and whitespace, filter empties
+    $names = @($raw | ForEach-Object {
+        if ($_) { ($_ -replace "`0", "").Trim() }
+    } | Where-Object { $_ -and $_ -notmatch '^\s*$' })
+    return $names
+}
+
+# ============================================================================
 # Test infrastructure
 # ============================================================================
 
 # Global results accumulator: array of [ordered]@{ Phase; Name; Status; Detail; Duration }
 $script:Results = @()
 $script:TestStartTime = Get-Date
+# Track temp clone dir for cleanup
+$script:CloneTempDir = $null
 
 function Test-Check {
     param(
@@ -216,7 +244,7 @@ function Invoke-WslCommand {
 
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
     $pinfo.FileName = "wsl.exe"
-    $pinfo.Arguments = "-d $Distro -- bash -c `"$($Command -replace '"', '\"')`""
+    $pinfo.Arguments = "-d $Distro -- bash -lc `"$($Command -replace '"', '\"')`""
     $pinfo.UseShellExecute = $false
     $pinfo.RedirectStandardOutput = $true
     $pinfo.RedirectStandardError = $true
@@ -355,7 +383,7 @@ function Test-SingleConfig {
         [string]$Config,
         [string]$Tarball,
         [string]$BuildDistroName,
-        [string]$RepoPath,
+        [string]$CloneDir,
         [bool]$DoBuild,
         [bool]$DoTerminal,
         [bool]$DoCleanup,
@@ -376,11 +404,11 @@ function Test-SingleConfig {
     # Phase 1 -- Discovery (extract expectations from Nix config)
     # ========================================================================
 
-    if ($BuildDistroName -and $RepoPath) {
+    if ($BuildDistroName -and $CloneDir) {
         try {
-            $expectations.User = Get-NixEval -Distro $BuildDistroName -RepoPath $RepoPath `
+            $expectations.User = Get-NixEval -Distro $BuildDistroName -RepoPath $CloneDir `
                 -AttrPath ".#nixosConfigurations.$Config.config.wsl.defaultUser"
-            $expectations.Hostname = Get-NixEval -Distro $BuildDistroName -RepoPath $RepoPath `
+            $expectations.Hostname = Get-NixEval -Distro $BuildDistroName -RepoPath $CloneDir `
                 -AttrPath ".#nixosConfigurations.$Config.config.networking.hostName"
 
             Write-Status "Expectations: user=$($expectations.User), hostname=$($expectations.Hostname)"
@@ -401,7 +429,7 @@ function Test-SingleConfig {
 
         # Build the tarball builder derivation
         $buildStatus = Test-Check "BUILD" "tarball-builder" {
-            $cmd = "cd $RepoPath && git add -A && nix build '.#nixosConfigurations.$Config.config.system.build.tarballBuilder' -o $buildLinkName --print-build-logs"
+            $cmd = "cd $CloneDir && nix build '.#nixosConfigurations.$Config.config.system.build.tarballBuilder' -o $buildLinkName --print-build-logs"
             $r = Invoke-WslCommand -Distro $BuildDistroName -Command $cmd -TimeoutSec ($BuildTimeout * 60)
             if ($r.ExitCode -ne 0) { throw "nix build failed: $($r.Error)" }
             return "derivation built"
@@ -414,7 +442,7 @@ function Test-SingleConfig {
 
         # Run the tarball builder (requires sudo)
         $buildStatus = Test-Check "BUILD" "tarball-built" {
-            $cmd = "cd $RepoPath && sudo ./$buildLinkName/bin/nixos-wsl-tarball-builder $tarballFileName"
+            $cmd = "cd $CloneDir && sudo ./$buildLinkName/bin/nixos-wsl-tarball-builder $tarballFileName"
             $r = Invoke-WslCommand -Distro $BuildDistroName -Command $cmd -TimeoutSec ($BuildTimeout * 60)
             if ($r.ExitCode -ne 0) { throw "tarball builder failed: $($r.Error)" }
             return "tarball created"
@@ -425,10 +453,9 @@ function Test-SingleConfig {
             return 2
         }
 
-        # Resolve UNC path to the tarball
-        $Tarball = "\\wsl$\$BuildDistroName\$($RepoPath -replace '~', (Invoke-WslCommand -Distro $BuildDistroName -Command 'echo $HOME' -TimeoutSec 10).Output)\$tarballFileName"
-        # Normalize double slashes from path join
-        $Tarball = $Tarball -replace '(?<!:)\\\\(?!\\)', '\'
+        # Resolve UNC path to the tarball inside the temp clone dir
+        $uncCloneDir = $CloneDir -replace '/', '\'
+        $Tarball = "\\wsl.localhost\$BuildDistroName$uncCloneDir\$tarballFileName"
 
         Test-Check "BUILD" "tarball-exists" {
             if (-not (Test-Path $Tarball)) { throw "Tarball not found at: $Tarball" }
@@ -454,8 +481,8 @@ function Test-SingleConfig {
     # ========================================================================
 
     # Pre-clean: remove leftover test distro if it exists
-    $existingTest = wsl --list --quiet 2>$null | Where-Object { $_ -and $_.Trim() -eq $testDistro }
-    if ($existingTest) {
+    $existingNames = Get-WslDistroNames
+    if ($testDistro -in $existingNames) {
         Write-Status "Pre-cleaning leftover test distro: $testDistro"
         wsl --unregister $testDistro 2>$null | Out-Null
     }
@@ -480,8 +507,8 @@ function Test-SingleConfig {
     }
 
     Test-Check "IMPORT" "distro-registered" {
-        $listed = wsl --list --quiet 2>$null | Where-Object { $_ -and $_.Trim() -eq $testDistro }
-        if (-not $listed) { throw "$testDistro not found in wsl --list" }
+        $names = Get-WslDistroNames
+        if ($testDistro -notin $names) { throw "$testDistro not found in wsl --list" }
         return "registered"
     } | Out-Null
 
@@ -558,7 +585,7 @@ function Test-SingleConfig {
     } | Out-Null
 
     # Conditional checks -- probe what the distro has
-    $checkGit = Invoke-WslCommand -Distro $testDistro -Command "which git 2>/dev/null" -TimeoutSec 10
+    $checkGit = Invoke-WslCommand -Distro $testDistro -Command "command -v git 2>/dev/null" -TimeoutSec 10
     if ($checkGit.ExitCode -eq 0) {
         Test-Check "VALIDATE" "git-available" {
             $r = Invoke-WslCommand -Distro $testDistro -Command "git --version" -TimeoutSec 15
@@ -567,7 +594,7 @@ function Test-SingleConfig {
         } | Out-Null
     }
 
-    $checkTmux = Invoke-WslCommand -Distro $testDistro -Command "which tmux 2>/dev/null" -TimeoutSec 10
+    $checkTmux = Invoke-WslCommand -Distro $testDistro -Command "command -v tmux 2>/dev/null" -TimeoutSec 10
     if ($checkTmux.ExitCode -eq 0) {
         Test-Check "VALIDATE" "tmux-available" {
             $r = Invoke-WslCommand -Distro $testDistro -Command "tmux -V" -TimeoutSec 15
@@ -576,14 +603,14 @@ function Test-SingleConfig {
         } | Out-Null
     }
 
-    $checkSetupUsername = Invoke-WslCommand -Distro $testDistro -Command "which setup-username 2>/dev/null" -TimeoutSec 10
+    $checkSetupUsername = Invoke-WslCommand -Distro $testDistro -Command "command -v setup-username 2>/dev/null" -TimeoutSec 10
     if ($checkSetupUsername.ExitCode -eq 0) {
         Test-Check "VALIDATE" "setup-username" {
             return "available"
         } | Out-Null
     }
 
-    $checkPodman = Invoke-WslCommand -Distro $testDistro -Command "which podman 2>/dev/null" -TimeoutSec 10
+    $checkPodman = Invoke-WslCommand -Distro $testDistro -Command "command -v podman 2>/dev/null" -TimeoutSec 10
     if ($checkPodman.ExitCode -eq 0) {
         Test-Check "VALIDATE" "podman-available" {
             $r = Invoke-WslCommand -Distro $testDistro -Command "podman --version" -TimeoutSec 15
@@ -624,9 +651,9 @@ function Test-SingleConfig {
         Skip-Check "TERMINAL" "all-terminal-checks" "terminal validation skipped"
     } else {
         # Check if Windows Terminal is installed
-        $terminalInstalled = Test-Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe" -or
-                             Test-Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe" -or
-                             Test-Path "$env:LOCALAPPDATA\Microsoft\Windows Terminal"
+        $terminalInstalled = (Test-Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe") -or
+                             (Test-Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe") -or
+                             (Test-Path "$env:LOCALAPPDATA\Microsoft\Windows Terminal")
 
         if (-not $terminalInstalled) {
             Skip-Check "TERMINAL" "all-terminal-checks" "Windows Terminal not installed"
@@ -717,8 +744,8 @@ function Test-SingleConfig {
         Test-Check "CLEANUP" "distro-unregistered" {
             wsl --unregister $testDistro 2>$null | Out-Null
             # Verify
-            $still = wsl --list --quiet 2>$null | Where-Object { $_ -and $_.Trim() -eq $testDistro }
-            if ($still) { throw "$testDistro still registered after unregister" }
+            $names = Get-WslDistroNames
+            if ($testDistro -in $names) { throw "$testDistro still registered after unregister" }
             return "removed"
         } | Out-Null
 
@@ -727,14 +754,6 @@ function Test-SingleConfig {
         if (Test-Path $fragmentPath) {
             Remove-Item $fragmentPath -Force -ErrorAction SilentlyContinue
             if ($Verbose) { Write-Status "Removed fragment: $fragmentPath" }
-        }
-
-        # Remove build artifacts if we built them
-        if ($DoBuild -and $BuildDistroName) {
-            $buildLinkName = "result-test-$Config"
-            $tarballFileName = "test-$Config.wsl"
-            Invoke-WslCommand -Distro $BuildDistroName -Command "cd $RepoPath && rm -f $tarballFileName && rm -f $buildLinkName" -TimeoutSec 15 | Out-Null
-            if ($Verbose) { Write-Status "Removed build artifacts in $BuildDistroName" }
         }
     }
 
@@ -764,15 +783,15 @@ try {
     exit 2
 }
 
-# Auto-detect or validate build distro (needed for build phase or discovery)
-$needsBuildDistro = -not $SkipBuild -or $true  # always useful for discovery
+# Auto-detect or validate build distro
+$needsBuildDistro = (-not $SkipBuild) -or (-not $TarballPath)
 if (-not $BuildDistro -and $needsBuildDistro) {
     Write-Status "Auto-detecting build distro (WSL distro with nix)..."
-    $runningDistros = wsl --list --quiet 2>$null | Where-Object { $_ -and $_ -notmatch '^\s*$' } | ForEach-Object { $_.Trim() }
+    $runningDistros = Get-WslDistroNames
 
     foreach ($d in $runningDistros) {
         if (-not $d) { continue }
-        $check = Invoke-WslCommand -Distro $d -Command "which nix 2>/dev/null" -TimeoutSec 15
+        $check = Invoke-WslCommand -Distro $d -Command "command -v nix 2>/dev/null" -TimeoutSec 15
         if ($check.ExitCode -eq 0) {
             $BuildDistro = $d
             Write-Ok "Auto-detected build distro: $BuildDistro"
@@ -792,23 +811,41 @@ if (-not $BuildDistro -and $needsBuildDistro) {
 }
 elseif ($BuildDistro) {
     # Validate specified build distro
-    $check = Invoke-WslCommand -Distro $BuildDistro -Command "which nix 2>/dev/null" -TimeoutSec 15
+    $check = Invoke-WslCommand -Distro $BuildDistro -Command "command -v nix 2>/dev/null" -TimeoutSec 15
     if ($check.ExitCode -ne 0) {
         Write-Err "Specified build distro '$BuildDistro' does not have nix."
         exit 2
     }
     Write-Ok "Build distro validated: $BuildDistro"
 }
+elseif ($SkipBuild -and $TarballPath) {
+    Write-Warn "No build distro -- skipping discovery (expectations won't be checked)."
+}
 
-# Validate NixcfgPath if we have a build distro
+# Clone repo into temp dir inside build distro (needed for discovery and/or build)
+$cloneDir = $null
 if ($BuildDistro) {
-    $check = Invoke-WslCommand -Distro $BuildDistro -Command "test -f $NixcfgPath/flake.nix && echo ok" -TimeoutSec 15
-    if ($check.Output -ne "ok") {
-        Write-Err "flake.nix not found at $NixcfgPath in $BuildDistro"
-        Write-Err "  Use -NixcfgPath to specify the correct path."
+    Write-Status "Cloning $RepoUrl (branch: $Branch) into build distro..."
+    $mktemp = Invoke-WslCommand -Distro $BuildDistro -Command "mktemp -d /tmp/test-wsl-import.XXXXXX" -TimeoutSec 10
+    if ($mktemp.ExitCode -ne 0) {
+        Write-Err "Failed to create temp directory in $BuildDistro"
         exit 2
     }
-    Write-Ok "nixcfg repo found at $NixcfgPath in $BuildDistro"
+    $cloneDir = $mktemp.Output
+    $script:CloneTempDir = $cloneDir
+
+    $cloneResult = Invoke-WslCommand -Distro $BuildDistro `
+        -Command "git clone --depth 1 --branch $Branch $RepoUrl $cloneDir/nixcfg" `
+        -TimeoutSec 120
+    if ($cloneResult.ExitCode -ne 0) {
+        Write-Err "git clone failed: $($cloneResult.Error)"
+        # Clean up temp dir
+        Invoke-WslCommand -Distro $BuildDistro -Command "rm -rf $cloneDir" -TimeoutSec 10 | Out-Null
+        exit 2
+    }
+    $cloneDir = "$cloneDir/nixcfg"
+    $script:CloneTempDir = $mktemp.Output  # parent dir for cleanup
+    Write-Ok "Cloned to $cloneDir in $BuildDistro"
 }
 
 # Detect Windows Terminal
@@ -839,15 +876,13 @@ Write-Host ""
 $configList = @()
 
 if ($All) {
-    if (-not $BuildDistro) {
+    if (-not $BuildDistro -or -not $cloneDir) {
         Write-Err "-All mode requires a build distro for config discovery."
         exit 2
     }
 
     Write-Status "Discovering WSL-capable configurations..."
-    $discoverCmd = "cd $NixcfgPath && nix eval '.#nixosConfigurations' --apply 'cs: builtins.attrNames (builtins.removeAttrs cs (builtins.filter (n: !(cs.\`${n}).config.wsl.enable or false) (builtins.attrNames cs)))' --json 2>/dev/null"
-    # Simpler approach: list all nixosConfigurations and filter by wsl.enable
-    $discoverCmd = "cd $NixcfgPath && nix eval --json '.#nixosConfigurations' --apply 'cs: builtins.filter (n: (builtins.tryEval (cs.\`${n}).config.wsl.enable).value or false) (builtins.attrNames cs)' 2>/dev/null"
+    $discoverCmd = "cd $cloneDir && nix eval --json '.#nixosConfigurations' --apply 'cs: builtins.filter (n: (builtins.tryEval (cs.\`${n}).config.wsl.enable).value or false) (builtins.attrNames cs)' 2>/dev/null"
     $result = Invoke-WslCommand -Distro $BuildDistro -Command $discoverCmd -TimeoutSec 60
 
     if ($result.ExitCode -eq 0 -and $result.Output) {
@@ -874,7 +909,7 @@ foreach ($cfg in $configList) {
         -Config $cfg `
         -Tarball $TarballPath `
         -BuildDistroName $BuildDistro `
-        -RepoPath $NixcfgPath `
+        -CloneDir $cloneDir `
         -DoBuild (-not $SkipBuild -and -not $TarballPath) `
         -DoTerminal (-not $SkipTerminalValidation) `
         -DoCleanup (-not $SkipCleanup) `
@@ -897,6 +932,14 @@ foreach ($cfg in $configList) {
 
     if ($exitCode -eq 2) { $overallExit = 2 }
     elseif ($failed -gt 0 -and $overallExit -ne 2) { $overallExit = 1 }
+}
+
+# --- Cleanup temp clone dir ---
+
+if ($script:CloneTempDir -and $BuildDistro) {
+    Write-Status "Cleaning up temp clone dir..."
+    Invoke-WslCommand -Distro $BuildDistro -Command "rm -rf $($script:CloneTempDir)" -TimeoutSec 15 | Out-Null
+    if ($Verbose) { Write-Status "Removed $($script:CloneTempDir) in $BuildDistro" }
 }
 
 # --- Matrix summary (for -All mode) ---
