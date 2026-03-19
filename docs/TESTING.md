@@ -526,6 +526,92 @@ The old script-based testing has been replaced with integrated Nix tests. All fu
 | nixos-wsl-minimal | ✅ eval-nixos-wsl-minimal | ✅ build-nixos-wsl-minimal-dryrun | ✅ Partial | ✅ Good |
 | mbp | ✅ eval-mbp | ❌ None | ❌ None | ⚠️ Basic only |
 
+## Windows-Side WSL Import Testing
+
+The Nix-native tests validate configuration evaluation and builds on Linux. However,
+the actual **import into WSL** can only be tested on a real Windows machine. The
+`Test-WslImport.ps1` script fills this gap.
+
+### Prerequisites
+
+- Windows 10/11 with WSL installed (`wsl --status` succeeds)
+- A WSL distro with Nix installed (for building tarballs)
+- Passwordless `sudo` in the build distro (tarball builder requires root)
+- Windows Terminal (optional, for fragment GUID validation)
+
+### Test Scenarios
+
+#### Full Pipeline (Build + Import + Validate + Cleanup)
+
+```powershell
+.\Test-WslImport.ps1
+```
+
+Builds the `nixos-wsl-dev-team` tarball in your Nix-enabled WSL distro, imports it
+as `test-nixos-wsl-dev-team`, runs all validation checks, and cleans up.
+
+#### Pre-Built Tarball (Import + Validate + Cleanup)
+
+```powershell
+.\Test-WslImport.ps1 -TarballPath .\nixcfg-wsl-dev-team-0.1.0.wsl -SkipBuild
+```
+
+Skips the build phase. Use this to validate a downloaded release artifact or CI
+build artifact.
+
+#### Matrix Mode (All WSL Configs)
+
+```powershell
+.\Test-WslImport.ps1 -All
+```
+
+Discovers all `nixosConfigurations` with `wsl.enable = true` and tests each one
+sequentially. Produces a summary matrix at the end.
+
+#### Debug Mode (Keep Test Distro)
+
+```powershell
+.\Test-WslImport.ps1 -SkipCleanup
+```
+
+Leaves the test distro registered so you can inspect it manually:
+```powershell
+wsl -d test-nixos-wsl-dev-team
+# When done:
+wsl --unregister test-nixos-wsl-dev-team
+```
+
+### Interpreting Results
+
+Each check is reported with a phase tag, name, status, and optional detail:
+
+```
+[VALIDATE] user-matches             PASS  (expected: dev, got: dev)
+[VALIDATE] systemd-state            PASS  (running)
+[TERMINAL] tier2-guid-matches       FAIL  (fragment={abc...} expected={def...})
+```
+
+- **PASS**: Check succeeded
+- **FAIL**: Check failed (detail explains why)
+- **SKIP**: Check was skipped (e.g., terminal not installed, `-SkipTerminalValidation`)
+
+Exit code 0 means all non-skipped checks passed. Exit code 1 means at least one
+check failed. Exit code 2 means a fatal error prevented testing (WSL missing,
+build failed, import failed).
+
+### CI Limitations
+
+This test requires a real Windows machine with WSL -- it cannot run in GitHub
+Actions (no WSL in Linux runners). Run it manually as part of the release
+validation workflow:
+
+1. CI builds the tarball and uploads as artifact
+2. Download artifact to a Windows machine
+3. Run `.\Test-WslImport.ps1 -TarballPath <artifact> -SkipBuild`
+4. Verify all checks pass before publishing the release
+
+Source: `docs/tools/Test-WslImport.ps1`
+
 ## Summary
 
 The test suite provides comprehensive validation of the NixOS configuration system. Use the test runners for quick validation, and individual test commands for debugging. Integration tests require KVM support but provide the most thorough validation. Always run regression tests before committing changes.

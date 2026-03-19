@@ -198,6 +198,55 @@ The script handles:
 Source: `docs/tools/Import-NixOSWSL.ps1`
 Architecture details: `docs/tools/TERMINAL-PROFILE-ARCHITECTURE.md`
 
+## Validation
+
+`Test-WslImport.ps1` is an integration test harness that automates the full
+**Build -> Import -> Validate -> Cleanup** pipeline. It calls `Import-NixOSWSL.ps1`
+directly (testing the real import path) and verifies the result.
+
+### Quick Start
+
+```powershell
+# Full pipeline (build + import + validate + cleanup)
+.\Test-WslImport.ps1
+
+# Test a pre-built tarball from a release download
+.\Test-WslImport.ps1 -TarballPath .\nixcfg-wsl-dev-team-0.1.0.wsl -SkipBuild
+
+# Test all WSL-capable configs
+.\Test-WslImport.ps1 -All
+
+# Keep test distro for manual inspection
+.\Test-WslImport.ps1 -SkipCleanup
+```
+
+### What It Validates
+
+- Distro responds and boots to systemd
+- Default user and hostname match Nix config expectations
+- Nix and NixOS are functional (`nix --version`, `nixos-version`)
+- Nix store integrity (`nix-store --verify`)
+- WSL conf default user
+- Available tools (git, tmux, podman, setup-username -- conditional)
+- Windows Terminal fragment file exists with correct GUID computation
+- Two-tier GUID system (Tier 2 profile GUID and Tier 1 hide GUID)
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All checks passed |
+| 1 | One or more checks failed |
+| 2 | Fatal error (WSL missing, build failed, import failed) |
+
+### When to Run
+
+- **Pre-release**: Full pipeline to validate a new tarball before tagging
+- **Post-download**: With `-SkipBuild -TarballPath` to verify a release artifact
+- **CI artifact testing**: Download CI artifact and validate on a real Windows machine
+
+Source: `docs/tools/Test-WslImport.ps1`
+
 ## Tarball Contents
 
 The `.wsl` tarball is a compressed NixOS root filesystem. It includes:
