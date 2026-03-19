@@ -11,9 +11,13 @@ Windows 11 laptop.
   ```
   Then reboot.
 - **Windows Terminal** installed (comes with Windows 11; update from Microsoft Store if needed).
-- You received two files from your team lead:
-  - `nixos.wsl` — the NixOS-WSL tarball
-  - `Import-NixOSWSL.ps1` — the import script
+
+## Download the Image
+
+1. Go to the [latest release](https://github.com/timblaktu/nixcfg/releases/latest).
+2. Download both files:
+   - `nixcfg-wsl-dev-team-<version>.wsl` — the NixOS-WSL tarball
+   - `Import-NixOSWSL.ps1` — the import script
 
 ## Import the Image
 
@@ -31,7 +35,7 @@ Windows 11 laptop.
 
 4. Run the import script:
    ```powershell
-   .\Import-NixOSWSL.ps1 -TarballPath .\nixos.wsl
+   .\Import-NixOSWSL.ps1 -TarballPath .\nixcfg-wsl-dev-team-*.wsl
    ```
 
    The script will:
@@ -64,8 +68,8 @@ Windows 11 laptop.
 **Development tools**: git, neovim, tmux, direnv, shellcheck, jq, fzf, and modern
 CLI replacements (eza, bat, delta, dust, zoxide).
 
-**AI coding assistants**: Claude Code and OpenCode, pre-configured for the Code
-Companion enterprise proxy.
+**AI coding assistants**: Claude Code and OpenCode, pre-configured with multi-account
+wrapper scripts.
 
 **Containers**: Podman with `docker` alias — run containers without Docker Desktop.
 
@@ -73,22 +77,47 @@ Companion enterprise proxy.
 
 **Network tools**: curl, httpie, nmap, tcpdump, iperf3, dig, traceroute.
 
-**GitLab integration**: `glab` CLI pre-configured for your team's GitLab instance.
+**GitLab integration**: `glab` CLI with credential helpers.
 
 **Passwordless sudo** for the dev workflow (you are in the `wheel` group).
 
 ## Updating to a New Version
 
-When a new tarball is distributed:
+When a new release is published:
 
-1. Save the new `nixos.wsl` file.
+1. Download the new `.wsl` and `Import-NixOSWSL.ps1` files from the
+   [releases page](https://github.com/timblaktu/nixcfg/releases/latest).
 2. Run the same import command — the script will offer to replace the existing install:
    ```powershell
-   .\Import-NixOSWSL.ps1 -TarballPath .\nixos.wsl
+   .\Import-NixOSWSL.ps1 -TarballPath .\nixcfg-wsl-dev-team-*.wsl
    ```
 
 > Your home directory is reset on reimport. Back up any local work (committed git repos
 > are safe if pushed to a remote).
+
+## Alternative: Build from Source
+
+If you prefer to build the tarball yourself (requires Nix):
+
+```bash
+# Clone the repo
+git clone https://github.com/timblaktu/nixcfg.git
+cd nixcfg
+
+# Build the tarball builder
+nix build '.#nixosConfigurations.nixos-wsl-dev-team.config.system.build.tarballBuilder'
+
+# Build the tarball (requires sudo for chroot)
+sudo ./result/bin/nixos-wsl-tarball-builder nixos.wsl
+
+# Import on Windows
+wsl --import nixos-wsl-dev-team <install-location> nixos.wsl
+```
+
+## Alternative: Consume as Flake Input
+
+For advanced users who want to customize the image or cherry-pick modules, see
+[SHARED-MODULES.md](SHARED-MODULES.md) for the full module catalog and usage examples.
 
 ## Troubleshooting
 
@@ -129,7 +158,7 @@ Then re-import with the steps above.
 
 If you want this to be the distro that opens when you type `wsl` in PowerShell:
 ```powershell
-.\Import-NixOSWSL.ps1 -TarballPath .\nixos.wsl -SetDefault
+.\Import-NixOSWSL.ps1 -TarballPath .\nixcfg-wsl-dev-team-*.wsl -SetDefault
 ```
 Or after import:
 ```powershell

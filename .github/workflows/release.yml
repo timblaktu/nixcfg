@@ -148,6 +148,9 @@ jobs:
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Copy import script
+        run: cp docs/tools/Import-NixOSWSL.ps1 Import-NixOSWSL.ps1
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -156,4 +159,5 @@ jobs:
           gh release create "$version" \
             --title "v${version}" \
             --notes "${{ steps.notes.outputs.notes }}" \
-            "nixcfg-wsl-dev-team-${version}.wsl"
+            "nixcfg-wsl-dev-team-${version}.wsl" \
+            "Import-NixOSWSL.ps1"

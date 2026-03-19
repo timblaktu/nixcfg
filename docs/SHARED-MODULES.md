@@ -1,264 +1,175 @@
-# Shared NixOS and Home Manager Modules
+# Shared NixOS, Home Manager, and Darwin Modules
 
-This repository exports reusable NixOS and Home Manager modules for sharing with colleagues and the community.
+This repository exports reusable modules for team consumption via flake input.
 
-## Available Modules
+**Repository**: <https://github.com/timblaktu/nixcfg>
 
-### NixOS Modules (System-Level)
+## Quick Start
 
-#### `nixosModules.wsl-base`
-Common WSL system configuration for NixOS-WSL hosts.
-
-**Platform Requirements**: NixOS-WSL distribution ONLY
-- Requires full NixOS-WSL distribution installed
-- Cannot be used on vanilla Ubuntu/Debian/Alpine WSL
-
-**Provides**:
-- System-level WSL integration (wsl.conf, systemd services)
-- User and group management
-- SSH daemon configuration with WSL-specific settings
-- SOPS-nix secrets management integration
-- USB/IP support for hardware passthrough
-
-**Usage Example**:
 ```nix
 {
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixos-wsl.url = "github:nix-community/NixOS-WSL";
-    nixcfg.url = "github:timblaktu/nixcfg";
-  };
+  inputs.nixcfg.url = "github:timblaktu/nixcfg";
 
-  outputs = { nixpkgs, nixos-wsl, nixcfg, ... }: {
-    nixosConfigurations.my-wsl-host = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
+  outputs = { nixpkgs, nixcfg, ... }: {
+    # Use a bundle (includes many feature modules):
+    nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+      modules = [ nixcfg.nixosModules.wsl-dev-team ];
+    };
+
+    # Or cherry-pick individual modules:
+    homeConfigurations."me@host" = home-manager.lib.homeManagerConfiguration {
       modules = [
-        nixos-wsl.nixosModules.default
-        nixcfg.nixosModules.wsl-base
-        {
-          # Override defaults as needed
-          wslCommon = {
-            hostname = "my-wsl-host";
-            defaultUser = "myuser";
-            sshPort = 2222;
-          };
-        }
+        nixcfg.homeManagerModules.shell
+        nixcfg.homeManagerModules.git
+        nixcfg.homeManagerModules.tmux
       ];
     };
   };
 }
 ```
 
-**Default Configuration**:
-```nix
-{
-  base = {
-    userName = "tim";  # Override this!
-    userGroups = [ "wheel" "dialout" ];
-    enableClaudeCodeEnterprise = false;
-    nixMaxJobs = 8;
-    nixCores = 0;
-    enableBinaryCache = true;
-    sshPasswordAuth = true;
-    requireWheelPassword = false;
-    additionalShellAliases = {
-      esp32c5 = "esp-idf-shell";
-      explorer = "explorer.exe .";
-      code = "code.exe";
-      code-insiders = "code-insiders.exe";
-    };
-  };
-
-  wsl = {
-    enable = true;
-    interop.register = true;
-    usbip.enable = true;
-    usbip.autoAttach = [ "3-1" "3-2" ];
-  };
-
-  sopsNix = {
-    enable = true;
-    hostKeyPath = "/etc/sops/age.key";
-  };
-
-  system.stateVersion = "24.11";
-}
-```
-
-All settings use `lib.mkDefault`, so you can override them in your host configuration.
+All options use `lib.mkDefault` — override freely in your config.
 
 ---
 
-#### `nixosModules.ssh-keys`
-Centralized SSH authorized keys registry.
+## NixOS Modules (13)
 
-**Provides**: Attribute set of SSH public keys for user access
+### System Type Layers
 
-**Usage Example**:
-```nix
-let
-  sshKeys = inputs.nixcfg.nixosModules.ssh-keys;
-in
-{
-  users.users.myuser = {
-    openssh.authorizedKeys.keys = [
-      sshKeys.timblaktu  # Add specific keys
-    ];
-  };
-}
-```
+Hierarchical layers — each imports the one above it.
 
-**Available Keys**:
-```nix
-{
-  timblaktu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com";
-}
-```
+| Export Name | Description |
+|-------------|-------------|
+| `system-minimal` | Nix settings, locale, timezone, core packages |
+| `system-default` | Users, networking, fonts, SSH client (imports system-minimal) |
+| `system-cli` | Dev tools, shell, tmux, neovim system-level (imports system-default) |
+| `system-desktop` | GUI, display manager, desktop environment (imports system-cli) |
 
----
+### WSL System Settings
 
-### Home Manager Modules (User-Level)
+| Export Name | Description |
+|-------------|-------------|
+| `wsl-base` | Common WSL config: wsl.conf, users, SSH daemon, SOPS, USBIP, CUDA |
+| `wsl-enterprise` | Enterprise WSL base: system-cli + WSL + CrowdStrike + enterprise defaults |
+| `wsl-dev-team` | Dev team WSL: enterprise + binfmt + Podman + Claude Code + USBIP |
 
-#### `homeManagerModules.wsl-home-base`
-Common home-manager configuration for WSL environments.
+### Platform-Agnostic
 
-**Platform Requirements**: ANY WSL distribution + Nix + home-manager ✅
-- Works on NixOS-WSL, Ubuntu, Debian, Alpine, or any WSL distro
-- Only requires Nix package manager and home-manager installed
-- Does NOT require NixOS system
+| Export Name | Description |
+|-------------|-------------|
+| `dev-team` | Dev team base for non-WSL hosts (VM, Proxmox, bare metal): system-cli + binfmt + Podman |
 
-**Provides**:
-- User-level WSL tweaks (shell wrappers, environment variables)
-- Windows Terminal settings management
-- WSL utilities (wslu)
-- Home Manager `targets.wsl` configuration
+### Image Configuration
 
-**Usage Example (Vanilla Ubuntu WSL)**:
-```nix
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    home-manager = {
-      url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    nixcfg.url = "github:timblaktu/nixcfg";
-  };
+| Export Name | Description |
+|-------------|-------------|
+| `proxmox-image-config` | Proxmox VE image defaults (UEFI, cloud-init, guest agent) |
+| `amazon-image-config` | Amazon EC2 AMI defaults (raw format, 6 GiB disk) |
 
-  outputs = { nixpkgs, home-manager, nixcfg, ... }: {
-    homeConfigurations."myuser@ubuntu-wsl" = home-manager.lib.homeManagerConfiguration {
-      pkgs = import nixpkgs {
-        system = "x86_64-linux";
-        config.allowUnfree = true;
-      };
-      modules = [
-        nixcfg.homeManagerModules.wsl-home-base  # Works on vanilla WSL!
-        {
-          homeBase = {
-            username = "myuser";
-            homeDirectory = "/home/myuser";
-          };
-        }
-      ];
-    };
-  };
-}
-```
+### Feature Modules (NixOS)
 
-**Usage Example (NixOS-WSL)**:
-```nix
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    home-manager.url = "github:nix-community/home-manager";
-    nixcfg.url = "github:timblaktu/nixcfg";
-  };
-
-  outputs = { nixpkgs, home-manager, nixcfg, ... }: {
-    homeConfigurations."myuser@nixos-wsl" = home-manager.lib.homeManagerConfiguration {
-      pkgs = import nixpkgs { system = "x86_64-linux"; };
-      modules = [
-        nixcfg.homeManagerModules.wsl-home-base
-        {
-          homeBase = {
-            username = "myuser";
-            homeDirectory = "/home/myuser";
-          };
-        }
-      ];
-    };
-  };
-}
-```
-
-**Default Configuration**:
-```nix
-{
-  homeBase = {
-    enableDevelopment = true;
-    enableEspIdf = true;
-    enableOneDriveUtils = true;
-    enableShellUtils = true;
-    enableTerminal = true;
-
-    environmentVariables = {
-      WSL_DISTRO = "nixos";  # Override this!
-      EDITOR = "nvim";
-    };
-
-    shellAliases = {
-      explorer = "explorer.exe .";
-      code = "code.exe";
-      code-insiders = "code-insiders.exe";
-      esp32c5 = "esp-idf-shell";
-    };
-  };
-
-  home.packages = [ pkgs.wslu ];
-
-  targets.wsl = {
-    enable = true;
-    windowsTools = {
-      enablePowerShell = true;
-      enableCmd = false;
-      enableWslPath = true;
-      wslPathPath = "/bin/wslpath";
-    };
-  };
-}
-```
-
-All settings use `lib.mkDefault`, so you can override them.
+| Export Name | Description |
+|-------------|-------------|
+| `crowdstrike-falcon` | CrowdStrike Falcon sensor (systemd service + FHS-wrapped .deb). WSL2: RFM mode |
+| `secrets-management` | SOPS-nix integration, Bitwarden helpers |
+| `shell` | System-level zsh/bash setup |
+| `git` | System-level gitconfig |
+| `tmux` | System-level tmux config |
+| `neovim` | Nixvim system-level setup |
 
 ---
 
-## Platform Compatibility Matrix
+## Home Manager Modules (25)
 
-| Module | NixOS-WSL | Ubuntu WSL | Debian WSL | Alpine WSL |
-|--------|-----------|------------|------------|------------|
-| `nixosModules.wsl-base` | ✅ | ❌ | ❌ | ❌ |
-| `nixosModules.ssh-keys` | ✅ | ❌ | ❌ | ❌ |
-| `homeManagerModules.wsl-home-base` | ✅ | ✅ | ✅ | ✅ |
+### System Type Layers
 
-**Key Insight**: Home Manager modules work on ANY WSL distro, but NixOS modules require NixOS-WSL.
+| Export Name | Description |
+|-------------|-------------|
+| `home-minimal` | Username, homeDirectory, stateVersion |
+| `home-default` | XDG, fonts, basic programs (imports home-minimal) |
+| `home-cli` | Full CLI tooling bundle (imports home-default) |
+| `home-desktop` | GUI applications (imports home-cli) |
+
+### WSL / Enterprise / Team Bundles
+
+| Export Name | Description |
+|-------------|-------------|
+| `wsl-home-base` | WSL user-level tweaks. Works on **any** WSL distro (Ubuntu, Debian, Alpine, NixOS) |
+| `home-enterprise` | Enterprise bundle: shell, git, tmux, neovim, yazi, files, onedrive |
+| `home-dev-team` | Dev team bundle: enterprise + claude-code, opencode, gitlab-auth, podman |
+
+### Feature Modules (Home Manager)
+
+| Export Name | Description |
+|-------------|-------------|
+| `shell` | zsh/bash config, starship prompt, direnv, fzf |
+| `git` | User-level gitconfig, aliases, delta pager |
+| `tmux` | Config, plugins, auto-reload |
+| `neovim` | Nixvim plugins, LSP, keybindings |
+| `terminal` | Font detection, TERM config |
+| `shell-utils` | Custom shell functions and libraries |
+| `system-tools` | Bootstrap, admin utilities |
+| `yazi` | Terminal file manager |
+| `onedrive` | OneDrive utilities for WSL |
+| `files` | Scripts, completions, autoWriter integration |
+| `git-auth-helpers` | Credential refresh utilities |
+| `claude-code` | Multi-account AI coding assistant |
+| `opencode` | Multi-account AI coding assistant |
+| `gitlab-auth` | CLI + credential helpers + Bitwarden/SOPS |
+| `github-auth` | CLI + credential helpers + Bitwarden/SOPS |
+| `podman` | Podman container tools (compose, docker aliases) |
+| `development-tools` | Python, Rust, Node, Go toolchains |
+| `windows-terminal` | Windows Terminal settings management for WSL |
+| `awscli` | AWS CLI v2 with Azure AD SSO support |
+| `pulumi` | Pulumi infrastructure-as-code CLI |
+| `esp-idf` | ESP-IDF embedded development environment |
+| `secrets-management` | Bitwarden CLI, rbw helpers |
 
 ---
 
-## Package Duplication: wslu
+## Darwin Modules (9)
 
-The `wslu` package appears in BOTH `wsl-base` and `wsl-home-base` intentionally:
-- **System level** (NixOS module): Provides system-wide access on NixOS-WSL
-- **User level** (Home Manager module): Ensures availability on ANY WSL distro
+For macOS hosts via nix-darwin.
 
-This duplication is harmless on NixOS-WSL (Nix deduplicates automatically) and essential for portability to vanilla WSL distributions.
+### System Type Layers
+
+| Export Name | Description |
+|-------------|-------------|
+| `system-minimal` | Nix settings, locale, core packages |
+| `system-default` | Users, networking, fonts |
+| `system-cli` | Dev tools, shell, tmux, neovim |
+| `system-desktop` | GUI, desktop environment |
+
+### Feature Modules (Darwin)
+
+| Export Name | Description |
+|-------------|-------------|
+| `shell` | zsh/bash setup |
+| `git` | gitconfig |
+| `tmux` | tmux config |
+| `neovim` | Nixvim setup |
+| `secrets-management` | SOPS/Bitwarden integration |
 
 ---
 
-## Getting Started
+## Platform Compatibility
 
-### For NixOS-WSL Users
+| Module Type | NixOS | NixOS-WSL | Ubuntu/Debian WSL | macOS |
+|-------------|-------|-----------|-------------------|-------|
+| `nixosModules.*` | Yes | Yes | No | No |
+| `homeManagerModules.*` | Yes | Yes | Yes (with Nix + HM) | Yes |
+| `darwinModules.*` | No | No | No | Yes |
 
-You can use both the NixOS system module and Home Manager module:
+**Key insight**: Home Manager modules work on any platform with Nix + home-manager
+installed. NixOS modules require a NixOS system. Darwin modules require nix-darwin.
+
+---
+
+## Usage Examples
+
+### Dev Team WSL Image (Turnkey)
+
+Use the pre-built NixOS-WSL bundles for a complete setup:
 
 ```nix
 {
@@ -270,25 +181,26 @@ You can use both the NixOS system module and Home Manager module:
   };
 
   outputs = { nixpkgs, nixos-wsl, home-manager, nixcfg, ... }: {
-    # System configuration
-    nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+    nixosConfigurations.my-wsl = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
       modules = [
         nixos-wsl.nixosModules.default
-        nixcfg.nixosModules.wsl-base  # System-level WSL config
+        nixcfg.nixosModules.wsl-dev-team
         {
-          wslCommon.hostname = "my-host";
+          systemDefault.userName = "myuser";
+          wsl-settings.hostname = "my-wsl";
         }
       ];
     };
 
-    # User configuration
-    homeConfigurations."me@my-host" = home-manager.lib.homeManagerConfiguration {
+    homeConfigurations."myuser@my-wsl" = home-manager.lib.homeManagerConfiguration {
+      pkgs = import nixpkgs { system = "x86_64-linux"; };
       modules = [
-        nixcfg.homeManagerModules.wsl-home-base  # User-level WSL config
+        nixcfg.homeManagerModules.home-dev-team
         {
-          homeBase = {
-            username = "me";
-            homeDirectory = "/home/me";
+          home = {
+            username = "myuser";
+            homeDirectory = "/home/myuser";
           };
         }
       ];
@@ -297,9 +209,7 @@ You can use both the NixOS system module and Home Manager module:
 }
 ```
 
-### For Vanilla WSL Users (Ubuntu, Debian, etc.)
-
-You can ONLY use the Home Manager module (system module requires NixOS):
+### Vanilla WSL (Ubuntu/Debian) with Home Manager Only
 
 ```nix
 {
@@ -313,9 +223,13 @@ You can ONLY use the Home Manager module (system module requires NixOS):
     homeConfigurations."me@ubuntu-wsl" = home-manager.lib.homeManagerConfiguration {
       pkgs = import nixpkgs { system = "x86_64-linux"; };
       modules = [
-        nixcfg.homeManagerModules.wsl-home-base  # Works on vanilla WSL!
+        nixcfg.homeManagerModules.wsl-home-base
+        nixcfg.homeManagerModules.shell
+        nixcfg.homeManagerModules.git
+        nixcfg.homeManagerModules.tmux
+        nixcfg.homeManagerModules.neovim
         {
-          homeBase = {
+          home = {
             username = "me";
             homeDirectory = "/home/me";
           };
@@ -326,75 +240,75 @@ You can ONLY use the Home Manager module (system module requires NixOS):
 }
 ```
 
----
-
-## Customization Guide
-
-### Overriding Defaults
-
-All module options use `lib.mkDefault`, allowing easy overrides:
+### Cherry-Pick for Non-WSL NixOS
 
 ```nix
 {
-  imports = [ nixcfg.homeManagerModules.wsl-home-base ];
-
-  # Override any default
-  homeBase = {
-    enableEspIdf = false;  # Disable ESP-IDF if not needed
-    environmentVariables.EDITOR = "vim";  # Change editor
-    shellAliases.explorer = "xdg-open";  # Custom alias
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixcfg.url = "github:timblaktu/nixcfg";
   };
 
-  # Add your own packages
-  home.packages = with pkgs; [
-    ripgrep
-    fd
-  ];
+  outputs = { nixpkgs, nixcfg, ... }: {
+    nixosConfigurations.my-server = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixcfg.nixosModules.system-cli
+        nixcfg.nixosModules.secrets-management
+      ];
+    };
+  };
 }
 ```
 
-### Extending Modules
-
-You can layer additional modules on top:
+### Proxmox VM Image
 
 ```nix
 {
-  imports = [
-    nixcfg.homeManagerModules.wsl-home-base
-    ./my-custom-wsl-tweaks.nix
-  ];
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixcfg.url = "github:timblaktu/nixcfg";
+  };
 
-  # Your customizations here
+  outputs = { nixpkgs, nixcfg, ... }: {
+    nixosConfigurations.my-vm = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixcfg.nixosModules.dev-team
+        nixcfg.nixosModules.proxmox-image-config
+      ];
+    };
+  };
 }
 ```
 
 ---
 
-## Contributing
+## Bundle Composition
 
-Found a bug or want to add features? Contributions welcome!
+Bundles compose feature modules for convenience. You can use a bundle and override
+any option, or skip bundles and cherry-pick features directly.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Ensure `nix flake check` passes
-5. Submit a pull request
+```
+NixOS bundles:
+  wsl-dev-team  ->  wsl-enterprise  ->  system-cli  ->  system-default  ->  system-minimal
+                                    +   wsl-base
+                +   binfmt, podman, claude-code, usbip
 
----
+  dev-team      ->  system-cli + binfmt + podman + claude-code + usbutils/kmod
 
-## Support
-
-- **Repository**: https://github.com/timblaktu/nixcfg
-- **Issues**: https://github.com/timblaktu/nixcfg/issues
-- **Documentation**: This file and `docs/CONSOLIDATION-PLAN.md`
-
----
-
-## License
-
-See repository LICENSE file.
+HM bundles:
+  home-dev-team ->  home-enterprise  ->  home-cli  ->  home-default  ->  home-minimal
+                +   claude-code, opencode, gitlab-auth, podman
+```
 
 ---
 
-**Last Updated**: 2025-12-13
-**Module Version**: Phase 2 - Flake exports added
+## Distribution
+
+**Pre-built WSL image**: Download from [GitHub Releases](https://github.com/timblaktu/nixcfg/releases/latest).
+See [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md) for import instructions.
+
+**Flake input**: `inputs.nixcfg.url = "github:timblaktu/nixcfg";`
+
+---
+
+**Last Updated**: 2026-03-18
