@@ -70,7 +70,7 @@ Hierarchical layers — each imports the one above it.
 
 | Export Name | Description |
 |-------------|-------------|
-| `crowdstrike-falcon` | CrowdStrike Falcon sensor (systemd service + FHS-wrapped .deb). WSL2: RFM mode |
+| `crowdstrike-falcon` | CrowdStrike Falcon sensor (systemd service + FHS-wrapped .deb). WSL2: [RFM only](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) |
 | `secrets-management` | SOPS-nix integration, Bitwarden helpers |
 | `shell` | System-level zsh/bash setup |
 | `git` | System-level gitconfig |

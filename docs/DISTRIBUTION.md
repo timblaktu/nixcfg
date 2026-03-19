@@ -209,7 +209,9 @@ The `.wsl` tarball is a compressed NixOS root filesystem. It includes:
 - **AI assistants** — Claude Code and OpenCode with multi-account wrapper scripts
 - **Containers** — Podman with `docker` alias
 - **Cross-compilation** — aarch64 binfmt via QEMU
-- **CrowdStrike Falcon** — module included but disabled by default (opt-in)
+- **CrowdStrike Falcon** — module included but disabled by default (opt-in).
+  On WSL2, the sensor enters Reduced Functionality Mode (compliance inventory only).
+  See [CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md)
 - **Generic `dev` user** — with `setup-username` for personalization
 - **wsl-distribution.conf** — custom Terminal profile metadata (icon, name)
 
@@ -226,7 +228,8 @@ CLI-only operation; CUDA auto-enables graphics when needed).
 - [SHARED-MODULES.md](SHARED-MODULES.md) — Module catalog for flake consumers
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Repository structure and design patterns
 - [WSL-CONFIGURATION-GUIDE.md](WSL-CONFIGURATION-GUIDE.md) — WSL-specific config details
-- [CrowdStrike WSL Limitations](../modules/programs/crowdstrike-falcon/docs/WSL-LIMITATIONS.md) — Falcon sensor on WSL2
+- [CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) — IT-facing analysis and recommendations
+- [CrowdStrike WSL Limitations](../modules/programs/crowdstrike-falcon/docs/WSL-LIMITATIONS.md) — Technical reference for module developers
 
 ---
 

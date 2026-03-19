@@ -10,8 +10,14 @@
 #   - Mutable /opt/CrowdStrike via tmpfiles (required by falcon sensor)
 #   - Secret file support for CID and provisioning token (SOPS/agenix compatible)
 #   - Golden image support: autoRemoveAid clears Agent ID on service start
-#   - WSL2 note: Sensor enters Reduced Functionality Mode (RFM) on WSL2 kernel.
-#     See docs/WSL-LIMITATIONS.md for details.
+#
+# WSL2 WARNING: The microsoft-standard-WSL2 kernel is NOT on CrowdStrike's
+# supported kernel whitelist. The sensor enters Reduced Functionality Mode (RFM)
+# on WSL2 — heartbeats and inventory only, no detection or prevention. The
+# Windows-side Falcon WSL2 Visibility Plugin (sensor 7.26+) provides actual
+# detection coverage for WSL2 workloads. See:
+#   - docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md (IT-facing overview)
+#   - modules/programs/crowdstrike-falcon/docs/WSL-LIMITATIONS.md (technical reference)
 #
 # Usage:
 #   imports = [ inputs.self.modules.nixos.crowdstrike-falcon ];
@@ -146,7 +152,15 @@
       in
       {
         options.services.falcon-sensor = {
-          enable = lib.mkEnableOption "CrowdStrike Falcon sensor";
+          enable = lib.mkEnableOption ''
+            CrowdStrike Falcon sensor.
+
+            On WSL2, the sensor enters Reduced Functionality Mode (RFM) because the
+            microsoft-standard-WSL2 kernel is not on CrowdStrike's supported whitelist.
+            RFM provides heartbeats and asset inventory only — no detection or prevention.
+            Set {option}`acknowledgeWslRfm` to suppress the WSL RFM warning.
+            See docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md for the full analysis
+          '';
 
           package = lib.mkOption {
             type = lib.types.nullOr lib.types.path;
@@ -220,9 +234,13 @@
             type = lib.types.enum [ "auto" "bpf" "kernel" ];
             default = "bpf";
             description = ''
-              Sensor backend. "bpf" is recommended for NixOS and WSL2 (looser
-              kernel requirements). "kernel" requires a kernel on CrowdStrike's
+              Sensor backend. "bpf" is recommended for NixOS (looser kernel
+              requirements). "kernel" requires a kernel on CrowdStrike's
               supported whitelist.
+
+              Note: On WSL2, neither backend prevents Reduced Functionality Mode
+              (RFM). The kernel identity check triggers RFM regardless of backend
+              choice because the microsoft-standard-WSL2 kernel is not whitelisted.
             '';
           };
 
@@ -260,6 +278,24 @@
               cloning so each instance gets a unique AID upon first registration.
             '';
           };
+
+          acknowledgeWslRfm = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Whether you acknowledge that on WSL2, the Falcon sensor enters
+              Reduced Functionality Mode (RFM) — heartbeats and asset inventory
+              only, no detection or prevention. The microsoft-standard-WSL2 kernel
+              is not on CrowdStrike's supported whitelist and this cannot be changed.
+
+              Set to true to suppress the WSL RFM assertion. This confirms you
+              understand the sensor provides compliance inventory only on WSL2,
+              and that actual detection coverage comes from the Windows-side Falcon
+              WSL2 Visibility Plugin (sensor 7.26+).
+
+              See docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md for the full analysis.
+            '';
+          };
         };
 
         config = lib.mkIf cfg.enable {
@@ -289,6 +325,23 @@
             {
               assertion = !((config.wsl.enable or false) && cfg.backend == "kernel");
               message = "services.falcon-sensor: 'kernel' backend is not supported on WSL2. Use 'bpf'.";
+            }
+            {
+              assertion = !((config.wsl.enable or false) && cfg.enable && !cfg.acknowledgeWslRfm);
+              message = ''
+                services.falcon-sensor: On WSL2, the CrowdStrike Falcon sensor enters
+                Reduced Functionality Mode (RFM) — heartbeats and asset inventory only,
+                no detection or prevention. The microsoft-standard-WSL2 kernel is not on
+                CrowdStrike's supported whitelist.
+
+                Actual WSL2 detection coverage comes from the Windows-side Falcon WSL2
+                Visibility Plugin (sensor 7.26+), not from a Linux sensor inside WSL.
+
+                If you understand this and want the sensor for compliance inventory,
+                set `services.falcon-sensor.acknowledgeWslRfm = true`.
+
+                See docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md for the full analysis.
+              '';
             }
           ];
 

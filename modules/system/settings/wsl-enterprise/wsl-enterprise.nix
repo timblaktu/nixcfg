@@ -66,7 +66,10 @@
           inputs.self.modules.nixos.system-cli
           # WSL integration (wsl.conf, users, SSH, SOPS, USBIP, etc.)
           inputs.self.modules.nixos.wsl
-          # CrowdStrike Falcon sensor (systemd service + FHS-wrapped package)
+          # CrowdStrike Falcon sensor (systemd service + FHS-wrapped package).
+          # On WSL2, sensor enters Reduced Functionality Mode (RFM) — compliance
+          # inventory only. Detection comes from the Windows-side Falcon WSL2
+          # Visibility Plugin. See docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md.
           inputs.self.modules.nixos.crowdstrike-falcon
         ];
 
@@ -238,6 +241,9 @@
           # CrowdStrike Falcon sensor enterprise defaults (opt-in per policy).
           # The actual module is in modules/programs/crowdstrike-falcon/.
           # Teams and hosts set services.falcon-sensor.package + .cid to activate.
+          # NOTE: On WSL2, the sensor provides compliance inventory only (RFM).
+          # Hosts enabling this on WSL must also set acknowledgeWslRfm = true.
+          # See docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md.
           {
             services.falcon-sensor = {
               enable = lib.mkDefault false;
