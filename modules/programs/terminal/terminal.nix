@@ -1,5 +1,5 @@
 # modules/programs/terminal/terminal.nix
-# Terminal configuration, font setup, and verification tools [nd]
+# Terminal configuration, font setup, and verification tools
 #
 # Provides:
 #   flake.modules.homeManager.terminal - Terminal utilities and WSL verification

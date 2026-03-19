@@ -71,25 +71,17 @@
       inherit (self.modules.nixos) amazon-image-config;
 
       # --- Feature Modules (NixOS) ---
-
-      # CrowdStrike Falcon sensor (systemd service + FHS-wrapped .deb package)
-      # Note: On WSL2 kernel, sensor enters Reduced Functionality Mode (RFM)
-      inherit (self.modules.nixos) crowdstrike-falcon;
-
-      # Secrets management (sops-nix integration, Bitwarden helpers)
-      inherit (self.modules.nixos) secrets-management;
-
-      # Shell configuration (system-level zsh/bash setup)
-      inherit (self.modules.nixos) shell;
-
-      # Git configuration (system-level gitconfig)
-      inherit (self.modules.nixos) git;
-
-      # Tmux configuration (system-level)
-      inherit (self.modules.nixos) tmux;
-
-      # Neovim/Nixvim configuration (system-level)
-      inherit (self.modules.nixos) neovim;
+      # crowdstrike-falcon: CrowdStrike Falcon sensor (WSL2: RFM mode)
+      # secrets-management: sops-nix integration, Bitwarden helpers
+      # shell/git/tmux/neovim: System-level configuration
+      inherit (self.modules.nixos)
+        crowdstrike-falcon
+        secrets-management
+        shell
+        git
+        tmux
+        neovim
+        ;
     };
 
     # =========================================================================
@@ -127,72 +119,30 @@
       inherit (self.modules.homeManager) home-dev-team;
 
       # --- Feature Modules (Home Manager) ---
-
-      # Shell (zsh/bash config, starship prompt, direnv, fzf)
-      inherit (self.modules.homeManager) shell;
-
-      # Git (user-level gitconfig, aliases, delta pager)
-      inherit (self.modules.homeManager) git;
-
-      # Tmux (config, plugins, auto-reload)
-      inherit (self.modules.homeManager) tmux;
-
-      # Neovim/Nixvim (plugins, LSP, keybindings)
-      inherit (self.modules.homeManager) neovim;
-
-      # Terminal (font detection, TERM config)
-      inherit (self.modules.homeManager) terminal;
-
-      # Shell utilities (custom shell functions and libraries)
-      inherit (self.modules.homeManager) shell-utils;
-
-      # System tools (bootstrap, admin utilities)
-      inherit (self.modules.homeManager) system-tools;
-
-      # Yazi (terminal file manager)
-      inherit (self.modules.homeManager) yazi;
-
-      # OneDrive utilities for WSL
-      inherit (self.modules.homeManager) onedrive;
-
-      # Files management (scripts, completions, autoWriter integration)
-      inherit (self.modules.homeManager) files;
-
-      # Git auth helpers (credential refresh utilities)
-      inherit (self.modules.homeManager) git-auth-helpers;
-
-      # Claude Code (multi-account AI coding assistant)
-      inherit (self.modules.homeManager) claude-code;
-
-      # OpenCode (multi-account AI coding assistant)
-      inherit (self.modules.homeManager) opencode;
-
-      # GitLab authentication (CLI + credential helpers + Bitwarden/SOPS)
-      inherit (self.modules.homeManager) gitlab-auth;
-
-      # GitHub authentication (CLI + credential helpers + Bitwarden/SOPS)
-      inherit (self.modules.homeManager) github-auth;
-
-      # Podman container tools (podman-tui, compose, docker aliases)
-      inherit (self.modules.homeManager) podman;
-
-      # Development tools (Python, Rust, Node, Go toolchains)
-      inherit (self.modules.homeManager) development-tools;
-
-      # Windows Terminal settings management for WSL
-      inherit (self.modules.homeManager) windows-terminal;
-
-      # AWS CLI v2 with Azure AD SSO support
-      inherit (self.modules.homeManager) awscli;
-
-      # Pulumi infrastructure-as-code CLI
-      inherit (self.modules.homeManager) pulumi;
-
-      # ESP-IDF embedded development environment
-      inherit (self.modules.homeManager) esp-idf;
-
-      # Secrets management (Bitwarden CLI, rbw helpers)
-      inherit (self.modules.homeManager) secrets-management;
+      inherit (self.modules.homeManager)
+        shell# zsh/bash config, starship prompt, direnv, fzf
+        git# user-level gitconfig, aliases, delta pager
+        tmux# config, plugins, auto-reload
+        neovim# Nixvim plugins, LSP, keybindings
+        terminal# font detection, TERM config
+        shell-utils# custom shell functions and libraries
+        system-tools# bootstrap, admin utilities
+        yazi# terminal file manager
+        onedrive# OneDrive utilities for WSL
+        files# scripts, completions, autoWriter integration
+        git-auth-helpers# credential refresh utilities
+        claude-code# multi-account AI coding assistant
+        opencode# multi-account AI coding assistant
+        gitlab-auth# GitLab CLI + credential helpers + Bitwarden/SOPS
+        github-auth# GitHub CLI + credential helpers + Bitwarden/SOPS
+        podman# container tools (podman-tui, compose, docker aliases)
+        development-tools# Python, Rust, Node, Go toolchains
+        windows-terminal# Windows Terminal settings management for WSL
+        awscli# AWS CLI v2 with Azure AD SSO support
+        pulumi# Pulumi infrastructure-as-code CLI
+        esp-idf# ESP-IDF embedded development environment
+        secrets-management# Bitwarden CLI, rbw helpers
+        ;
     };
 
     # =========================================================================
@@ -200,18 +150,18 @@
     # =========================================================================
     darwinModules = {
 
-      # System type layers
-      inherit (self.modules.darwin) system-minimal;
-      inherit (self.modules.darwin) system-default;
-      inherit (self.modules.darwin) system-cli;
-      inherit (self.modules.darwin) system-desktop;
-
-      # Feature modules with Darwin support
-      inherit (self.modules.darwin) shell;
-      inherit (self.modules.darwin) git;
-      inherit (self.modules.darwin) tmux;
-      inherit (self.modules.darwin) neovim;
-      inherit (self.modules.darwin) secrets-management;
+      # System type layers + feature modules with Darwin support
+      inherit (self.modules.darwin)
+        system-minimal
+        system-default
+        system-cli
+        system-desktop
+        shell
+        git
+        tmux
+        neovim
+        secrets-management
+        ;
     };
   };
 }

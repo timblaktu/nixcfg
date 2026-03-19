@@ -1,5 +1,5 @@
 # modules/programs/crowdstrike-falcon/crowdstrike-falcon.nix
-# CrowdStrike Falcon sensor for NixOS [N]
+# CrowdStrike Falcon sensor for NixOS
 #
 # Provides:
 #   flake.modules.nixos.crowdstrike-falcon - CrowdStrike Falcon sensor systemd service
@@ -62,7 +62,7 @@
 
             # Some .deb layouts use usr/lib or usr/bin
             if [ -d usr ]; then
-              cp -r usr/* $out/ 2>/dev/null || true
+              cp -r usr/* $out/
             fi
 
             # Ensure key binaries are findable
@@ -120,21 +120,26 @@
           ++ lib.optional (provisioningTokenValue != "") "--provisioning-token=${provisioningTokenValue}"
           ++ lib.optional (cfg.tags != [ ]) "--tags=${lib.concatStringsSep "," cfg.tags}"
           ++ lib.optional (cfg.backend != "auto") "--backend=${cfg.backend}"
-          ++ lib.optional cfg.proxy.enable "--apd=false --aph=${cfg.proxy.host} --app=${toString cfg.proxy.port}"
+          ++ lib.optionals cfg.proxy.enable [
+            "--apd=false"
+            "--aph=${cfg.proxy.host}"
+            "--app=${toString cfg.proxy.port}"
+          ]
+          ++ lib.optional (cfg.cloudRegion != "us-1") "--cloud=${cfg.cloudRegion}"
           ++ lib.optional (cfg.trace != "none") "--trace=${cfg.trace}"
         );
 
         # Resolve CID: secret file takes precedence over plaintext option
         cidValue =
           if cfg.cidSecretFile != null then
-            "$(cat ${cfg.cidSecretFile})"
+            "$(cat '${cfg.cidSecretFile}')"
           else
             cfg.cid;
 
         # Resolve provisioning token similarly
         provisioningTokenValue =
           if cfg.provisioningTokenSecretFile != null then
-            "$(cat ${cfg.provisioningTokenSecretFile})"
+            "$(cat '${cfg.provisioningTokenSecretFile}')"
           else
             cfg.provisioningToken;
 
@@ -144,7 +149,8 @@
           enable = lib.mkEnableOption "CrowdStrike Falcon sensor";
 
           package = lib.mkOption {
-            type = lib.types.path;
+            type = lib.types.nullOr lib.types.path;
+            default = null;
             description = ''
               Path to the Falcon sensor .deb package. The package is not
               publicly downloadable -- it requires CrowdStrike Falcon Console
@@ -259,6 +265,10 @@
         config = lib.mkIf cfg.enable {
           assertions = [
             {
+              assertion = cfg.package != null;
+              message = "services.falcon-sensor.package must be set to a Falcon sensor .deb path.";
+            }
+            {
               assertion = cfg.cid != "" || cfg.cidSecretFile != null;
               message = ''
                 services.falcon-sensor: Either `cid` or `cidSecretFile` must be
@@ -271,6 +281,14 @@
               message = ''
                 services.falcon-sensor: `proxy.host` must be set when proxy is enabled.
               '';
+            }
+            {
+              assertion = builtins.stringLength (lib.concatStringsSep "," cfg.tags) <= 256;
+              message = "services.falcon-sensor.tags: combined length exceeds CrowdStrike's 256-char limit.";
+            }
+            {
+              assertion = !((config.wsl.enable or false) && cfg.backend == "kernel");
+              message = "services.falcon-sensor: 'kernel' backend is not supported on WSL2. Use 'bpf'.";
             }
           ];
 

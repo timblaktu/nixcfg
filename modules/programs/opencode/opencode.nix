@@ -1,5 +1,5 @@
 # modules/programs/opencode/opencode.nix
-# OpenCode multi-account configuration for home-manager [nd]
+# OpenCode multi-account configuration for home-manager
 #
 # Provides:
 #   flake.modules.homeManager.opencode - Full OpenCode multi-account setup

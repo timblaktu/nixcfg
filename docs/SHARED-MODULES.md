@@ -32,7 +32,7 @@ All options use `lib.mkDefault` — override freely in your config.
 
 ---
 
-## NixOS Modules (13)
+## NixOS Modules (16)
 
 ### System Type Layers
 
@@ -79,7 +79,7 @@ Hierarchical layers — each imports the one above it.
 
 ---
 
-## Home Manager Modules (25)
+## Home Manager Modules (29)
 
 ### System Type Layers
 

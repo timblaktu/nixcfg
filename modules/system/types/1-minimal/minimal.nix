@@ -1,5 +1,5 @@
 # modules/system/types/1-minimal/minimal.nix
-# Minimal system configuration layer [NDnd]
+# Minimal system configuration layer
 #
 # Provides:
 #   flake.modules.nixos.system-minimal - Absolute minimum NixOS configuration

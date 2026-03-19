@@ -1,5 +1,5 @@
 # modules/programs/system-tools/system-tools.nix
-# System bootstrap and administration tools [nd]
+# System bootstrap and administration tools
 #
 # Provides:
 #   flake.modules.homeManager.system-tools - System admin and bootstrap utilities

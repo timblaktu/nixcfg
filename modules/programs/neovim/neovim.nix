@@ -1,5 +1,5 @@
 # modules/programs/neovim/neovim.nix
-# Neovim/Nixvim configuration for all platforms [NDnd]
+# Neovim/Nixvim configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.neovim - Full nixvim config (LSP, treesitter, plugins)

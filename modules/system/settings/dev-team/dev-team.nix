@@ -1,5 +1,5 @@
 # modules/system/settings/dev-team/dev-team.nix
-# Platform-agnostic dev team NixOS module [NDnd]
+# Platform-agnostic dev team NixOS module
 #
 # Provides:
 #   flake.modules.nixos.dev-team - Shared dev team system config

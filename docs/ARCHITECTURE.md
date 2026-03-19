@@ -79,18 +79,18 @@ nixcfg/
 │   │   ├── shell-utils/         # Bash libraries
 │   │   ├── esp-idf/             # ESP32 development
 │   │   ├── onedrive/            # OneDrive utilities
-│   │   ├── podman [nd]/         # Container tools
-│   │   ├── windows-terminal [nd]/ # Windows Terminal config
+│   │   ├── podman/              # Container tools
+│   │   ├── windows-terminal/    # Windows Terminal config
 │   │   ├── secrets-management/  # SOPS + Bitwarden
 │   │   ├── github-auth/         # GitHub authentication
-│   │   ├── gitlab-auth [nd]/    # GitLab authentication
-│   │   ├── git-auth-helpers [nd]/ # Git credential helpers
-│   │   └── files [nd]/          # Shared scripts and libs
+│   │   ├── gitlab-auth/         # GitLab authentication
+│   │   ├── git-auth-helpers/    # Git credential helpers
+│   │   └── files/               # Shared scripts and libs
 │   │
 │   └── hosts/                   # Host-specific configurations
 │       ├── thinky-nixos/        # Primary WSL NixOS dev machine
 │       ├── pa161878-nixos [N]/  # Work WSL with CUDA
-│       ├── thinky-ubuntu [nd]/  # Vanilla Ubuntu WSL (HM only)
+│       ├── thinky-ubuntu/       # Vanilla Ubuntu WSL (HM only)
 │       ├── mbp [N]/             # Intel MacBook Pro (NixOS)
 │       ├── potato [N]/          # ARM SBC (Private CA)
 │       ├── macbook-air [D]/     # Apple Silicon Darwin
@@ -205,10 +205,10 @@ Directory names indicate platform support:
 |----------|---------|---------|
 | `[N]` | NixOS only | `pa161878-nixos [N]/` |
 | `[D]` | Darwin only | `macbook-air [D]/` |
-| `[nd]` | Home Manager only (NixOS + Darwin) | `thinky-ubuntu [nd]/` |
-| `[ND]` | NixOS + Darwin system | (not currently used) |
-| `[NDnd]` | All three contexts | (not currently used) |
 | No brackets | Universal | `git/`, `shell/` |
+
+> **Note**: `[nd]` and `[NDnd]` directory suffixes were removed in Plan 026 Task 4.
+> Platform scope is now documented in module header comments only.
 
 ### 4. import-tree Auto-Discovery
 

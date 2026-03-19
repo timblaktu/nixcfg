@@ -1,5 +1,5 @@
 # modules/system/settings/wsl-home/wsl-home.nix
-# WSL Home Manager configuration [nd]
+# WSL Home Manager configuration
 #
 # Provides:
 #   flake.modules.homeManager.wsl-home - WSL user-level configuration

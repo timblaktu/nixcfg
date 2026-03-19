@@ -1,5 +1,5 @@
 # modules/programs/shell/shell.nix
-# Shell configuration for all platforms [NDnd]
+# Shell configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.shell - ZSH configuration with vi-mode, completions, plugins

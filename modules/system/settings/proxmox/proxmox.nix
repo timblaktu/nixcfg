@@ -1,5 +1,5 @@
 # modules/system/settings/proxmox/proxmox.nix
-# Proxmox VE image configuration module [NDnd]
+# Proxmox VE image configuration module
 #
 # Provides:
 #   flake.modules.nixos.proxmox-image-config - Deferred module for image.modules.proxmox

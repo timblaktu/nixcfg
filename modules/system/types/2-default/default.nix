@@ -1,5 +1,5 @@
 # modules/system/types/2-default/default.nix
-# Default system configuration layer [NDnd]
+# Default system configuration layer
 #
 # Provides:
 #   flake.modules.nixos.system-default - NixOS with user management + integrations

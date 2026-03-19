@@ -1,5 +1,5 @@
 # modules/programs/git/git.nix
-# Git configuration for all platforms [NDnd]
+# Git configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.git - Full git config with delta, hooks, tools

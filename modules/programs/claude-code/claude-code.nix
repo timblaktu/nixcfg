@@ -1,5 +1,5 @@
 # modules/programs/claude-code/claude-code.nix
-# Claude Code multi-account configuration for home-manager [nd]
+# Claude Code multi-account configuration for home-manager
 #
 # Provides:
 #   flake.modules.homeManager.claude-code - Full Claude Code multi-account setup

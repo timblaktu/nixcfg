@@ -1,5 +1,5 @@
 # modules/system/types/3-cli/cli.nix
-# CLI-focused system configuration layer [NDnd]
+# CLI-focused system configuration layer
 #
 # Provides:
 #   flake.modules.nixos.system-cli - NixOS with full CLI tooling

@@ -1,5 +1,5 @@
 # modules/system/settings/wsl-dev-team/wsl-dev-team.nix
-# Dev team WSL configuration layer [NDnd]
+# Dev team WSL configuration layer
 #
 # Provides:
 #   flake.modules.nixos.wsl-dev-team - Team-specific NixOS-WSL system config

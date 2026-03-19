@@ -1,5 +1,5 @@
 # modules/programs/development-tools/development-tools.nix
-# Development toolchains and build tools for home-manager [nd]
+# Development toolchains and build tools for home-manager
 #
 # Provides:
 #   flake.modules.homeManager.development-tools - Language toolchains and build tools

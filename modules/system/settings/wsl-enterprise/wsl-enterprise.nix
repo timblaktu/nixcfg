@@ -1,5 +1,5 @@
 # modules/system/settings/wsl-enterprise/wsl-enterprise.nix
-# Enterprise WSL base configuration [NDnd]
+# Enterprise WSL base configuration
 #
 # Provides:
 #   flake.modules.nixos.wsl-enterprise - Company-wide NixOS-WSL system base

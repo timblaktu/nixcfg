@@ -1,5 +1,5 @@
 # modules/programs/tmux/tmux.nix
-# Tmux configuration for all platforms [NDnd]
+# Tmux configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.tmux - Full tmux config with plugins, keybindings, auto-reload
