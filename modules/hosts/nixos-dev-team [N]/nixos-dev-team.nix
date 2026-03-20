@@ -35,6 +35,17 @@
     config = {
       networking.hostName = "nixos-dev-team";
 
+      # DHCP on all ethernet interfaces via systemd-networkd.
+      # The upstream proxmox-image.nix sets networking.useDHCP = false and
+      # enables systemd-networkd (via cloud-init). Without an explicit
+      # networkd config, the VM boots with no IP. The 99- prefix gives
+      # this lowest priority so cloud-init metadata overrides it.
+      systemd.network.enable = true;
+      systemd.network.networks."99-ethernet-default-dhcp" = {
+        matchConfig.Type = "ether";
+        networkConfig.DHCP = "yes";
+      };
+
       # NOTE: nixpkgs.config.allowUnfree is set at the nixosConfiguration
       # registration level (nixos-configurations.nix), not here. Setting it
       # in the module causes assertion failures in VM tests where the test
