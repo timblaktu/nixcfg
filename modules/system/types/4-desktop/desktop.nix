@@ -1,5 +1,5 @@
 # modules/system/types/4-desktop/desktop.nix
-# Desktop system configuration layer [NDnd]
+# Desktop system configuration layer
 #
 # Provides:
 #   flake.modules.nixos.system-desktop - NixOS with full desktop environment

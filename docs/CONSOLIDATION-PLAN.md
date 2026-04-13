@@ -571,9 +571,9 @@ home-manager switch --flake '.#tim@thinky-nixos' --dry-run
           };
           gitlab = {
             enable = true;
-            host = "git.panasonic.aero";
+            host = "gitlab.example.com";
             bitwarden = {
-              item = "GitLab git.panasonic.aero";
+              item = "GitLab Token";
               field = "lord (access token)";
             };
             glab.enable = true;

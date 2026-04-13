@@ -1,5 +1,5 @@
 # modules/programs/claude-code/claude-code.nix
-# Claude Code multi-account configuration for home-manager [nd]
+# Claude Code multi-account configuration for home-manager
 #
 # Provides:
 #   flake.modules.homeManager.claude-code - Full Claude Code multi-account setup
@@ -21,6 +21,13 @@
 #     enable = true;
 #     accounts = { max = { ... }; pro = { ... }; };
 #   };
+#
+# Known upstream limitations (Plan 032):
+#   - Editor / vim mode is NOT exposable via settings.json. Upstream removed
+#     the persistent setting in v2.1.91; it is now a runtime `/config` toggle
+#     only. There is no nix option for it. See docs/ai-tool-feature-comparison.md
+#     §5 (CC-G18). To use vim-style input bindings, run Claude Code and toggle
+#     via the `/config` slash command at runtime.
 { config, lib, inputs, ... }:
 {
   flake.modules = {
@@ -135,6 +142,327 @@
               default = [ ];
               description = "Additional directories to grant access to";
             };
+
+            # Plan 032 T4 — CC-G2. Serializes as
+            # permissions.disableBypassPermissionsMode in settings.json.
+            # Upstream documents the value "disable" (CHANGELOG v-ish, see
+            # examples/settings/settings-strict.json). Typed as nullOr str to
+            # remain forward-compatible with any new enum values.
+            disableBypassPermissionsMode = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              example = "disable";
+              description = ''
+                Hide the bypass permissions mode from the picker. Null =
+                upstream default. Known value: "disable".
+              '';
+            };
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Plan 032 T4 — CC governance / managed-settings options
+          # (CC-G3..CC-G7). Every key here serializes to the *top level* of
+          # settings.json (not nested under "governance") — the nix-side
+          # grouping is for ergonomics only. All leaves default to null so we
+          # only emit keys the user sets. Structured values use the JSON
+          # freeform type for forward-compat with upstream schema additions.
+          # Keys verified against ~/src/claude-code/examples/settings/
+          # settings-strict.json + CHANGELOG entries in
+          # docs/ai-tool-feature-comparison.md §2.4.
+          # ─────────────────────────────────────────────────────────────────────
+          governance =
+            let
+              jsonType = (pkgs.formats.json { }).type;
+            in
+            {
+              allowManagedPermissionRulesOnly = mkOption {
+                type = types.nullOr types.bool;
+                default = null;
+                description = "Only apply permission rules from managed settings.";
+              };
+              allowManagedHooksOnly = mkOption {
+                type = types.nullOr types.bool;
+                default = null;
+                description = "Only run hooks defined in managed settings.";
+              };
+              allowedMcpServers = mkOption {
+                type = types.nullOr (types.listOf types.str);
+                default = null;
+                description = "Allowlist of MCP servers (managed policy).";
+              };
+              deniedMcpServers = mkOption {
+                type = types.nullOr (types.listOf types.str);
+                default = null;
+                description = "Denylist of MCP servers (managed policy).";
+              };
+              strictKnownMarketplaces = mkOption {
+                type = types.nullOr jsonType;
+                default = null;
+                description = ''
+                  Marketplace allowlist. Upstream accepts a list of objects
+                  with hostPattern/pathPattern entries; freeform JSON type is
+                  used here for forward-compat.
+                '';
+              };
+              allowedChannelPlugins = mkOption {
+                type = types.nullOr (types.listOf types.str);
+                default = null;
+                description = "Channel plugin allowlist for team/enterprise admins.";
+              };
+              enabledPlugins = mkOption {
+                type = types.nullOr jsonType;
+                default = null;
+                description = "Plugins forcibly enabled by managed settings.";
+              };
+              pluginTrustMessage = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = "Extra message appended to the plugin trust warning.";
+              };
+              forceRemoteSettingsRefresh = mkOption {
+                type = types.nullOr types.bool;
+                default = null;
+                description = ''
+                  Block CLI startup until remote managed settings are freshly
+                  fetched; exit if fetch fails (fail-closed).
+                '';
+              };
+            };
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Plan 032 T5 — CC security/UX scalar settings.
+          # All default to null so we only emit keys the user actually sets,
+          # leaving upstream defaults in place. Keys verified against
+          # ~/src/claude-code/CHANGELOG.md (commit hashes recorded in
+          # docs/ai-tool-feature-comparison.md §1).
+          # ─────────────────────────────────────────────────────────────────────
+          voice = {
+            enable = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Enable voice mode (push-to-talk). Serializes as top-level
+                `voiceEnabled` in settings.json. Null = upstream default (off).
+              '';
+            };
+
+            language = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              example = "japanese";
+              description = ''
+                Claude's response language and STT dictation language.
+                Serializes as top-level `language` in settings.json.
+                Null = upstream default (English).
+              '';
+            };
+          };
+
+          display.showThinkingSummaries = mkOption {
+            type = types.nullOr types.bool;
+            default = null;
+            description = ''
+              Show thinking summaries in interactive sessions. Upstream
+              changed the default to false; set true to restore the prior
+              behavior. Null = upstream default.
+            '';
+          };
+
+          cleanupPeriodDays = mkOption {
+            type = types.nullOr types.ints.positive;
+            default = null;
+            description = ''
+              Days to retain transcript and tool-result files before cleanup.
+              Upstream rejects 0 — use a positive integer or leave null for
+              the upstream default.
+            '';
+          };
+
+          security = {
+            disableSkillShellExecution = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Disable inline shell execution in skills, custom slash
+                commands, and plugin commands. Null = upstream default
+                (enabled).
+              '';
+            };
+
+            disableDeepLinkRegistration = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Prevent registration of the `claude-cli://` protocol handler.
+                Null = upstream default.
+              '';
+            };
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Plan 032 T3 — CC sandbox.* subtree (CC-G1).
+          # Keys verified against ~/src/claude-code/examples/settings/
+          # settings-bash-sandbox.json and CHANGELOG entries referenced in
+          # docs/ai-tool-feature-comparison.md §2.2. All leaves default to null
+          # so we only emit the keys the user sets; nested `network` and
+          # `filesystem` submodules are freeformType-enabled for forward-compat.
+          # ─────────────────────────────────────────────────────────────────────
+          sandbox = {
+            enabled = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Master switch for the Bash sandbox. Null = upstream default.";
+            };
+            failIfUnavailable = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Exit Claude Code if the sandbox runtime is not available (CHANGELOG v2.1.83).";
+            };
+            autoAllowBashIfSandboxed = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Auto-approve Bash commands when the sandbox is active.";
+            };
+            allowUnsandboxedCommands = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Allow commands that cannot be sandboxed to still run.";
+            };
+            excludedCommands = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              description = "Commands that bypass the sandbox entirely.";
+            };
+            enableWeakerNestedSandbox = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Enable a weaker nested sandbox when nesting is detected.";
+            };
+            enableWeakerNetworkIsolation = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "TLS bypass / weaker network isolation (macOS, CHANGELOG v2.1.70).";
+            };
+            network = mkOption {
+              default = { };
+              description = "Sandbox network controls. Freeform attrset for forward-compat.";
+              type = types.submodule {
+                freeformType = (pkgs.formats.json { }).type;
+                options = {
+                  allowUnixSockets = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = "Allowed unix socket paths.";
+                  };
+                  allowAllUnixSockets = mkOption {
+                    type = types.nullOr types.bool;
+                    default = null;
+                    description = "Allow all unix sockets.";
+                  };
+                  allowLocalBinding = mkOption {
+                    type = types.nullOr types.bool;
+                    default = null;
+                    description = "Allow binding to local network interfaces.";
+                  };
+                  allowedDomains = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = "Allowed outbound domains.";
+                  };
+                  httpProxyPort = mkOption {
+                    type = types.nullOr types.port;
+                    default = null;
+                    description = "HTTP proxy port.";
+                  };
+                  socksProxyPort = mkOption {
+                    type = types.nullOr types.port;
+                    default = null;
+                    description = "SOCKS proxy port.";
+                  };
+                };
+              };
+            };
+            filesystem = mkOption {
+              default = { };
+              description = "Sandbox filesystem controls (CHANGELOG v2.1.70/v2.1.77). Freeform.";
+              type = types.submodule {
+                freeformType = (pkgs.formats.json { }).type;
+                options = {
+                  allowWrite = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = "Whitelist of paths Claude may write to.";
+                  };
+                  denyRead = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = "Blacklist of paths Claude may not read from.";
+                  };
+                  allowRead = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = "Re-allow reads within otherwise-denied regions.";
+                  };
+                };
+              };
+            };
+          };
+
+          prompt.includeGitInstructions = mkOption {
+            type = types.nullOr types.bool;
+            default = null;
+            description = ''
+              Include the built-in commit/PR workflow instructions in
+              Claude's system prompt. Set false to suppress (also exposable
+              via `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS` env var). Null =
+              upstream default.
+            '';
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Plan 032 T6 — apiKeyHelper, worktree.sparsePaths, modelOverrides
+          # (CC-G14, CC-G15, CC-G16). Keys verified against
+          # ~/src/claude-code/CHANGELOG.md entries.
+          # ─────────────────────────────────────────────────────────────────────
+          apiKeyHelper = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            example = "/path/to/get-api-key.sh";
+            description = ''
+              Path to a script that prints an API key on stdout. Claude
+              Code calls this instead of reading ANTHROPIC_API_KEY; the
+              returned key has a 5-minute TTL before re-invocation. Useful
+              for vault-backed or rotating credentials. Null = upstream
+              default (use env var / OAuth).
+            '';
+          };
+
+          worktree.sparsePaths = mkOption {
+            type = types.nullOr (types.listOf types.str);
+            default = null;
+            example = [ "src/frontend" "packages/shared" ];
+            description = ''
+              Directories to include when `claude --worktree` creates a
+              sparse-checkout working tree. Useful in large monorepos to
+              avoid checking out unrelated subtrees. Serializes as
+              `worktree.sparsePaths` in settings.json. Null = full
+              checkout (upstream default).
+            '';
+          };
+
+          modelOverrides = mkOption {
+            type = types.nullOr (types.attrsOf types.str);
+            default = null;
+            example = {
+              opus = "arn:aws:bedrock:us-east-1:123456:inference-profile/my-opus";
+              sonnet = "arn:aws:bedrock:us-east-1:123456:inference-profile/my-sonnet";
+            };
+            description = ''
+              Map model picker entries to custom provider model IDs (e.g.
+              Bedrock inference profile ARNs). Keys are the picker names
+              (opus, sonnet, haiku); values are the provider-specific
+              model identifiers. Null = upstream defaults.
+            '';
           };
 
           environmentVariables = mkOption {
@@ -242,7 +570,7 @@
                               item = mkOption {
                                 type = types.str;
                                 description = "Bitwarden item name containing the token";
-                                example = "Code-Companion";
+                                example = "AI-Proxy-Token";
                               };
                               field = mkOption {
                                 type = types.str;
@@ -364,9 +692,11 @@
 
             mkSettingsTemplate = { model, accountApi ? null }: pkgs.writeText "claude-settings.json" (builtins.toJSON (
               let
-                hasHooks = cfg._internal.hooks.PreToolUse != null || cfg._internal.hooks.PostToolUse != null ||
-                  cfg._internal.hooks.Start != null || cfg._internal.hooks.Stop != null;
-                cleanHooks = filterAttrs (_n: v: v != null) cfg._internal.hooks;
+                # Filter out null and empty-list event slots so only populated
+                # hooks are serialized.  Fixes prior bug: gate checked only 4
+                # events (with a typo — "Start" instead of "SessionStart").
+                cleanHooks = filterAttrs (_n: v: v != null && v != [ ]) cfg._internal.hooks;
+                hasHooks = cleanHooks != { };
                 hasStatusline = cfg._internal.statuslineSettings != { };
 
                 permissionsV2 = {
@@ -375,6 +705,22 @@
                   inherit (cfg.permissions) ask;
                   inherit (cfg.permissions) defaultMode;
                   inherit (cfg.permissions) additionalDirectories;
+                } // optionalAttrs (cfg.permissions.disableBypassPermissionsMode != null) {
+                  inherit (cfg.permissions) disableBypassPermissionsMode;
+                };
+
+                # Plan 032 T4 — governance keys serialize flat at top level.
+                governanceJson = filterAttrs (_n: v: v != null) {
+                  inherit (cfg.governance)
+                    allowManagedPermissionRulesOnly
+                    allowManagedHooksOnly
+                    allowedMcpServers
+                    deniedMcpServers
+                    strictKnownMarketplaces
+                    allowedChannelPlugins
+                    enabledPlugins
+                    pluginTrustMessage
+                    forceRemoteSettingsRefresh;
                 };
 
                 accountEnvVars =
@@ -389,6 +735,26 @@
                     // (accountApi.extraEnvVars or { });
 
                 mergedEnvVars = cfg.environmentVariables // accountEnvVars;
+
+                # Plan 032 T3 — serialize sandbox.* subtree, stripping nulls.
+                stripNulls = attrs: filterAttrs (_n: v: v != null) attrs;
+                sandboxNetwork = stripNulls {
+                  inherit (cfg.sandbox.network)
+                    allowUnixSockets allowAllUnixSockets allowLocalBinding
+                    allowedDomains httpProxyPort socksProxyPort;
+                };
+                sandboxFilesystem = stripNulls {
+                  inherit (cfg.sandbox.filesystem) allowWrite denyRead allowRead;
+                };
+                sandboxBase = stripNulls {
+                  inherit (cfg.sandbox)
+                    enabled failIfUnavailable autoAllowBashIfSandboxed
+                    allowUnsandboxedCommands excludedCommands
+                    enableWeakerNestedSandbox enableWeakerNetworkIsolation;
+                };
+                sandboxJson = sandboxBase
+                  // optionalAttrs (sandboxNetwork != { }) { network = sandboxNetwork; }
+                  // optionalAttrs (sandboxFilesystem != { }) { filesystem = sandboxFilesystem; };
               in
               {
                 inherit model;
@@ -404,9 +770,43 @@
                   searchPaths = cfg.projectOverridePaths;
                 };
               }
+              # Plan 032 T5 — security/UX scalar settings (only emit when set)
+              // optionalAttrs (cfg.voice.enable != null) {
+                voiceEnabled = cfg.voice.enable;
+              }
+              // optionalAttrs (cfg.voice.language != null) {
+                inherit (cfg.voice) language;
+              }
+              // optionalAttrs (cfg.display.showThinkingSummaries != null) {
+                inherit (cfg.display) showThinkingSummaries;
+              }
+              // optionalAttrs (cfg.cleanupPeriodDays != null) {
+                inherit (cfg) cleanupPeriodDays;
+              }
+              // optionalAttrs (cfg.security.disableSkillShellExecution != null) {
+                inherit (cfg.security) disableSkillShellExecution;
+              }
+              // optionalAttrs (cfg.security.disableDeepLinkRegistration != null) {
+                inherit (cfg.security) disableDeepLinkRegistration;
+              }
+              // optionalAttrs (cfg.prompt.includeGitInstructions != null) {
+                inherit (cfg.prompt) includeGitInstructions;
+              }
+              # Plan 032 T6 — apiKeyHelper, worktree.sparsePaths, modelOverrides
+              // optionalAttrs (cfg.apiKeyHelper != null) {
+                inherit (cfg) apiKeyHelper;
+              }
+              // optionalAttrs (cfg.worktree.sparsePaths != null) {
+                worktree = { inherit (cfg.worktree) sparsePaths; };
+              }
+              // optionalAttrs (cfg.modelOverrides != null) {
+                inherit (cfg) modelOverrides;
+              }
+              # Plan 032 T3 — sandbox.* subtree
+              // optionalAttrs (sandboxJson != { }) { sandbox = sandboxJson; }
+              # Plan 032 T4 — governance keys (flat top-level)
+              // governanceJson
             ));
-
-            settingsTemplate = mkSettingsTemplate { model = cfg.defaultModel; };
 
             mcpTemplate = pkgs.writeText "claude-mcp.json" (builtins.toJSON {
               mcpServers = claudeCodeMcpServers;
@@ -470,10 +870,8 @@
 
           in
           mkIf cfg.enable {
-            home.packages = with pkgs; [
-              # Only include raw claude-code when no defaultAccount wrapper replaces it
-            ] ++ optional (cfg.defaultAccount == null) pkgs.claude-code
-            ++ (with pkgs; [
+            home.packages = with pkgs; optional (cfg.defaultAccount == null) pkgs.claude-code
+              ++ (with pkgs; [
               nodejs_22
               git
               ripgrep
@@ -499,7 +897,7 @@
             ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
               libnotify
             ] ++ wrapperScripts
-            ++ defaultWrapper;
+              ++ defaultWrapper;
 
             home.file = mkMerge [
               (mkMerge (mapAttrsToList

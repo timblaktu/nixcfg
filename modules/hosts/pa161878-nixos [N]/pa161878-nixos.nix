@@ -2,12 +2,12 @@
 # Dendritic host composition for pa161878-nixos (WSL work environment)
 #
 # This module defines both NixOS system and Home Manager configurations
-# following the dendritic pattern. Uses the tiger-team layer modules as
+# following the dendritic pattern. Uses the dev-team layer modules as
 # base, adding only personal-specific configuration.
 #
 # Layer chain:
-#   NixOS:  wsl-tiger-team -> wsl-enterprise -> system-cli + wsl
-#   HM:     home-tiger-team -> home-enterprise -> home-default + all tools
+#   NixOS:  wsl-dev-team -> wsl-enterprise -> system-cli + wsl
+#   HM:     home-dev-team -> home-enterprise -> home-default + all tools
 #
 # Deploy NixOS: sudo nixos-rebuild switch --flake '.#pa161878-nixos'
 # Deploy HM:    home-manager switch --flake '.#tim@pa161878-nixos'
@@ -19,7 +19,7 @@ let
   };
 
   # Common user settings
-  username = "tim";
+  inherit (config.meta) username;
   homeDirectory = "/home/${username}";
 in
 {
@@ -27,37 +27,65 @@ in
   flake.modules.nixos.pa161878-nixos = { config, lib, pkgs, ... }: {
     imports = [
       ./_hardware-config.nix
-      # Tiger-team layer (chains: wsl-enterprise -> system-cli + wsl)
-      inputs.self.modules.nixos.wsl-tiger-team
+      # Dev-team layer (chains: wsl-enterprise -> system-cli + wsl)
+      inputs.self.modules.nixos.wsl-dev-team
+      # System monitoring (wrappers, below daemon, sysstat)
+      inputs.self.modules.nixos.monitoring
     ];
 
     # Personal overrides (bare values override enterprise mkDefault;
-    # mkForce where tiger-team sets bare values)
+    # mkForce where dev-team sets bare values)
     systemDefault.userName = username;
 
     wsl-settings = {
-      # mkForce: tiger-team sets "nixos-wsl-tiger" as bare value (priority 100)
+      # mkForce: dev-team sets "nixos-wsl-dev-team" as bare value (priority 100)
       hostname = lib.mkForce "pa161878-nixos";
       defaultUser = username;
       sshPort = 2223;
       userGroups = [ "wheel" "dialout" ];
       sshAuthorizedKeys = [ sshKeys.timblaktu ];
-      # binfmt.enable: inherited from tiger-team (true)
+      # binfmt.enable: inherited from dev-team (true)
       # cuda.enable: inherited from enterprise (false)
+      # usbip.autoAttachByHardwareId: inherited from dev-team (FTDI, Jetson APX)
     };
+
+    # System monitoring — wrappers enabled, daemons opt-in (WSL2 uncertainty)
+    monitoring.enable = true;
+    # monitoring.below.enable = true;    # Needs cgroupv2 + eBPF testing on WSL2
+    # monitoring.sysstat.enable = true;  # sadc should work, test first
+
+    # Jetson Orin Nano USB device rules
+    services.udev.packages = [
+      (pkgs.writeTextFile {
+        name = "10-jetson-usb";
+        destination = "/etc/udev/rules.d/10-jetson-usb.rules";
+        text = ''
+          # NVIDIA Jetson Recovery Mode (APX) — USB flashing via sdkmanager/initrd flash
+          SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7523", MODE="0666", GROUP="dialout"
+
+          # NVIDIA Jetson Orin Nano (L4T running) — ADB/serial over USB
+          # Commented: PID 7020 is unverified for Orin Nano; confirm with usbipd.exe list when booted
+          # SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7020", MODE="0666", GROUP="dialout"
+        '';
+      })
+    ];
   };
 
   # === Home Manager Module ===
-  flake.modules.homeManager."tim@pa161878-nixos" = { config, lib, pkgs, ... }: {
+  flake.modules.homeManager."${username}@pa161878-nixos" = { config, lib, pkgs, ... }: {
     imports = [
-      # Tiger-team bundle (enterprise + team tools: claude-code, opencode,
+      # Dev-team bundle (enterprise + team tools: claude-code, opencode,
       # gitlab-auth, podman, development-tools, windows-terminal, and all
       # enterprise modules: shell, git, tmux, neovim, wsl-home, etc.)
-      inputs.self.modules.homeManager.home-tiger-team
+      inputs.self.modules.homeManager.home-dev-team
+      # System monitoring dashboard
+      inputs.self.modules.homeManager.monitoring
       # Personal-only modules (not shared with team)
       inputs.self.modules.homeManager.secrets-management
       inputs.self.modules.homeManager.github-auth
       inputs.self.modules.homeManager.esp-idf
+      inputs.self.modules.homeManager.pulumi
+      # awscli: imported via home-dev-team; azureAuth configured below
     ];
 
     # Required by system types
@@ -67,12 +95,17 @@ in
 
     # Host-specific overrides
     homeDefault.enableLocalAI = false;
+    monitoring.enable = true;
+    monitoring.enableTier2 = true;
     espIdf.enable = true;
+    pulumi.enable = true;
+    wsl-home-settings.wifiTools.enable = true;
 
     # Secrets management (personal bitwarden)
     secretsManagement = {
       enable = true;
       rbw.email = "timblaktu@gmail.com";
+      rbw.lockTimeout = 28800; # 8 hours
     };
 
     # GitHub authentication (personal PATs + org tokens)
@@ -95,8 +128,9 @@ in
       };
     };
 
-    # GitLab authentication (personal credentials -- host/cli/userName from tiger-team)
+    # GitLab authentication (host + personal credentials)
     gitAuth.gitlab = {
+      host = "git.panasonic.aero";
       mode = "bitwarden";
       bitwarden = {
         item = "GitLab git.panasonic.aero";
@@ -105,12 +139,112 @@ in
       cli.apiUser = "blackt1";
     };
 
-    # Claude Code: add personal accounts (tiger-team provides work + base config;
-    # accounts is attrsOf submodule, so these merge with tiger-team's work account)
-    programs.claude-code.accounts = inputs.self.lib.claudeCode.personalAccounts;
+    # AWS CLI with Azure AD SSO (personal -- needs secretsManagement for rbw)
+    awscli = {
+      enable = true;
+      azureAuth.enable = true;
+    };
 
-    # OpenCode: add personal accounts (same merging pattern)
-    programs.opencode.accounts = inputs.self.lib.openCode.personalAccounts;
+    # JFrog CLI (Artifactory access token from Bitwarden)
+    jfrogCli = {
+      host = "artifinity.nextcloud.aero";
+      bitwarden = {
+        item = "JFrog Artifactory";
+        field = "access-token";
+      };
+    };
+
+    # Git: use work email for work GitLab repos
+    programs.git.includes = [
+      {
+        condition = "hasconfig:remote.*.url:https://git.panasonic.aero/**";
+        contents.user.email = "timothy.black@panasonic.aero";
+      }
+    ];
+
+    # === Claude Code: personal accounts + deployment-specific work config ===
+    # Dev-team provides structural work account template; we fill in
+    # deployment values (baseUrl, bitwarden, modelMappings) and add personal accounts.
+    programs.claude-code.defaultAccount = lib.mkForce "max";
+    programs.claude-code.accounts = inputs.self.lib.claudeCode.personalAccounts // {
+      work = (inputs.self.lib.claudeCode.workAccount.work or { }) // {
+        api = {
+          baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
+          authMethod = "bedrock";
+          modelMappings = {
+            haiku = "devstral";
+            sonnet = "qwen-a3b";
+            opus = "claude-sonnet-4-5-20250929";
+          };
+        };
+        secrets.bearerToken.bitwarden = {
+          item = "PAC Code Companion v2";
+          field = "Bedrock API Key";
+        };
+      };
+    };
+
+    # === OpenCode: personal accounts + deployment-specific work config ===
+    programs.opencode.defaultAccount = lib.mkForce "max";
+    programs.opencode.accounts = inputs.self.lib.openCode.personalAccounts // {
+      work = (inputs.self.lib.openCode.workAccount.work or { }) // {
+        model = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+        secrets.envTokens = {
+          BEDROCK_API_TOKEN = {
+            bitwarden = { item = "PAC Code Companion v2"; field = "Bedrock API Key"; };
+          };
+          AI_PROXY_API_KEY = {
+            bitwarden = { item = "PAC Code Companion v2"; field = "API Key"; };
+          };
+        };
+      };
+    };
+    # Deep-merge deployment-specific values (baseURL, models) onto the
+    # dev-team provider template (npm, name, apiKey). Plain assignment would
+    # shallow-replace via types.attrs merge, losing apiKey from the template.
+    programs.opencode.provider = lib.recursiveUpdate
+      (inputs.self.lib.openCode.baseConfig.provider // inputs.self.lib.openCode.workProvider)
+      {
+        # Bedrock proxy — Anthropic + Meta models via AWS Bedrock
+        # Last synced with /models endpoint: 2026-04-04
+        bedrock = {
+          options.baseURL = "https://ai-platform-bedrockapis.d-dp.nextcloud.aero/api/v1";
+          models = {
+            # -- Anthropic (Sonnet family) --
+            "us.anthropic.claude-sonnet-4-5-20250929-v1:0" = { name = "Claude Sonnet 4.5"; };
+            "us.anthropic.claude-sonnet-4-20250514-v1:0" = { name = "Claude Sonnet 4"; };
+            "us.anthropic.claude-3-7-sonnet-20250219-v1:0" = { name = "Claude 3.7 Sonnet"; };
+            # -- Meta --
+            "us.meta.llama4-maverick-17b-instruct-v1:0" = { name = "Llama 4 Maverick 17B"; };
+            "us.meta.llama3-3-70b-instruct-v1:0" = { name = "Llama 3.3 70B"; };
+            # -- DISABLED: not available on gateway (2026-04-04) --
+            # "us.anthropic.claude-opus-4-5-20251101-v1:0" — never existed on this proxy
+            # "anthropic.claude-opus-4-6-v1" — exists on gateway but 403 restricted for our token
+          };
+        };
+        # Code Companion v2 AI Proxy — self-hosted vLLM + Bedrock passthrough
+        # Last synced with /models endpoint: 2026-04-04
+        ai-proxy = {
+          options.baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
+          models = {
+            "qwen-a3b" = {
+              name = "Qwen A3B";
+              modalities = {
+                input = [ "text" "image" ];
+                output = [ "text" ];
+              };
+            };
+            "qwen35-a3b" = { name = "Qwen 3.5 A3B"; };
+            "qwen3-coder-next" = { name = "Qwen 3 Coder Next"; };
+            "devstral" = { name = "Devstral"; };
+            "glm-47" = { name = "GLM 47"; };
+            "ray-sample-glm-ocr-glm-ocr" = { name = "GLM OCR"; };
+            "minimax-m21" = { name = "MiniMax M2.1"; };
+            # -- DISABLED: no longer in /models response (2026-04-04) --
+            # "kimi-linear-reap-a3b" — was { name = "Kimi Linear Reap A3B"; }
+          };
+        };
+      };
   };
 
   # === Configuration Registration ===

@@ -1,5 +1,5 @@
 # modules/programs/shell/shell.nix
-# Shell configuration for all platforms [NDnd]
+# Shell configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.shell - ZSH configuration with vi-mode, completions, plugins
@@ -418,8 +418,8 @@ in
               src = pkgs.fetchFromGitHub {
                 owner = "zsh-users";
                 repo = "zsh-autosuggestions";
-                rev = "v0.7.0";
-                sha256 = "sha256-KLUYpUu4DHRumQZ3w59m9aTW6TBKMCXl2UcKi4uMd7w=";
+                rev = "v0.7.1";
+                sha256 = "sha256-vpTyYq9ZgfgdDsWzjxVAE7FZH4MALMNZIFyEOBLm5Qo=";
               };
             }
             {
@@ -427,8 +427,8 @@ in
               src = pkgs.fetchFromGitHub {
                 owner = "zsh-users";
                 repo = "zsh-syntax-highlighting";
-                rev = "0.7.1";
-                sha256 = "sha256-gOG0NLlaJfotJfs+SUhGgLTNOnGLjoqnUp54V9aFJg8=";
+                rev = "0.8.0";
+                sha256 = "sha256-iJdWopZwHpSyYl5/FQXEW7gl/SrKaYDEtTH9cGP7iPo=";
               };
             }
           ];

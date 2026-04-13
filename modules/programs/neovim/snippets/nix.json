@@ -1,0 +1,32 @@
+{
+  "mkOption": {
+    "prefix": "mkopt",
+    "body": [
+      "${1:name} = lib.mkOption {",
+      "  type = lib.types.${2|bool,str,int,path,attrs,listOf str,attrsOf str|};",
+      "  default = ${3:default};",
+      "  description = \"${4:description}\";",
+      "};"
+    ],
+    "description": "NixOS/HM mkOption declaration"
+  },
+  "mkIf": {
+    "prefix": "mkif",
+    "body": [
+      "lib.mkIf ${1:condition} {",
+      "  $0",
+      "};"
+    ],
+    "description": "mkIf conditional block"
+  },
+  "Let In": {
+    "prefix": "letin",
+    "body": [
+      "let",
+      "  ${1:name} = ${2:value};",
+      "in",
+      "$0"
+    ],
+    "description": "let-in expression"
+  }
+}

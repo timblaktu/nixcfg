@@ -108,6 +108,13 @@ in
             };
           }
 
+          # ===== MAINTENANCE COMMANDS =====
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/maintenance/analyze-package-updates.md" = {
+              text = builtins.readFile (commandsBasePath + "/maintenance/analyze-package-updates.md");
+            };
+          }
+
           # ===== PLANNING COMMANDS =====
           {
             "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/planning/plans.md" = {

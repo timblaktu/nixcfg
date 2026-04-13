@@ -2,13 +2,14 @@
 
 ## Critical Rules
 
-- **MANDATORY RESPONSE ENDING**: EVERY response MUST end with a ready-to-paste prompt for the next session after context is cleared. NO EXCEPTIONS.
+- **MANDATORY RESPONSE ENDING**: EVERY response MUST end with a ready-to-paste prompt for the next session after context is cleared. NO EXCEPTIONS. The continuation prompt must be **self-contained** — merge the task summary (what was done, commits, artifacts, what was NOT done) directly into the prompt block. No separate summary section above. The user copies ONE block into the next session and nothing is lost.
 - NEVER clutter this user-global CLAUDE.md with project- or session-specific content
 - **NEVER include AI attribution in commit messages** - NO "Generated with Claude Code", NO "Co-Authored-By: Claude", NO emoji robots. Commit messages must appear entirely human-authored.
 - ALWAYS use timestamp format: `date +%Y-%m-%d\ %H:%M:%S\ %Z`
 - ALWAYS use rg and fd for file searching (never grep/find or Search/Find tools)
 - ALWAYS ensure shell commands support both bash AND zsh
 - ALWAYS properly escape or quote special shell characters
+- **WSL interop**: Windows executables are callable directly from WSL (e.g., `usbipd.exe list`, `powershell.exe -c "command"`). NEVER tell user to "open PowerShell" or "run from Windows" — call the `.exe` directly from the current shell. Windows PATH is on `$PATH` via `appendWindowsPath` (wsl module default).
 - **Screenshots (WSL)**: Find dynamically with `fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-`
 - NEVER create files unless absolutely necessary - prefer editing existing files
 - ALWAYS add documentation to existing markdown files - ASK where if ambiguous
@@ -16,15 +17,19 @@
 - **ALWAYS single-quote Nix derivation references**: `nix build '.#thing'` (zsh glob expansion)
 - **Use mcp-nixos MCP tools** to verify NixOS/Home Manager options BEFORE making changes
 - NEVER sudo long-running commands with timeout (causes Claude Code EPERM crashes)
+- **NEVER run nix commands concurrently** — do not use background tasks for nix commands, do not issue multiple Bash calls with nix in the same response. Always serialize nix invocations (`nix build`, `nix run`, `nix flake check`, `nix eval`). Concurrent nix evaluations cause OOM kills. This applies within a single session — other sessions may also be running nix, compounding the problem. A flock-based guard (`nix-guarded`) is prepended to PATH in agent wrappers as a safety net, but agents should not rely on it — always serialize explicitly. Bypass with `NIX_NO_GUARD=1` if needed.
 - **NEVER resolve merge conflicts automatically** - show conflicted files, let user decide
 - **NEVER use `git add -f`** - respect .gitignore patterns
+- **ALWAYS pass `-f` to `rm`** in non-interactive Bash tool calls (`rm -f`, `rm -rf`). The user's shell aliases `rm` to `rm -i`, which prompts for confirmation and hangs forever in non-interactive subshells, leaving orphaned zsh processes. Same applies to `cp -i`, `mv -i` if those aliases are added later — always use the non-interactive form. Also prefer the `Bash` tool's working-dir-aware operations over destructive shell commands when possible.
+- **VERIFY PROCESS PROVENANCE BEFORE KILLING** - Multiple Claude/opencode sessions run concurrently in different cwds. Before `kill`-ing any PID you didn't directly spawn in the current session, walk the parent chain (`pstree -p -s PID` or `ps -o ppid= -p PID` repeatedly) up to the owning `claude`/`opencode` process and check `/proc/<claude-pid>/cwd`. If the cwd is not your session's cwd, the process belongs to another session — DO NOT kill it. This applies especially to long-running `nix` evaluations and pre-commit hooks.
 - **ALL github.com/timblaktu repos are USER-OWNED** - work in local worktrees, not flake input changes
 - Use `echo "$WSL_DISTRO_NAME"` to determine WSL instance; access others at `/mnt/wsl/$WSL_DISTRO_NAME/`
-- **ONE TASK PER SESSION** for multi-phase plans - stop after completing one task
+- **ONE TASK PER SESSION** for multi-phase **user-plans** (`.claude/user-plans/`) - stop after completing one plan task and provide continuation prompt. Does NOT apply when executing an approved plan within a single session (user said "implement this plan" = execute all tasks). The boundary is between plan tasks across sessions, not within approved plan execution.
 - **ALWAYS stage changes before nix commands** - Nix only sees staged/committed changes
-- **Task summaries**: Be explicit about SCOPE, list ALL artifacts, state what was NOT done
-- **UPDATE MEMORY BEFORE SUMMARY** - update project memory first, then provide summary
+- **Task summaries are INSIDE the continuation prompt** - Do NOT produce a separate summary section followed by a separate continuation prompt. Merge them: the continuation prompt IS the summary. Include scope, commits, artifacts, what was NOT done — all inside the single paste-ready block.
+- **UPDATE MEMORY BEFORE CONTINUATION PROMPT** - update project memory first, then provide the combined summary+prompt
 - **COMMIT DIAGRAM CHANGES IMMEDIATELY** - `.drawio.svg` files with uncommitted pages can be lost if `git checkout` is used; commit after each significant diagram edit
+- **LOCAL-FIRST RESEARCH** - When researching topics involving source code or repositories, ALWAYS start by looking in `~/src/` for existing clones. Most upstream repos are already cloned there. If a repo is not yet cloned locally, `git clone` it into `~/src/` rather than using web searches or WebFetch. Read source code directly from local checkouts — it's faster, more accurate, and avoids token-heavy web fetching. Web search is a last resort for non-code information (release notes, mailing list discussions, etc.).
 
 ## Terminal-Width-Aware Output Formatting
 
@@ -185,21 +190,18 @@ Long-running tasks (>5 minutes expected duration) ARE allowed but require carefu
 
 ## Session Workflow Protocol (CRITICAL - 2026-01-31)
 
-**ONE TASK PER SESSION is mandatory** - violated in session 2026-01-31 by completing 4 tasks without stopping
+**ONE TASK PER SESSION applies to user-plans only** — when working through `.claude/user-plans/` plan files across multiple sessions, complete one plan task per session then stop with a continuation prompt. This was violated in session 2026-01-31 by completing 4 unrelated tasks without stopping.
 
-**The Problem**:
-- Completed 4 tasks in single session (Buildroot research, Task E0 update, cleanup, plan 002 completion)
-- Did not stop after each task to ask user what to do next
-- Created long response instead of clean task completion handoffs
+**Scope clarification (2026-04-03)**: This rule applies to **plan tasks spread across sessions**, NOT to executing an approved plan within a single session. When the user approves a plan (via ExitPlanMode or explicit "implement this plan") and the session has sufficient context, execute all plan tasks in sequence. The rule prevents Claude from autonomously deciding to start unrelated work after finishing a task — it does NOT prevent completing an approved multi-task plan the user asked to be implemented.
 
 **Why This Matters**:
-- **Context management**: Each task completion is natural breaking point for context refresh
-- **User control**: User should direct work between tasks, not Claude autodeciding
-- **Plan integrity**: Plans are designed with task boundaries for review/approval points
-- **Quality**: Fresh context per task reduces accumulated errors
+- **Context management**: Each task completion is natural breaking point for context refresh *across sessions*
+- **User control**: User should direct work between *unrelated* tasks, not Claude autodeciding
+- **Plan integrity**: Plans are designed with task boundaries for review/approval points *when spanning sessions*
+- **Quality**: Fresh context per task reduces accumulated errors *for large plans*
 
-**Correct Protocol**:
-1. **Complete ONE task** (research, implementation, cleanup, etc.)
+**Correct Protocol (multi-session plans)**:
+1. **Complete ONE plan task** (research, implementation, cleanup, etc.)
 2. **Update memory** (project and user-global CLAUDE.md if learnings occurred)
 3. **Update plan files** with task status
 4. **Commit changes** with clear message
@@ -214,6 +216,8 @@ Long-running tasks (>5 minutes expected duration) ARE allowed but require carefu
    [Context/blockers if any]
    ```
 6. **STOP** - wait for user to start new session
+
+**Approved plan execution (same session)**: When user says "implement this plan" → execute all tasks → commit → provide final summary+continuation prompt at end.
 
 **Exception**: User explicitly grants permission to continue ("continue to next task", "keep going", etc.)
 

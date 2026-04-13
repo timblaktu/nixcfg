@@ -57,6 +57,12 @@
 
     nix-writers.url = "github:timblaktu/nix-writers";
 
+    # Disk partitioning (nixos-anywhere deployments)
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Documentation tooling
     drawio-svg-sync.url = "github:timblaktu/drawio-svg-sync";
 

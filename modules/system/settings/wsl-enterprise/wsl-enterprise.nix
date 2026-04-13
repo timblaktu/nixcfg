@@ -1,12 +1,12 @@
 # modules/system/settings/wsl-enterprise/wsl-enterprise.nix
-# Enterprise WSL base configuration [NDnd]
+# Enterprise WSL base configuration
 #
 # Provides:
 #   flake.modules.nixos.wsl-enterprise - Company-wide NixOS-WSL system base
 #   flake.modules.homeManager.home-enterprise - Company-wide HM feature bundle
 #
 # This is the foundational layer for all enterprise WSL images.
-# Team modules (wsl-tiger-team, etc.) import this to get the shared base.
+# Team modules (wsl-dev-team, etc.) import this to get the shared base.
 #
 # NixOS side: Imports system-cli + wsl, sets conservative enterprise defaults.
 # HM side: Bundles standard employee tools (shell, git, tmux, neovim, etc.).
@@ -38,9 +38,9 @@
         # Terminal reads it when discovering WSL distros to set profile appearance.
         terminalProfileJson = builtins.toJSON (
           { name = cfg.terminal.profileName; }
-          // lib.optionalAttrs (cfg.terminal.icon != null) { icon = cfg.terminal.icon; }
-          // lib.optionalAttrs (cfg.terminal.colorScheme != null) { colorScheme = cfg.terminal.colorScheme; }
-          // lib.optionalAttrs (cfg.terminal.font != { }) { font = cfg.terminal.font; }
+          // lib.optionalAttrs (cfg.terminal.icon != null) { inherit (cfg.terminal) icon; }
+          // lib.optionalAttrs (cfg.terminal.colorScheme != null) { inherit (cfg.terminal) colorScheme; }
+          // lib.optionalAttrs (cfg.terminal.font != { }) { inherit (cfg.terminal) font; }
         );
 
         # WORKAROUND: NixOS-WSL build-tarball.nix hardcodes wsl-distribution.conf
@@ -66,30 +66,15 @@
           inputs.self.modules.nixos.system-cli
           # WSL integration (wsl.conf, users, SSH, SOPS, USBIP, etc.)
           inputs.self.modules.nixos.wsl
+          # CrowdStrike Falcon sensor (systemd service + FHS-wrapped package).
+          # On WSL2, sensor enters Reduced Functionality Mode (RFM) — compliance
+          # inventory only. Detection comes from the Windows-side Falcon WSL2
+          # Visibility Plugin. See docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md.
+          inputs.self.modules.nixos.crowdstrike-falcon
         ];
 
         # === Enterprise Options ===
         options.enterprise = {
-          crowdStrike = {
-            enable = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "Enable CrowdStrike Falcon sensor (package TBD from IT)";
-            };
-
-            cid = lib.mkOption {
-              type = lib.types.str;
-              default = "";
-              description = "CrowdStrike Customer ID";
-            };
-
-            serverUrl = lib.mkOption {
-              type = lib.types.str;
-              default = "";
-              description = "CrowdStrike server URL";
-            };
-          };
-
           welcomeMessage = {
             enable = lib.mkOption {
               type = lib.types.bool;
@@ -139,12 +124,12 @@
           # Core system defaults
           {
             # Generic username for distribution (not personal)
-            systemDefault.userName = lib.mkDefault "dev";
+            systemDefault.userName = lib.mkDefault "user";
 
             # WSL settings -- conservative enterprise defaults
             wsl-settings = {
               hostname = lib.mkDefault "nixos-wsl";
-              defaultUser = lib.mkDefault "dev";
+              defaultUser = lib.mkDefault "user";
               sshPort = lib.mkDefault 22;
               userGroups = lib.mkDefault [ "wheel" ];
               sshAuthorizedKeys = lib.mkDefault [ ];
@@ -253,18 +238,19 @@
             });
           }
 
-          # CrowdStrike stub -- warns when enabled but no package available yet
-          (lib.mkIf cfg.crowdStrike.enable {
-            warnings = [
-              ''
-                enterprise.crowdStrike.enable is true, but no CrowdStrike Falcon
-                package is available yet. Contact IT for the CID and server URL,
-                then add the Falcon sensor package to this module.
-                  CID: ${if cfg.crowdStrike.cid != "" then cfg.crowdStrike.cid else "(not set)"}
-                  Server: ${if cfg.crowdStrike.serverUrl != "" then cfg.crowdStrike.serverUrl else "(not set)"}
-              ''
-            ];
-          })
+          # CrowdStrike Falcon sensor enterprise defaults (opt-in per policy).
+          # The actual module is in modules/programs/crowdstrike-falcon/.
+          # Teams and hosts set services.falcon-sensor.package + .cid to activate.
+          # NOTE: On WSL2, the sensor provides compliance inventory only (RFM).
+          # Hosts enabling this on WSL must also set acknowledgeWslRfm = true.
+          # See docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md.
+          {
+            services.falcon-sensor = {
+              enable = lib.mkDefault false;
+              backend = lib.mkDefault "bpf";
+              tags = lib.mkDefault [ "Environment/Enterprise" ];
+            };
+          }
 
           # Ensure default user has .zshrc (prevents zsh-newuser-install wizard)
           # /etc/skel only applies to useradd; this covers the pre-created default user.

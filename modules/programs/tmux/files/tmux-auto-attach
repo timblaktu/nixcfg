@@ -3,6 +3,29 @@
 # tmux-auto-attach: Shared tmux auto-attach logic with continuum support
 # This script is sourced by both bash and zsh initialization to ensure
 # consistent tmux behavior regardless of which shell is configured.
+#
+# Service sessions (e.g. monitoring dashboard) are excluded from auto-attach
+# selection and started detached in the background. Service session names are
+# read from ~/.config/tmux/service-sessions.d/ (one name per file).
+
+# Read service session names from XDG config (one name per file).
+# Uses find instead of shell glob to avoid zsh "no matches found" on empty dirs.
+_get_service_sessions() {
+    local dir="${XDG_CONFIG_HOME:-$HOME/.config}/tmux/service-sessions.d"
+    [[ -d "$dir" ]] || return
+    find -L "$dir" -maxdepth 1 -type f -exec cat {} + 2>/dev/null
+}
+
+# Start service sessions detached (if not already running)
+_start_service_sessions() {
+    local session
+    while IFS= read -r session; do
+        [[ -z "$session" ]] && continue
+        if ! tmux has-session -t "$session" 2>/dev/null; then
+            tmuxp load -d -y "$session" 2>/dev/null || true
+        fi
+    done < <(_get_service_sessions)
+}
 
 # tmux auto-attach on interactive shell startup
 # Only attach if:
@@ -19,26 +42,66 @@ tmux_auto_attach() {
             ssh_from_host=$(echo "$SSH_CLIENT" | awk '{print $1}')
             # Only proceed if it's not a loopback connection
             if [[ "$ssh_from_host" != "127.0.0.1" && "$ssh_from_host" != "::1" ]]; then
-                # Safe to attach - we're SSHing from a different host
                 _tmux_attach_or_create
             fi
         else
-            # Not in SSH at all, safe to attach
             _tmux_attach_or_create
         fi
     fi
 }
 
-# Helper function that implements the improved attach logic
-# This allows continuum to auto-restore before we create new sessions
 _tmux_attach_or_create() {
-    # First try to attach to any existing session
-    # This allows tmux-continuum to auto-restore sessions if configured
-    if ! tmux attach 2>/dev/null; then
-        # No sessions exist - now it's safe to create our default "main" session
-        # At this point, continuum has had a chance to restore sessions
-        tmux new-session -A -s main
+    # Build grep exclusion pattern for service sessions
+    local exclude_pattern="_bootstrap"
+    local session
+    while IFS= read -r session; do
+        [[ -z "$session" ]] && continue
+        exclude_pattern="${exclude_pattern}|${session}"
+    done < <(_get_service_sessions)
+
+    # If tmux server is running, attach to first non-service session
+    if tmux list-sessions 2>/dev/null >&/dev/null; then
+        local target
+        target=$(tmux list-sessions -F '#{session_name}' 2>/dev/null \
+            | grep -Ev "^(${exclude_pattern})$" \
+            | head -n 1)
+        if [[ -n "$target" ]]; then
+            _start_service_sessions &
+            tmux attach -t "$target"
+            return
+        fi
+        # Only service sessions exist — fall through to create working session
     fi
+
+    # No tmux server or no working sessions — bootstrap.
+    # Use a temporary bootstrap session so continuum can auto-restore the real
+    # sessions from the resurrect save file. Once restore completes, we kill
+    # the bootstrap and attach to the restored session.
+    local bootstrap="_bootstrap"
+    tmux new-session -d -s "$bootstrap"
+
+    # Continuum restore is triggered by run-shell during plugin init, which
+    # fires asynchronously after new-session. Poll briefly for restored sessions.
+    local i
+    for i in 1 2 3 4 5; do
+        sleep 0.3
+        # Check if any non-service, non-bootstrap session exists
+        local real
+        real=$(tmux list-sessions -F '#{session_name}' 2>/dev/null \
+            | grep -Ev "^(${exclude_pattern})$" \
+            | head -n 1)
+        if [[ -n "$real" ]]; then
+            tmux kill-session -t "$bootstrap" 2>/dev/null
+            _start_service_sessions &
+            tmux attach -t "$real"
+            return
+        fi
+    done
+
+    # Continuum did not restore anything — rename bootstrap and attach
+    tmux rename-session -t "$bootstrap" main 2>/dev/null
+    _start_service_sessions &
+    tmux attach -t main
 }
 
 # Call the function when this script is sourced

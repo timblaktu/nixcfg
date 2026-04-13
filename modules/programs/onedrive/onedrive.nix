@@ -1,5 +1,5 @@
 # modules/programs/onedrive/onedrive.nix
-# OneDrive utilities for WSL environments [nd]
+# OneDrive utilities for WSL environments
 #
 # Provides:
 #   flake.modules.homeManager.onedrive - OneDrive sync utilities for WSL

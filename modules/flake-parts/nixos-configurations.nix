@@ -79,20 +79,81 @@
         }
       );
 
-      # nixos-wsl-tiger-team: Tiger team distribution image
-      # module defined in modules/hosts/nixos-wsl-tiger-team [N]/
-      nixos-wsl-tiger-team = withSystem "x86_64-linux" ({ pkgs, ... }:
+      # nixos-wsl-dev-team: Dev team distribution image
+      # module defined in modules/hosts/nixos-wsl-dev-team [N]/
+      nixos-wsl-dev-team = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           modules = [
-            # allowUnfree set by wsl-tiger-team module (true)
-            self.modules.nixos.nixos-wsl-tiger-team
+            # allowUnfree set by wsl-dev-team module (true)
+            self.modules.nixos.nixos-wsl-dev-team
           ];
           specialArgs = {
             inherit inputs;
           };
         }
       );
+
+      # nixos-dev-team: Pure NixOS dev team image (no WSL)
+      # module defined in modules/hosts/nixos-dev-team [N]/
+      nixos-dev-team = withSystem "x86_64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nixos-dev-team
+          ];
+          specialArgs = {
+            inherit inputs;
+          };
+        }
+      );
+
+      # nixos-dev-team-ec2: EC2 AMI for dev team (x86_64)
+      # module defined in modules/hosts/nixos-dev-team-ec2 [N]/
+      nixos-dev-team-ec2 = withSystem "x86_64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nixos-dev-team-ec2
+          ];
+          specialArgs = {
+            inherit inputs;
+          };
+        }
+      );
+
+      # nixos-dev-team-graviton: EC2 AMI for dev team (aarch64 Graviton)
+      # module defined in modules/hosts/nixos-dev-team-graviton [N]/
+      nixos-dev-team-graviton = withSystem "aarch64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nixos-dev-team-graviton
+          ];
+          specialArgs = {
+            inherit inputs;
+          };
+        }
+      );
+
+      # nuc-apt-repo: Dendritic pattern - module defined in modules/hosts/nuc-apt-repo [N]/
+      nuc-apt-repo = withSystem "x86_64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nuc-apt-repo
+          ];
+          specialArgs = {
+            inherit inputs;
+            inherit (inputs) nixpkgs-stable;
+          };
+        }
+      );
+
     };
   };
 }

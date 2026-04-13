@@ -15,7 +15,6 @@ let
   # Transform shared MCP server definition to OpenCode format
   # OpenCode uses: { type = "local"; command = [...]; environment = {}; enabled = true; }
   # NOTE: OpenCode uses "enabled" (with 'd'), not "enable"
-  # NOTE: OpenCode doesn't support "timeout" at server level
   toOpencodeFormat = serverCfg: {
     type = "local";
     command =
@@ -29,6 +28,25 @@ let
   } // optionalAttrs (serverCfg.env or { } != { }) {
     environment = serverCfg.env;
   };
+
+  # Strip null values and empty attrs from a custom server definition so that
+  # upstream's .strict() zod schemas (McpLocal, McpRemote) don't reject
+  # unexpected keys.  Also recursively cleans nested attrs (e.g. oauth).
+  cleanCustomServer = _name: srv:
+    let
+      # Recursively strip nulls from an attrset (one level deep is sufficient)
+      stripNulls = filterAttrs (_: v: v != null);
+      stripped = stripNulls srv;
+      # Also strip empty attrsets (environment = {}, headers = {})
+      cleaned = filterAttrs (_: v: !(builtins.isAttrs v && v == { })) stripped;
+      # Also strip empty lists (command = [])
+      final = filterAttrs (_: v: !(builtins.isList v && v == [ ])) cleaned;
+      # Clean nested oauth attrset if present
+    in
+    if final ? oauth && builtins.isAttrs final.oauth then
+      final // { oauth = stripNulls final.oauth; }
+    else
+      final;
 
 in
 {
@@ -120,14 +138,23 @@ in
       };
     };
 
+    cliMcpServer = {
+      enable = mkEnableOption "CLI MCP server (useful for OpenCode Desktop, not needed for TUI)";
+      allowedDir = mkOption {
+        type = types.str;
+        default = "/tmp";
+        description = "Allowed directory for CLI operations";
+      };
+    };
+
     # Custom servers (raw configuration matching OpenCode schema)
     custom = mkOption {
       type = types.attrsOf (types.submodule {
         options = {
           enabled = mkOption {
-            type = types.bool;
-            default = true;
-            description = "Whether this server is enabled";
+            type = types.nullOr types.bool;
+            default = null;
+            description = "Enable or disable the MCP server on startup. null = omit (upstream default: true).";
           };
           type = mkOption {
             type = types.enum [ "local" "remote" ];
@@ -137,22 +164,62 @@ in
           command = mkOption {
             type = types.listOf types.str;
             default = [ ];
-            description = "Command to start local server";
+            description = "Command to start local server (local type only)";
           };
           url = mkOption {
             type = types.nullOr types.str;
             default = null;
-            description = "URL for remote server";
+            description = "URL for remote server (remote type only)";
           };
           environment = mkOption {
             type = types.attrsOf types.str;
             default = { };
-            description = "Environment variables for the server";
+            description = "Environment variables for the server (local type only)";
           };
           headers = mkOption {
             type = types.attrsOf types.str;
             default = { };
-            description = "HTTP headers for remote server";
+            description = "HTTP headers for remote server (remote type only)";
+          };
+          timeout = mkOption {
+            type = types.nullOr types.ints.positive;
+            default = null;
+            description = ''
+              Timeout in milliseconds for MCP server requests.
+              null = omit (upstream default: 5000ms).
+              Applies to both local and remote servers.
+            '';
+          };
+          oauth = mkOption {
+            type = types.nullOr (types.either
+              (types.enum [ false ])
+              (types.submodule {
+                options = {
+                  clientId = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "OAuth client ID. If not provided, dynamic client registration (RFC 7591) is attempted.";
+                  };
+                  clientSecret = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "OAuth client secret (if required by the authorization server).";
+                  };
+                  scope = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "OAuth scopes to request during authorization.";
+                  };
+                };
+              })
+            );
+            default = null;
+            description = ''
+              OAuth configuration for the MCP server (remote type only).
+              Set to `false` to disable OAuth auto-detection.
+              Set to `{ clientId = "..."; }` etc. for explicit OAuth config.
+              null = omit (upstream uses auto-detection if server requires it).
+            '';
           };
         };
       });
@@ -223,8 +290,14 @@ in
               inherit (cfg.mcpServers.filesystem) allowedPaths;
               inherit (cfg) debug;
             });
+          } else { })
+          // (if cfg.mcpServers.cliMcpServer.enable then {
+            "cli-mcp-server" = toOpencodeFormat (sharedMcpDefs.cliMcpServer.mkConfig {
+              inherit (cfg.mcpServers.cliMcpServer) allowedDir;
+              inherit (cfg) debug;
+            });
           } else { });
       in
-      preConfigured // cfg.mcpServers.custom;
+      preConfigured // mapAttrs cleanCustomServer cfg.mcpServers.custom;
   };
 }

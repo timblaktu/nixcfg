@@ -23,7 +23,7 @@ deterministic profile GUID via UUIDv5. For WSL:
 
 ```
 namespace = {2bde4a90-d05f-401c-9492-e40884ead1d8}   (Terminal's internal GUID)
-name      = distro name (e.g., "nixos-wsl-tiger-team")
+name      = distro name (e.g., "nixos-wsl-dev-team")
 encoding  = UTF-16LE (critical — NOT UTF-8)
 result    = UUIDv5(namespace, name.encode("UTF-16LE"))
 ```
@@ -118,7 +118,7 @@ Terminal's built-in WSL generator computes profile GUIDs from the **distro name*
 | Property | Value |
 |----------|-------|
 | Namespace | `{2bde4a90-d05f-401c-9492-e40884ead1d8}` |
-| Input | distro name (e.g., `"nixos-wsl-tiger-team"`) |
+| Input | distro name (e.g., `"nixos-wsl-dev-team"`) |
 | Encoding | UTF-16LE |
 | Source | `"Windows.Terminal.Wsl"` |
 | Code | `WslDistroGenerator.cpp` in Terminal source |
@@ -200,7 +200,7 @@ Example from a working system (thinky, 2026-02-15):
 |--------|-------------|-------------|-------|
 | NixOS | `{c397f356-...}` | `{565d4910-...}` | Both in settings.json + fragment |
 | archlinux | `{398d4a22-...}` | `{ec57df90-...}` | Both in settings.json + fragment |
-| nixos-wsl-tiger-team | `{abf54488-...}` | `{c5fed060-...}` | settings.json only |
+| nixos-wsl-dev-team | `{abf54488-...}` | `{c5fed060-...}` | settings.json only |
 
 Tier 1 GUIDs verified: `UUIDv5({2bde4a90-...}, name.encode("UTF-16LE"))` matches
 the `"updates": "{...}", "hidden": true` entries in WSL-created fragments.
@@ -333,8 +333,8 @@ format — a new Tier 2 profile plus a hide entry for Tier 1:
   "profiles": [
     {
       "guid": "{tier2-guid-from-registry}",
-      "name": "NixOS Tiger Team",
-      "commandline": "wsl.exe -d nixos-wsl-tiger-team",
+      "name": "NixOS Dev Team",
+      "commandline": "wsl.exe -d nixos-wsl-dev-team",
       "source": "Microsoft.WSL",
       "icon": "C:\\Users\\...\\shortcut.ico",
       "font": { "face": "CaskaydiaMono Nerd Font", "size": 11 }
@@ -354,7 +354,7 @@ to overlay on whatever profile Terminal or WSL already created:
 {
   "profiles": [{
     "updates": "{dynamically-found-guid}",
-    "name": "NixOS Tiger Team",
+    "name": "NixOS Dev Team",
     "icon": "C:\\Users\\...\\shortcut.ico",
     "font": { "face": "CaskaydiaMono Nerd Font", "size": 11 }
   }]
@@ -409,22 +409,22 @@ module at `modules/system/settings/wsl-enterprise/wsl-enterprise.nix`:
 ```nix
 enterprise.terminal = {
   enable = true;                              # default
-  profileName = "NixOS";                      # overridden by tiger-team
+  profileName = "NixOS";                      # overridden by dev-team
   icon = "/etc/nixos.ico";                    # Linux-side path (not used by fragment)
   font = { };                                 # e.g., { face = "CaskaydiaMono Nerd Font"; size = 11; }
   colorScheme = null;                         # e.g., "One Half Dark"
 };
 ```
 
-The tiger-team layer overrides:
+The dev-team layer overrides:
 ```nix
-enterprise.terminal.profileName = "NixOS Tiger Team";
+enterprise.terminal.profileName = "NixOS Dev Team";
 enterprise.terminal.font = { face = "CaskaydiaMono Nerd Font"; size = 11; };
 ```
 
 The resulting JSON inside the tarball:
 ```json
-{"name":"NixOS Tiger Team","icon":"/etc/nixos.ico","font":{"face":"CaskaydiaMono Nerd Font","size":11}}
+{"name":"NixOS Dev Team","icon":"/etc/nixos.ico","font":{"face":"CaskaydiaMono Nerd Font","size":11}}
 ```
 
 The import script reads this file and uses the `name`, `font`, and `colorScheme`
@@ -440,7 +440,7 @@ looks for the Windows-side icon that WSL extracts during import instead.
 Get-ChildItem "$env:LOCALAPPDATA\Microsoft\Windows Terminal\Fragments" -Recurse
 
 # Read our fragment
-Get-Content "$env:LOCALAPPDATA\Microsoft\Windows Terminal\Fragments\Microsoft.WSL\nixos-wsl-tiger-team.json"
+Get-Content "$env:LOCALAPPDATA\Microsoft\Windows Terminal\Fragments\Microsoft.WSL\nixos-wsl-dev-team.json"
 
 # Check state.json for generated profile GUIDs
 $state = Get-Content "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\state.json" | ConvertFrom-Json
@@ -459,7 +459,7 @@ import uuid
 
 # Tier 1 GUID (Terminal namespace + distro name)
 tier1_ns = uuid.UUID("{2bde4a90-d05f-401c-9492-e40884ead1d8}")
-distro_name = "nixos-wsl-tiger-team"
+distro_name = "nixos-wsl-dev-team"
 tier1 = uuid.uuid5(tier1_ns, distro_name.encode("UTF-16LE").decode("ASCII"))
 print(f"Tier 1 (hide): {{{tier1}}}")
 
@@ -474,10 +474,10 @@ print(f"Tier 2 (profile): {{{tier2}}}")
 
 ```powershell
 # Tier 1 (hide GUID) — from distro name
-Get-TerminalHideGuid "nixos-wsl-tiger-team"
+Get-TerminalHideGuid "nixos-wsl-dev-team"
 
 # Tier 2 (profile GUID) — from registry GUID
-$registryGuid = Get-DistroGuid "nixos-wsl-tiger-team"
+$registryGuid = Get-DistroGuid "nixos-wsl-dev-team"
 Get-WslProfileGuid $registryGuid
 ```
 

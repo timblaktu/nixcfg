@@ -5,6 +5,37 @@ with lib;
 let
   cfg = config.programs.claude-code;
 
+  # Canonical list of all CC hook events. When upstream adds events, add one
+  # string here — the rest of the module (custom default, base structure,
+  # hasHooks gate) derives from this list automatically.
+  hookEvents = [
+    "PreToolUse"
+    "PostToolUse"
+    "Stop"
+    "SubagentStop"
+    "StopFailure"
+    "UserPromptSubmit"
+    "SessionStart"
+    "SessionEnd"
+    "PreCompact"
+    "PostCompact"
+    "CwdChanged"
+    "FileChanged"
+    "ConfigChange"
+    "PermissionDenied"
+    "TaskCreated"
+    "TaskCompleted"
+    "WorktreeCreate"
+    "WorktreeRemove"
+    "InstructionsLoaded"
+    "Elicitation"
+    "ElicitationResult"
+    "Notification"
+    "SubagentStart"
+    "TeammateIdle"
+    "Setup"
+  ];
+
   mkHook =
     { matcher
     , type ? "command"
@@ -151,19 +182,15 @@ in
 
     custom = mkOption {
       type = types.attrs;
-      default = { PreToolUse = [ ]; PostToolUse = [ ]; SessionStart = [ ]; Stop = [ ]; };
-      description = "Custom hook definitions";
+      default = lib.genAttrs hookEvents (_: [ ]);
+      description = "Custom hook definitions. Keys are CC hook event names (see hookEvents list).";
     };
   };
 
   config.programs.claude-code._internal.hooks = mkMerge [
-    # Base hook structure
-    {
-      PreToolUse = [ ];
-      PostToolUse = [ ];
-      SessionStart = [ ];
-      Stop = [ ];
-    }
+    # Base hook structure — scaffold every known event so categorized and
+    # custom hooks can merge into any slot.
+    (lib.genAttrs hookEvents (_: [ ]))
 
     # Development workflow hooks
     (mkIf cfg.hooks.development.enable {

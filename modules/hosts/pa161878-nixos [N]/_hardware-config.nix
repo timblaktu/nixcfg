@@ -23,11 +23,11 @@
       fsType = "tmpfs";
     };
 
-  fileSystems."/usr/lib/wsl/drivers" =
-    {
-      device = "drivers";
-      fsType = "9p";
-    };
+  # /usr/lib/wsl/drivers removed: the 9p "drivers" share is only provided when
+  # the Windows host has a GPU driver AND wsl.useWindowsDriver = true. With
+  # cuda.enable = false on this host the share is absent, and mounting it
+  # fails during activation, blocking local-fs.target. Re-add if CUDA is
+  # enabled on this host.
 
   fileSystems."/" =
     {
@@ -65,12 +65,6 @@
       device = "/mnt/wslg/.X11-unix";
       fsType = "none";
       options = [ "bind" ];
-    };
-
-  fileSystems."/mnt/c" =
-    {
-      device = "C:\134";
-      fsType = "9p";
     };
 
   fileSystems."/mnt/wslg/run/user/1000" =

@@ -1,0 +1,59 @@
+# Auto-tag: creates an annotated git tag when VERSION changes on main.
+#
+# Alternatives considered (documented for future reference):
+# - release-please: auto-generates Release PRs + changelogs from conventional
+#   commits. Better for multi-contributor projects with richer changelog needs.
+# - workflow_dispatch: fully atomic (VERSION update + tag in single run).
+#   Useful if the gap between VERSION change and tag creation becomes a problem.
+#
+# This workflow uses RELEASE_PAT (not GITHUB_TOKEN) because events created by
+# GITHUB_TOKEN don't trigger downstream workflows (like release.yml).
+name: Auto-tag
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Create version tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PAT }}
+          fetch-depth: 0
+
+      - name: Read VERSION
+        id: version
+        run: |
+          ver=$(cat VERSION | tr -d '[:space:]')
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "VERSION: $ver"
+
+      - name: Validate semver
+        run: |
+          ver="${{ steps.version.outputs.version }}"
+          if ! echo "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$'; then
+            echo "::error::VERSION '$ver' is not valid semver (expected N.N.N or N.N.N-suffix)"
+            exit 1
+          fi
+
+      - name: Check tag doesn't exist
+        run: |
+          ver="${{ steps.version.outputs.version }}"
+          if git rev-parse "refs/tags/$ver" >/dev/null 2>&1; then
+            echo "::error::Tag '$ver' already exists"
+            exit 1
+          fi
+
+      - name: Create annotated tag
+        run: |
+          ver="${{ steps.version.outputs.version }}"
+          git tag -a "$ver" -m "Release $ver"
+          git push origin "$ver"

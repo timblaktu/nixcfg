@@ -13,6 +13,9 @@ let
   # Import shared rbw helper library for consistent credential handling
   # Location: modules/lib/ (dendritic structure)
   rbwLib = import ../../../lib/rbw.nix { inherit pkgs lib; };
+
+  # flock-based nix concurrency guard — prevents OOM from concurrent nix evaluations
+  nixGuardedPkg = import ../../../lib/nix-guarded.nix { inherit pkgs; };
 in
 {
   # Generate a Claude Code wrapper script for an account
@@ -57,7 +60,7 @@ in
           export ANTHROPIC_BASE_URL="${baseUrl}"'')
 
         # ANTHROPIC_API_KEY - retrieve via rbw if bearer auth + bitwarden configured
-        # For third-party proxies (Code-Companion), use API_KEY for x-api-key header
+        # For third-party proxies, use API_KEY for x-api-key header
         # Uses shared rbw library with time-based sync (default 5 min staleness)
         (lib.optionalString (authMethod == "bearer" && bearerToken != null && bearerToken.bitwarden or null != null) (
           let
@@ -72,8 +75,25 @@ in
           }
         ))
 
-        # ANTHROPIC_API_KEY - set to empty string only if disableApiKey is true AND no bearer auth
-        (lib.optionalString (disableApiKey && authMethod != "bearer") ''
+        # ANTHROPIC_AUTH_TOKEN - retrieve via rbw for Bedrock proxy auth
+        # CC v2 Bedrock guide: ANTHROPIC_AUTH_TOKEN for bearer, ANTHROPIC_API_KEY="" #gitleaks:allow
+        (lib.optionalString (authMethod == "bedrock" && bearerToken != null && bearerToken.bitwarden or null != null) (
+          let
+            bwItem = bearerToken.bitwarden.item;
+            bwField = bearerToken.bitwarden.field or null;
+          in
+          ''
+            ${rbwLib.mkRbwExportWithDiagnostics {
+              item = bwItem;
+              field = if bwField == "" then null else bwField;
+              varName = "ANTHROPIC_AUTH_TOKEN";
+            }}
+            export ANTHROPIC_API_KEY=""
+          ''
+        ))
+
+        # ANTHROPIC_API_KEY - set to empty string only if disableApiKey is true AND no bearer/bedrock auth
+        (lib.optionalString (disableApiKey && authMethod != "bearer" && authMethod != "bedrock") ''
           export ANTHROPIC_API_KEY=""'')
       ]);
 
@@ -125,6 +145,9 @@ in
         # Capture terminal width from real TTY before launching Claude Code
         # Claude's subprocesses cannot detect terminal dimensions (no real PTY)
         export CLAUDE_TERMINAL_WIDTH="''${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+        # Prepend flock-based nix concurrency guard to PATH so agent nix
+        # invocations are serialized (prevents OOM from concurrent evals)
+        export PATH="${nixGuardedPkg}/bin:$PATH"
         ${envSetupBlock}
       }
 

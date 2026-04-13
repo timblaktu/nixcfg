@@ -1,5 +1,5 @@
 # modules/programs/esp-idf/esp-idf.nix
-# ESP-IDF development environment with FHS compatibility [nd]
+# ESP-IDF development environment with FHS compatibility
 #
 # Provides:
 #   flake.modules.homeManager.esp-idf - ESP32 development environment

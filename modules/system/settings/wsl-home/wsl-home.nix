@@ -1,5 +1,5 @@
 # modules/system/settings/wsl-home/wsl-home.nix
-# WSL Home Manager configuration [nd]
+# WSL Home Manager configuration
 #
 # Provides:
 #   flake.modules.homeManager.wsl-home - WSL user-level configuration
@@ -16,6 +16,7 @@
 #   - Windows Terminal settings management (via targets.wsl)
 #   - WSL utilities (wslu package)
 #   - Windows interop tools (explorer.exe, code.exe aliases)
+#   - Wi-Fi priority management via netsh.exe (wifiTools option group)
 #
 # Usage in host home config:
 #   imports = [
@@ -32,6 +33,160 @@
     homeManager.wsl-home = { config, lib, pkgs, ... }:
       let
         cfg = config.wsl-home-settings;
+        wifiCfg = config.wsl-home-settings.wifiTools;
+
+        # Wi-Fi priority management scripts (netsh.exe wrappers)
+        mkWifiScripts = defaultIface:
+          let
+            wslGuard = ''
+              if ! command -v netsh.exe >/dev/null 2>&1; then
+                echo "Error: netsh.exe not found. This tool requires WSL with Windows interop enabled." >&2
+                exit 1
+              fi
+            '';
+
+            crlfStrip = "tr -d '\\r'";
+
+            elevationError = ''
+              echo "" >&2
+              echo "This command requires administrator elevation." >&2
+              echo "Options:" >&2
+              echo "  1. Launch an elevated WSL shell:" >&2
+              echo "     powershell.exe -Command \"Start-Process wsl -Verb RunAs\"" >&2
+              echo "  2. Re-run from an Administrator terminal" >&2
+            '';
+
+            # Awk program to extract SSIDs from netsh profile listing.
+            # Parses the "User profiles" section, skipping "Group policy profiles".
+            ssidAwk = ''
+              /^User profiles/  { in_user=1; next }
+              /^Group policy/   { in_user=0; next }
+              /^-+/             { next }
+              in_user && /All User Profile/ {
+                sub(/^[[:space:]]*All User Profile[[:space:]]*: /, "")
+                print
+              }
+            '';
+
+            wifi-priority-list = pkgs.writeShellApplication {
+              name = "wifi-priority-list";
+              runtimeInputs = with pkgs; [ gawk coreutils ];
+              text = ''
+                ${wslGuard}
+                iface="''${1:-${defaultIface}}"
+
+                echo "Wi-Fi profiles on interface: $iface (priority order)"
+                echo "================================================"
+
+                netsh.exe wlan show profiles interface="$iface" 2>&1 | ${crlfStrip} | \
+                  awk '
+                    ${ssidAwk}
+                  ' | awk '{ printf "%3d  %s\n", NR, $0 }'
+              '';
+            };
+
+            wifi-priority-set = pkgs.writeShellApplication {
+              name = "wifi-priority-set";
+              runtimeInputs = [ pkgs.gawk pkgs.coreutils pkgs.gnugrep wifi-priority-list ];
+              text = ''
+                ${wslGuard}
+                if [ $# -lt 2 ]; then
+                  echo "Usage: wifi-priority-set <SSID> <priority> [interface]" >&2
+                  echo "  priority: 1 = highest priority" >&2
+                  exit 1
+                fi
+                ssid="$1"
+                priority="$2"
+                iface="''${3:-${defaultIface}}"
+
+                echo "=== BEFORE ==="
+                wifi-priority-list "$iface"
+                echo ""
+
+                echo "Setting '$ssid' to priority $priority on interface '$iface'..."
+                output=$(netsh.exe wlan set profileorder name="$ssid" interface="$iface" priority="$priority" 2>&1 | ${crlfStrip}) || true
+
+                if grep -qiE "elevated|access is denied" <<< "$output"; then
+                  echo "$output" >&2
+                  ${elevationError}
+                  exit 1
+                fi
+                echo "$output"
+                echo ""
+                echo "=== AFTER ==="
+                wifi-priority-list "$iface"
+              '';
+            };
+
+            wifi-autoswitch-set = pkgs.writeShellApplication {
+              name = "wifi-autoswitch-set";
+              runtimeInputs = with pkgs; [ coreutils gnugrep ];
+              text = ''
+                ${wslGuard}
+                if [ $# -lt 2 ]; then
+                  echo "Usage: wifi-autoswitch-set <SSID> <yes|no> [interface]" >&2
+                  exit 1
+                fi
+                ssid="$1"
+                value="$2"
+                iface="''${3:-${defaultIface}}"
+
+                if [ "$value" != "yes" ] && [ "$value" != "no" ]; then
+                  echo "Error: value must be 'yes' or 'no'" >&2
+                  exit 1
+                fi
+
+                echo "Setting autoSwitch=$value for '$ssid' on interface '$iface'..."
+                output=$(netsh.exe wlan set profileparameter name="$ssid" interface="$iface" autoSwitch="$value" 2>&1 | ${crlfStrip}) || true
+
+                if grep -qiE "elevated|access is denied" <<< "$output"; then
+                  echo "$output" >&2
+                  ${elevationError}
+                  exit 1
+                fi
+                echo "$output"
+              '';
+            };
+
+            wifi-priority-show-detail = pkgs.writeShellApplication {
+              name = "wifi-priority-show-detail";
+              runtimeInputs = with pkgs; [ gawk coreutils ];
+              text = ''
+                ${wslGuard}
+                iface="''${1:-${defaultIface}}"
+
+                # Collect SSIDs in priority order
+                mapfile -t ssids < <(
+                  netsh.exe wlan show profiles interface="$iface" 2>&1 | ${crlfStrip} | \
+                    awk '
+                      ${ssidAwk}
+                    '
+                )
+
+                if [ "''${#ssids[@]}" -eq 0 ]; then
+                  echo "No Wi-Fi profiles found on interface '$iface'"
+                  exit 0
+                fi
+
+                printf "%-4s  %-30s  %-22s  %s\n" "#" "SSID" "Connection Mode" "AutoSwitch"
+                printf "%-4s  %-30s  %-22s  %s\n" "---" "------------------------------" "----------------------" "----------"
+
+                n=0
+                for ssid in "''${ssids[@]}"; do
+                  n=$((n + 1))
+                  detail=$(netsh.exe wlan show profile name="$ssid" interface="$iface" 2>&1 | ${crlfStrip})
+                  conn_mode=$(awk -F': ' '/Connection mode/ { sub(/^ +/, "", $2); print $2; exit }' <<< "$detail")
+                  auto_switch=$(awk -F': ' '/AutoSwitch/ { sub(/^ +/, "", $2); print $2; exit }' <<< "$detail")
+                  printf "%-4s  %-30s  %-22s  %s\n" "$n" "$ssid" "''${conn_mode:-N/A}" "''${auto_switch:-N/A}"
+                done
+              '';
+            };
+          in
+          {
+            inherit wifi-priority-list wifi-priority-set wifi-autoswitch-set wifi-priority-show-detail;
+          };
+
+        wifiScripts = mkWifiScripts wifiCfg.defaultInterface;
       in
       {
         options.wsl-home-settings = {
@@ -114,6 +269,21 @@
               description = "Path to wslpath binary";
             };
           };
+
+          # === Wi-Fi Priority Management ===
+          wifiTools = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Enable Wi-Fi priority management tools (netsh.exe wrappers)";
+            };
+
+            defaultInterface = lib.mkOption {
+              type = lib.types.str;
+              default = "Wi-Fi";
+              description = "Default Windows Wi-Fi interface name";
+            };
+          };
         };
 
         config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -152,6 +322,9 @@
             home.packages = with pkgs; [
               wslu # WSL utilities (wslview, wslfetch, wslvar, etc.)
             ];
+
+            # xdg-open → wslview: opens URLs/files in the Windows default application
+            home.file.".local/bin/xdg-open".source = "${pkgs.wslu}/bin/wslview";
           }
 
           # === Windows Terminal Target Configuration ===
@@ -166,6 +339,30 @@
               };
             };
           }
+
+          # === Wi-Fi Priority Management ===
+          (lib.mkIf wifiCfg.enable {
+            home.packages = with wifiScripts; [
+              wifi-priority-list
+              wifi-priority-set
+              wifi-autoswitch-set
+              wifi-priority-show-detail
+            ];
+
+            programs.bash.shellAliases = {
+              wpl = "wifi-priority-list";
+              wps = "wifi-priority-set";
+              was = "wifi-autoswitch-set";
+              wpd = "wifi-priority-show-detail";
+            };
+
+            programs.zsh.shellAliases = {
+              wpl = "wifi-priority-list";
+              wps = "wifi-priority-set";
+              was = "wifi-autoswitch-set";
+              wpd = "wifi-priority-show-detail";
+            };
+          })
         ]);
       };
   };

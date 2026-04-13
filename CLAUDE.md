@@ -72,24 +72,36 @@ Check: [relevant file path]
   - **Local** environments already have nix, so hook should be a no-op (fast)
 - **Environment config**: `modules/flake-parts/dev-shells.nix` defines tooling
 
+## Nix Concurrency Guard
+
+Agent wrapper scripts (claudemax, opencodepro, etc.) prepend a flock-based `nix` wrapper
+to PATH that serializes all nix evaluations system-wide. This prevents OOM kills from
+concurrent nix evaluations across multiple agent sessions.
+
+- **Lock file**: `/tmp/nix-eval-guard.lock`
+- **Timeout**: 600s (10 min) — if a nix process hangs, the lock is released after timeout
+- **Bypass**: `NIX_NO_GUARD=1 nix <command>` skips the guard
+- **Contention logging**: When blocked, prints `[nix-guard] Waiting for lock...` to stderr
+- **Graceful degradation**: If flock fails (e.g., /tmp not writable), nix runs unguarded
+- **Source**: `claude-runtime/bin/nix-guarded.sh` (template), `modules/lib/nix-guarded.nix` (Nix package)
+- **Scope**: Only agent sessions — regular user `nix` commands are unaffected
+
 # CLAUDE-CODE CONFIGURATION AND STATE MANAGEMENT
 
 **Local sessions:**
 - Use `CLAUDE_CONFIG_DIR` → `claude-runtime/.claude-{account}/`
 - Never touch `.claude/`
-- Hook script at `modules/programs/files [nd]/files/bin/ensure-nix.sh`
+- Hook script at `.claude/SessionStart` (web sessions only)
 
 **Web sessions:**
 - Use `.claude/settings.json` for hooks
 - Create runtime state in `.claude/` (all ignored except settings.json)
-- Hook runs `bin/ensure-nix.sh` (same script, works in both contexts)
+- Hook runs `.claude/SessionStart` (installs nix in ephemeral web environments)
 
 ## Filesystem View of Claude Configuration and Runtime State
 
 ```
 nixcfg/
-├── modules/programs/files [nd]/files/bin/
-│   └── ensure-nix.sh          # Shared hook script
 ├── claude-runtime/
 │   ├── .claude-default/
 │   │   ├── settings.json      # ✅ Checked in (Nix-managed)
@@ -162,26 +174,26 @@ Four-layer architecture for distributable team WSL images:
 
 ```
 Layer 1: wsl-enterprise (module)     -- Company-wide base (system-cli + WSL)
-Layer 2: wsl-tiger-team (module)     -- Team dev stack (Podman, Claude Code, GitLab)
-Layer 3: nixos-wsl-tiger-team (host) -- Thin host producing .wsl tarball
+Layer 2: wsl-dev-team (module)        -- Team dev stack (Podman, Claude Code, GitLab)
+Layer 3: nixos-wsl-dev-team (host)   -- Thin host producing .wsl tarball
 Layer 4: pa161878-nixos (host)       -- Personal machine (uses team layers + personal config)
 ```
 
 **Key modules created**:
 - `modules/system/settings/wsl-enterprise/` -- NixOS (`wsl-enterprise`) + HM (`home-enterprise`)
-- `modules/system/settings/wsl-tiger-team/` -- NixOS (`wsl-tiger-team`) + HM (`home-tiger-team`)
-- `modules/hosts/nixos-wsl-tiger-team [N]/` -- Distributable host config
+- `modules/system/settings/wsl-dev-team/` -- NixOS (`wsl-dev-team`) + HM (`home-dev-team`)
+- `modules/hosts/nixos-wsl-dev-team [N]/` -- Distributable host config
 
 **Design principles**:
 - Layers are convenience bundles, not gatekeepers (no exclusivity)
 - Dual-registration: each layer provides both NixOS and HM modules
 - Generic user `dev` with `setup-username` script for personalization
 - Tarball security check validates no personal data leaks
-- `pa161878-nixos` refactored to import `wsl-tiger-team` + personal-only modules
+- `pa161878-nixos` refactored to import `wsl-dev-team` + personal-only modules
 
-**Build**: `nix build '.#nixosConfigurations.nixos-wsl-tiger-team.config.system.build.tarballBuilder'`
+**Build**: `nix build '.#nixosConfigurations.nixos-wsl-dev-team.config.system.build.tarballBuilder'`
 **Run** (requires sudo): `sudo ./result/bin/nixos-wsl-tarball-builder`
-**Import**: `wsl --import nixos-wsl-tiger-team <location> nixos.wsl`
+**Import**: `wsl --import nixos-wsl-dev-team <location> nixos.wsl`
 
 ### ✅ **OpenCode Branch Validation** (COMPLETED - 2026-01-17)
 
@@ -536,6 +548,103 @@ DHCP Pool: 10.0.0.100-200
 - CUDA auto-enables graphics + `wsl.useWindowsDriver` when `wsl-settings.cuda.enable = true`
 
 **Source repos**: `~/src/terminal` (Tier 1), `~/src/WSL` (Tier 2)
+
+---
+
+### ✅ **System Monitoring Dashboard** (COMPLETED - 2026-04-05)
+
+**Branch**: `feat/usb-jetson-pa161878`
+**Plan**: `.claude/user-plans/030-tmux-monitoring-dashboard.md`
+**Status**: All T1-T8 complete. Deployed and validated on pa161878-nixos.
+
+**Module**: `modules/programs/monitoring/monitoring.nix` (dual HM + NixOS registration)
+
+**Home Manager** (`monitoring.enable = true`):
+- Tier 1: btop, bandwhich, sysstat (iostat/sar), iotop-c, nvtop, below, trippy
+- Tier 2 (`enableTier2 = true`): gping, nload, dool, iftop
+- btop: gruvbox_dark_v2 theme, iowait graphs, 2s interval, io_mode
+- tmuxp dashboard: 4 windows (overview, io, network, extra)
+- `monitor` launcher: creates/attaches to tmux session
+
+**NixOS** (`monitoring.enable = true`):
+- security.wrappers: bandwhich (cap_net_admin), iotop-c (cap_sys_ptrace), trip (cap_net_raw)
+- Optional below daemon (`monitoring.below.enable`, off by default — WSL2 eBPF uncertain)
+- Optional sysstat collection (`monitoring.sysstat.enable`, off by default)
+
+**Quick start**: Run `monitor` to launch the dashboard.
+
+**Commits**: `12327e8` (initial), `6d6c4e8` (YAML fix)
+
+---
+
+### ✅ **Plan 031: Claude Code ↔ OpenCode Nix Module Parity** (COMPLETED - 2026-04-06)
+
+**Branch**: `feat/usb-jetson-pa161878`
+**Status**: All T0-T9 complete. Commit `0e83352`.
+
+**What was done**:
+- **T0**: Package version overlays — claude-code 2.1.87, opencode 1.3.2 via pinned nixpkgs
+- **T1**: Feature comparison document at `docs/ai-tool-feature-comparison.md`
+- **T2**: File-based command deployment sub-module (`_hm/file-commands.nix`) + `/plans` command
+- **T3**: Agent file deployment sub-module (`_hm/agent-files.nix`)
+- **T4**: Skill configuration & deployment sub-module (`_hm/skills.nix`)
+- **T5**: Fixed compaction serialization (options existed but were not in JSON output)
+- **T6**: Added `cliMcpServer` to OC MCP server options (parity with CC)
+- **T7**: Instruction content audit — shared lib already comprehensive, no gaps
+- **T8**: Updated lib.nix presets + all 6 host configs + wsl-dev-team
+- **T9**: Validation passed — `nix flake check --no-build` + HM dry-run
+
+**OC module structure after**:
+```
+modules/programs/opencode/
+├── opencode.nix              # Core (3 new imports, skills/compaction in JSON)
+└── _hm/
+    ├── mcp-servers.nix       # +cliMcpServer
+    ├── file-commands.nix     # NEW
+    ├── agent-files.nix       # NEW
+    ├── skills.nix            # NEW (shares CC's adr-writer skill files)
+    └── commands/planning/
+        └── plans.md          # NEW
+```
+
+---
+
+### 🚧 **USB/IP + Jetson Orin Nano Development** (IN PROGRESS)
+
+**Branch**: `feat/usb-jetson-pa161878`
+**Status**: USB infrastructure complete, CI/CD + nixos-dev-team config added (2026-03-14)
+
+**What's implemented locally** (15 commits on branch):
+- `wsl-settings.usbip` options in `modules/system/settings/wsl/wsl.nix` (enable, autoAttach, snippetIpAddress)
+- Activation script checking for `usbipd.exe` on Windows side (with corrected PATH)
+- Jetson Recovery Mode (APX) udev rule: VID:0955 PID:7523 (active)
+- Jetson L4T running udev rule: VID:0955 PID:7020 (commented out, needs verification)
+- `usbip.autoAttach = [ ]` placeholder in `pa161878-nixos.nix`
+- `usbutils` + `kmod` in dev-team layer
+- WSL environment capture for systemd-spawned shells
+- `wsl-recover-mounts` script with 4 trigger points (boot, switch, shell, devshell)
+- `restart-usb` + `restart-usb-v4.ps1` recovery scripts
+- GitHub Actions CI/CD pipeline (ci.yml + release.yml) with versioned releases
+- Pure NixOS `nixos-dev-team` host module (non-WSL, system-cli + binfmt + podman)
+- Tarball builder eval tests for all 3 WSL configs
+- VM test `vm-dev-team-stack` for the non-WSL dev-team config
+
+**Windows-side confirmed working** (2026-03-14):
+- usbipd-win v5.3.0 installed, policy configured for non-admin attach
+- Manual `usbipd attach --wsl --hardware-id VID:PID --auto-attach` works
+- Devices: FTDI USB-UART (0403:6001), Jetson APX (0955:7523)
+
+**Upstream contribution opportunity** (HIGH PRIORITY):
+NixOS-WSL's `modules/usbip.nix` is outdated — fetches `auto-attach.sh` from usbipd-win
+v4.2.0 (removed in v5.3.0). Module needs modernization for v5.x + hardware-ID auto-attach.
+Full research documented in `docs/NIXOS-WSL-BARE-MOUNT-CONTRIBUTION-PLAN.md` under
+"usbip.nix: Modernize for usbipd-win v5.x + hardware-ID auto-attach".
+
+**Remaining work**:
+1. Implement `autoAttachByHardwareId` locally in `wsl.nix` + dev-team module (interim)
+2. Prepare upstream PR for NixOS-WSL `modules/usbip.nix` modernization
+3. Verify Jetson L4T PID 7020 when hardware boots into Linux
+4. Jetson flashing workflow (sdkmanager or initrd flash via WSL)
 
 ---
 

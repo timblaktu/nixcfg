@@ -1,0 +1,26 @@
+# GitHub release notes category configuration
+# Used by GitHub's auto-generated release notes (UI-created releases).
+# The automated pipeline (release.yml) generates its own notes from git history.
+changelog:
+  categories:
+    - title: Breaking Changes
+      labels:
+        - breaking-change
+    - title: Features
+      labels:
+        - enhancement
+        - feature
+    - title: Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Infrastructure
+      labels:
+        - ci
+        - infrastructure
+    - title: Other Changes
+      labels:
+        - '*'

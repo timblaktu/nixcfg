@@ -1,5 +1,5 @@
 # modules/programs/terminal/terminal.nix
-# Terminal configuration, font setup, and verification tools [nd]
+# Terminal configuration, font setup, and verification tools
 #
 # Provides:
 #   flake.modules.homeManager.terminal - Terminal utilities and WSL verification
@@ -79,8 +79,16 @@
 
           TERMINAL=$(detect_terminal)
 
+          # Check if Windows filesystem is accessible (9p mounts may be broken in WSL)
+          _wsl_windows_ok=false
+          if [[ -n "''${WSL_DISTRO:-}" ]] || [[ -n "''${WSL_DISTRO_NAME:-}" ]]; then
+            if [[ -x "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe" ]]; then
+              _wsl_windows_ok=true
+            fi
+          fi
+
           # Windows Terminal specific verification (WSL only)
-          if [[ "$TERMINAL" == "WindowsTerminal" ]] && [[ -n "''${WSL_DISTRO:-}" ]]; then
+          if [[ "$TERMINAL" == "WindowsTerminal" ]] && [[ "$_wsl_windows_ok" == "true" ]]; then
             WT_SETTINGS=$(powershell.exe -NoProfile -Command "
               try {
                 \$settingsPath = @(
@@ -119,7 +127,7 @@
           fi
 
           # WSL-specific font checks
-          if [[ -n "''${WSL_DISTRO:-}" ]]; then
+          if [[ "$_wsl_windows_ok" == "true" ]]; then
             CASCADIA_CHECK=$(powershell.exe -NoProfile -Command "
               \$fonts = Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts' -ErrorAction SilentlyContinue
               if (\$fonts -and (\$fonts.PSObject.Properties | Where-Object { \$_.Name -like '*CaskaydiaMono NFM*' })) {
@@ -204,25 +212,25 @@
               # Terminal font setup and verification scripts
               (pkgs.writeShellApplication {
                 name = "setup-terminal-fonts";
-                text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/setup-terminal-fonts");
+                text = builtins.readFile ./files/setup-terminal-fonts;
                 runtimeInputs = with pkgs; [ jq coreutils util-linux ];
               })
 
               (pkgs.writeShellApplication {
                 name = "check-terminal-setup";
-                text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/check-terminal-setup");
+                text = builtins.readFile ./files/check-terminal-setup;
                 runtimeInputs = with pkgs; [ jq coreutils ];
               })
 
               (pkgs.writeShellApplication {
                 name = "diagnose-emoji-rendering";
-                text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/diagnose-emoji-rendering");
+                text = builtins.readFile ./files/diagnose-emoji-rendering;
                 runtimeInputs = with pkgs; [ xxd coreutils util-linux ];
               })
 
               (pkgs.writeShellApplication {
                 name = "is_terminal_background_light_or_dark";
-                text = builtins.readFile (../../.. + "/modules/programs/files [nd]/files/bin/is_terminal_background_light_or_dark.sh");
+                text = builtins.readFile ./files/is_terminal_background_light_or_dark.sh;
                 runtimeInputs = with pkgs; [ coreutils util-linux ];
               })
             ];

@@ -1,5 +1,5 @@
 # modules/programs/tmux/tmux.nix
-# Tmux configuration for all platforms [NDnd]
+# Tmux configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.tmux - Full tmux config with plugins, keybindings, auto-reload
@@ -19,8 +19,8 @@
 #   imports = [ inputs.self.modules.homeManager.tmux ];
 { config, lib, inputs, ... }:
 let
-  # Library files for scripts (shared with other modules)
-  libPath = ../../.. + "/modules/programs/files [nd]/files/lib";
+  # Library files for scripts (shared from shell-utils)
+  libPath = ../../.. + "/modules/programs/shell-utils/files/lib";
 in
 {
   flake.modules = {
@@ -301,6 +301,10 @@ in
                 set-hook -g client-detached 'run-shell "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh > /dev/null 2>&1; tmux-resurrect-cleanup > /dev/null 2>&1"'
                 set-hook -g session-closed 'run-shell "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh > /dev/null 2>&1; tmux-resurrect-cleanup > /dev/null 2>&1"'
 
+                # Native session/window tree with big preview (25% tree, 75% preview)
+                # Press 'v' at runtime to cycle: OFF → BIG → NORMAL
+                bind-key w choose-tree -ZwNN
+
                 # Session pickers
                 bind-key t display-popup -E -w 95% -h 95% 'bash -c "tmux-session-picker --layout vertical"'
                 bind-key T display-popup -E -w 95% -h 95% 'bash -c "tmux-session-picker --layout horizontal"'
@@ -338,6 +342,24 @@ in
                         "~powershell.exe *" \
                         "~*loop *" \
                         "~claude" \
+                        "~btop" \
+                        "~bandwhich" \
+                        "~iostat *" \
+                        "~iotop-c" \
+                        "~nload" \
+                        "~gping *" \
+                        "~dool *" \
+                        "~iftop" \
+                    '
+                    # KNOWN LIMITATION (2026-04-07): dool will NOT auto-restore via
+                    # tmux-resurrect. dool is a Python script, so its pane process
+                    # appears as `python3`, and the "~dool *" pattern above never
+                    # matches. We deliberately do NOT use "~python3 *" — too broad,
+                    # would restore unrelated python tools. dool only runs in the
+                    # monitoring dashboard's `extra` window (see
+                    # modules/programs/monitoring/monitoring.nix), so the impact is
+                    # limited to that one pane after a restore. Re-launch manually
+                    # with `dool` if needed.
                     '
 
                     set -g @resurrect-save-command-strategy 'tmux-resurrect-cleanup'
@@ -352,6 +374,12 @@ in
                   '';
                 }
               ];
+            };
+
+            # Install tmux-auto-attach to ~/bin/ (sourced by shell.nix, not an executable command)
+            home.file."bin/tmux-auto-attach" = {
+              source = ./files/tmux-auto-attach;
+              executable = true;
             };
 
             # Create persistent directory for tmux-resurrect saves
@@ -488,11 +516,9 @@ in
               })
 
               # Window status format script
-              (pkgs.writers.writeBashBin "tmux-window-status-format" (builtins.replaceStrings
-                [ ''source "''${HOME}/lib/general-utils.bash"'' ]
-                [ "source \"${config.home.homeDirectory}/.local/lib/general-utils.bash\"" ]
+              (pkgs.writers.writeBashBin "tmux-window-status-format"
                 (builtins.readFile ./files/tmux-window-status-format)
-              ))
+              )
 
               # Tmux resurrect cleanup script
               (pkgs.writers.writeBashBin "tmux-resurrect-cleanup" ''
@@ -504,13 +530,34 @@ in
                   exit 0
                 fi
 
-                find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -size -50c -delete 2>/dev/null || true
-                find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -mtime +30 -delete 2>/dev/null || true
-
-                if command -v ls >/dev/null 2>&1; then
-                  cd "$RESURRECT_DIR" 2>/dev/null || exit 0
-                  ls -t tmux_resurrect_*.txt 2>/dev/null | tail -n +51 | xargs -r rm -f 2>/dev/null || true
+                # Resolve the 'last' symlink target so we never delete it
+                LAST_FILE=""
+                if [[ -L "$RESURRECT_DIR/last" ]]; then
+                  LAST_FILE="$(readlink "$RESURRECT_DIR/last")"
+                  # Handle both relative and absolute symlink targets
+                  [[ "$LAST_FILE" != /* ]] && LAST_FILE="$RESURRECT_DIR/$LAST_FILE"
                 fi
+
+                # Delete small (empty/corrupt) files, but never the last-linked file or the symlink
+                find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -size -50c -print0 2>/dev/null \
+                  | while IFS= read -r -d "" f; do
+                      [[ "$f" -ef "''${LAST_FILE:-}" ]] && continue
+                      rm -f "$f"
+                    done
+
+                # Delete files older than 30 days, but never the last-linked file
+                find "$RESURRECT_DIR" -name "tmux_resurrect_*.txt" -mtime +30 -print0 2>/dev/null \
+                  | while IFS= read -r -d "" f; do
+                      [[ "$f" -ef "''${LAST_FILE:-}" ]] && continue
+                      rm -f "$f"
+                    done
+
+                # Keep only the 50 most recent files, but never delete the last-linked file
+                cd "$RESURRECT_DIR" 2>/dev/null || exit 0
+                ls -t tmux_resurrect_*.txt 2>/dev/null | tail -n +51 | while IFS= read -r f; do
+                  [[ "$RESURRECT_DIR/$f" -ef "''${LAST_FILE:-}" ]] && continue
+                  rm -f "$f"
+                done
               '')
 
               # Tmux resurrect session browser

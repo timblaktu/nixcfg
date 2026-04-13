@@ -115,7 +115,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Available commands:"
     echo "  claudemax   - Claude Max account"
     echo "  claudepro   - Claude Pro account"
-    echo "  claudework  - Work Code-Companion proxy"
+    echo "  claudework  - Work account"
     echo ""
     echo "Setup work account:"
     echo "  claude-setup-work"

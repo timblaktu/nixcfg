@@ -1,5 +1,5 @@
 # modules/programs/opencode/opencode.nix
-# OpenCode multi-account configuration for home-manager [nd]
+# OpenCode multi-account configuration for home-manager
 #
 # Provides:
 #   flake.modules.homeManager.opencode - Full OpenCode multi-account setup
@@ -36,18 +36,176 @@
         # Location: modules/lib/ (dendritic structure)
         rbwLib = import ../../lib/rbw.nix { inherit pkgs lib; };
 
-        # Agent submodule type
+        # Channel-aware DB migration helper for OpenCode session history
+        channelMigrate = import ./_hm/channel-migrate.nix { inherit pkgs lib; };
+
+        # flock-based nix concurrency guard — prevents OOM from concurrent nix evaluations
+        nixGuardedPkg = import ../../lib/nix-guarded.nix { inherit pkgs; };
+
+        # OpenCode PermissionRule: either a flat action or a pattern-to-action map.
+        # Flat:   bash = "allow"
+        # Object: bash = { "*" = "allow"; "rm -rf /*" = "deny"; }
+        permissionActionType = types.enum [ "allow" "ask" "deny" ];
+        permissionRuleType = types.either permissionActionType (types.attrsOf permissionActionType);
+
+        # JSON type for freeform nested attrs (forward-compat)
+        jsonType = (pkgs.formats.json { }).type;
+
+        # Provider submodule type — mirrors upstream config.ts:788-847
+        providerModule = types.submodule {
+          options = {
+            name = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Display name for this provider";
+            };
+
+            npm = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "npm package implementing the AI SDK provider (e.g. @ai-sdk/openai-compatible)";
+            };
+
+            whitelist = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              description = "Model whitelist — only these models from this provider are available";
+            };
+
+            blacklist = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              description = "Model blacklist — hide these models from this provider";
+            };
+
+            models = mkOption {
+              type = types.nullOr jsonType;
+              default = null;
+              description = ''
+                Per-model overrides. Keys are model IDs; values are partial model
+                objects with optional `variants` sub-key. Uses freeform JSON type
+                for forward-compat with upstream schema changes.
+              '';
+              example = {
+                "claude-sonnet-4-5" = {
+                  variants = {
+                    thinking = { disabled = true; };
+                  };
+                };
+              };
+            };
+
+            options = mkOption {
+              type = types.nullOr (types.submodule {
+                freeformType = jsonType;
+                options = {
+                  timeout = mkOption {
+                    type = types.nullOr (types.either types.ints.positive (types.enum [ false ]));
+                    default = null;
+                    description = ''
+                      Request timeout in milliseconds (default 300000 = 5 min).
+                      Set to `false` to disable timeout entirely.
+                    '';
+                  };
+
+                  chunkTimeout = mkOption {
+                    type = types.nullOr types.ints.positive;
+                    default = null;
+                    description = ''
+                      Timeout in milliseconds between streamed SSE chunks.
+                      If no chunk arrives within this window, the request is aborted.
+                    '';
+                  };
+
+                  setCacheKey = mkOption {
+                    type = types.nullOr types.bool;
+                    default = null;
+                    description = "Enable promptCacheKey for this provider (default false)";
+                  };
+
+                  enterpriseUrl = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "GitHub Enterprise URL for copilot authentication";
+                  };
+
+                  apiKey = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "API key for this provider (prefer env vars or secrets for sensitive values)";
+                  };
+
+                  baseURL = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Custom base URL for API requests";
+                  };
+                };
+              });
+              default = null;
+              description = ''
+                Provider options (timeout, caching, auth, etc.). Uses a freeform
+                submodule so provider-specific keys (e.g. Bedrock's region, profile,
+                endpoint) pass through without explicit Nix option definitions.
+              '';
+            };
+          };
+        };
+
+        # Serialize a provider submodule value to JSON-ready attrs, stripping nulls
+        mkProviderAttrs = _name: prov:
+          let
+            optAttrs =
+              if prov.options == null then { }
+              else
+                let
+                  raw = prov.options;
+                  # Remove null-valued typed options; freeform extras pass through
+                  filtered = filterAttrs (_k: v: v != null) raw;
+                in
+                if filtered == { } then { } else { options = filtered; };
+          in
+          { }
+          // optionalAttrs (prov.name != null) { inherit (prov) name; }
+          // optionalAttrs (prov.npm != null) { inherit (prov) npm; }
+          // optionalAttrs (prov.whitelist != null) { inherit (prov) whitelist; }
+          // optionalAttrs (prov.blacklist != null) { inherit (prov) blacklist; }
+          // optionalAttrs (prov.models != null) { inherit (prov) models; }
+          // optAttrs;
+
+        # Agent submodule type — mirrors upstream config.ts:521-556
+        # Well-known agent names: plan, build (primary); general, explore (subagent);
+        # title, summary, compaction (specialized). Arbitrary custom names also allowed.
         agentModule = types.submodule {
           options = {
             description = mkOption {
-              type = types.str;
-              description = "Description of what this agent does";
+              type = types.nullOr types.str;
+              default = null;
+              description = "Description of when to use this agent";
             };
 
             model = mkOption {
               type = types.nullOr types.str;
               default = null;
               description = "Model to use for this agent (null = use default)";
+            };
+
+            variant = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Default model variant for this agent (e.g. thinking variant)";
+            };
+
+            temperature = mkOption {
+              type = types.nullOr types.float;
+              default = null;
+              description = "Temperature parameter for sampling";
+            };
+
+            top_p = mkOption {
+              type = types.nullOr types.float;
+              default = null;
+              description = "Top-p (nucleus) sampling parameter";
             };
 
             prompt = mkOption {
@@ -65,11 +223,55 @@
             tools = mkOption {
               type = types.attrsOf types.bool;
               default = { };
-              description = "Tool enable/disable overrides for this agent";
+              description = "Tool enable/disable overrides for this agent (deprecated upstream — prefer permission)";
+            };
+
+            disable = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Disable this agent entirely";
+            };
+
+            mode = mkOption {
+              type = types.nullOr (types.enum [ "subagent" "primary" "all" ]);
+              default = null;
+              description = ''
+                Agent execution mode:
+                - "subagent": runs as a spawned subagent
+                - "primary": runs in the main conversation
+                - "all": available in both modes
+              '';
+            };
+
+            hidden = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Hide from @ autocomplete (only meaningful for subagents)";
+            };
+
+            color = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Agent color — either a hex color (#XXXXXX) or a theme color name:
+                primary, secondary, accent, success, warning, error, info.
+              '';
+            };
+
+            steps = mkOption {
+              type = types.nullOr types.ints.positive;
+              default = null;
+              description = "Max agentic iterations (positive integer)";
+            };
+
+            options = mkOption {
+              type = types.nullOr jsonType;
+              default = null;
+              description = "Arbitrary key-value options for this agent (freeform)";
             };
 
             permission = mkOption {
-              type = types.attrsOf (types.enum [ "allow" "ask" "deny" ]);
+              type = types.attrsOf permissionRuleType;
               default = { };
               description = "Permission overrides for this agent";
             };
@@ -117,6 +319,10 @@
 
         imports = [
           ./_hm/mcp-servers.nix
+          ./_hm/file-commands.nix
+          ./_hm/agent-files.nix
+          ./_hm/skills.nix
+          ./_hm/tui-json.nix
         ];
 
         options.programs.opencode = {
@@ -226,6 +432,35 @@
                         default = { };
                         description = "Bearer token configuration for API authentication";
                       };
+
+                      envTokens = mkOption {
+                        type = types.attrsOf (types.submodule {
+                          options = {
+                            bitwarden = mkOption {
+                              type = types.submodule {
+                                options = {
+                                  item = mkOption {
+                                    type = types.str;
+                                    description = "Bitwarden item name";
+                                  };
+                                  field = mkOption {
+                                    type = types.str;
+                                    default = "Password";
+                                    description = "Field name in Bitwarden item";
+                                  };
+                                };
+                              };
+                              description = "Bitwarden reference for this token";
+                            };
+                          };
+                        });
+                        default = { };
+                        description = ''
+                          Named environment variables to export from Bitwarden at runtime.
+                          Key = env var name, value = Bitwarden source.
+                          Use this for multi-provider setups needing multiple tokens.
+                        '';
+                      };
                     };
                   };
                   default = { };
@@ -252,7 +487,19 @@
           agents = mkOption {
             type = types.attrsOf agentModule;
             default = { };
-            description = "Custom agent definitions";
+            description = ''
+              Agent definitions (catchall — arbitrary agent names accepted).
+              Well-known agents:
+              - Primary: plan, build
+              - Subagent: general, explore
+              - Specialized: title, summary, compaction
+              Custom agent names are also accepted.
+            '';
+            example = {
+              plan = { model = "anthropic/claude-sonnet-4-5"; steps = 50; };
+              compaction = { model = "anthropic/claude-haiku-4-5"; };
+              "my-agent" = { description = "Custom agent"; prompt = "You are a specialist."; mode = "subagent"; color = "#ff6600"; };
+            };
           };
 
           defaultAgent = mkOption {
@@ -274,16 +521,24 @@
           # PERMISSIONS
           # ─────────────────────────────────────────────────────────────────────────
           permissions = mkOption {
-            type = types.attrsOf (types.enum [ "allow" "ask" "deny" ]);
+            type = types.attrsOf permissionRuleType;
             default = { };
             description = ''
-              Tool permissions. Keys are tool names, values are permission levels.
-              Built-in tools: read, edit, glob, grep, list, bash, task, web, etc.
+              Tool permissions (catchall — arbitrary tool names accepted).
+              Keys are tool names, values are either a permission level
+              ("allow"/"ask"/"deny") or an object mapping command patterns
+              to permission levels (last match wins).
+
+              Well-known tools: read, edit, glob, grep, list, bash, task,
+              skill, lsp, todowrite, question, webfetch, websearch,
+              codesearch, external_directory, doom_loop.
+              Custom/MCP tool names are also accepted (catchall via attrsOf).
             '';
             example = {
-              edit = "ask";
-              bash = "ask";
-              web = "allow";
+              bash = { "*" = "allow"; "rm -rf /*" = "deny"; };
+              edit = "allow";
+              read = "allow";
+              "mcp__myserver__mytool" = "allow";
             };
           };
 
@@ -307,32 +562,10 @@
           # ─────────────────────────────────────────────────────────────────────────
           # TUI SETTINGS
           # ─────────────────────────────────────────────────────────────────────────
-          tui = {
-            scrollSpeed = mkOption {
-              type = types.int;
-              default = 3;
-              description = "Scroll speed in the TUI";
-            };
-
-            scrollAcceleration = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Enable scroll acceleration";
-            };
-
-            diffStyle = mkOption {
-              type = types.enum [ "auto" "unified" "side-by-side" ];
-              default = "auto";
-              description = "Diff display style";
-            };
-
-            theme = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Theme name (null = default)";
-            };
-          };
-
+          # `programs.opencode.tui.*` options are defined in ./_hm/tui-json.nix
+          # and written to `tui.json` (NOT `opencode.json`). See Plan 032 T1/T2
+          # and the module header comment in tui-json.nix for the rationale.
+          #
           # ─────────────────────────────────────────────────────────────────────────
           # FORMATTERS
           # ─────────────────────────────────────────────────────────────────────────
@@ -381,6 +614,15 @@
               default = true;
               description = "Enable automatic context pruning";
             };
+
+            reserved = mkOption {
+              type = types.nullOr (types.ints.unsigned);
+              default = null;
+              description = ''
+                Token buffer for compaction. Leaves enough window to avoid
+                overflow during compaction. null = omit (use upstream default).
+              '';
+            };
           };
 
           watcher = {
@@ -392,9 +634,65 @@
           };
 
           autoupdate = mkOption {
-            type = types.bool;
+            type = types.nullOr (types.either types.bool (types.enum [ "notify" ]));
             default = true;
-            description = "Enable automatic updates";
+            description = ''
+              Auto-update behavior: true (auto-update), false (disable),
+              "notify" (show notifications only), or null (omit key; use upstream default).
+            '';
+          };
+
+          # ─────────────────────────────────────────────────────────────────────────
+          # SERVER (opencode serve / web) — Plan 032 T9 / OC-G8
+          # ─────────────────────────────────────────────────────────────────────────
+          server = {
+            port = mkOption {
+              type = types.nullOr types.port;
+              default = null;
+              description = "Port to listen on (opencode serve / web).";
+            };
+            hostname = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Hostname to listen on.";
+            };
+            mdns = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = "Enable mDNS service discovery.";
+            };
+            mdnsDomain = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Custom mDNS domain (default upstream: opencode.local).";
+            };
+            cors = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              description = "Additional domains to allow for CORS.";
+            };
+          };
+
+          # ─────────────────────────────────────────────────────────────────────────
+          # MISC top-level scalars — Plan 032 T9
+          # ─────────────────────────────────────────────────────────────────────────
+          snapshot = mkOption {
+            type = types.nullOr types.bool;
+            default = null;
+            description = ''
+              Enable or disable snapshot tracking. When false, filesystem snapshots
+              are not recorded and undo/revert will not restore file changes.
+              null = omit (upstream default: true). OC-G15.
+            '';
+          };
+
+          username = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Custom username displayed in conversations instead of system username.
+              OC-G18.
+            '';
           };
 
           share = mkOption {
@@ -404,15 +702,185 @@
           };
 
           provider = mkOption {
-            type = types.attrs;
+            type = types.attrsOf providerModule;
             default = { };
-            description = "Provider-specific configuration (timeouts, caching, etc.)";
+            description = ''
+              Per-provider configuration keyed by provider ID (e.g. "anthropic",
+              "openai", "amazon-bedrock"). Each entry supports whitelist, blacklist,
+              models overrides, and options (timeout, caching, auth).
+            '';
+            example = {
+              anthropic = {
+                options = {
+                  timeout = 600000;
+                  chunkTimeout = 30000;
+                  setCacheKey = true;
+                };
+              };
+              "amazon-bedrock" = {
+                options = {
+                  region = "us-east-1";
+                  profile = "my-aws-profile";
+                };
+              };
+            };
+          };
+
+          disabledProviders = mkOption {
+            type = types.nullOr (types.listOf types.str);
+            default = null;
+            description = ''
+              Provider IDs to disable. These providers will not be loaded even if
+              auto-detected. Takes priority over enabledProviders.
+            '';
+            example = [ "openai" "gemini" ];
+          };
+
+          enabledProviders = mkOption {
+            type = types.nullOr (types.listOf types.str);
+            default = null;
+            description = ''
+              When set, ONLY these providers will be enabled. All other providers
+              are ignored (allowlist mode).
+            '';
+            example = [ "anthropic" "openai" ];
+          };
+
+          enterprise = {
+            url = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Enterprise URL for self-hosted deployments";
+            };
           };
 
           experimental = mkOption {
-            type = types.attrs;
+            type = types.submodule {
+              freeformType = jsonType;
+              options = {
+                openTelemetry = mkOption {
+                  type = types.nullOr types.bool;
+                  default = null;
+                  description = "Enable OpenTelemetry spans for AI SDK calls (experimental_telemetry flag)";
+                };
+
+                batch_tool = mkOption {
+                  type = types.nullOr types.bool;
+                  default = null;
+                  description = "Enable the batch tool";
+                };
+
+                disable_paste_summary = mkOption {
+                  type = types.nullOr types.bool;
+                  default = null;
+                  description = "Disable paste summary generation";
+                };
+
+                primary_tools = mkOption {
+                  type = types.nullOr (types.listOf types.str);
+                  default = null;
+                  description = "Tools that should only be available to primary agents";
+                };
+
+                continue_loop_on_deny = mkOption {
+                  type = types.nullOr types.bool;
+                  default = null;
+                  description = "Continue the agent loop when a tool call is denied";
+                };
+
+                mcp_timeout = mkOption {
+                  type = types.nullOr types.ints.positive;
+                  default = null;
+                  description = "Timeout in milliseconds for MCP requests";
+                };
+              };
+            };
             default = { };
-            description = "Experimental features";
+            description = ''
+              Experimental features. Typed fields match upstream config.ts:1019-1038.
+              Freeform attrs allowed for forward-compat with new upstream experiments.
+            '';
+          };
+
+          # ─────────────────────────────────────────────────────────────────────────
+          # PLUGINS — Plan 032 T13 / OC-G24
+          # ─────────────────────────────────────────────────────────────────────────
+          plugin = mkOption {
+            type = types.listOf (types.either
+              types.str
+              (types.listOf jsonType));
+            default = [ ];
+            description = ''
+              Top-level plugin specifiers (separate from tui.plugins).
+              Each entry is either a plugin name string (npm package or file:// URL)
+              or a [name, options] tuple where options is an arbitrary attrset.
+              Matches upstream PluginSpec = string | [string, Record<string, unknown>].
+            '';
+            example = [
+              "@opencode/plugin-foo"
+              [ "@opencode/plugin-bar" { someOption = true; } ]
+            ];
+          };
+
+          # ─────────────────────────────────────────────────────────────────────────
+          # LSP — Plan 032 T13 / OC-G25
+          # ─────────────────────────────────────────────────────────────────────────
+          lsp = mkOption {
+            type = types.either
+              (types.enum [ false ])
+              (types.attrsOf (types.submodule {
+                options = {
+                  command = mkOption {
+                    type = types.listOf types.str;
+                    description = "LSP server command and arguments";
+                    example = [ "typescript-language-server" "--stdio" ];
+                  };
+
+                  extensions = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = ''
+                      File extensions this LSP server handles.
+                      Required for custom servers; optional for built-in server IDs.
+                    '';
+                  };
+
+                  disabled = mkOption {
+                    type = types.nullOr types.bool;
+                    default = null;
+                    description = "Disable this LSP server";
+                  };
+
+                  env = mkOption {
+                    type = types.attrsOf types.str;
+                    default = { };
+                    description = "Environment variables passed to the LSP server process";
+                  };
+
+                  initialization = mkOption {
+                    type = types.nullOr jsonType;
+                    default = null;
+                    description = "Initialization options sent to the LSP server (arbitrary JSON)";
+                  };
+                };
+              }));
+            default = { };
+            description = ''
+              LSP server configuration. Set to `false` to disable all LSP integration.
+              Otherwise, an attrset keyed by server ID. Built-in server IDs (e.g.
+              "typescript") don't require extensions; custom servers must specify them.
+              Each server supports env vars and initialization options that round-trip
+              to opencode.json. Matches upstream config.ts:962-997.
+            '';
+            example = {
+              typescript = { disabled = true; };
+              custom-server = {
+                command = [ "my-lsp" "--stdio" ];
+                extensions = [ ".myext" ];
+                env = { MY_VAR = "value"; };
+                initialization = { setting1 = true; };
+              };
+            };
           };
 
           # ─────────────────────────────────────────────────────────────────────────
@@ -425,6 +893,18 @@
               internal = true;
               description = "Processed MCP server configurations";
             };
+            skillPaths = mkOption {
+              type = types.listOf types.str;
+              default = [ ];
+              internal = true;
+              description = "Aggregated skill paths from skills sub-module";
+            };
+            skillUrls = mkOption {
+              type = types.listOf types.str;
+              default = [ ];
+              internal = true;
+              description = "Aggregated skill URLs from skills sub-module";
+            };
           };
         };
 
@@ -436,19 +916,23 @@
             # Build the MCP configuration from _internal
             mcpConfig = cfg._internal.mcpServers;
 
-            # Build agent configuration
+            # Build agent configuration — only emit non-null / non-empty fields
             agentConfig = mapAttrs
-              (_name: agent: {
-                inherit (agent) description;
-              } // optionalAttrs (agent.model != null) {
-                inherit (agent) model;
-              } // optionalAttrs (agent.prompt != null) {
-                inherit (agent) prompt;
-              } // optionalAttrs (agent.tools != { }) {
-                inherit (agent) tools;
-              } // optionalAttrs (agent.permission != { }) {
-                inherit (agent) permission;
-              })
+              (_name: agent: { }
+                // optionalAttrs (agent.description != null) { inherit (agent) description; }
+                // optionalAttrs (agent.model != null) { inherit (agent) model; }
+                // optionalAttrs (agent.variant != null) { inherit (agent) variant; }
+                // optionalAttrs (agent.temperature != null) { inherit (agent) temperature; }
+                // optionalAttrs (agent.top_p != null) { inherit (agent) top_p; }
+                // optionalAttrs (agent.prompt != null) { inherit (agent) prompt; }
+                // optionalAttrs (agent.tools != { }) { inherit (agent) tools; }
+                // optionalAttrs (agent.disable != null) { inherit (agent) disable; }
+                // optionalAttrs (agent.mode != null) { inherit (agent) mode; }
+                // optionalAttrs (agent.hidden != null) { inherit (agent) hidden; }
+                // optionalAttrs (agent.color != null) { inherit (agent) color; }
+                // optionalAttrs (agent.steps != null) { inherit (agent) steps; }
+                // optionalAttrs (agent.options != null) { inherit (agent) options; }
+                // optionalAttrs (agent.permission != { }) { inherit (agent) permission; })
               cfg.agents;
 
             # Build command configuration
@@ -493,22 +977,89 @@
               // optionalAttrs (commandConfig != { }) { command = commandConfig; }
               // optionalAttrs (cfg.permissions != { }) { permission = cfg.permissions; }
               // optionalAttrs (cfg.instructions.files != [ ]) { instructions = cfg.instructions.files; }
-              // optionalAttrs (cfg.tui.theme != null) { inherit (cfg.tui) theme; }
-              // {
-                tui = {
-                  scroll_speed = cfg.tui.scrollSpeed;
-                  scroll_acceleration = { enabled = cfg.tui.scrollAcceleration; };
-                  diff_style = cfg.tui.diffStyle;
-                };
-              }
+              # NOTE: tui.*, theme, and keybinds intentionally NOT written here —
+              # they live in tui.json, deployed by ./_hm/tui-json.nix. See Plan
+              # 032 T1/T2 and the header comment in tui-json.nix for rationale.
               // optionalAttrs (formatterConfig != { }) { formatter = formatterConfig; }
-              // optionalAttrs (cfg.provider != { }) { inherit (cfg) provider; }
+              // (
+                let
+                  providerAttrs = mapAttrs mkProviderAttrs cfg.provider;
+                  nonEmpty = filterAttrs (_: v: v != { }) providerAttrs;
+                in
+                optionalAttrs (nonEmpty != { }) { provider = nonEmpty; }
+              )
+              // optionalAttrs (cfg.disabledProviders != null) { disabled_providers = cfg.disabledProviders; }
+              // optionalAttrs (cfg.enabledProviders != null) { enabled_providers = cfg.enabledProviders; }
+              // (
+                let
+                  ent = { }
+                  // optionalAttrs (cfg.enterprise.url != null) { inherit (cfg.enterprise) url; };
+                in
+                optionalAttrs (ent != { }) { enterprise = ent; }
+              )
               // {
                 watcher = {
                   inherit (cfg.watcher) ignore;
                 };
-                inherit (cfg) autoupdate;
                 inherit (cfg) share;
+              }
+              // optionalAttrs (cfg.autoupdate != null) { inherit (cfg) autoupdate; }
+              // optionalAttrs (cfg.snapshot != null) { inherit (cfg) snapshot; }
+              // optionalAttrs (cfg.username != null) { inherit (cfg) username; }
+              // (
+                let
+                  s = cfg.server;
+                  serverAttrs = { }
+                  // optionalAttrs (s.port != null) { inherit (s) port; }
+                  // optionalAttrs (s.hostname != null) { inherit (s) hostname; }
+                  // optionalAttrs (s.mdns != null) { inherit (s) mdns; }
+                  // optionalAttrs (s.mdnsDomain != null) { inherit (s) mdnsDomain; }
+                  // optionalAttrs (s.cors != null) { inherit (s) cors; };
+                in
+                optionalAttrs (serverAttrs != { }) { server = serverAttrs; }
+              )
+              // {
+                compaction = {
+                  inherit (cfg.compaction) auto prune;
+                }
+                // optionalAttrs (cfg.compaction.reserved != null) {
+                  inherit (cfg.compaction) reserved;
+                };
+              }
+              // (
+                let
+                  # Strip null leaves from the experimental submodule
+                  expFiltered = filterAttrs (_: v: v != null) cfg.experimental;
+                in
+                optionalAttrs (expFiltered != { }) { experimental = expFiltered; }
+              )
+              // optionalAttrs (cfg.plugin != [ ]) { inherit (cfg) plugin; }
+              // (
+                let
+                  lspVal = cfg.lsp;
+                  # lsp can be `false` (disable all) or an attrset of server configs
+                  isDisabled = lspVal == false;
+                  isNonEmpty = !isDisabled && lspVal != { };
+                  # Strip null/empty leaves from each server config
+                  mkLspServer = _name: srv:
+                    { inherit (srv) command; }
+                    // optionalAttrs (srv.extensions != null) { inherit (srv) extensions; }
+                    // optionalAttrs (srv.disabled != null) { inherit (srv) disabled; }
+                    // optionalAttrs (srv.env != { }) { inherit (srv) env; }
+                    // optionalAttrs (srv.initialization != null) { inherit (srv) initialization; };
+                in
+                if isDisabled then { lsp = false; }
+                else if isNonEmpty then { lsp = mapAttrs mkLspServer lspVal; }
+                else { }
+              )
+              // optionalAttrs (cfg._internal.skillPaths != [ ] || cfg._internal.skillUrls != [ ]) {
+                skills = { }
+                // optionalAttrs (cfg._internal.skillPaths != [ ]) {
+                  paths = cfg._internal.skillPaths;
+                }
+                // optionalAttrs (cfg._internal.skillUrls != [ ]) {
+                  urls = cfg._internal.skillUrls;
+                };
               };
 
             # Generate AGENTS.md content using shared instructions
@@ -563,9 +1114,19 @@
                     item = bwItem;
                     field = if bwField == "" then null else bwField;
                     varName = accountCfg.api.apiKeyEnvVar;
-                    # Use default 300s staleness; could make configurable via account.rbwSyncInterval
                   }
                 );
+
+                # Multi-token fetch via envTokens (for multi-provider setups)
+                envTokenFetches = concatStringsSep "\n" (mapAttrsToList
+                  (envVarName: tokenCfg:
+                    rbwLib.mkRbwExportWithDiagnostics {
+                      inherit (tokenCfg.bitwarden) item;
+                      field = let f = tokenCfg.bitwarden.field; in if f == "" then null else f;
+                      varName = envVarName;
+                    }
+                  )
+                  accountCfg.secrets.envTokens);
               in
               pkgs.writeShellScriptBin "opencode${accountName}" ''
                 #!/usr/bin/env bash
@@ -573,8 +1134,14 @@
                 set -o nounset
                 set -o pipefail
 
+                # Prepend flock-based nix concurrency guard to PATH so agent nix
+                # invocations are serialized (prevents OOM from concurrent evals)
+                export PATH="${nixGuardedPkg}/bin:''$PATH"
+
                 ${envExports}
+                ${channelMigrate.mkChannelMigrateSnippet { ocPackage = cfg.package; }}
                 ${bitwardenFetch}
+                ${envTokenFetches}
 
                 exec ${cfg.package}/bin/opencode "$@"
               '';

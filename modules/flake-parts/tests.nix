@@ -1,6 +1,10 @@
 # modules/flake-parts/tests.nix
 # Comprehensive test suite for NixOS configurations
-{ inputs, self, ... }: {
+{ inputs, self, config, ... }:
+let
+  inherit (config.meta) username;
+in
+{
   perSystem = { config, self', inputs', pkgs, system, lib, ... }:
     let
       # Helper function to create configuration evaluation tests
@@ -181,7 +185,7 @@
         unified-files-diagnostic-test =
           let
             # Try to get scripts from unified files module (current architecture)
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
 
             # Check what's available in home packages (where scripts would be installed)
             homePackages = hmConfig.home.packages or [ ];
@@ -227,14 +231,18 @@
         eval-potato = mkEvalTest "potato" "potato";
         eval-nixos-wsl-minimal = mkEvalTest "nixos-wsl-minimal" "nixos-wsl-minimal";
         eval-mbp = mkEvalTest "mbp" "mbp";
+        eval-nixos-wsl-dev-team = mkEvalTest "nixos-wsl-dev-team" "nixos-wsl-dev-team";
+        eval-nixos-dev-team = mkEvalTest "nixos-dev-team" "nixos-dev-team";
+        eval-nixos-dev-team-ec2 = mkEvalTest "nixos-dev-team-ec2" "nixos-dev-team-ec2";
+        eval-nixos-dev-team-graviton = mkEvalTest "nixos-dev-team-graviton" "nixos-dev-team-graviton";
 
         # Home Manager configuration eval tests (x86_64-linux only)
         # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
-        eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "tim@thinky-nixos";
-        eval-hm-pa161878-nixos = mkHmEvalTest "pa161878-nixos" "tim@pa161878-nixos";
-        eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "tim@thinky-ubuntu";
-        eval-hm-mbp = mkHmEvalTest "mbp" "tim@mbp";
-        eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "tim@nixvim-minimal";
+        eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "${username}@thinky-nixos";
+        eval-hm-pa161878-nixos = mkHmEvalTest "pa161878-nixos" "${username}@pa161878-nixos";
+        eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "${username}@thinky-ubuntu";
+        eval-hm-mbp = mkHmEvalTest "mbp" "${username}@mbp";
+        eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "${username}@nixvim-minimal";
 
         # === MODULE INTEGRATION TESTS ===
         module-base-integration = mkModuleTest {
@@ -246,7 +254,7 @@
             userGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.systemDefault.userGroups;
           };
           checks = ''
-            [[ "$userName" == "tim" ]] || (echo "❌ Username not tim" && exit 1)
+            [[ "$userName" == "${username}" ]] || (echo "❌ Username not ${username}" && exit 1)
             echo "User name: $userName"
             echo "User groups: $userGroups"
           '';
@@ -328,24 +336,24 @@
         '';
 
         # === USER CONFIGURATION TESTS ===
-        user-tim-configured = pkgs.runCommand "user-tim-configured"
+        user-configured = pkgs.runCommand "user-configured"
           {
             meta = {
-              description = "Verify user tim is properly configured";
+              description = "Verify primary user is properly configured";
               maintainers = [ ];
               timeout = 30;
             };
             # Force evaluation by referencing configuration attributes
-            isNormalUser = if self.nixosConfigurations.thinky-nixos.config.users.users.tim.isNormalUser then "1" else "0";
-            extraGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.users.users.tim.extraGroups;
+            isNormalUser = if self.nixosConfigurations.thinky-nixos.config.users.users.${username}.isNormalUser then "1" else "0";
+            extraGroups = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.users.users.${username}.extraGroups;
           } ''
-          echo "Testing user tim configuration..."
+          echo "Testing user ${username} configuration..."
           # If we got here, the configuration evaluated successfully
           [[ "$isNormalUser" == "1" ]] || (echo "❌ User not normal user" && exit 1)
           echo "$extraGroups" | grep -q "wheel" || (echo "❌ User not in wheel group" && exit 1)
           echo "User is normal user: $isNormalUser"
           echo "User groups: $extraGroups"
-          echo "✅ User tim configuration passed"
+          echo "✅ User ${username} configuration passed"
           touch $out
         '';
 
@@ -429,14 +437,14 @@
             # Check if SOPS is enabled via wsl-settings and user matches
             sopsEnabled = if self.nixosConfigurations.thinky-nixos.config.wsl-settings.sops.enable then "1" else "0";
             inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
-            userExists = if (builtins.hasAttr "tim" self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
+            userExists = if (builtins.hasAttr username self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
           } ''
           echo "Testing SOPS-NiX integration with base module..."
 
           [[ "$sopsEnabled" == "1" ]] || (echo "❌ SOPS-NiX not enabled" && exit 1)
           echo "✅ SOPS-NiX is enabled"
 
-          [[ "$userExists" == "1" ]] || (echo "❌ User tim not configured" && exit 1)
+          [[ "$userExists" == "1" ]] || (echo "❌ User ${username} not configured" && exit 1)
           echo "✅ User $userName exists in system configuration"
 
           echo "✅ SOPS-NiX and base module integration test passed"
@@ -558,6 +566,133 @@
           touch $out
         '';
 
+        # === TARBALL BUILDER EVALUATION TESTS ===
+        # Force evaluation of tarball builder derivations for all WSL configs
+        build-tarball-dev-team-dryrun = pkgs.runCommand "build-tarball-dev-team-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of nixos-wsl-dev-team tarball builder";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.nixos-wsl-dev-team.config.system.build) tarballBuilder;
+          } ''
+          echo "Testing nixos-wsl-dev-team tarball builder evaluation..."
+          echo "Tarball builder derivation: $tarballBuilder"
+          echo "nixos-wsl-dev-team tarball builder evaluation passed"
+          touch $out
+        '';
+
+        build-tarball-pa161878-dryrun = pkgs.runCommand "build-tarball-pa161878-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of pa161878-nixos tarball builder";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.pa161878-nixos.config.system.build) tarballBuilder;
+          } ''
+          echo "Testing pa161878-nixos tarball builder evaluation..."
+          echo "Tarball builder derivation: $tarballBuilder"
+          echo "pa161878-nixos tarball builder evaluation passed"
+          touch $out
+        '';
+
+        build-tarball-thinky-dryrun = pkgs.runCommand "build-tarball-thinky-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of thinky-nixos tarball builder";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.thinky-nixos.config.system.build) tarballBuilder;
+          } ''
+          echo "Testing thinky-nixos tarball builder evaluation..."
+          echo "Tarball builder derivation: $tarballBuilder"
+          echo "thinky-nixos tarball builder evaluation passed"
+          touch $out
+        '';
+
+        # === BUILD EVALUATION TEST: nixos-dev-team ===
+        build-nixos-dev-team-dryrun = pkgs.runCommand "build-nixos-dev-team-dryrun"
+          {
+            meta = {
+              description = "Dry-run build test for nixos-dev-team";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.nixos-dev-team.config.system.build) toplevel;
+          } ''
+          echo "Testing nixos-dev-team build evaluation..."
+          echo "Toplevel derivation: $toplevel"
+          echo "nixos-dev-team build evaluation passed"
+          touch $out
+        '';
+
+        # === IMAGE OUTPUTS EVALUATION TEST ===
+        # Verifies image.modules framework produces expected image attributes
+        # on nixos-dev-team. Forces eval of the images attrset without building.
+        # For full VMA build, use:
+        #   nix build '.#nixosConfigurations.nixos-dev-team.config.system.build.images.proxmox'
+        build-images-dev-team-dryrun = pkgs.runCommand "build-images-dev-team-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of nixos-dev-team image.modules (Proxmox VMA wiring)";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            imageNames = builtins.concatStringsSep " " (builtins.attrNames self.nixosConfigurations.nixos-dev-team.config.system.build.images);
+            hasProxmox = if (builtins.hasAttr "proxmox" self.nixosConfigurations.nixos-dev-team.config.system.build.images) then "1" else "0";
+          } ''
+          echo "Testing nixos-dev-team image outputs evaluation..."
+          echo "Available images: $imageNames"
+          [[ "$hasProxmox" == "1" ]] || (echo "FAIL: proxmox image missing from system.build.images" && exit 1)
+          echo "Proxmox image present in system.build.images"
+          echo "nixos-dev-team image outputs evaluation passed"
+          touch $out
+        '';
+
+        # === IMAGE OUTPUTS EVALUATION TEST: EC2 AMI ===
+        # Verifies image.modules framework produces amazon image attributes
+        # on nixos-dev-team-ec2 (x86_64). Forces eval without building.
+        build-images-ec2-dryrun = pkgs.runCommand "build-images-ec2-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of nixos-dev-team-ec2 image.modules (Amazon AMI wiring)";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            imageNames = builtins.concatStringsSep " " (builtins.attrNames self.nixosConfigurations.nixos-dev-team-ec2.config.system.build.images);
+            hasAmazon = if (builtins.hasAttr "amazon" self.nixosConfigurations.nixos-dev-team-ec2.config.system.build.images) then "1" else "0";
+          } ''
+          echo "Testing nixos-dev-team-ec2 image outputs evaluation..."
+          echo "Available images: $imageNames"
+          [[ "$hasAmazon" == "1" ]] || (echo "FAIL: amazon image missing from system.build.images" && exit 1)
+          echo "Amazon image present in system.build.images"
+          echo "nixos-dev-team-ec2 image outputs evaluation passed"
+          touch $out
+        '';
+
+        # Verifies image.modules framework produces amazon image attributes
+        # on nixos-dev-team-graviton (aarch64). Forces eval without building.
+        build-images-graviton-dryrun = pkgs.runCommand "build-images-graviton-dryrun"
+          {
+            meta = {
+              description = "Dry-run eval of nixos-dev-team-graviton image.modules (Amazon AMI wiring)";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            imageNames = builtins.concatStringsSep " " (builtins.attrNames self.nixosConfigurations.nixos-dev-team-graviton.config.system.build.images);
+            hasAmazon = if (builtins.hasAttr "amazon" self.nixosConfigurations.nixos-dev-team-graviton.config.system.build.images) then "1" else "0";
+          } ''
+          echo "Testing nixos-dev-team-graviton image outputs evaluation..."
+          echo "Available images: $imageNames"
+          [[ "$hasAmazon" == "1" ]] || (echo "FAIL: amazon image missing from system.build.images" && exit 1)
+          echo "Amazon image present in system.build.images"
+          echo "nixos-dev-team-graviton image outputs evaluation passed"
+          touch $out
+        '';
+
         # === FILES MODULE TEST ===
         files-module-test = pkgs.runCommand "files-module-test"
           {
@@ -578,11 +713,10 @@
 
         # === HYBRID UNIFIED FILES MODULE TEST ===
         # Tests the homeFiles module with autoWriter integration
-        # Module location: modules/programs/files [nd]/_homefiles-module.nix
+        # Module location: modules/programs/files/_homefiles-module.nix
         hybrid-files-module-test =
           let
-            # Reference the module using path concatenation to handle special characters
-            homefilesModulePath = ../programs + "/files [nd]/_homefiles-module.nix";
+            homefilesModulePath = ../programs + "/files/_homefiles-module.nix";
             moduleFile = import homefilesModulePath {
               config = { homeFiles = { }; };
               inherit lib pkgs;
@@ -642,10 +776,10 @@
 
         # === VALIDATED SCRIPTS TESTS ===
         # Test that validates single source of truth implementation
-        # Script location: modules/programs/files [nd]/files/bin/tmux-session-picker
+        # Script location: modules/programs/tmux/files/tmux-session-picker
         tmux-picker-syntax =
           let
-            tmuxPickerPath = ../programs + "/files [nd]/files/bin/tmux-session-picker";
+            tmuxPickerPath = ../programs + "/tmux/files/tmux-session-picker";
           in
           pkgs.runCommand "test-tmux-session-picker-syntax"
             {
@@ -678,7 +812,7 @@
 
             echo "✅ tmux-session-picker single source of truth validation passed"
             echo "✅ Source file exists and contains valid bash script"
-            echo "✅ No duplication - scripts now in modules/programs/files [nd]/files/"
+            echo "✅ Script owned by tmux module in modules/programs/tmux/files/"
             touch $out
           '';
 
@@ -689,7 +823,7 @@
         # Test OpenCode module generates valid configuration
         opencode-config-validation =
           let
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
             opencodeEnabled = hmConfig.programs.opencode-enhanced.enable or false;
             opencodeAccounts = hmConfig.programs.opencode-enhanced.accounts or { };
             enabledAccounts = lib.filterAttrs (_n: a: a.enable or false) opencodeAccounts;
@@ -714,7 +848,7 @@
 
             # Check module is enabled
             if [[ "$opencodeEnabled" != "1" ]]; then
-              echo "⚠️  OpenCode module not enabled in tim@thinky-nixos"
+              echo "⚠️  OpenCode module not enabled in ${username}@thinky-nixos"
               echo "This is expected if claude-code is disabled"
             else
               echo "✅ OpenCode module is enabled"
@@ -739,7 +873,7 @@
         # Test OpenCode JSON output is valid
         opencode-json-syntax =
           let
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
             # Build a sample config to test JSON generation
             sampleConfig = {
               "$schema" = "https://opencode.ai/config.json";
@@ -796,7 +930,7 @@
         # Test MCP server configuration structure
         opencode-mcp-structure =
           let
-            hmConfig = self.homeConfigurations."tim@thinky-nixos".config;
+            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
             mcpServers = hmConfig.programs.opencode-enhanced._internal.mcpServers or { };
           in
           pkgs.runCommand "opencode-mcp-structure"
@@ -1071,36 +1205,42 @@
               maintainers = [ ];
               timeout = 120;
             };
-            # Force evaluation of all 5 NixOS configurations
+            # Force evaluation of all NixOS configurations
             nixosThinky = self.nixosConfigurations.thinky-nixos.config.system.stateVersion;
             nixosPa161878 = self.nixosConfigurations.pa161878-nixos.config.system.stateVersion;
             nixosPotato = self.nixosConfigurations.potato.config.system.stateVersion;
             nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
             nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
+            nixosDevTeam = self.nixosConfigurations.nixos-dev-team.config.system.stateVersion;
+            nixosDevTeamEc2 = self.nixosConfigurations.nixos-dev-team-ec2.config.system.stateVersion;
+            nixosDevTeamGraviton = self.nixosConfigurations.nixos-dev-team-graviton.config.system.stateVersion;
             # Force evaluation of all 5 x86_64-linux Home Manager configurations
-            hmThinky = self.homeConfigurations."tim@thinky-nixos".config.home.homeDirectory;
-            hmPa161878 = self.homeConfigurations."tim@pa161878-nixos".config.home.homeDirectory;
-            hmUbuntu = self.homeConfigurations."tim@thinky-ubuntu".config.home.homeDirectory;
-            hmMbp = self.homeConfigurations."tim@mbp".config.home.homeDirectory;
-            hmNixvim = self.homeConfigurations."tim@nixvim-minimal".config.home.homeDirectory;
+            hmThinky = self.homeConfigurations."${username}@thinky-nixos".config.home.homeDirectory;
+            hmPa161878 = self.homeConfigurations."${username}@pa161878-nixos".config.home.homeDirectory;
+            hmUbuntu = self.homeConfigurations."${username}@thinky-ubuntu".config.home.homeDirectory;
+            hmMbp = self.homeConfigurations."${username}@mbp".config.home.homeDirectory;
+            hmNixvim = self.homeConfigurations."${username}@nixvim-minimal".config.home.homeDirectory;
           } ''
           echo "Regression test: evaluating all configurations..."
           echo ""
           echo "NixOS configurations:"
-          echo "  thinky-nixos:      stateVersion=$nixosThinky"
-          echo "  pa161878-nixos:    stateVersion=$nixosPa161878"
-          echo "  potato:            stateVersion=$nixosPotato"
-          echo "  mbp:               stateVersion=$nixosMbp"
-          echo "  nixos-wsl-minimal: stateVersion=$nixosWslMinimal"
+          echo "  thinky-nixos:        stateVersion=$nixosThinky"
+          echo "  pa161878-nixos:      stateVersion=$nixosPa161878"
+          echo "  potato:              stateVersion=$nixosPotato"
+          echo "  mbp:                 stateVersion=$nixosMbp"
+          echo "  nixos-wsl-minimal:   stateVersion=$nixosWslMinimal"
+          echo "  nixos-dev-team:      stateVersion=$nixosDevTeam"
+          echo "  nixos-dev-team-ec2:  stateVersion=$nixosDevTeamEc2"
+          echo "  nixos-dev-team-graviton: stateVersion=$nixosDevTeamGraviton"
           echo ""
           echo "Home Manager configurations:"
-          echo "  tim@thinky-nixos:   homeDir=$hmThinky"
-          echo "  tim@pa161878-nixos: homeDir=$hmPa161878"
-          echo "  tim@thinky-ubuntu:  homeDir=$hmUbuntu"
-          echo "  tim@mbp:            homeDir=$hmMbp"
-          echo "  tim@nixvim-minimal: homeDir=$hmNixvim"
+          echo "  ${username}@thinky-nixos:   homeDir=$hmThinky"
+          echo "  ${username}@pa161878-nixos: homeDir=$hmPa161878"
+          echo "  ${username}@thinky-ubuntu:  homeDir=$hmUbuntu"
+          echo "  ${username}@mbp:            homeDir=$hmMbp"
+          echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim"
           echo ""
-          echo "All 10 configurations evaluated successfully"
+          echo "All 13 configurations evaluated successfully"
           touch $out
         '';
       };

@@ -1,5 +1,5 @@
 # modules/system/types/3-cli/cli.nix
-# CLI-focused system configuration layer [NDnd]
+# CLI-focused system configuration layer
 #
 # Provides:
 #   flake.modules.nixos.system-cli - NixOS with full CLI tooling
@@ -143,10 +143,13 @@
 
             # Enhanced shell prompt and aliases
             environment.shellAliases = {
-              # File listing with eza if available
-              ls = "eza --icons";
-              la = "eza -la --icons";
-              lt = "eza --tree --icons";
+              # File listing with eza
+              ls = "eza -al --icons -s size";
+              la = "eza -a --icons";
+              ll = lib.mkForce "eza -l --icons";
+              lla = "eza -al --icons";
+              lh = "eza -al --icons -s modified";
+              lt = "eza --tree --icons -L 3 --git-ignore";
               # Git shortcuts
               gs = "git status";
               gd = "git diff";
@@ -394,10 +397,13 @@
 
             # Enhanced shell aliases
             environment.shellAliases = {
-              # File listing with eza if available
-              ls = "eza --icons";
-              la = "eza -la --icons";
-              lt = "eza --tree --icons";
+              # File listing with eza
+              ls = "eza -al --icons -s size";
+              la = "eza -a --icons";
+              ll = lib.mkForce "eza -l --icons";
+              lla = "eza -al --icons";
+              lh = "eza -al --icons -s modified";
+              lt = "eza --tree --icons -L 3 --git-ignore";
               # Git shortcuts
               gs = "git status";
               gd = "git diff";

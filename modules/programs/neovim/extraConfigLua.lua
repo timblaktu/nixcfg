@@ -586,6 +586,178 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 -- ========================================================================
+-- SNIPPET NAVIGATION
+-- ========================================================================
+
+local ls = require("luasnip")
+
+-- Jump forward: expand or jump to next tab stop
+vim.keymap.set({ "i", "s" }, "<C-k>", function()
+  if ls.expand_or_jumpable() then
+    ls.expand_or_jump()
+  end
+end, { silent = true, desc = "Snippet: expand or jump forward" })
+
+-- Jump backward: jump to previous tab stop
+vim.keymap.set({ "i", "s" }, "<C-j>", function()
+  if ls.jumpable(-1) then
+    ls.jump(-1)
+  end
+end, { silent = true, desc = "Snippet: jump backward" })
+
+-- Cycle through choice nodes
+vim.keymap.set({ "i", "s" }, "<C-l>", function()
+  if ls.choice_active() then
+    ls.change_choice(1)
+  end
+end, { silent = true, desc = "Snippet: cycle choice" })
+
+-- ========================================================================
+-- SNIPPET INTROSPECTION
+-- ========================================================================
+
+-- Telescope picker for snippets (current filetype)
+vim.keymap.set("n", "<leader>fs", function()
+  local ft = vim.bo.filetype
+  local snips = ls.available(ft)
+  local items = {}
+
+  for filetype, snippet_list in pairs(snips) do
+    for _, snip in ipairs(snippet_list) do
+      table.insert(items, {
+        ft = filetype,
+        trigger = snip.trigger,
+        name = snip.name or snip.trigger,
+        desc = snip.description and table.concat(snip.description, " ") or "",
+      })
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("No snippets for filetype: " .. ft, vim.log.levels.INFO)
+    return
+  end
+
+  table.sort(items, function(a, b) return a.trigger < b.trigger end)
+
+  local pickers = require("telescope.pickers")
+  local finders = require("telescope.finders")
+  local conf = require("telescope.config").values
+  local actions = require("telescope.actions")
+  local action_state = require("telescope.actions.state")
+
+  pickers.new({}, {
+    prompt_title = "Snippets (" .. ft .. ")",
+    finder = finders.new_table({
+      results = items,
+      entry_maker = function(entry)
+        local display = string.format("[%s] %s: %s", entry.ft, entry.trigger, entry.desc)
+        return {
+          value = entry,
+          display = display,
+          ordinal = entry.trigger .. " " .. entry.desc .. " " .. entry.ft,
+        }
+      end,
+    }),
+    sorter = conf.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        local selection = action_state.get_selected_entry()
+        if selection then
+          vim.api.nvim_put({ selection.value.trigger }, "", true, true)
+        end
+      end)
+      return true
+    end,
+  }):find()
+end, { desc = "Search snippets (current ft)" })
+
+-- Telescope picker for ALL snippets (all filetypes)
+vim.keymap.set("n", "<leader>fS", function()
+  local snips = ls.available()
+  local items = {}
+
+  for filetype, snippet_list in pairs(snips) do
+    for _, snip in ipairs(snippet_list) do
+      table.insert(items, {
+        ft = filetype,
+        trigger = snip.trigger,
+        name = snip.name or snip.trigger,
+        desc = snip.description and table.concat(snip.description, " ") or "",
+      })
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("No snippets loaded", vim.log.levels.INFO)
+    return
+  end
+
+  table.sort(items, function(a, b)
+    if a.ft == b.ft then return a.trigger < b.trigger end
+    return a.ft < b.ft
+  end)
+
+  local pickers = require("telescope.pickers")
+  local finders = require("telescope.finders")
+  local conf = require("telescope.config").values
+  local actions = require("telescope.actions")
+  local action_state = require("telescope.actions.state")
+
+  pickers.new({}, {
+    prompt_title = "Snippets (all filetypes)",
+    finder = finders.new_table({
+      results = items,
+      entry_maker = function(entry)
+        local display = string.format("[%s] %s: %s", entry.ft, entry.trigger, entry.desc)
+        return {
+          value = entry,
+          display = display,
+          ordinal = entry.trigger .. " " .. entry.desc .. " " .. entry.ft,
+        }
+      end,
+    }),
+    sorter = conf.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        local selection = action_state.get_selected_entry()
+        if selection then
+          vim.api.nvim_put({ selection.value.trigger }, "", true, true)
+        end
+      end)
+      return true
+    end,
+  }):find()
+end, { desc = "Search snippets (all ft)" })
+
+-- :SnippetList command - dump available snippets to scratch buffer
+vim.api.nvim_create_user_command("SnippetList", function(opts)
+  local ft = opts.args ~= "" and opts.args or vim.bo.filetype
+  local snips = ls.available(ft)
+  local lines = { "Available snippets for: " .. ft, string.rep("-", 50) }
+
+  for filetype, snippet_list in pairs(snips) do
+    table.insert(lines, "")
+    table.insert(lines, "[" .. filetype .. "]")
+    for _, snip in ipairs(snippet_list) do
+      local desc = snip.description and table.concat(snip.description, " ") or ""
+      table.insert(lines, string.format("  %-15s %s", snip.trigger, desc))
+    end
+  end
+
+  -- Open in scratch buffer
+  vim.cmd("new")
+  local buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].filetype = "snippetlist"
+end, { nargs = "?", desc = "List available snippets (optional: specify filetype)" })
+
+-- ========================================================================
 -- OPTIONAL: NVIM-NOTIFY SETUP (COMMENTED OUT)
 -- ========================================================================
 

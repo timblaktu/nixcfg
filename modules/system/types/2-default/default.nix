@@ -1,5 +1,5 @@
 # modules/system/types/2-default/default.nix
-# Default system configuration layer [NDnd]
+# Default system configuration layer
 #
 # Provides:
 #   flake.modules.nixos.system-default - NixOS with user management + integrations
@@ -462,7 +462,7 @@
             };
 
             # Glow markdown renderer configuration
-            home.file.".config/glow/glow.yml".source = ../../../.. + "/modules/programs/files [nd]/files/glow.yml";
+            home.file.".config/glow/glow.yml".source = ../../../.. + "/modules/programs/files/files/glow.yml";
           }
 
           # SSH client configuration
@@ -516,6 +516,17 @@
                 "he*" = {
                   proxyJump = "pdx-gw2";
                   user = "blackt1";
+                };
+
+                # NUC service host — host key changes on reinstall
+                "nuc-apt-repo 10.139.254.97" = {
+                  hostname = "10.139.254.97";
+                  user = "root";
+                  extraOptions = {
+                    StrictHostKeyChecking = "no";
+                    UserKnownHostsFile = "/dev/null";
+                    LogLevel = "ERROR";
+                  };
                 };
               };
             };

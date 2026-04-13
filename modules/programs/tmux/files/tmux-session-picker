@@ -14,124 +14,114 @@ source "$HOME/.local/lib/color-utils.bash"
 source "$HOME/.local/lib/path-utils.bash"
 
 # Inlined tmux-resurrect file parser (was tmux-parser-optimized)
+# Outputs one record per session found in the file (files can contain multiple sessions).
+# Each record is a single line with fields separated by ASCII Unit Separator (\x1F).
 parse_single_file() {
-    local file="$1" 
+    local file="$1"
     local current_file="$2"
-  
+
     [[ ! -f "$file" ]] && return 1
     [[ ! -r "$file" ]] && return 1
-  
-    # Enhanced parsing using basic tools
-    local session=""
-    local window_count=0
-    local pane_count=0
-    local -a paths=()
-    local -a commands=()
-    
-    # Single pass through file to extract all data (robust field handling)
+
+    # Collect per-session data in associative arrays (single pass)
+    local -a session_order=()
+    local -A session_seen=()
+    local -A session_windows=()
+    local -A session_panes=()
+    local -A session_paths=()
+    local -A session_commands=()
+
     while IFS=$'\t' read -r type session_name rest || [[ -n "$type" ]]; do
         case "$type" in
             window)
-                [[ -z "$session" ]] && session="$session_name"
-                [[ "$session_name" == "$session" ]] && window_count=$((window_count + 1))
+                if [[ -z "${session_seen[$session_name]+x}" ]]; then
+                    session_order+=("$session_name")
+                    session_seen[$session_name]=1
+                    session_windows[$session_name]=0
+                    session_panes[$session_name]=0
+                fi
+                session_windows[$session_name]=$(( ${session_windows[$session_name]} + 1 ))
                 ;;
             pane)
-                [[ -z "$session" ]] && session="$session_name"
-                [[ "$session_name" == "$session" ]] && pane_count=$((pane_count + 1))
-                
-                # For paths and commands, we need to split the rest fields
-                # This is a simplified approach that handles variable field counts
-                if [[ -n "$rest" && "$session_name" == "$session" ]]; then
-                    # Split the rest into an array
+                if [[ -z "${session_seen[$session_name]+x}" ]]; then
+                    session_order+=("$session_name")
+                    session_seen[$session_name]=1
+                    session_windows[$session_name]=0
+                    session_panes[$session_name]=0
+                fi
+                session_panes[$session_name]=$(( ${session_panes[$session_name]} + 1 ))
+
+                if [[ -n "$rest" ]]; then
                     local -a fields
                     IFS=$'\t' read -r -a fields <<< "$rest"
-                    
-                    # Extract path (field 5 in rest, after type and session_name)
+
                     if [[ ${#fields[@]} -gt 5 ]]; then
                         local path="${fields[5]#:}"
-                        [[ -n "$path" && "$path" != "" ]] && paths+=("$path")
+                        [[ -n "$path" && "$path" != "" ]] && session_paths[$session_name]+="${path}"$'\n'
                     fi
-                    
-                    # Extract commands (fields 7 and 8 in rest)
+
                     local cmd=""
                     if [[ ${#fields[@]} -gt 8 ]]; then
-                        cmd="${fields[8]#:}"  # Try full command first
+                        cmd="${fields[8]#:}"
                     fi
                     if [[ -z "$cmd" || "$cmd" == "" ]] && [[ ${#fields[@]} -gt 7 ]]; then
-                        cmd="${fields[7]#:}"  # Fallback to basic command
+                        cmd="${fields[7]#:}"
                     fi
-                    [[ -n "$cmd" && "$cmd" != "" && "$cmd" != "bash" && "$cmd" != "zsh" && "$cmd" != "sh" ]] && commands+=("$cmd")
+                    [[ -n "$cmd" && "$cmd" != "" && "$cmd" != "bash" && "$cmd" != "zsh" && "$cmd" != "sh" ]] && \
+                        session_commands[$session_name]+="${cmd}"$'\n'
                 fi
                 ;;
         esac
     done < "$file"
-  
-    # Must have a session and at least one window
-    [[ -z "$session" || $window_count -eq 0 ]] && return 1
-  
-    # Extract timestamp from filename
+
+    [[ ${#session_order[@]} -eq 0 ]] && return 1
+
     local filename="${file##*/}"
     local timestamp="${filename#tmux_resurrect_}"
     timestamp="${timestamp%.txt}"
-    
-    # Create enhanced summary with paths and commands
-    local paths_str=""
-    local commands_str=""
-    if [[ ${#paths[@]} -gt 0 ]]; then
-        # Get unique paths, abbreviated
-        local -A unique_paths=()
-        for path in "${paths[@]}"; do
-            # Abbreviate path
-            local abbrev_path="${path/#$HOME/~}"
-            unique_paths["$abbrev_path"]=1
-        done
-        paths_str=$(printf "%s:" "${!unique_paths[@]}")
-        paths_str="${paths_str%:}"  # Remove trailing colon
-    fi
-    
-    if [[ ${#commands[@]} -gt 0 ]]; then
-        # Get unique commands
-        local -A unique_commands=()
-        for cmd in "${commands[@]}"; do
-            unique_commands["$cmd"]=1
-        done
-        commands_str=$(printf "%s:" "${!unique_commands[@]}")
-        commands_str="${commands_str%:}"  # Remove trailing colon
-    fi
-    
-    # Format summary with last items only
-    local summary_items=()
-    if [[ -n "$paths_str" ]]; then
-        IFS=':' read -ra path_arr <<< "$paths_str"
-        for p in "${path_arr[@]}"; do
-            summary_items+=("${p##*/}")
-        done
-    fi
-    if [[ -n "$commands_str" ]]; then
-        IFS=':' read -ra cmd_arr <<< "$commands_str"
-        for c in "${cmd_arr[@]}"; do
-            summary_items+=("$c")
-        done
-    fi
-    local window_summary
-    if [[ ${#summary_items[@]} -gt 0 ]]; then
-        window_summary="${summary_items[*]}"
-    else
-        window_summary="${window_count}w ${pane_count}p"
-    fi
-  
-    # Check if current
+
     local is_current="false"
     [[ "$file" == "$current_file" ]] && is_current="true"
-  
-    # Output result using ASCII Unit Separator (US) to avoid conflicts with user content
-    printf "%s\x1F%d\x1F%d\x1F%s\x1F%s\x1F%s\n" \
-        "$session" \
-        "$window_count" \
-        "$pane_count" \
-        "$timestamp" \
-        "$window_summary" \
-        "$is_current"
+
+    # Emit one record per session
+    local sess
+    for sess in "${session_order[@]}"; do
+        local wc="${session_windows[$sess]}"
+        local pc="${session_panes[$sess]}"
+        [[ "$wc" -eq 0 ]] && continue
+
+        # Build summary from unique paths and commands
+        local -A unique_paths=()
+        local -A unique_cmds=()
+        local summary_items=()
+
+        if [[ -n "${session_paths[$sess]:-}" ]]; then
+            while IFS= read -r p; do
+                [[ -z "$p" ]] && continue
+                local abbrev="${p/#$HOME/~}"
+                unique_paths["${abbrev##*/}"]=1
+            done <<< "${session_paths[$sess]}"
+            for k in "${!unique_paths[@]}"; do summary_items+=("$k"); done
+        fi
+
+        if [[ -n "${session_commands[$sess]:-}" ]]; then
+            while IFS= read -r c; do
+                [[ -z "$c" ]] && continue
+                unique_cmds["$c"]=1
+            done <<< "${session_commands[$sess]}"
+            for k in "${!unique_cmds[@]}"; do summary_items+=("$k"); done
+        fi
+
+        local window_summary
+        if [[ ${#summary_items[@]} -gt 0 ]]; then
+            window_summary="${summary_items[*]}"
+        else
+            window_summary="${wc}w ${pc}p"
+        fi
+
+        printf "%s\x1F%d\x1F%d\x1F%s\x1F%s\x1F%s\n" \
+            "$sess" "$wc" "$pc" "$timestamp" "$window_summary" "$is_current"
+    done
 }
 
 RESURRECT_DIR="${HOME}/.local/share/tmux/resurrect"
@@ -581,100 +571,32 @@ process_session_file_complete() {
     local GREEN='\033[32m' MAGENTA='\033[35m'
     
     # Parse file using inlined parser (self-contained)
+    # parse_single_file now outputs one line per session in the file
     local parser_output parser_exit_code
     parser_output=$(parse_single_file "$session_file" "$current_session_file" 2>/dev/null)
     parser_exit_code=$?
-    
+
     if [[ $parser_exit_code -ne 0 ]] || [[ -z "$parser_output" ]]; then
         echo "Error: Failed to parse session file: $session_file" >&2
         return 1
     fi
-    
-    # Extract parsed data
-    local session window_count pane_count parsed_timestamp window_summary is_current
-    IFS=$'\x1F' read -r session window_count pane_count parsed_timestamp window_summary is_current <<< "$parser_output"
-    
-    # Validate and default empty fields
-    [[ -z "$session" ]] && session="unknown"
-    [[ -z "$window_count" ]] && window_count="0"
-    [[ -z "$pane_count" ]] && pane_count="0"
-    [[ -z "$parsed_timestamp" ]] && parsed_timestamp="$timestamp"
-    [[ -z "$window_summary" ]] && window_summary=""
-    [[ -z "$is_current" ]] && is_current="false"
-    
-    # Use shared formatting function
-    local display_line
-    display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$parsed_timestamp" "$window_summary" "$is_current" "$terminal_width")
-    
-    # Output structured format for GNU parallel collection:
-    # Line 1: Formatted session data for fzf display (with tab + timestamp)
-    printf "%s\t%s\n" "$display_line" "$parsed_timestamp"
-    
-    # Line 2: Preview cache marker
-    echo "##PREVIEW_CACHE:${parsed_timestamp}##"
-    
-    # Lines 3+: Complete preview content
-    if [[ "$is_current" == "true" ]]; then
-        echo -e "${YELLOW}${BOLD}* CURRENTLY ACTIVE SESSION${RESET}"
-    fi
-    
-    # Generate preview content
-    while IFS=$'\t' read -r type session_name window_idx window_name active _flags layout; do
-        # Skip windows that don't belong to our target session
-        [[ "$session_name" != "$session" ]] && continue
-        
-        window_name="${window_name#:}"
-        local marker="○"
-        [[ "$active" == "1" ]] && marker="●"
-        
-        echo -e "  ${marker} ${CYAN}${BOLD}Window ${window_idx}: ${window_name}${RESET}"
-        
-        # Show panes for this window
-        grep "^pane" "$session_file" | while IFS=$'\t' read -r _ptype _psession _pwindow pane_idx _pwindow_name _pane_id title path focused command args; do
-            if [[ "$_psession" == "$session_name" && "$_pwindow" == "$window_idx" ]]; then
-                local pmarker=" "
-                [[ "$focused" == "1" ]] && pmarker="▸"
-                
-                title="${title#:}"
-                [[ -z "$title" || "$title" == ":" ]] && title="pane${pane_idx}"
-                
-                command="${command:-shell}"
-                
-                # Enhance command with arguments if available
-                if [[ -n "$args" && "$args" != ":" && "$args" != "$command" ]]; then
-                    # Clean up args and extract just the arguments part
-                    args="${args#:}"
-                    # Extract arguments by removing the command path from the beginning
-                    # Pattern: /path/to/command arg1 arg2 -> arg1 arg2
-                    if [[ "$args" =~ ^[^[:space:]]+[[:space:]]+(.+)$ ]]; then
-                        local extracted_args="${BASH_REMATCH[1]}"
-                        # Limit args to reasonable length to prevent overflow
-                        local max_args_length=25
-                        if [[ ${#extracted_args} -gt $max_args_length ]]; then
-                            extracted_args="${extracted_args:0:$((max_args_length - 1))}…"
-                        fi
-                        command="$command $extracted_args"
-                    fi
-                fi
-                
-                # Simple path abbreviation for preview
-                path="${path/#$HOME\//~/}"
-                path="${path//~\/src\//~/s/}"
-                
-                # Simple truncation for preview (no complex unicode handling in worker)
-                local truncated_title="${title:0:20}"
-                [[ ${#title} -gt 20 ]] && truncated_title="${title:0:19}…"
-                
-                # Increase command column width to accommodate richer command+args info
-                local truncated_command="${command:0:20}"
-                [[ ${#command} -gt 20 ]] && truncated_command="${command:0:19}…"
-                
-                printf "    %s \033[35m%-20s\033[0m \033[34m%-20s\033[0m %s\n" \
-                    "$pmarker" "$truncated_title" "$truncated_command" "$path"
-            fi
-        done
-    done < <(grep "^window" "$session_file")
-    
+
+    # Emit one display line per session found in the file
+    while IFS=$'\x1F' read -r session window_count pane_count parsed_timestamp window_summary is_current; do
+        [[ -z "$session" ]] && continue
+        [[ -z "$window_count" ]] && window_count="0"
+        [[ -z "$pane_count" ]] && pane_count="0"
+        [[ -z "$parsed_timestamp" ]] && parsed_timestamp="$timestamp"
+        [[ -z "$window_summary" ]] && window_summary=""
+        [[ -z "$is_current" ]] && is_current="false"
+
+        local display_line
+        display_line=$(_format_session_row "$session" "$window_count" "$pane_count" "$parsed_timestamp" "$window_summary" "$is_current" "$terminal_width")
+
+        # Output formatted session data for fzf display (with tab + timestamp)
+        printf "%s\t%s\n" "$display_line" "$parsed_timestamp"
+    done <<< "$parser_output"
+
     return 0
 }
 
@@ -707,19 +629,18 @@ parse_all_files_parallel() {
     local parallel_flags=(--will-cite --jobs 0 --keep-order)
     
     # Process files in parallel using the complete worker function
-    # Extract only the first line (formatted display data) from each worker output
-    # Capture stderr to individual files for debugging (only when debugging is needed)
+    # Each worker now emits one display line per session found in the file
     if [[ "${TMUX_PICKER_DEBUG:-false}" == "true" ]]; then
         printf '%s\n' "${session_files[@]}" | \
             parallel "${parallel_flags[@]}" \
-                'process_session_file_complete {} '"$terminal_width"' 2>'"$debug_dir"'/worker-{#}.stderr | head -n 1'
+                'process_session_file_complete {} '"$terminal_width"' 2>'"$debug_dir"'/worker-{#}.stderr'
         echo "Debug files preserved in: $debug_dir" >&2
         echo "Worker stderr files: $debug_dir/worker-*.stderr" >&2
     else
         # Normal mode: send stderr to /dev/null for clean operation
         printf '%s\n' "${session_files[@]}" | \
             parallel "${parallel_flags[@]}" \
-                'process_session_file_complete {} '"$terminal_width"' 2>/dev/null | head -n 1'
+                'process_session_file_complete {} '"$terminal_width"' 2>/dev/null'
         # Clean up debug directory in normal mode
         rm -rf "$debug_dir"
     fi

@@ -22,7 +22,7 @@
     Path to the .wsl tarball file. If not specified, searches common locations.
 
 .PARAMETER DistroName
-    Name for the imported WSL distribution. Default: nixos-wsl-tiger-team
+    Name for the imported WSL distribution. Default: nixos-wsl-dev-team
 
 .PARAMETER SetDefault
     If specified, sets the imported distro as the default WSL distribution.
@@ -51,7 +51,7 @@
 
 param(
     [string]$TarballPath,
-    [string]$DistroName = "nixos-wsl-tiger-team",
+    [string]$DistroName = "nixos-wsl-dev-team",
     [switch]$SetDefault
 )
 

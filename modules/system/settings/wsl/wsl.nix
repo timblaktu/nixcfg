@@ -240,6 +240,36 @@
               default = "localhost";
               description = "IP address for USB/IP snippets";
             };
+
+            autoAttachByHardwareId = lib.mkOption {
+              type = lib.types.listOf (lib.types.submodule {
+                options = {
+                  hardwareId = lib.mkOption {
+                    type = lib.types.str;
+                    description = "USB hardware ID in VID:PID format (e.g., '0403:6001')";
+                    example = "0403:6001";
+                  };
+                  description = lib.mkOption {
+                    type = lib.types.str;
+                    default = "";
+                    description = "Human-readable description of the USB device";
+                    example = "FTDI USB-UART adapter";
+                  };
+                };
+              });
+              default = [ ];
+              description = ''
+                USB devices to auto-attach by hardware ID (VID:PID) using usbipd-win v5.x.
+                Creates one systemd service per device that runs
+                `usbipd.exe attach --wsl --hardware-id VID:PID --auto-attach`.
+                Hardware IDs are stable across USB ports, unlike bus IDs.
+              '';
+              example = [
+                { hardwareId = "0403:6001"; description = "FTDI USB-UART adapter"; }
+                { hardwareId = "0955:7523"; description = "NVIDIA Jetson Recovery Mode (APX)"; }
+                { hardwareId = "1d6b:0104"; description = "Linux USB Mass Storage Gadget (Jetson initrd-flash)"; }
+              ];
+            };
           };
 
           # === Shell Aliases ===
@@ -356,6 +386,15 @@
             };
           };
 
+          # === Environment Capture for Systemd-spawned Shells ===
+          envCapture = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Capture Windows PATH and WSLg variables at boot for systemd-spawned shells";
+            };
+          };
+
           # === Tarball Security Checks ===
           tarballChecks = {
             enable = lib.mkOption {
@@ -425,7 +464,7 @@
               # We need priority < 100 so host userGroups (e.g., [ "wheel" "dialout" ])
               # actually take effect. Hosts can still use mkForce (50) to override.
               extraGroups = lib.mkOverride 90 cfg.userGroups;
-              hashedPassword = lib.mkDefault ""; # No password needed in WSL
+              hashedPassword = lib.mkOverride 900 ""; # No password needed in WSL (overrides dev-team default)
               openssh.authorizedKeys.keys = lib.mkIf (cfg.sshAuthorizedKeys != [ ]) cfg.sshAuthorizedKeys;
             };
 
@@ -453,6 +492,153 @@
             services.printing.enable = lib.mkDefault false;
           }
 
+          # === Windows Drive Mount Recovery ===
+          #
+          # Part of the defense against the WSL2 sgdisk sync() hang:
+          #
+          #   Layer 1 (n3x in-guest):  LD_PRELOAD nosync.so overrides sync() inside
+          #                            ISAR build containers (gptfdisk-wsl-fix recipe).
+          #   Layer 2 (n3x host):      kas-build wrapper unmounts /mnt/[a-z] before
+          #                            builds, remounts via trap on exit. State file at
+          #                            $XDG_RUNTIME_DIR/n3x-kas-build-unmounted-drives
+          #                            enables recovery if the wrapper is SIGKILLed.
+          #   Layer 3 (this module):   Recovery at four trigger points:
+          #                            a) Boot: systemd oneshot Before=local-fs.target
+          #                            b) Switch: activation script during nixos-rebuild
+          #                            c) Shell: interactiveShellInit (terminals, tmux)
+          #                            d) Devshell: callable from n3x shellHook for
+          #                               nix develop -c (non-interactive) builds
+          #
+          # All four trigger points call the same wsl-recover-mounts script.
+          #
+          # Why drvfs, not 9p: WSL's kernel-level 9p tags (e.g. "C:\134") are ephemeral
+          # and invalidated when a mount is lost mid-session. The drvfs device name
+          # (e.g. "C:") is stable and always resolves correctly.
+          #
+          # Why directory scanning, not /etc/fstab: On NixOS, /etc/fstab is generated
+          # from fileSystems config at build time — WSL's runtime 9p entries never appear
+          # in it. Scanning /mnt/[a-z] directories (created by WSL init before systemd)
+          # is the only reliable discovery method.
+          (
+            let
+              uid = toString config.users.users.${cfg.defaultUser}.uid;
+              gid = toString config.users.groups.users.gid;
+              inherit (cfg) automountRoot;
+
+              # Core recovery script — used by systemd service, activation script,
+              # interactive shells, and devshell hooks. Runs as root (systemd/activation)
+              # or via sudo (interactive shells).
+              #
+              # Flags:
+              #   -q   Quiet mode: no output unless a mount is actually recovered.
+              #        Used in interactiveShellInit to avoid noise on every shell open.
+              #   -s   Sudo mode: invoke mount via sudo (for non-root callers).
+              recoverMountsScript = pkgs.writeShellScriptBin "wsl-recover-mounts" ''
+                quiet=false
+                use_sudo=false
+                for arg in "$@"; do
+                  case "$arg" in
+                    -q) quiet=true ;;
+                    -s) use_sudo=true ;;
+                  esac
+                done
+
+                automount_root="${automountRoot}"
+                recovered=0
+                failed=0
+                drvfs_opts="metadata,uid=${uid},gid=${gid}"
+
+                do_mount() {
+                  if $use_sudo; then
+                    sudo ${pkgs.util-linux}/bin/mount "$@"
+                  else
+                    ${pkgs.util-linux}/bin/mount "$@"
+                  fi
+                }
+
+                # Scan single-letter directories under automount root. WSL's init creates
+                # these (e.g. /mnt/c, /mnt/d) before systemd starts. If the directory
+                # exists but isn't a mountpoint, the drive was unmounted and needs recovery.
+                for mp in "$automount_root"/[a-z]; do
+                  [ -d "$mp" ] || continue
+
+                  # Skip if already mounted
+                  if ${pkgs.util-linux}/bin/mountpoint -q "$mp" 2>/dev/null; then
+                    continue
+                  fi
+
+                  # Extract drive letter (e.g., /mnt/c -> C)
+                  drive_letter="''${mp##*/}"
+                  drive_letter="$(echo "$drive_letter" | tr '[:lower:]' '[:upper:]')"
+
+                  $quiet || echo "Recovering mount: $mp (drive $drive_letter:)"
+                  if do_mount -t drvfs "''${drive_letter}:" "$mp" -o "$drvfs_opts" 2>/dev/null; then
+                    echo "Recovered: $mp"
+                    recovered=$((recovered + 1))
+                  else
+                    $quiet || echo "Failed to recover $mp — may need: wsl --shutdown" >&2
+                    failed=$((failed + 1))
+                  fi
+                done
+
+                if [ "$recovered" -gt 0 ]; then
+                  echo "Recovered $recovered Windows drive mount(s)"
+                fi
+
+                [ "$failed" -eq 0 ]
+              '';
+            in
+            {
+              # Put wsl-recover-mounts on PATH for all WSL hosts.
+              # Callable from: interactive shells, n3x devshell shellHook,
+              # kas-build wrappers, or manual recovery.
+              environment.systemPackages = [ recoverMountsScript ];
+
+              # Boot-time recovery: runs early before local-fs.target to fix mounts
+              # broken by a previous session (e.g., kas-build SIGKILLed mid-unmount).
+              systemd.services."wsl-recover-windows-mounts" = {
+                description = "Recover unmounted Windows drive mounts in WSL";
+                before = [ "local-fs.target" ];
+                wantedBy = [ "local-fs.target" ];
+                unitConfig = {
+                  DefaultDependencies = false;
+                  ConditionPathExists = automountRoot;
+                };
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  ExecStart = "${recoverMountsScript}/bin/wsl-recover-mounts";
+                };
+              };
+
+              # Switch-time recovery: nixos-rebuild switch can stop mount units that
+              # tracked stale fileSystems entries (e.g., a 9p entry captured by
+              # nixos-generate-config then later removed). The boot-time service won't
+              # re-run because systemd considers it already active. This activation
+              # script covers that gap.
+              system.activationScripts.recoverWindowsMounts = lib.stringAfter [ ] ''
+                if [ -d "${automountRoot}" ]; then
+                  ${recoverMountsScript}/bin/wsl-recover-mounts
+                fi
+              '';
+
+              # Shell-time recovery: every interactive shell (terminal, tmux pane, SSH)
+              # checks whether /mnt/c is mounted. Fast path: single mountpoint(1) call
+              # (~0.1ms) exits immediately when already mounted. Slow path: calls
+              # wsl-recover-mounts with sudo to remount any dropped drives.
+              # This covers the gap between kas-build unmounting /mnt/c and the next
+              # boot or nixos-rebuild switch.
+              #
+              # mkBefore ensures this runs BEFORE the wsl-env-capture snippet (mkAfter)
+              # which sources /run/wsl-env containing paths under /mnt/c.
+              environment.interactiveShellInit = lib.mkBefore ''
+                if [ -d "${automountRoot}/c" ] && ! ${pkgs.util-linux}/bin/mountpoint -q "${automountRoot}/c" 2>/dev/null; then
+                  ${recoverMountsScript}/bin/wsl-recover-mounts -q -s
+                fi
+              '';
+            }
+          )
+
           # === USBIP Configuration ===
           (lib.mkIf cfg.usbip.enable {
             wsl.usbip = {
@@ -460,6 +646,64 @@
               inherit (cfg.usbip) autoAttach;
               inherit (cfg.usbip) snippetIpAddress;
             };
+
+            # Runtime check for Windows-side usbipd-win dependency.
+            # During activation (root/systemd context), appendWindowsPath interop
+            # isn't active, so we must explicitly add the winget install location.
+            system.activationScripts.checkUsbipd = lib.stringAfter [ ] ''
+              if ! PATH="$PATH:${cfg.automountRoot}/c/Program Files/usbipd-win" command -v usbipd.exe >/dev/null 2>&1; then
+                echo -e "\033[1;31mWARNING: usbipd.exe not found. Install from admin PowerShell: winget install -e --id dorssel.usbipd-win\033[0m"
+              fi
+            '';
+          })
+
+          # === USBIP Hardware-ID Auto-Attach Services ===
+          # One systemd service per hardware ID, calling usbipd.exe via binfmt interop.
+          # Uses hardware IDs (VID:PID) which are stable across USB ports, unlike bus IDs.
+          # Requires usbipd-win v5.x on the Windows side.
+          (lib.mkIf (cfg.usbip.enable && cfg.usbip.autoAttachByHardwareId != [ ]) {
+            assertions = map
+              (dev: {
+                assertion = builtins.match "[0-9a-fA-F]{4}:[0-9a-fA-F]{4}" dev.hardwareId != null;
+                message = "wsl-settings.usbip.autoAttachByHardwareId: '${dev.hardwareId}' is not a valid VID:PID (expected format: 0403:6001)";
+              })
+              cfg.usbip.autoAttachByHardwareId;
+
+            systemd.services = lib.listToAttrs (map
+              (dev:
+                let
+                  safeName = builtins.replaceStrings [ ":" ] [ "-" ] dev.hardwareId;
+                  desc = if dev.description != "" then " (${dev.description})" else "";
+                in
+                lib.nameValuePair "usbipd-auto-attach-hwid-${safeName}" {
+                  description = "Auto-attach USB device ${dev.hardwareId}${desc} via usbipd-win";
+                  after = [ "local-fs.target" "systemd-binfmt.service" "wsl-recover-windows-mounts.service" ];
+                  wantedBy = [ "multi-user.target" ];
+                  unitConfig = {
+                    ConditionPathExists = "${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe";
+                  };
+                  serviceConfig = {
+                    Type = "simple";
+                    Restart = "always";
+                    RestartSec = "5s";
+                    ExecStart = pkgs.writeShellScript "usbipd-auto-attach-${safeName}" ''
+                      USBIPD="${cfg.automountRoot}/c/Program Files/usbipd-win/usbipd.exe"
+                      HWID="${dev.hardwareId}"
+
+                      # Poll until device appears on the Windows USB bus.
+                      # usbipd attach --auto-attach requires the device to be present
+                      # at invocation — it watches for reconnects, not first appearance.
+                      echo "Watching for USB device $HWID${desc}..."
+                      while ! "$USBIPD" list 2>/dev/null | grep -qi "$HWID"; do
+                        sleep 5
+                      done
+
+                      echo "Device $HWID found, attaching with auto-reattach..."
+                      exec "$USBIPD" attach --wsl --hardware-id "$HWID" --auto-attach
+                    '';
+                  };
+                })
+              cfg.usbip.autoAttachByHardwareId);
           })
 
           # === Windows Aliases ===
@@ -592,6 +836,103 @@
           # User linger for persistent user session
           (lib.mkIf cfg.systemdUserSession.enableLinger {
             users.users.${cfg.defaultUser}.linger = true;
+          })
+
+          # === WSL Environment Capture for Systemd-spawned Shells ===
+          # UPSTREAM-WORTHY: nix-community/NixOS-WSL#171, #375
+          #
+          # PROBLEM: WSL injects environment variables (Windows PATH, WSLg display
+          # vars, WSL_INTEROP) into Relay-spawned login shells only. Processes spawned
+          # by systemd (tmux, SSH, user services) never receive these because systemd
+          # starts at VM boot before any Windows Terminal session exists. NixOS-WSL's
+          # split-path is a classifier, not a provider: it cannot discover missing paths.
+          #
+          # SOLUTION: A oneshot boot service queries Windows PATH via cmd.exe (binfmt
+          # interop), probes filesystem for WSLg state, and writes a sourceable cache
+          # to /run/wsl-env. An environment.extraInit snippet (mkAfter split-path)
+          # sources the cache only when WSLPATH is empty (systemd-spawned shells).
+          #
+          # REFERENCES: microsoft/WSL#8842, #9213, #10205
+          (lib.mkIf cfg.envCapture.enable {
+            systemd.services."wsl-env-capture" = {
+              description = "Capture Windows PATH and WSLg variables for systemd-spawned shells";
+              after = [ "local-fs.target" "systemd-binfmt.service" "wsl-recover-windows-mounts.service" ];
+              before = [ "multi-user.target" ];
+              wantedBy = [ "multi-user.target" ];
+              unitConfig = {
+                ConditionPathExists = "${cfg.automountRoot}/c/WINDOWS/system32/cmd.exe";
+              };
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+                ExecStart = pkgs.writeShellScript "wsl-env-capture" ''
+                  automount_root="${cfg.automountRoot}"
+
+                  # Query Windows PATH via binfmt interop
+                  # Use printf throughout: Windows paths contain \U, \W, \v which echo
+                  # interprets as escape sequences
+                  if win_path=$("''${automount_root}/c/WINDOWS/system32/cmd.exe" /c "echo %PATH%" 2>/dev/null); then
+                    # Remove trailing carriage return from cmd.exe output
+                    win_path=$(printf '%s' "$win_path" | tr -d '\r')
+                  else
+                    echo "WARNING: Could not query Windows PATH via cmd.exe" >&2
+                    win_path=""
+                  fi
+
+                  # Convert Windows paths to WSL mount paths
+                  # Windows PATH is semicolon-separated: C:\foo;D:\bar
+                  # Result: /mnt/c/foo:/mnt/d/bar
+                  wsl_path=""
+                  IFS=';' read -ra win_entries <<< "$win_path"
+                  for entry in "''${win_entries[@]}"; do
+                    [ -z "$entry" ] && continue
+                    # Match drive letter prefix (C:, D:, etc.)
+                    if [[ "$entry" =~ ^([A-Za-z]): ]]; then
+                      drive_lower=$(printf '%s' "''${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
+                      rest="''${entry#[A-Za-z]:}"
+                      rest=$(printf '%s' "$rest" | tr '\\' '/')
+                      linux_path="''${automount_root}/''${drive_lower}''${rest}"
+                      linux_path="''${linux_path%/}"
+                      if [ -n "$wsl_path" ]; then
+                        wsl_path="''${wsl_path}:''${linux_path}"
+                      else
+                        wsl_path="$linux_path"
+                      fi
+                    fi
+                  done
+
+                  # Probe filesystem for WSLg state (stable paths, no cmd.exe needed)
+                  display=""
+                  wayland_display=""
+                  pulse_server=""
+                  [ -e /tmp/.X11-unix/X0 ] && display=":0"
+                  [ -e /mnt/wslg/runtime-dir/wayland-0 ] && wayland_display="wayland-0"
+                  [ -e /mnt/wslg/PulseServer ] && pulse_server="/mnt/wslg/PulseServer"
+
+                  # Write sourceable cache (printf, not echo, for safety)
+                  {
+                    printf 'WSLPATH="%s"\nexport WSLPATH\n' "$wsl_path"
+                    [ -n "$display" ] && printf 'DISPLAY="%s"\nexport DISPLAY\n' "$display"
+                    [ -n "$wayland_display" ] && printf 'WAYLAND_DISPLAY="%s"\nexport WAYLAND_DISPLAY\n' "$wayland_display"
+                    [ -n "$pulse_server" ] && printf 'PULSE_SERVER="%s"\nexport PULSE_SERVER\n' "$pulse_server"
+                    ${lib.optionalString cfg.interop.includePath ''printf 'PATH="''${PATH:+$PATH:}$WSLPATH"\nexport PATH\n' ''}
+                  } > /run/wsl-env
+
+                  chmod 644 /run/wsl-env
+                  echo "WSL environment captured to /run/wsl-env ($(wc -c < /run/wsl-env) bytes)"
+                '';
+              };
+            };
+
+            # Use interactiveShellInit (goes into /etc/bashrc + /etc/zshrc) rather
+            # than extraInit (goes into /etc/set-environment).  tmux panes inherit
+            # __NIXOS_SET_ENVIRONMENT_DONE from the server, which causes
+            # /etc/set-environment to be skipped entirely in new panes.
+            environment.interactiveShellInit = lib.mkAfter ''
+              if [ -z "''${WSLPATH-}" ] && [ -f /run/wsl-env ]; then
+                . /run/wsl-env
+              fi
+            '';
           })
 
           # === Tarball Security Checks ===

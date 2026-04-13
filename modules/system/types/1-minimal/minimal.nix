@@ -1,5 +1,5 @@
 # modules/system/types/1-minimal/minimal.nix
-# Minimal system configuration layer [NDnd]
+# Minimal system configuration layer
 #
 # Provides:
 #   flake.modules.nixos.system-minimal - Absolute minimum NixOS configuration
@@ -145,7 +145,7 @@
             type = "github";
             owner = "NixOS";
             repo = "nixpkgs";
-            rev = inputs.nixpkgs.rev;
+            inherit (inputs.nixpkgs) rev;
           };
 
           # System state version - should be overridden by host

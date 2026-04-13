@@ -56,7 +56,7 @@ After running the updated import script:
 
 - `docs/tools/Import-NixOSWSL.ps1` — Import script with fragment creation
 - `modules/system/settings/wsl-enterprise/wsl-enterprise.nix` — Terminal profile options + tarball builder override
-- `modules/system/settings/wsl-tiger-team/wsl-tiger-team.nix` — Team-specific terminal overrides
+- `modules/system/settings/wsl-dev-team/wsl-dev-team.nix` — Team-specific terminal overrides
 - `docs/WSL-CONFIGURATION-GUIDE.md` — User-facing documentation
 
 ## References

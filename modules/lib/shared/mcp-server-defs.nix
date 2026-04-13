@@ -35,6 +35,12 @@ rec {
       env = {
         MCP_NIXOS_CLEANUP_ORPHANS = "true";
         MCP_NIXOS_CACHE_TTL = toString cacheTtl;
+        # Bypass nix-guarded flock — this is a long-lived service that
+        # exec-chains the lock fd into the python entrypoint, holding
+        # /tmp/nix-eval-guard.lock for the entire Claude session and forcing
+        # all subsequent nix invocations to wait the 600s flock timeout.
+        # See ~/src/nixcfg/docs/nix-guarded-fd-leak.md.
+        NIX_NO_GUARD = "1";
       } // optionalAttrs debug {
         DEBUG = "*";
         NODE_ENV = "development";

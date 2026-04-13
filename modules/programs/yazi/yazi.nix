@@ -1,5 +1,5 @@
 # modules/programs/yazi/yazi.nix
-# Yazi terminal file manager configuration [nd]
+# Yazi terminal file manager configuration
 #
 # Provides:
 #   flake.modules.homeManager.yazi - Full yazi configuration

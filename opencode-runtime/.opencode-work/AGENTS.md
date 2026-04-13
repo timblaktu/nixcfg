@@ -46,7 +46,30 @@ fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots*
 
 ## Nix Flake Projects
 
-- ALWAYS stage relevant changed files (`git add --update` + `git add <relevant-untracked-files>`)
+### CRITICAL: Flake Files Must Be Tracked by Git
+
+**⚠️ IMPORTANT:** Nix flakes ONLY use files tracked by Git (staged or committed). Unstaged changes are IGNORED.
+
+**When modifying flake files:**
+1. Make changes to flake.nix or other flake inputs
+2. **IMMEDIATELY stage with `git add`** - changes won't work until staged
+3. Test with `nix build .` or `nix run .`
+4. Commit when ready
+
+**Example workflow:**
+```bash
+# Edit flake.nix
+vim flake.nix
+
+# MUST stage immediately for Nix to see changes
+git add flake.nix
+
+# Now test (will use staged version)
+nix build .
+
+# Commit when satisfied
+git commit -m "fix: update flake configuration"
+```
 
 
 ### MCP Servers (Current Status)
@@ -57,3 +80,23 @@ fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots*
 
 
 
+
+---
+
+## AI Agent Tool Usage (Critical for All OpenCode Sessions)
+
+### Error Handling Protocol
+
+**If ANY tool fails more than 2-3 times:**
+1. **STOP immediately** - do not continue retrying
+2. **Diagnose the root cause** - check parameters, file paths, permissions  
+3. **Report the issue to the user** with full details
+4. **DO NOT** blindly retry the same broken approach 50+ times
+
+### Common Tool Signatures
+
+#### bash Tool
+**Required:** `command` (string), `description` (string)
+```xml
+<invoke name="bash">
+<parameter name="command">ls -la

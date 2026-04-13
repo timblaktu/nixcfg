@@ -15,7 +15,14 @@
 #   nix build '.#checks.x86_64-linux.vm-boot-minimal' -L    # Run specific VM test
 #   nix flake check                                          # Run all (including VM tests)
 #   nix flake check --no-build                               # Skip VM tests (eval-only)
-{ inputs, self, ... }: {
+{ inputs, self, config, ... }:
+let
+  # Central test username — sourced from flake-level meta option.
+  # All VM tests use this instead of hardcoding usernames.
+  testUsername = config.meta.username;
+  testHomeDir = "/home/${testUsername}";
+in
+{
   perSystem = { config, self', inputs', pkgs, system, lib, ... }:
     let
       # mkVmTest: Create a NixOS VM test with common defaults
@@ -91,8 +98,8 @@
       #     hmModules = [ self.modules.homeManager.yazi ];
       #     testScript = ''
       #       machine.wait_for_unit("multi-user.target")
-      #       machine.wait_for_unit("home-manager-tim.service")
-      #       machine.succeed("su - tim -c 'yazi --version'")
+      #       machine.wait_for_unit("home-manager-${testUsername}.service")
+      #       machine.succeed("su - ${testUsername} -c 'yazi --version'")
       #     '';
       #   }
       mkHmModuleTest =
@@ -114,7 +121,7 @@
               inputs.home-manager.nixosModules.home-manager
             ] ++ extraNixosModules;
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
             networking.firewall.enable = false;
             virtualisation.memorySize = memory;
@@ -123,14 +130,14 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                 ] ++ hmModules;
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 # NixOS-integrated HM doesn't need genericLinux
@@ -185,14 +192,14 @@
           description = "system-default layer: user creation, locale, timezone";
           modules = [ self.modules.nixos.system-default ];
           extraConfig = {
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
           };
           testScript = ''
             machine.wait_for_unit("multi-user.target")
 
             # User creation
-            machine.succeed("id tim")
-            machine.succeed("id -nG tim | grep -q wheel")
+            machine.succeed("id ${testUsername}")
+            machine.succeed("id -nG ${testUsername} | grep -q wheel")
 
             # Locale
             machine.succeed("locale | grep -q en_US")
@@ -201,7 +208,7 @@
             machine.succeed("timedatectl show -p Timezone --value | grep -q America/Los_Angeles")
 
             # Shell is zsh
-            machine.succeed("getent passwd tim | grep -q zsh")
+            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
 
             # System packages from default layer
             machine.succeed("which wget")
@@ -219,7 +226,7 @@
           description = "system-cli layer: SSH daemon, dev tools, network tools";
           modules = [ self.modules.nixos.system-cli ];
           extraConfig = {
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
           };
           testScript = ''
             machine.wait_for_unit("multi-user.target")
@@ -228,7 +235,7 @@
             machine.wait_for_unit("sshd.service")
 
             # Inherits default: user exists
-            machine.succeed("id tim")
+            machine.succeed("id ${testUsername}")
 
             # Dev tools present (enableDevTools = true by default)
             machine.succeed("git --version")
@@ -265,7 +272,7 @@
                 imports = [ self.modules.nixos.system-cli ];
                 networking.firewall.enable = false;
                 virtualisation.memorySize = 1024;
-                systemDefault.userName = "tim";
+                systemDefault.userName = testUsername;
                 # Deploy the test public key via the dendritic sshAuthorizedKeys option
                 systemCli.sshAuthorizedKeys = [ testPubKey ];
               };
@@ -273,7 +280,7 @@
                 imports = [ self.modules.nixos.system-cli ];
                 networking.firewall.enable = false;
                 virtualisation.memorySize = 1024;
-                systemDefault.userName = "tim";
+                systemDefault.userName = testUsername;
               };
             };
             testScript = ''
@@ -291,11 +298,11 @@
               # --- Test 3: SSH listens on port 22 ---
               server.wait_for_open_port(22)
 
-              # --- Test 4: Authorized keys deployed for user tim ---
+              # --- Test 4: Authorized keys deployed for test user ---
               # NixOS may use /etc/ssh/authorized_keys.d/ or ~/.ssh/authorized_keys
               server.succeed(
-                  "{ cat /etc/ssh/authorized_keys.d/tim 2>/dev/null"
-                  " || cat /home/tim/.ssh/authorized_keys; }"
+                  "{ cat /etc/ssh/authorized_keys.d/${testUsername} 2>/dev/null"
+                  " || cat /home/${testUsername}/.ssh/authorized_keys; }"
                   " | grep -q ssh-ed25519"
               )
 
@@ -303,19 +310,19 @@
               client.wait_for_unit("multi-user.target")
 
               # Deploy the test private key to client
-              client.succeed("mkdir -p /home/tim/.ssh && chmod 700 /home/tim/.ssh")
-              client.succeed("cp ${testPrivKeyFile} /home/tim/.ssh/id_ed25519")
-              client.succeed("chmod 600 /home/tim/.ssh/id_ed25519")
-              client.succeed("chown -R tim:users /home/tim/.ssh")
+              client.succeed("mkdir -p /home/${testUsername}/.ssh && chmod 700 /home/${testUsername}/.ssh")
+              client.succeed("cp ${testPrivKeyFile} /home/${testUsername}/.ssh/id_ed25519")
+              client.succeed("chmod 600 /home/${testUsername}/.ssh/id_ed25519")
+              client.succeed("chown -R ${testUsername}:users /home/${testUsername}/.ssh")
 
               # Add server to known_hosts (avoid interactive host key prompt)
               client.succeed(
-                  "su - tim -c 'ssh-keyscan server >> /home/tim/.ssh/known_hosts 2>/dev/null'"
+                  "su - ${testUsername} -c 'ssh-keyscan server >> /home/${testUsername}/.ssh/known_hosts 2>/dev/null'"
               )
 
               # SSH from client to server and verify command execution
               result = client.succeed(
-                  "su - tim -c 'ssh -i /home/tim/.ssh/id_ed25519 tim@server echo SSH_OK'"
+                  "su - ${testUsername} -c 'ssh -i /home/${testUsername}/.ssh/id_ed25519 ${testUsername}@server echo SSH_OK'"
               )
               assert "SSH_OK" in result, f"Expected SSH_OK in output, got: {result}"
 
@@ -323,10 +330,10 @@
               # BatchMode=yes causes ssh to fail immediately if password would be needed
               # (no interactive prompt). This verifies password auth is truly disabled.
               client.fail(
-                  "su - tim -c 'ssh -o PubkeyAuthentication=no"
+                  "su - ${testUsername} -c 'ssh -o PubkeyAuthentication=no"
                   " -o BatchMode=yes"
                   " -o StrictHostKeyChecking=no"
-                  " tim@server echo SHOULD_NOT_WORK'"
+                  " ${testUsername}@server echo SHOULD_NOT_WORK'"
               )
             '';
           };
@@ -343,7 +350,7 @@
               inputs.home-manager.nixosModules.home-manager
             ];
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
 
             networking.firewall.enable = false;
@@ -353,7 +360,7 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                   self.modules.homeManager.shell
@@ -361,8 +368,8 @@
                 ];
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 # Override genericLinux — not needed in NixOS-integrated mode
@@ -376,36 +383,36 @@
 
             # --- Test 1: Home Manager activation completed ---
             # In NixOS-integrated mode, HM activates via system activation.
-            # home-manager-tim.service is the systemd unit for the user's activation.
-            machine.wait_for_unit("home-manager-tim.service")
+            # home-manager-${testUsername}.service is the systemd unit for the user's activation.
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # --- Test 2: Git is configured by HM ---
-            machine.succeed("su - tim -c 'git --version'")
+            machine.succeed("su - ${testUsername} -c 'git --version'")
             # Git config should contain user.name from the dendritic git module
-            machine.succeed("su - tim -c 'git config user.name' | grep -q 'Tim Black'")
-            machine.succeed("su - tim -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
+            machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
+            machine.succeed("su - ${testUsername} -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
 
             # --- Test 3: Git config file generated ---
             # HM puts git config in XDG path
-            machine.succeed("test -f /home/tim/.config/git/config")
+            machine.succeed("test -f /home/${testUsername}/.config/git/config")
 
             # --- Test 4: Zsh configured by HM ---
-            machine.succeed("test -f /home/tim/.zshrc")
+            machine.succeed("test -f /home/${testUsername}/.zshrc")
 
             # --- Test 5: home-manager command available ---
-            machine.succeed("su - tim -c 'home-manager --version'")
+            machine.succeed("su - ${testUsername} -c 'home-manager --version'")
 
             # --- Test 6: HM-generated XDG directories exist ---
             # Home Manager creates XDG config structure during activation
-            machine.succeed("test -d /home/tim/.config/git")
+            machine.succeed("test -d /home/${testUsername}/.config/git")
 
             # --- Test 7: HM-managed program in PATH ---
             # Delta (git diff viewer) is enabled by the git module
-            machine.succeed("su - tim -c 'which delta'")
+            machine.succeed("su - ${testUsername} -c 'which delta'")
 
             # --- Test 8: Zsh history directory created ---
             # The shell module configures zsh history in XDG data dir
-            machine.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+            machine.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
           '';
         };
 
@@ -420,7 +427,7 @@
               inputs.home-manager.nixosModules.home-manager
             ];
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
 
             networking.firewall.enable = false;
@@ -430,15 +437,15 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                   self.modules.homeManager.shell
                 ];
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 targets.genericLinux.enable = lib.mkForce false;
@@ -448,38 +455,38 @@
 
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-tim.service")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # --- Test 1: Zsh starts without errors ---
-            machine.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+            machine.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
 
             # --- Test 2: Zsh is the login shell ---
-            machine.succeed("getent passwd tim | grep -q zsh")
+            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
 
             # --- Test 3: Session variables are set ---
-            machine.succeed("su - tim -c 'zsh -ic \"echo \\$EDITOR\"' | grep -q nvim")
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"echo \\$EDITOR\"' | grep -q nvim")
 
             # --- Test 4: Shell aliases are defined ---
             # Check a few representative aliases from the module
-            machine.succeed("su - tim -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
-            machine.succeed("su - tim -c 'zsh -ic \"alias ll\"' | grep -q 'ls -l'")
-            machine.succeed("su - tim -c 'zsh -ic \"alias v\"' | grep -q nvim")
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias ll\"' | grep -q 'ls -l'")
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias v\"' | grep -q nvim")
 
             # --- Test 5: Zsh history path configured in .zshrc ---
             # The module sets history path to $XDG_DATA_HOME/zsh/history
-            machine.succeed("su - tim -c 'grep -q zsh/history ~/.zshrc'")
+            machine.succeed("su - ${testUsername} -c 'grep -q zsh/history ~/.zshrc'")
 
             # --- Test 6: Zsh completion system loaded ---
-            machine.succeed("su - tim -c 'grep -q compinit ~/.zshrc'")
+            machine.succeed("su - ${testUsername} -c 'grep -q compinit ~/.zshrc'")
 
             # --- Test 7: Zsh plugins configured ---
             # Home Manager writes plugin source lines into .zshrc
-            machine.succeed("su - tim -c 'grep -q zsh-autosuggestions ~/.zshrc'")
-            machine.succeed("su - tim -c 'grep -q zsh-syntax-highlighting ~/.zshrc'")
+            machine.succeed("su - ${testUsername} -c 'grep -q zsh-autosuggestions ~/.zshrc'")
+            machine.succeed("su - ${testUsername} -c 'grep -q zsh-syntax-highlighting ~/.zshrc'")
 
             # --- Test 8: Custom prompt is set (not default) ---
             # Our module sets PROMPT with smart_pwd and shell_scope_indicator
-            machine.succeed("su - tim -c 'grep -q smart_pwd ~/.zshrc'")
+            machine.succeed("su - ${testUsername} -c 'grep -q smart_pwd ~/.zshrc'")
           '';
         };
 
@@ -515,7 +522,7 @@
                 self.modules.nixos.secrets-management
               ];
 
-              systemDefault.userName = "tim";
+              systemDefault.userName = testUsername;
               systemDefault.wheelNeedsPassword = false;
 
               networking.firewall.enable = false;
@@ -555,7 +562,7 @@
 
               sops.secrets."api_key" = {
                 mode = "0440";
-                owner = "tim";
+                owner = testUsername;
                 group = "users";
               };
 
@@ -626,11 +633,11 @@
               owner = machine.succeed("stat -c %U:%G /run/secrets/database_password").strip()
               assert owner == "root:root", f"database_password: expected root:root, got {owner}"
 
-              # api_key: mode 0440, owner tim:users
+              # api_key: mode 0440, owner ${testUsername}:users
               perms = machine.succeed("stat -c %a /run/secrets/api_key").strip()
               assert perms == "440", f"api_key: expected mode 440, got {perms}"
               owner = machine.succeed("stat -c %U:%G /run/secrets/api_key").strip()
-              assert owner == "tim:users", f"api_key: expected tim:users, got {owner}"
+              assert owner == "${testUsername}:users", f"api_key: expected ${testUsername}:users, got {owner}"
 
               # tls_cert: mode 0444, owner root:root
               perms = machine.succeed("stat -c %a /run/secrets/tls_cert").strip()
@@ -647,10 +654,10 @@
               assert perms == "700", f"/var/lib/sops-nix: expected mode 700, got {perms}"
 
               # --- Test 9: Non-root user can read user-owned secret ---
-              machine.succeed("su - tim -c 'cat /run/secrets/api_key' | grep -q key-abc-def-789")
+              machine.succeed("su - ${testUsername} -c 'cat /run/secrets/api_key' | grep -q key-abc-def-789")
 
               # --- Test 10: Non-root user cannot read root-only secret ---
-              machine.fail("su - tim -c 'cat /run/secrets/database_password'")
+              machine.fail("su - ${testUsername} -c 'cat /run/secrets/database_password'")
             '';
           };
 
@@ -667,7 +674,7 @@
               inputs.home-manager.nixosModules.home-manager
             ];
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
 
             networking.firewall.enable = false;
@@ -677,15 +684,15 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                   self.modules.homeManager.neovim
                 ];
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 targets.genericLinux.enable = lib.mkForce false;
@@ -695,26 +702,26 @@
 
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-tim.service")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # --- Test 1: nvim binary present and working ---
-            machine.succeed("su - tim -c 'nvim --version' | grep -q 'NVIM'")
+            machine.succeed("su - ${testUsername} -c 'nvim --version' | grep -q 'NVIM'")
 
             # --- Test 2: Config loads without errors (headless startup + quit) ---
-            machine.succeed("su - tim -c 'nvim --headless -c \"qa!\"'")
+            machine.succeed("su - ${testUsername} -c 'nvim --headless -c \"qa!\"'")
 
             # --- Test 3: Neovim config directory exists ---
-            machine.succeed("test -d /home/tim/.config/nvim")
+            machine.succeed("test -d /home/${testUsername}/.config/nvim")
 
             # --- Test 4: Treesitter parsers installed ---
             # nixvim installs treesitter parsers into the nix store; verify via runtime
             result = machine.succeed(
-                "su - tim -c 'nvim --headless -c \"lua print(#vim.api.nvim_get_runtime_file(\\\"parser/*.so\\\", true))\" -c \"qa!\"' 2>&1"
+                "su - ${testUsername} -c 'nvim --headless -c \"lua print(#vim.api.nvim_get_runtime_file(\\\"parser/*.so\\\", true))\" -c \"qa!\"' 2>&1"
             )
             # Should have at least a few parsers (lua, nix, bash, python, etc.)
             # The number is printed to stderr/stdout by nvim, extract any digit > 0
             machine.succeed(
-                "su - tim -c 'nvim --headless"
+                "su - ${testUsername} -c 'nvim --headless"
                 " -c \"lua local n = #vim.api.nvim_get_runtime_file(\\\"parser/*.so\\\", true); if n > 0 then print(\\\"PARSERS_OK:\\\" .. n) else error(\\\"no parsers\\\") end\""
                 " -c \"qa!\"' 2>&1 | grep -q 'PARSERS_OK'"
             )
@@ -722,30 +729,30 @@
             # --- Test 5: Key plugins loaded (telescope, lsp, treesitter, gitsigns) ---
             for plugin in ["telescope", "nvim-treesitter", "gitsigns"]:
                 machine.succeed(
-                    f"su - tim -c 'nvim --headless"
+                    f"su - ${testUsername} -c 'nvim --headless"
                     f" -c \"lua local ok, _ = pcall(require, \\\"{plugin}\\\"); if ok then print(\\\"{plugin}_OK\\\") else error(\\\"{plugin} not found\\\") end\""
                     f" -c \"qa!\"' 2>&1 | grep -q '{plugin}_OK'"
                 )
 
             # --- Test 6: LSP clients are configured (check lspconfig) ---
             machine.succeed(
-                "su - tim -c 'nvim --headless"
+                "su - ${testUsername} -c 'nvim --headless"
                 " -c \"lua local ok, lsp = pcall(require, \\\"lspconfig\\\"); if ok then print(\\\"LSP_OK\\\") else error(\\\"lspconfig missing\\\") end\""
                 " -c \"qa!\"' 2>&1 | grep -q 'LSP_OK'"
             )
 
             # --- Test 7: Default editor is nvim ---
-            machine.succeed("su - tim -c 'echo $EDITOR' | grep -q nvim")
+            machine.succeed("su - ${testUsername} -c 'echo $EDITOR' | grep -q nvim")
 
             # --- Test 8: vi/vim aliases resolve to nvim ---
             # viAlias/vimAlias may create wrappers; verify they invoke nvim
-            machine.succeed("su - tim -c 'vi --version' | head -1 | grep -q NVIM")
-            machine.succeed("su - tim -c 'vim --version' | head -1 | grep -q NVIM")
+            machine.succeed("su - ${testUsername} -c 'vi --version' | head -1 | grep -q NVIM")
+            machine.succeed("su - ${testUsername} -c 'vim --version' | head -1 | grep -q NVIM")
 
             # --- Test 9: checkhealth runs without critical errors ---
             # Run checkhealth and capture output; look for ERROR in critical sections
             health_output = machine.succeed(
-                "su - tim -c 'nvim --headless -c \"checkhealth\" -c \"w! /tmp/nvim-health.txt\" -c \"qa!\"' 2>&1 || true"
+                "su - ${testUsername} -c 'nvim --headless -c \"checkhealth\" -c \"w! /tmp/nvim-health.txt\" -c \"qa!\"' 2>&1 || true"
             )
             # Verify the health report was generated (checkhealth writes to buffer, we save it)
             machine.succeed("test -f /tmp/nvim-health.txt")
@@ -767,7 +774,7 @@
               inputs.home-manager.nixosModules.home-manager
             ];
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
 
             networking.firewall.enable = false;
@@ -777,15 +784,15 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                   self.modules.homeManager.tmux
                 ];
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 targets.genericLinux.enable = lib.mkForce false;
@@ -795,69 +802,69 @@
 
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-tim.service")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # --- Test 1: tmux binary present and version check ---
-            machine.succeed("su - tim -c 'tmux -V' | grep -q tmux")
+            machine.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
 
             # --- Test 2: Tmux config file generated by HM ---
             # Home Manager manages tmux config via XDG path
-            machine.succeed("test -f /home/tim/.config/tmux/tmux.conf")
+            machine.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
 
             # --- Test 3: Tmux server starts and session can be created ---
-            machine.succeed("su - tim -c 'tmux new-session -d -s test-session'")
+            machine.succeed("su - ${testUsername} -c 'tmux new-session -d -s test-session'")
 
             # --- Test 4: Session can be listed ---
-            machine.succeed("su - tim -c 'tmux list-sessions' | grep -q test-session")
+            machine.succeed("su - ${testUsername} -c 'tmux list-sessions' | grep -q test-session")
 
             # --- Test 5: Prefix key configured to Ctrl-a ---
-            machine.succeed("su - tim -c 'tmux show-options -g prefix' | grep -q C-a")
+            machine.succeed("su - ${testUsername} -c 'tmux show-options -g prefix' | grep -q C-a")
 
             # --- Test 6: Vi mode enabled ---
-            machine.succeed("su - tim -c 'tmux show-options -gw mode-keys' | grep -q vi")
+            machine.succeed("su - ${testUsername} -c 'tmux show-options -gw mode-keys' | grep -q vi")
 
             # --- Test 7: Mouse mode enabled ---
-            machine.succeed("su - tim -c 'tmux show-options -g mouse' | grep -q on")
+            machine.succeed("su - ${testUsername} -c 'tmux show-options -g mouse' | grep -q on")
 
             # --- Test 8: Plugins loaded (resurrect, continuum) ---
             # tmux-resurrect sets @resurrect-dir option
             machine.succeed(
-                "su - tim -c 'tmux show-options -g @resurrect-dir'"
+                "su - ${testUsername} -c 'tmux show-options -g @resurrect-dir'"
                 " | grep -q resurrect"
             )
             # tmux-continuum sets @continuum-save-interval
             machine.succeed(
-                "su - tim -c 'tmux show-options -g @continuum-save-interval'"
+                "su - ${testUsername} -c 'tmux show-options -g @continuum-save-interval'"
                 " | grep -q 5"
             )
 
             # --- Test 9: Resurrect directory exists ---
-            machine.succeed("test -d /home/tim/.local/share/tmux/resurrect")
+            machine.succeed("test -d /home/${testUsername}/.local/share/tmux/resurrect")
 
             # --- Test 10: tmux-session-picker script is executable ---
-            machine.succeed("su - tim -c 'which tmux-session-picker'")
+            machine.succeed("su - ${testUsername} -c 'which tmux-session-picker'")
 
             # --- Test 11: Helper scripts present and executable ---
-            machine.succeed("su - tim -c 'which tmux-cpu-mem'")
-            machine.succeed("su - tim -c 'which tmux-save-with-rename'")
-            machine.succeed("su - tim -c 'which tmux-window-status-format'")
-            machine.succeed("su - tim -c 'which tmux-test-data-generator'")
+            machine.succeed("su - ${testUsername} -c 'which tmux-cpu-mem'")
+            machine.succeed("su - ${testUsername} -c 'which tmux-save-with-rename'")
+            machine.succeed("su - ${testUsername} -c 'which tmux-window-status-format'")
+            machine.succeed("su - ${testUsername} -c 'which tmux-test-data-generator'")
 
             # --- Test 12: Can create additional sessions and switch between them ---
-            machine.succeed("su - tim -c 'tmux new-session -d -s second-session'")
-            result = machine.succeed("su - tim -c 'tmux list-sessions'")
+            machine.succeed("su - ${testUsername} -c 'tmux new-session -d -s second-session'")
+            result = machine.succeed("su - ${testUsername} -c 'tmux list-sessions'")
             assert "test-session" in result, f"test-session missing from: {result}"
             assert "second-session" in result, f"second-session missing from: {result}"
 
             # --- Test 13: Pane splitting works ---
-            machine.succeed("su - tim -c 'tmux split-window -h -t test-session'")
-            panes = machine.succeed("su - tim -c 'tmux list-panes -t test-session'")
+            machine.succeed("su - ${testUsername} -c 'tmux split-window -h -t test-session'")
+            panes = machine.succeed("su - ${testUsername} -c 'tmux list-panes -t test-session'")
             # Should have at least 2 panes after splitting
             assert panes.count("\n") >= 2, f"Expected 2+ panes, got: {panes}"
 
             # --- Test 14: Kill server cleanly ---
-            machine.succeed("su - tim -c 'tmux kill-server'")
-            machine.fail("su - tim -c 'tmux list-sessions'")
+            machine.succeed("su - ${testUsername} -c 'tmux kill-server'")
+            machine.fail("su - ${testUsername} -c 'tmux list-sessions'")
           '';
         };
 
@@ -874,7 +881,7 @@
               inputs.home-manager.nixosModules.home-manager
             ];
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
 
             networking.firewall.enable = false;
@@ -884,15 +891,15 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                   self.modules.homeManager.git
                 ];
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 targets.genericLinux.enable = lib.mkForce false;
@@ -902,82 +909,82 @@
 
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-tim.service")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # --- Test 1: Delta configured as git pager ---
-            machine.succeed("su - tim -c 'git config core.pager' | grep -q delta")
+            machine.succeed("su - ${testUsername} -c 'git config core.pager' | grep -q delta")
 
             # --- Test 2: Delta side-by-side mode configured ---
-            machine.succeed("su - tim -c 'git config delta.side-by-side' | grep -q true")
-            machine.succeed("su - tim -c 'git config delta.line-numbers' | grep -q true")
+            machine.succeed("su - ${testUsername} -c 'git config delta.side-by-side' | grep -q true")
+            machine.succeed("su - ${testUsername} -c 'git config delta.line-numbers' | grep -q true")
 
             # --- Test 3: Git aliases defined ---
-            machine.succeed("su - tim -c 'git config alias.st' | grep -q status")
-            machine.succeed("su - tim -c 'git config alias.ci' | grep -q commit")
-            machine.succeed("su - tim -c 'git config alias.co' | grep -q checkout")
-            machine.succeed("su - tim -c 'git config alias.br' | grep -q branch")
-            machine.succeed("su - tim -c 'git config alias.lg' | grep -q 'log --graph'")
-            machine.succeed("su - tim -c 'git config alias.unstage' | grep -q 'reset HEAD'")
-            machine.succeed("su - tim -c 'git config alias.last' | grep -q 'log -1 HEAD'")
+            machine.succeed("su - ${testUsername} -c 'git config alias.st' | grep -q status")
+            machine.succeed("su - ${testUsername} -c 'git config alias.ci' | grep -q commit")
+            machine.succeed("su - ${testUsername} -c 'git config alias.co' | grep -q checkout")
+            machine.succeed("su - ${testUsername} -c 'git config alias.br' | grep -q branch")
+            machine.succeed("su - ${testUsername} -c 'git config alias.lg' | grep -q 'log --graph'")
+            machine.succeed("su - ${testUsername} -c 'git config alias.unstage' | grep -q 'reset HEAD'")
+            machine.succeed("su - ${testUsername} -c 'git config alias.last' | grep -q 'log -1 HEAD'")
 
             # --- Test 4: Global gitignore patterns configured ---
             # HM writes ignores to ~/.config/git/ignore (XDG default, no core.excludesFile needed)
-            ignores = machine.succeed("cat /home/tim/.config/git/ignore")
+            ignores = machine.succeed("cat /home/${testUsername}/.config/git/ignore")
             assert ".DS_Store" in ignores, f".DS_Store not in gitignore: {ignores}"
             assert "*.swp" in ignores, f"*.swp not in gitignore: {ignores}"
             assert "result" in ignores, f"result not in gitignore: {ignores}"
             assert ".direnv/" in ignores, f".direnv/ not in gitignore: {ignores}"
 
             # --- Test 5: Git LFS available ---
-            machine.succeed("su - tim -c 'git lfs version'")
+            machine.succeed("su - ${testUsername} -c 'git lfs version'")
             # LFS filter configured
-            machine.succeed("su - tim -c 'git config filter.lfs.clean' | grep -q 'git-lfs clean'")
+            machine.succeed("su - ${testUsername} -c 'git config filter.lfs.clean' | grep -q 'git-lfs clean'")
 
             # --- Test 6: Pre-commit hook infrastructure ---
             # HM generates hooks in the config directory
-            hooks_path = machine.succeed("su - tim -c 'git config core.hooksPath'").strip()
+            hooks_path = machine.succeed("su - ${testUsername} -c 'git config core.hooksPath'").strip()
             machine.succeed(f"test -d {hooks_path}")
             machine.succeed(f"test -x {hooks_path}/pre-commit")
 
             # --- Test 7: Merge tool configured (smart-nvimdiff) ---
-            machine.succeed("su - tim -c 'git config merge.tool' | grep -q smart-nvimdiff")
+            machine.succeed("su - ${testUsername} -c 'git config merge.tool' | grep -q smart-nvimdiff")
             machine.succeed(
-                "su - tim -c 'git config mergetool.smart-nvimdiff.cmd'"
+                "su - ${testUsername} -c 'git config mergetool.smart-nvimdiff.cmd'"
                 " | grep -q smart-nvimdiff"
             )
 
             # --- Test 8: Diff tool configured (nvimdiff) ---
-            machine.succeed("su - tim -c 'git config diff.tool' | grep -q nvimdiff")
-            machine.succeed("su - tim -c 'git config diff.algorithm' | grep -q histogram")
+            machine.succeed("su - ${testUsername} -c 'git config diff.tool' | grep -q nvimdiff")
+            machine.succeed("su - ${testUsername} -c 'git config diff.algorithm' | grep -q histogram")
 
             # --- Test 9: Credential helper configured ---
-            machine.succeed("su - tim -c 'git config credential.helper' | grep -q 'cache --timeout=3600'")
+            machine.succeed("su - ${testUsername} -c 'git config credential.helper' | grep -q 'cache --timeout=3600'")
 
             # --- Test 10: Init default branch is main ---
-            machine.succeed("su - tim -c 'git config init.defaultBranch' | grep -q main")
+            machine.succeed("su - ${testUsername} -c 'git config init.defaultBranch' | grep -q main")
 
             # --- Test 11: smart-nvimdiff script in PATH ---
-            machine.succeed("su - tim -c 'which smart-nvimdiff'")
+            machine.succeed("su - ${testUsername} -c 'which smart-nvimdiff'")
 
             # --- Test 12: Bundled utility scripts in PATH ---
-            machine.succeed("su - tim -c 'which syncfork'")
-            machine.succeed("su - tim -c 'which git-functions'")
+            machine.succeed("su - ${testUsername} -c 'which syncfork'")
+            machine.succeed("su - ${testUsername} -c 'which git-functions'")
 
             # --- Test 13: Security and workflow tools available ---
-            machine.succeed("su - tim -c 'which gitleaks'")
-            machine.succeed("su - tim -c 'which lazygit'")
-            machine.succeed("su - tim -c 'which git-crypt'")
-            machine.succeed("su - tim -c 'which pre-commit'")
+            machine.succeed("su - ${testUsername} -c 'which gitleaks'")
+            machine.succeed("su - ${testUsername} -c 'which lazygit'")
+            machine.succeed("su - ${testUsername} -c 'which git-crypt'")
+            machine.succeed("su - ${testUsername} -c 'which pre-commit'")
 
             # --- Test 14: Delta binary is present and working ---
-            machine.succeed("su - tim -c 'delta --version'")
+            machine.succeed("su - ${testUsername} -c 'delta --version'")
 
             # --- Test 15: Merge conflict style is diff3 ---
-            machine.succeed("su - tim -c 'git config merge.conflictstyle' | grep -q diff3")
+            machine.succeed("su - ${testUsername} -c 'git config merge.conflictstyle' | grep -q diff3")
 
             # --- Test 16: Functional test — init repo, commit, verify delta in log ---
             machine.succeed(
-                "su - tim -c '"
+                "su - ${testUsername} -c '"
                 "cd /tmp && mkdir test-repo && cd test-repo && git init"
                 " && echo hello > file.txt && git add file.txt"
                 " && git commit -m \"initial commit\""
@@ -1002,7 +1009,7 @@
               inputs.home-manager.nixosModules.home-manager
             ];
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
 
             networking.firewall.enable = false;
@@ -1012,15 +1019,15 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                   self.modules.homeManager.development-tools
                 ];
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 developmentTools.enable = true;
@@ -1033,126 +1040,126 @@
 
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-tim.service")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # === Enhanced CLI Tools (enableEnhancedCli = true by default) ===
 
             # --- Test 1: bat (better cat) ---
-            machine.succeed("su - tim -c 'bat --version'")
+            machine.succeed("su - ${testUsername} -c 'bat --version'")
 
             # --- Test 2: eza (modern ls) ---
-            machine.succeed("su - tim -c 'eza --version'")
+            machine.succeed("su - ${testUsername} -c 'eza --version'")
 
             # --- Test 3: delta (better diff) ---
-            machine.succeed("su - tim -c 'delta --version'")
+            machine.succeed("su - ${testUsername} -c 'delta --version'")
 
             # --- Test 4: bottom (system monitor) ---
-            machine.succeed("su - tim -c 'btm --version'")
+            machine.succeed("su - ${testUsername} -c 'btm --version'")
 
             # --- Test 5: miller (CSV/JSON processor) ---
-            machine.succeed("su - tim -c 'mlr --version'")
+            machine.succeed("su - ${testUsername} -c 'mlr --version'")
 
             # === Rust Toolchain (enableRust = true by default) ===
 
             # --- Test 6: rustc ---
-            machine.succeed("su - tim -c 'rustc --version'")
+            machine.succeed("su - ${testUsername} -c 'rustc --version'")
 
             # --- Test 7: cargo ---
-            machine.succeed("su - tim -c 'cargo --version'")
+            machine.succeed("su - ${testUsername} -c 'cargo --version'")
 
             # --- Test 8: rust-analyzer ---
-            machine.succeed("su - tim -c 'which rust-analyzer'")
+            machine.succeed("su - ${testUsername} -c 'which rust-analyzer'")
 
             # --- Test 9: rustfmt ---
-            machine.succeed("su - tim -c 'rustfmt --version'")
+            machine.succeed("su - ${testUsername} -c 'rustfmt --version'")
 
             # --- Test 10: clippy ---
-            machine.succeed("su - tim -c 'which clippy-driver'")
+            machine.succeed("su - ${testUsername} -c 'which clippy-driver'")
 
             # === Node.js Ecosystem (enableNode = true by default) ===
 
             # --- Test 11: node ---
-            machine.succeed("su - tim -c 'node --version'")
+            machine.succeed("su - ${testUsername} -c 'node --version'")
 
             # --- Test 12: npm ---
-            machine.succeed("su - tim -c 'npm --version'")
+            machine.succeed("su - ${testUsername} -c 'npm --version'")
 
             # --- Test 13: yarn ---
-            machine.succeed("su - tim -c 'yarn --version'")
+            machine.succeed("su - ${testUsername} -c 'yarn --version'")
 
             # === Python (enablePython = true by default) ===
 
             # --- Test 14: python3 ---
-            machine.succeed("su - tim -c 'python3 --version'")
+            machine.succeed("su - ${testUsername} -c 'python3 --version'")
 
             # --- Test 15: pip available as module ---
-            machine.succeed("su - tim -c 'python3 -m pip --version'")
+            machine.succeed("su - ${testUsername} -c 'python3 -m pip --version'")
 
             # --- Test 16: ipython available ---
-            machine.succeed("su - tim -c 'python3 -c \"import IPython\"'")
+            machine.succeed("su - ${testUsername} -c 'python3 -c \"import IPython\"'")
 
             # === Go (enableGo = true by default) ===
 
             # --- Test 17: go binary ---
-            machine.succeed("su - tim -c 'go version'")
+            machine.succeed("su - ${testUsername} -c 'go version'")
 
             # --- Test 18: Go directories created by activation ---
-            machine.succeed("test -d /home/tim/go/src")
-            machine.succeed("test -d /home/tim/go/pkg")
-            machine.succeed("test -d /home/tim/go/bin")
+            machine.succeed("test -d /home/${testUsername}/go/src")
+            machine.succeed("test -d /home/${testUsername}/go/pkg")
+            machine.succeed("test -d /home/${testUsername}/go/bin")
 
             # === C/C++ Build Tools (enableCppTools = true by default) ===
 
             # --- Test 19: cmake ---
-            machine.succeed("su - tim -c 'cmake --version'")
+            machine.succeed("su - ${testUsername} -c 'cmake --version'")
 
             # --- Test 20: gcc ---
-            machine.succeed("su - tim -c 'gcc --version'")
+            machine.succeed("su - ${testUsername} -c 'gcc --version'")
 
             # --- Test 21: make ---
-            machine.succeed("su - tim -c 'make --version'")
+            machine.succeed("su - ${testUsername} -c 'make --version'")
 
             # --- Test 22: pkg-config ---
-            machine.succeed("su - tim -c 'pkg-config --version'")
+            machine.succeed("su - ${testUsername} -c 'pkg-config --version'")
 
             # === Build Utilities (enableBuildUtils = true by default) ===
 
             # --- Test 23: flex ---
-            machine.succeed("su - tim -c 'flex --version'")
+            machine.succeed("su - ${testUsername} -c 'flex --version'")
 
             # --- Test 24: bison ---
-            machine.succeed("su - tim -c 'bison --version'")
+            machine.succeed("su - ${testUsername} -c 'bison --version'")
 
             # --- Test 25: gperf ---
-            machine.succeed("su - tim -c 'gperf --version'")
+            machine.succeed("su - ${testUsername} -c 'gperf --version'")
 
             # --- Test 26: doxygen ---
-            machine.succeed("su - tim -c 'doxygen --version'")
+            machine.succeed("su - ${testUsername} -c 'doxygen --version'")
 
             # --- Test 27: entr ---
-            machine.succeed("su - tim -c 'which entr'")
+            machine.succeed("su - ${testUsername} -c 'which entr'")
 
             # === Claude Development Utilities (enableClaudeUtils = true by default) ===
 
             # --- Test 28: claudevloop script ---
-            machine.succeed("su - tim -c 'which claudevloop'")
+            machine.succeed("su - ${testUsername} -c 'which claudevloop'")
 
             # --- Test 29: restart_claude script ---
-            machine.succeed("su - tim -c 'which restart_claude'")
+            machine.succeed("su - ${testUsername} -c 'which restart_claude'")
 
             # --- Test 30: mkclaude_desktop_config script ---
-            machine.succeed("su - tim -c 'which mkclaude_desktop_config'")
+            machine.succeed("su - ${testUsername} -c 'which mkclaude_desktop_config'")
 
             # --- Test 31: claude-models script ---
-            machine.succeed("su - tim -c 'which claude-models'")
+            machine.succeed("su - ${testUsername} -c 'which claude-models'")
 
             # --- Test 32: pdf2md script ---
-            machine.succeed("su - tim -c 'which pdf2md'")
+            machine.succeed("su - ${testUsername} -c 'which pdf2md'")
 
             # === Kubernetes NOT installed by default (enableKubernetes = false) ===
 
             # --- Test 33: kubectl should NOT be present ---
-            machine.fail("su - tim -c 'which kubectl'")
+            machine.fail("su - ${testUsername} -c 'which kubectl'")
 
             # === Session Paths ===
 
@@ -1190,7 +1197,7 @@
               virtualisation.memorySize = 2048;
 
               # Required by system-default (inherited via cli → default)
-              systemDefault.userName = "tim";
+              systemDefault.userName = testUsername;
               systemDefault.wheelNeedsPassword = false;
 
               # Use defaults: GNOME, PipeWire, Bluetooth, Printing, Nerd Fonts
@@ -1275,14 +1282,14 @@
               machine.fail("which gnome-tour 2>/dev/null")
 
               # === Test 16: User in printer group (lp) ===
-              machine.succeed("id -nG tim | grep -q lp")
+              machine.succeed("id -nG ${testUsername} | grep -q lp")
 
               # === Test 17: rtkit enabled for real-time audio scheduling ===
               machine.succeed("systemctl cat rtkit-daemon.service")
 
               # === Test 18: Inherits default layer — user exists ===
-              machine.succeed("id tim")
-              machine.succeed("getent passwd tim | grep -q zsh")
+              machine.succeed("id ${testUsername}")
+              machine.succeed("getent passwd ${testUsername} | grep -q zsh")
             '';
           };
 
@@ -1295,22 +1302,22 @@
           hmModules = [ self.modules.homeManager.yazi ];
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-tim.service")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # --- Test 1: yazi binary present ---
-            machine.succeed("su - tim -c 'yazi --version'")
+            machine.succeed("su - ${testUsername} -c 'yazi --version'")
 
             # --- Test 2: Yazi config directory exists ---
-            machine.succeed("test -d /home/tim/.config/yazi")
+            machine.succeed("test -d /home/${testUsername}/.config/yazi")
 
             # --- Test 3: Yazi config file generated ---
-            machine.succeed("test -f /home/tim/.config/yazi/yazi.toml")
+            machine.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
 
             # --- Test 4: Custom init.lua deployed ---
-            machine.succeed("test -f /home/tim/.config/yazi/init.lua")
+            machine.succeed("test -f /home/${testUsername}/.config/yazi/init.lua")
 
             # --- Test 5: Keymap config generated ---
-            machine.succeed("test -f /home/tim/.config/yazi/keymap.toml")
+            machine.succeed("test -f /home/${testUsername}/.config/yazi/keymap.toml")
           '';
         };
 
@@ -1329,7 +1336,7 @@
                   inputs.home-manager.nixosModules.home-manager
                 ];
 
-                systemDefault.userName = "tim";
+                systemDefault.userName = testUsername;
                 systemDefault.wheelNeedsPassword = false;
                 networking.firewall.enable = false;
                 virtualisation.memorySize = 1024;
@@ -1338,14 +1345,14 @@
                   useGlobalPkgs = true;
                   useUserPackages = true;
                   extraSpecialArgs = { inherit inputs; };
-                  users.tim = { config, pkgs, lib, ... }: {
+                  users.${testUsername} = { config, pkgs, lib, ... }: {
                     imports = [
                       self.modules.homeManager.home-minimal
                     ] ++ hmModules;
 
                     homeMinimal = {
-                      username = "tim";
-                      homeDirectory = "/home/tim";
+                      username = testUsername;
+                      homeDirectory = testHomeDir;
                     };
 
                     targets.genericLinux.enable = lib.mkForce false;
@@ -1392,39 +1399,39 @@
               # Wait for HM activation on all nodes
               for node in [node_tmux, node_neovim, node_git, node_shell, node_devtools, node_yazi, node_shellutils, node_podman]:
                   node.wait_for_unit("multi-user.target")
-                  node.wait_for_unit("home-manager-tim.service")
+                  node.wait_for_unit("home-manager-${testUsername}.service")
 
               # === tmux: binary + config ===
-              node_tmux.succeed("su - tim -c 'tmux -V' | grep -q tmux")
-              node_tmux.succeed("test -f /home/tim/.config/tmux/tmux.conf")
+              node_tmux.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
+              node_tmux.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
 
               # === neovim: binary + config dir ===
-              node_neovim.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
-              node_neovim.succeed("test -d /home/tim/.config/nvim")
+              node_neovim.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
+              node_neovim.succeed("test -d /home/${testUsername}/.config/nvim")
 
               # === git: user config + config file ===
-              node_git.succeed("su - tim -c 'git config user.name' | grep -q 'Tim Black'")
-              node_git.succeed("test -f /home/tim/.config/git/config")
+              node_git.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
+              node_git.succeed("test -f /home/${testUsername}/.config/git/config")
 
               # === shell: zsh works + zshrc generated ===
-              node_shell.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
-              node_shell.succeed("test -f /home/tim/.zshrc")
+              node_shell.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+              node_shell.succeed("test -f /home/${testUsername}/.zshrc")
 
               # === development-tools: enhanced CLI + language toolchain ===
-              node_devtools.succeed("su - tim -c 'bat --version'")
-              node_devtools.succeed("su - tim -c 'rustc --version'")
+              node_devtools.succeed("su - ${testUsername} -c 'bat --version'")
+              node_devtools.succeed("su - ${testUsername} -c 'rustc --version'")
 
               # === yazi: binary + config file ===
-              node_yazi.succeed("su - tim -c 'yazi --version'")
-              node_yazi.succeed("test -f /home/tim/.config/yazi/yazi.toml")
+              node_yazi.succeed("su - ${testUsername} -c 'yazi --version'")
+              node_yazi.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
 
               # === shell-utils: representative script + library file ===
-              node_shellutils.succeed("su - tim -c 'which mytree'")
-              node_shellutils.succeed("test -f /home/tim/.local/lib/general-utils.bash")
+              node_shellutils.succeed("su - ${testUsername} -c 'which mytree'")
+              node_shellutils.succeed("test -f /home/${testUsername}/.local/lib/general-utils.bash")
 
               # === podman: podman-tui binary + registries config ===
-              node_podman.succeed("su - tim -c 'which podman-tui'")
-              node_podman.succeed("test -f /home/tim/.config/containers/registries.conf")
+              node_podman.succeed("su - ${testUsername} -c 'which podman-tui'")
+              node_podman.succeed("test -f /home/${testUsername}/.config/containers/registries.conf")
             '';
           };
 
@@ -1442,7 +1449,7 @@
                   inputs.home-manager.nixosModules.home-manager
                 ];
 
-                systemDefault.userName = "tim";
+                systemDefault.userName = testUsername;
                 systemDefault.wheelNeedsPassword = false;
                 networking.firewall.enable = false;
                 virtualisation.memorySize = 2048;
@@ -1451,14 +1458,14 @@
                   useGlobalPkgs = true;
                   useUserPackages = true;
                   extraSpecialArgs = { inherit inputs; };
-                  users.tim = { config, pkgs, lib, ... }: {
+                  users.${testUsername} = { config, pkgs, lib, ... }: {
                     imports = [
                       self.modules.homeManager.home-minimal
                     ] ++ hmModules;
 
                     homeMinimal = {
-                      username = "tim";
-                      homeDirectory = "/home/tim";
+                      username = testUsername;
+                      homeDirectory = testHomeDir;
                     };
 
                     targets.genericLinux.enable = lib.mkForce false;
@@ -1510,18 +1517,18 @@
               # Wait for HM activation on all nodes
               for node in [pair_nvim_tmux, pair_git_nvim, pair_git_shell, pair_shell_tmux]:
                   node.wait_for_unit("multi-user.target")
-                  node.wait_for_unit("home-manager-tim.service")
+                  node.wait_for_unit("home-manager-${testUsername}.service")
 
               # ========================================================
               # Pair 1: neovim + tmux — vim-tmux-navigator integration
               # ========================================================
 
               # Both binaries present
-              pair_nvim_tmux.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
-              pair_nvim_tmux.succeed("su - tim -c 'tmux -V' | grep -q tmux")
+              pair_nvim_tmux.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
+              pair_nvim_tmux.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
 
               # Tmux config has vim-tmux-navigator keybindings (C-h, C-j, C-k, C-l)
-              tmux_conf = pair_nvim_tmux.succeed("cat /home/tim/.config/tmux/tmux.conf")
+              tmux_conf = pair_nvim_tmux.succeed("cat /home/${testUsername}/.config/tmux/tmux.conf")
               assert "is_vim" in tmux_conf, "tmux-navigator is_vim detection missing from tmux.conf"
               assert "C-h" in tmux_conf, "C-h navigator binding missing from tmux.conf"
               assert "C-j" in tmux_conf, "C-j navigator binding missing from tmux.conf"
@@ -1530,7 +1537,7 @@
 
               # Neovim has tmux-navigator plugin loaded
               pair_nvim_tmux.succeed(
-                  "su - tim -c 'nvim --headless"
+                  "su - ${testUsername} -c 'nvim --headless"
                   " -c \"lua local ok, _ = pcall(require, \\\"tmux\\\"); if ok then print(\\\"TMUX_NAV_OK\\\") else"
                   " local rtp = vim.api.nvim_list_runtime_paths();"
                   " for _, p in ipairs(rtp) do if p:match(\\\"tmux\\\") then print(\\\"TMUX_NAV_OK\\\"); return end end;"
@@ -1539,42 +1546,42 @@
               )
 
               # Functional test: start tmux, run nvim inside, verify both work together
-              pair_nvim_tmux.succeed("su - tim -c 'tmux new-session -d -s nvim-test'")
-              pair_nvim_tmux.succeed("su - tim -c 'tmux send-keys -t nvim-test \"nvim --headless -c qa!\" Enter'")
+              pair_nvim_tmux.succeed("su - ${testUsername} -c 'tmux new-session -d -s nvim-test'")
+              pair_nvim_tmux.succeed("su - ${testUsername} -c 'tmux send-keys -t nvim-test \"nvim --headless -c qa!\" Enter'")
               import time; time.sleep(2)
-              pair_nvim_tmux.succeed("su - tim -c 'tmux list-sessions' | grep -q nvim-test")
+              pair_nvim_tmux.succeed("su - ${testUsername} -c 'tmux list-sessions' | grep -q nvim-test")
 
               # ========================================================
               # Pair 2: git + neovim — merge/diff tool integration
               # ========================================================
 
               # Both binaries present
-              pair_git_nvim.succeed("su - tim -c 'git --version'")
-              pair_git_nvim.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
+              pair_git_nvim.succeed("su - ${testUsername} -c 'git --version'")
+              pair_git_nvim.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
 
               # Git merge tool set to smart-nvimdiff (depends on nvim)
-              pair_git_nvim.succeed("su - tim -c 'git config merge.tool' | grep -q smart-nvimdiff")
+              pair_git_nvim.succeed("su - ${testUsername} -c 'git config merge.tool' | grep -q smart-nvimdiff")
               pair_git_nvim.succeed(
-                  "su - tim -c 'git config mergetool.smart-nvimdiff.cmd'"
+                  "su - ${testUsername} -c 'git config mergetool.smart-nvimdiff.cmd'"
                   " | grep -q smart-nvimdiff"
               )
 
               # Git diff tool set to nvimdiff
-              pair_git_nvim.succeed("su - tim -c 'git config diff.tool' | grep -q nvimdiff")
+              pair_git_nvim.succeed("su - ${testUsername} -c 'git config diff.tool' | grep -q nvimdiff")
               pair_git_nvim.succeed(
-                  "su - tim -c 'git config difftool.nvimdiff.cmd'"
+                  "su - ${testUsername} -c 'git config difftool.nvimdiff.cmd'"
                   " | grep -q 'nvim -d'"
               )
 
               # smart-nvimdiff script is in PATH and executable
-              pair_git_nvim.succeed("su - tim -c 'which smart-nvimdiff'")
+              pair_git_nvim.succeed("su - ${testUsername} -c 'which smart-nvimdiff'")
 
               # The script references nvim — verify nvim is callable from the script's env
-              pair_git_nvim.succeed("su - tim -c 'smart-nvimdiff --help || true' 2>&1")
+              pair_git_nvim.succeed("su - ${testUsername} -c 'smart-nvimdiff --help || true' 2>&1")
 
               # Functional test: create merge conflict, verify merge tool config works
               pair_git_nvim.succeed(
-                  "su - tim -c '"
+                  "su - ${testUsername} -c '"
                   "cd /tmp && mkdir merge-test && cd merge-test && git init"
                   " && echo base > file.txt && git add file.txt && git commit -m base"
                   " && git checkout -b feature"
@@ -1585,7 +1592,7 @@
               )
               # Verify conflict exists (merge.tool would be invoked to resolve it)
               pair_git_nvim.succeed(
-                  "su - tim -c 'cd /tmp/merge-test && git diff --name-only --diff-filter=U' | grep -q file.txt"
+                  "su - ${testUsername} -c 'cd /tmp/merge-test && git diff --name-only --diff-filter=U' | grep -q file.txt"
               )
 
               # ========================================================
@@ -1593,19 +1600,19 @@
               # ========================================================
 
               # Both git and zsh work
-              pair_git_shell.succeed("su - tim -c 'git --version'")
-              pair_git_shell.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+              pair_git_shell.succeed("su - ${testUsername} -c 'git --version'")
+              pair_git_shell.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
 
               # Git aliases available in zsh interactive session
-              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
-              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
-              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gc\"' | grep -q 'git commit'")
-              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gp\"' | grep -q 'git push'")
-              pair_git_shell.succeed("su - tim -c 'zsh -ic \"alias gd\"' | grep -q 'git diff'")
+              pair_git_shell.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+              pair_git_shell.succeed("su - ${testUsername} -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
+              pair_git_shell.succeed("su - ${testUsername} -c 'zsh -ic \"alias gc\"' | grep -q 'git commit'")
+              pair_git_shell.succeed("su - ${testUsername} -c 'zsh -ic \"alias gp\"' | grep -q 'git push'")
+              pair_git_shell.succeed("su - ${testUsername} -c 'zsh -ic \"alias gd\"' | grep -q 'git diff'")
 
               # Functional test: use git alias in zsh to run actual git command
               pair_git_shell.succeed(
-                  "su - tim -c 'cd /tmp && mkdir alias-test && cd alias-test && git init"
+                  "su - ${testUsername} -c 'cd /tmp && mkdir alias-test && cd alias-test && git init"
                   " && zsh -ic \"gs\"'"
               )
 
@@ -1614,20 +1621,20 @@
               # ========================================================
 
               # Both work independently
-              pair_shell_tmux.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
-              pair_shell_tmux.succeed("su - tim -c 'tmux -V' | grep -q tmux")
+              pair_shell_tmux.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+              pair_shell_tmux.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
 
               # Start a tmux session — the pane shell inherits $TMUX from tmux
-              pair_shell_tmux.succeed("su - tim -c 'tmux new-session -d -s shell-test'")
+              pair_shell_tmux.succeed("su - ${testUsername} -c 'tmux new-session -d -s shell-test'")
 
               # Wait for tmux session to be ready and zsh to finish loading
-              pair_shell_tmux.succeed("su - tim -c 'tmux list-sessions' | grep -q shell-test")
+              pair_shell_tmux.succeed("su - ${testUsername} -c 'tmux list-sessions' | grep -q shell-test")
               import time; time.sleep(5)
 
               # Verify TMUX env var is set inside the tmux pane's shell
               # Use send-keys which runs inside the pane's shell where $TMUX is set
               pair_shell_tmux.succeed(
-                  "su - tim -c 'tmux send-keys -t shell-test \"printenv TMUX > /tmp/tmux-env.txt\" Enter'"
+                  "su - ${testUsername} -c 'tmux send-keys -t shell-test \"printenv TMUX > /tmp/tmux-env.txt\" Enter'"
               )
               # Wait for the command to execute (file to appear)
               pair_shell_tmux.wait_until_succeeds("test -s /tmp/tmux-env.txt", timeout=10)
@@ -1636,7 +1643,7 @@
 
               # Verify zsh works inside tmux pane by running zsh command
               pair_shell_tmux.succeed(
-                  "su - tim -c 'tmux send-keys -t shell-test \"zsh -c \\\"echo ZSH_IN_TMUX\\\" > /tmp/zsh-test.txt\" Enter'"
+                  "su - ${testUsername} -c 'tmux send-keys -t shell-test \"zsh -c \\\"echo ZSH_IN_TMUX\\\" > /tmp/zsh-test.txt\" Enter'"
               )
               pair_shell_tmux.wait_until_succeeds("test -s /tmp/zsh-test.txt", timeout=10)
               result = pair_shell_tmux.succeed("cat /tmp/zsh-test.txt").strip()
@@ -1644,11 +1651,11 @@
 
               # Verify tmux detection in shell config
               # The shell module checks for TMUX variable in .zshrc
-              zshrc = pair_shell_tmux.succeed("cat /home/tim/.zshrc")
+              zshrc = pair_shell_tmux.succeed("cat /home/${testUsername}/.zshrc")
               assert "TMUX" in zshrc, "Shell module should reference TMUX variable in .zshrc"
 
               # Clean up
-              pair_shell_tmux.succeed("su - tim -c 'tmux kill-server'")
+              pair_shell_tmux.succeed("su - ${testUsername} -c 'tmux kill-server'")
             '';
           };
 
@@ -1666,7 +1673,7 @@
               inputs.home-manager.nixosModules.home-manager
             ];
 
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.wheelNeedsPassword = false;
             networking.firewall.enable = false;
             virtualisation.memorySize = 3072;
@@ -1675,7 +1682,7 @@
               useGlobalPkgs = true;
               useUserPackages = true;
               extraSpecialArgs = { inherit inputs; };
-              users.tim = { config, pkgs, lib, ... }: {
+              users.${testUsername} = { config, pkgs, lib, ... }: {
                 imports = [
                   self.modules.homeManager.home-minimal
                   self.modules.homeManager.shell
@@ -1689,8 +1696,8 @@
                 ];
 
                 homeMinimal = {
-                  username = "tim";
-                  homeDirectory = "/home/tim";
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
                 };
 
                 developmentTools.enable = true;
@@ -1703,17 +1710,17 @@
 
           testScript = ''
             machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-tim.service")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
 
             # === Section 1: All primary binaries present ===
 
-            machine.succeed("su - tim -c 'nvim --version' | grep -q NVIM")
-            machine.succeed("su - tim -c 'tmux -V' | grep -q tmux")
-            machine.succeed("su - tim -c 'git --version'")
-            machine.succeed("su - tim -c 'yazi --version'")
-            machine.succeed("su - tim -c 'bat --version'")
-            machine.succeed("su - tim -c 'which podman-tui'")
-            machine.succeed("su - tim -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+            machine.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
+            machine.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
+            machine.succeed("su - ${testUsername} -c 'git --version'")
+            machine.succeed("su - ${testUsername} -c 'yazi --version'")
+            machine.succeed("su - ${testUsername} -c 'bat --version'")
+            machine.succeed("su - ${testUsername} -c 'which podman-tui'")
+            machine.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
 
             # === Section 2: NixOS system-cli layer verified ===
 
@@ -1724,78 +1731,195 @@
 
             # === Section 3: Cross-module integration — git + delta ===
 
-            machine.succeed("su - tim -c 'git config core.pager' | grep -q delta")
-            machine.succeed("su - tim -c 'delta --version'")
+            machine.succeed("su - ${testUsername} -c 'git config core.pager' | grep -q delta")
+            machine.succeed("su - ${testUsername} -c 'delta --version'")
 
             # === Section 4: Cross-module integration — zsh + git aliases ===
 
-            machine.succeed("su - tim -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
-            machine.succeed("su - tim -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
 
             # === Section 5: Cross-module integration — neovim + tmux navigator ===
 
-            tmux_conf = machine.succeed("cat /home/tim/.config/tmux/tmux.conf")
+            tmux_conf = machine.succeed("cat /home/${testUsername}/.config/tmux/tmux.conf")
             assert "is_vim" in tmux_conf, "vim-tmux-navigator detection missing"
 
             # === Section 6: Cross-module integration — git + neovim merge tool ===
 
-            machine.succeed("su - tim -c 'git config merge.tool' | grep -q smart-nvimdiff")
-            machine.succeed("su - tim -c 'git config diff.tool' | grep -q nvimdiff")
+            machine.succeed("su - ${testUsername} -c 'git config merge.tool' | grep -q smart-nvimdiff")
+            machine.succeed("su - ${testUsername} -c 'git config diff.tool' | grep -q nvimdiff")
 
             # === Section 7: Neovim starts cleanly with full config ===
 
-            machine.succeed("su - tim -c 'nvim --headless -c \"qa!\"'")
+            machine.succeed("su - ${testUsername} -c 'nvim --headless -c \"qa!\"'")
 
             # === Section 8: Tmux server lifecycle ===
 
-            machine.succeed("su - tim -c 'tmux new-session -d -s full-stack-test'")
-            machine.succeed("su - tim -c 'tmux list-sessions' | grep -q full-stack-test")
-            machine.succeed("su - tim -c 'tmux kill-server'")
+            machine.succeed("su - ${testUsername} -c 'tmux new-session -d -s full-stack-test'")
+            machine.succeed("su - ${testUsername} -c 'tmux list-sessions' | grep -q full-stack-test")
+            machine.succeed("su - ${testUsername} -c 'tmux kill-server'")
 
             # === Section 9: User environment coherent ===
 
             # EDITOR set to nvim
-            machine.succeed("su - tim -c 'echo $EDITOR' | grep -q nvim")
+            machine.succeed("su - ${testUsername} -c 'echo $EDITOR' | grep -q nvim")
 
             # Shell is zsh
-            machine.succeed("getent passwd tim | grep -q zsh")
+            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
 
             # User is in wheel group (from system-default via system-cli)
-            machine.succeed("id -nG tim | grep -q wheel")
+            machine.succeed("id -nG ${testUsername} | grep -q wheel")
 
             # Nix trusts the user
-            machine.succeed("nix show-config | grep trusted-users | grep -q tim")
+            machine.succeed("nix show-config | grep trusted-users | grep -q ${testUsername}")
 
             # === Section 10: Module-specific configs all generated ===
 
-            machine.succeed("test -f /home/tim/.config/tmux/tmux.conf")
-            machine.succeed("test -f /home/tim/.config/git/config")
-            machine.succeed("test -d /home/tim/.config/nvim")
-            machine.succeed("test -f /home/tim/.config/yazi/yazi.toml")
-            machine.succeed("test -f /home/tim/.zshrc")
-            machine.succeed("test -f /home/tim/.config/containers/registries.conf")
+            machine.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
+            machine.succeed("test -f /home/${testUsername}/.config/git/config")
+            machine.succeed("test -d /home/${testUsername}/.config/nvim")
+            machine.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
+            machine.succeed("test -f /home/${testUsername}/.zshrc")
+            machine.succeed("test -f /home/${testUsername}/.config/containers/registries.conf")
 
             # === Section 11: Development toolchains present ===
 
-            machine.succeed("su - tim -c 'rustc --version'")
-            machine.succeed("su - tim -c 'node --version'")
-            machine.succeed("su - tim -c 'python3 --version'")
-            machine.succeed("su - tim -c 'go version'")
+            machine.succeed("su - ${testUsername} -c 'rustc --version'")
+            machine.succeed("su - ${testUsername} -c 'node --version'")
+            machine.succeed("su - ${testUsername} -c 'python3 --version'")
+            machine.succeed("su - ${testUsername} -c 'go version'")
 
             # === Section 12: Shell utility scripts from shell-utils ===
 
-            machine.succeed("su - tim -c 'which mytree'")
-            machine.succeed("test -f /home/tim/.local/lib/general-utils.bash")
+            machine.succeed("su - ${testUsername} -c 'which mytree'")
+            machine.succeed("test -f /home/${testUsername}/.local/lib/general-utils.bash")
 
             # === Section 13: Functional integration — init repo with aliases in zsh ===
 
             machine.succeed(
-                "su - tim -c '"
+                "su - ${testUsername} -c '"
                 "cd /tmp && mkdir full-stack-repo && cd full-stack-repo && git init"
                 " && echo hello > file.txt && git add file.txt"
                 " && git commit -m \"test commit\""
                 " && git log --oneline | grep -q \"test commit\"'"
             )
+          '';
+        };
+
+        # Dev Team Stack Integration Test: activates the actual nixos-dev-team host
+        # module (pure NixOS, no WSL) with HM dev tool modules. Validates that the
+        # non-WSL dev-team configuration boots, provides SSH, user management, and
+        # all expected dev tooling through HM integration.
+        # Tests the full module chain: system-cli + binfmt + podman + HM dev stack
+        vm-dev-team-stack = pkgs.testers.nixosTest {
+          name = "vm-dev-team-stack";
+
+          nodes.machine = { config, pkgs, lib, ... }: {
+            imports = [
+              self.modules.nixos.nixos-dev-team
+              inputs.home-manager.nixosModules.home-manager
+            ];
+
+            # Override hardware config for VM test (nixos-dev-team has grub/disk)
+            boot.loader.grub.enable = lib.mkForce false;
+            boot.loader.grub.device = lib.mkForce "";
+            fileSystems."/" = lib.mkForce {
+              device = "none";
+              fsType = "tmpfs";
+            };
+
+            systemDefault.userName = testUsername;
+            systemDefault.wheelNeedsPassword = false;
+            networking.firewall.enable = false;
+            virtualisation.memorySize = 3072;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.${testUsername} = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.shell
+                  self.modules.homeManager.git
+                  self.modules.homeManager.tmux
+                  self.modules.homeManager.neovim
+                  self.modules.homeManager.development-tools
+                  self.modules.homeManager.yazi
+                  self.modules.homeManager.shell-utils
+                  self.modules.homeManager.files
+                  self.modules.homeManager.podman
+                ];
+
+                homeMinimal = {
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
+                };
+
+                developmentTools.enable = true;
+                programs.podman-tools.enable = true;
+
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
+
+            # === Section 1: Boot and user creation ===
+
+            machine.succeed("id ${testUsername}")
+            machine.succeed("id -nG ${testUsername} | grep -q wheel")
+
+            # === Section 2: Sudo works (wheelNeedsPassword = false) ===
+
+            machine.succeed("su - ${testUsername} -c 'sudo -n true'")
+
+            # === Section 3: SSH service running ===
+
+            machine.wait_for_unit("sshd.service")
+
+            # === Section 4: HM activation completed ===
+
+            # HM config files generated
+            machine.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
+            machine.succeed("test -f /home/${testUsername}/.config/git/config")
+            machine.succeed("test -d /home/${testUsername}/.config/nvim")
+            machine.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
+            machine.succeed("test -f /home/${testUsername}/.zshrc")
+
+            # === Section 5: Core binaries present ===
+
+            machine.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
+            machine.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
+            machine.succeed("su - ${testUsername} -c 'git --version'")
+            machine.succeed("su - ${testUsername} -c 'yazi --version'")
+            machine.succeed("su - ${testUsername} -c 'bat --version'")
+            machine.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+
+            # === Section 6: Cross-module integration — git + delta ===
+
+            machine.succeed("su - ${testUsername} -c 'git config core.pager' | grep -q delta")
+            machine.succeed("su - ${testUsername} -c 'delta --version'")
+
+            # === Section 7: Cross-module integration — zsh + git aliases ===
+
+            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+
+            # === Section 8: Development toolchains ===
+
+            machine.succeed("su - ${testUsername} -c 'rustc --version'")
+            machine.succeed("su - ${testUsername} -c 'node --version'")
+            machine.succeed("su - ${testUsername} -c 'python3 --version'")
+            machine.succeed("su - ${testUsername} -c 'go version'")
+
+            # === Section 9: User environment coherent ===
+
+            machine.succeed("su - ${testUsername} -c 'echo $EDITOR' | grep -q nvim")
+            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
+            machine.succeed("nix show-config | grep trusted-users | grep -q ${testUsername}")
           '';
         };
 
@@ -1806,7 +1930,7 @@
           description = "User creation, groups, home directory, shell, and sudo";
           modules = [ self.modules.nixos.system-default ];
           extraConfig = {
-            systemDefault.userName = "tim";
+            systemDefault.userName = testUsername;
             systemDefault.userGroups = [ "wheel" "networkmanager" "audio" "video" "docker" ];
             systemDefault.wheelNeedsPassword = false;
             systemDefault.extraShellAliases = { testvm = "echo test-alias-works"; };
@@ -1816,29 +1940,29 @@
             machine.wait_for_unit("multi-user.target")
 
             # --- Test 1: User exists and is a normal user ---
-            machine.succeed("id tim")
-            machine.succeed("getent passwd tim | grep -q /home/tim")
+            machine.succeed("id ${testUsername}")
+            machine.succeed("getent passwd ${testUsername} | grep -q /home/${testUsername}")
 
             # --- Test 2: Home directory exists and is owned by user ---
-            machine.succeed("test -d /home/tim")
-            machine.succeed("stat -c '%U' /home/tim | grep -q tim")
+            machine.succeed("test -d /home/${testUsername}")
+            machine.succeed("stat -c '%U' /home/${testUsername} | grep -q ${testUsername}")
 
             # --- Test 3: User is in expected groups ---
-            machine.succeed("id -nG tim | grep -q wheel")
-            machine.succeed("id -nG tim | grep -q audio")
-            machine.succeed("id -nG tim | grep -q video")
+            machine.succeed("id -nG ${testUsername} | grep -q wheel")
+            machine.succeed("id -nG ${testUsername} | grep -q audio")
+            machine.succeed("id -nG ${testUsername} | grep -q video")
 
             # --- Test 4: Shell is zsh ---
-            machine.succeed("getent passwd tim | grep -q zsh")
+            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
             # zsh binary exists
             machine.succeed("which zsh")
 
             # --- Test 5: User can sudo (wheel group) ---
             # sudo should work for wheel members (default NixOS config)
-            machine.succeed("su - tim -c 'sudo -n true'")
+            machine.succeed("su - ${testUsername} -c 'sudo -n true'")
 
             # --- Test 6: Nix trusts the user ---
-            machine.succeed("nix show-config | grep trusted-users | grep -q tim")
+            machine.succeed("nix show-config | grep trusted-users | grep -q ${testUsername}")
 
             # --- Test 7: Environment variable set ---
             machine.succeed("bash -lc 'echo $TEST_VAR' | grep -q vm-test-value")

@@ -1,0 +1,60 @@
+{
+  "Continuation Prompt": {
+    "prefix": "cont",
+    "body": [
+      "Continue working on ${1:task}. Current status: ${2:status}.",
+      "Next step: ${3:next action}.",
+      "Key context: ${4:critical info}.",
+      "Check: ${5:file/location}."
+    ],
+    "description": "Claude Code continuation prompt template"
+  },
+  "Code Block": {
+    "prefix": "cb",
+    "body": [
+      "```${1:language}",
+      "$0",
+      "```"
+    ],
+    "description": "Fenced code block with language"
+  },
+  "Code Block (Bash)": {
+    "prefix": "cbsh",
+    "body": [
+      "```bash",
+      "$0",
+      "```"
+    ],
+    "description": "Bash fenced code block"
+  },
+  "Code Block (Nix)": {
+    "prefix": "cbnix",
+    "body": [
+      "```nix",
+      "$0",
+      "```"
+    ],
+    "description": "Nix fenced code block"
+  },
+  "Task Status": {
+    "prefix": "task",
+    "body": [
+      "### ${1|TODO,IN PROGRESS,DONE,BLOCKED|} **${2:Task Name}**",
+      "",
+      "$0"
+    ],
+    "description": "Task status header with status choice"
+  },
+  "Details Block": {
+    "prefix": "detail",
+    "body": [
+      "<details>",
+      "<summary>${1:Summary}</summary>",
+      "",
+      "$0",
+      "",
+      "</details>"
+    ],
+    "description": "HTML details/summary collapsible block"
+  }
+}

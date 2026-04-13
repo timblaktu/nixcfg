@@ -1,0 +1,166 @@
+name: Release
+
+on:
+  push:
+    tags: ['[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., 0.1.0)'
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate tag matches VERSION
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ver="${{ inputs.tag }}"
+          else
+            ver="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "Version: $ver"
+
+      - name: Validate VERSION file matches tag
+        run: |
+          file_ver=$(cat VERSION | tr -d '[:space:]')
+          tag_ver="${{ steps.version.outputs.version }}"
+          if [ "$file_ver" != "$tag_ver" ]; then
+            echo "::error::VERSION file ($file_ver) does not match tag ($tag_ver)"
+            exit 1
+          fi
+          echo "VERSION file matches tag: $tag_ver"
+
+  build-tarball:
+    name: Build WSL tarball
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Build tarball builder
+        run: >
+          nix build
+          '.#nixosConfigurations.nixos-wsl-dev-team.config.system.build.tarballBuilder'
+          --print-build-logs
+
+      - name: Build tarball
+        run: |
+          version="${{ needs.validate.outputs.version }}"
+          sudo ./result/bin/nixos-wsl-tarball-builder "nixcfg-wsl-dev-team-${version}.wsl"
+          ls -lh "nixcfg-wsl-dev-team-${version}.wsl"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wsl-tarball
+          path: nixcfg-wsl-dev-team-${{ needs.validate.outputs.version }}.wsl
+          retention-days: 5
+
+  release:
+    name: Create GitHub Release
+    needs: [validate, build-tarball]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: wsl-tarball
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          version="${{ needs.validate.outputs.version }}"
+
+          # Find previous tag
+          prev_tag=$(git tag --sort=-v:refname | grep -E '^[0-9]' | head -2 | tail -1 || echo "")
+
+          if [ -n "$prev_tag" ] && [ "$prev_tag" != "$version" ]; then
+            range="${prev_tag}..${version}"
+          else
+            range="$version"
+          fi
+
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            echo "## What's Changed"
+            echo ""
+
+            # Group commits by conventional commit type
+            for type_label in "feat:Features" "fix:Bug Fixes" "docs:Documentation" "refactor:Refactoring" "perf:Performance" "test:Tests" "ci:CI/CD" "chore:Maintenance"; do
+              type="${type_label%%:*}"
+              label="${type_label#*:}"
+              commits=$(git log "$range" --pretty=format:"- %s (%h)" --grep="^${type}" 2>/dev/null || echo "")
+              if [ -n "$commits" ]; then
+                echo "### $label"
+                echo "$commits"
+                echo ""
+              fi
+            done
+
+            # Uncategorized commits
+            uncategorized=$(git log "$range" --pretty=format:"- %s (%h)" \
+              --invert-grep \
+              --grep="^feat" --grep="^fix" --grep="^docs" \
+              --grep="^refactor" --grep="^perf" --grep="^test" \
+              --grep="^ci" --grep="^chore" 2>/dev/null || echo "")
+            if [ -n "$uncategorized" ]; then
+              echo "### Other"
+              echo "$uncategorized"
+              echo ""
+            fi
+
+            echo "---"
+            echo ""
+            echo "**Assets:**"
+            echo "- \`nixcfg-wsl-dev-team-${version}.wsl\` — Dev team WSL distribution image"
+            echo ""
+            echo "**Install:** \`wsl --import nixos-wsl-dev-team <location> nixcfg-wsl-dev-team-${version}.wsl\`"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Copy scripts
+        run: |
+          cp docs/tools/Import-NixOSWSL.ps1 Import-NixOSWSL.ps1
+          cp docs/tools/Test-WslImport.ps1 Test-WslImport.ps1
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.validate.outputs.version }}"
+          gh release create "$version" \
+            --title "v${version}" \
+            --notes "${{ steps.notes.outputs.notes }}" \
+            "nixcfg-wsl-dev-team-${version}.wsl" \
+            "Import-NixOSWSL.ps1" \
+            "Test-WslImport.ps1"

@@ -10,7 +10,7 @@
 { config, lib, inputs, ... }:
 let
   # Common user settings
-  username = "tim";
+  inherit (config.meta) username;
   homeDirectory = "/home/${username}";
 in
 {
@@ -194,7 +194,7 @@ in
   };
 
   # === Home Manager Module ===
-  flake.modules.homeManager."tim@mbp" = { config, lib, pkgs, ... }: {
+  flake.modules.homeManager."${username}@mbp" = { config, lib, pkgs, ... }: {
     imports = [
       # Dendritic system type - provides home-default layer (includes home-minimal)
       inputs.self.modules.homeManager.home-default
@@ -270,6 +270,9 @@ in
       accounts = inputs.self.lib.openCode.personalAccounts;
       mcpServers = inputs.self.lib.openCode.defaultMcpServers;
       commands = inputs.self.lib.openCode.defaultCommands;
+      agentFiles.custom = inputs.self.lib.openCode.defaultAgentFiles;
+      skills = inputs.self.lib.openCode.defaultSkills;
+      fileCommands.custom = inputs.self.lib.openCode.defaultFileCommands;
     };
   };
 

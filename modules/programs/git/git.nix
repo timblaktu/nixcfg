@@ -1,5 +1,5 @@
 # modules/programs/git/git.nix
-# Git configuration for all platforms [NDnd]
+# Git configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.git - Full git config with delta, hooks, tools
@@ -102,16 +102,8 @@ in
             };
           };
 
-          includes = [
-            {
-              condition = "hasconfig:remote.*.url:https://git.panasonic.aero/**";
-              contents = {
-                user = {
-                  email = "timothy.black@panasonic.aero";
-                };
-              };
-            }
-          ];
+          # Per-host git includes (e.g., work email for specific GitLab) should
+          # be set in host config via programs.git.includes, not here.
 
           ignores = [
             ".DS_Store"

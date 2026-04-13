@@ -1,6 +1,10 @@
 # modules/flake-parts/home-configurations.nix
 # Standalone-only home-manager configurations
-{ inputs, self, withSystem, ... }: {
+{ inputs, self, config, withSystem, ... }:
+let
+  inherit (config.meta) username;
+in
+{
   flake = {
     # Standalone-only home-manager configurations
     #
@@ -15,12 +19,12 @@
     # - User autonomy (no root required for user changes)
     homeConfigurations = {
       # tim@mbp: Dendritic pattern - module defined in modules/hosts/mbp [N]/
-      "tim@mbp" = withSystem "x86_64-linux" ({ pkgs, ... }:
+      "${username}@mbp" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            self.modules.homeManager."tim@mbp"
+            self.modules.homeManager."${username}@mbp"
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -30,13 +34,13 @@
         }
       );
 
-      # tim@thinky-ubuntu: Dendritic pattern - module defined in modules/hosts/thinky-ubuntu [nd]/
-      "tim@thinky-ubuntu" = withSystem "x86_64-linux" ({ pkgs, ... }:
+      # tim@thinky-ubuntu: Dendritic pattern - module defined in modules/hosts/thinky-ubuntu/
+      "${username}@thinky-ubuntu" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            self.modules.homeManager."tim@thinky-ubuntu"
+            self.modules.homeManager."${username}@thinky-ubuntu"
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -47,12 +51,12 @@
       );
 
       # tim@pa161878-nixos: Dendritic pattern - module defined in modules/hosts/pa161878-nixos/
-      "tim@pa161878-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
+      "${username}@pa161878-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            self.modules.homeManager."tim@pa161878-nixos"
+            self.modules.homeManager."${username}@pa161878-nixos"
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -63,12 +67,12 @@
       );
 
       # tim@thinky-nixos: Dendritic pattern - module defined in modules/hosts/thinky-nixos/
-      "tim@thinky-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
+      "${username}@thinky-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager-wsl.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            self.modules.homeManager."tim@thinky-nixos"
+            self.modules.homeManager."${username}@thinky-nixos"
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -81,15 +85,15 @@
       # tim@tblack-t14-nixos configuration archived (work laptop no longer in use)
       # See hosts/archived/tblack-t14-nixos/ for reference
 
-      "tim@nixvim-minimal" = withSystem "x86_64-linux" ({ pkgs, ... }:
+      "${username}@nixvim-minimal" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             {
               nixpkgs.config.allowUnfree = true;
               home = {
-                username = "tim";
-                homeDirectory = "/home/tim";
+                inherit (config.meta) username;
+                homeDirectory = "/home/${config.meta.username}";
                 stateVersion = "24.11";
               };
               nix = {
@@ -115,12 +119,12 @@
       # See hosts/archived/ for reference
 
       # tim@potato: Dendritic pattern - module defined in modules/hosts/potato [N]/
-      "tim@potato" = withSystem "aarch64-linux" ({ pkgs, ... }:
+      "${username}@potato" = withSystem "aarch64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            self.modules.homeManager."tim@potato"
+            self.modules.homeManager."${username}@potato"
           ];
           extraSpecialArgs = {
             inherit inputs;
@@ -130,13 +134,29 @@
         }
       );
 
-      # tim@macbook-air: Dendritic pattern - module defined in modules/hosts/macbook-air [D]/
-      "tim@macbook-air" = withSystem "aarch64-darwin" ({ pkgs, ... }:
+      # tim@nuc-apt-repo: Dendritic pattern - module defined in modules/hosts/nuc-apt-repo [N]/
+      "${username}@nuc-apt-repo" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
           modules = [
             { nixpkgs.config.allowUnfree = true; }
-            self.modules.homeManager."tim@macbook-air"
+            self.modules.homeManager."${username}@nuc-apt-repo"
+          ];
+          extraSpecialArgs = {
+            inherit inputs;
+            inherit (inputs) nixpkgs-stable;
+            hostname = "nuc-apt-repo";
+          };
+        }
+      );
+
+      # tim@macbook-air: Dendritic pattern - module defined in modules/hosts/macbook-air [D]/
+      "${username}@macbook-air" = withSystem "aarch64-darwin" ({ pkgs, ... }:
+        inputs.home-manager.lib.homeManagerConfiguration {
+          inherit pkgs;
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.homeManager."${username}@macbook-air"
           ];
           extraSpecialArgs = {
             inherit inputs;

@@ -51,15 +51,29 @@ fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots*
 
 ### MCP Servers (Current Status)
 
-- **brave-search**: + 
 - **context7**: + 
-- **filesystem**: + 
-- **github**: + 
-- **gitlab**: + 
 - **mcp-nixos**: + 
-- **puppeteer**: + 
 - **sequential-thinking**: + 
-- **serena**: + 
 
 
 
+
+---
+
+## AI Agent Tool Usage (Critical for All OpenCode Sessions)
+
+### Error Handling Protocol
+
+**If ANY tool fails more than 2-3 times:**
+1. **STOP immediately** - do not continue retrying
+2. **Diagnose the root cause** - check parameters, file paths, permissions  
+3. **Report the issue to the user** with full details
+4. **DO NOT** blindly retry the same broken approach 50+ times
+
+### Common Tool Signatures
+
+#### bash Tool
+**Required:** `command` (string), `description` (string)
+```xml
+<invoke name="bash">
+<parameter name="command">ls -la

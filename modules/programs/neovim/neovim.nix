@@ -1,5 +1,5 @@
 # modules/programs/neovim/neovim.nix
-# Neovim/Nixvim configuration for all platforms [NDnd]
+# Neovim/Nixvim configuration for all platforms
 #
 # Provides:
 #   flake.modules.homeManager.neovim - Full nixvim config (LSP, treesitter, plugins)
@@ -423,6 +423,9 @@
                       { "<leader>du", desc = "Update diff highlighting" },
                       { "<leader>di", desc = "Show diff context info" },
                       { "<leader>t", group = "Tasks/Overseer" },
+                      { "<leader>s", group = "Snippets" },
+                      { "<leader>fs", desc = "Search snippets (current ft)" },
+                      { "<leader>fS", desc = "Search snippets (all ft)" },
                       { "<leader>/", desc = "Toggle line comment" },
                       { "<leader>?", desc = "Toggle block comment" },
                       { "gc", desc = "Comment (motion)" },
@@ -1103,7 +1106,15 @@
             cmp-cmdline.enable = true;
 
             # Snippets
-            luasnip.enable = true;
+            luasnip = {
+              enable = true;
+              fromVscode = [
+                # friendly-snippets plugin auto-injects { } for its own snippets
+                { paths = ./snippets; } # loads custom snippets from module directory
+              ];
+            };
+            cmp_luasnip.enable = true; # Bridge between cmp and luasnip
+            friendly-snippets.enable = true; # Community VS Code-format snippets
 
             # Task runner and quickfix enhancements
             overseer = {

@@ -213,10 +213,11 @@ in
 
     openCode = {
       # Base config (enable, defaults, common settings)
+      # NOTE: defaultAccount intentionally omitted — each deployment layer sets its own.
+      # Dev-team sets "work", personal hosts override to "max".
       baseConfig = {
         enable = true;
         defaultModel = "anthropic/claude-sonnet-4-5";
-        defaultAccount = "max";
         # Provider configuration - API key via environment variable
         provider = {
           anthropic = {
@@ -225,18 +226,39 @@ in
             };
           };
         };
+        # OpenCode permission keys are lowercase tool names.
+        # Valid: read, edit, glob, grep, list, bash, task, skill, lsp,
+        #        todowrite, question, webfetch, websearch, codesearch,
+        #        external_directory, doom_loop
+        # Note: "edit" covers write+edit+apply_patch+multiedit operations.
+        # Object syntax enables pattern-based rules (last match wins).
+        #
+        # Parity with Claude Code permissions:
+        #   CC allows: Bash, Read, Write, Edit, WebFetch + MCP servers
+        #   CC denies: Search, Find, Bash(rm -rf /*)
+        #   OC equivalents: glob=Glob, grep=Grep, edit=Write+Edit, bash=Bash
         permissions = {
-          Bash = "allow";
-          Read = "allow";
-          Write = "allow";
-          Edit = "allow";
-          WebFetch = "allow";
+          bash = {
+            "*" = "allow";
+            "rm -rf /*" = "deny";
+          };
+          read = "allow";
+          edit = "allow";
+          glob = "allow";
+          grep = "allow";
+          list = "allow";
+          task = "allow";
+          skill = "allow";
+          lsp = "allow";
+          webfetch = "allow";
+          websearch = "allow";
+          codesearch = "allow";
+          todowrite = "allow";
+          question = "allow";
+          external_directory = "allow";
           "mcp__context7" = "allow";
           "mcp__mcp-nixos" = "allow";
           "mcp__sequential-thinking" = "allow";
-          Search = "deny";
-          Find = "deny";
-          "Bash(rm -rf /*)" = "deny";
         };
       };
 
@@ -259,21 +281,22 @@ in
         };
       };
 
-      # Work account (Code-Companion proxy) - only for work machines with VPN access
+      # Work account template - structural preset for enterprise AI proxy access.
+      # Deployment-specific values (bitwarden items, model names) are set in the
+      # team or host layer that consumes this preset.
       workAccount = {
         work = {
           enable = true;
-          displayName = "OpenCode Work Code-Companion";
+          displayName = "OpenCode Work";
           provider = "custom";
-          model = "codecompanion/qwen-a3b";
-          # API config is in the top-level codecompanion provider block
-          # We still need the env var name for the wrapper script
-          api = {
-            apiKeyEnvVar = "ANTHROPIC_API_KEY";
-          };
-          secrets.bearerToken.bitwarden = {
-            item = "PAC Code Companion v2";
-            field = "API Key";
+          # model: set by team/host layer (e.g., "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+          secrets.envTokens = {
+            BEDROCK_API_TOKEN = {
+              # bitwarden: set by team/host layer
+            };
+            AI_PROXY_API_KEY = {
+              # bitwarden: set by team/host layer
+            };
           };
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";
@@ -281,28 +304,26 @@ in
         };
       };
 
-      # Work provider config (Code-Companion via OpenAI-compatible API)
-      # Merge this into baseConfig.provider for work machines
+      # Work provider templates - structural presets for enterprise AI proxy providers.
+      # baseURL and model lists are deployment-specific; set by team/host layer.
       workProvider = {
-        codecompanion = {
+        bedrock = {
           npm = "@ai-sdk/openai-compatible";
-          name = "Code Companion V2";
+          name = "Bedrock";
           options = {
-            baseURL = "https://codecompanionv2.d-dp.nextcloud.aero/v1";
-            apiKey = "{env:ANTHROPIC_API_KEY}";
+            # baseURL: set by team/host layer
+            apiKey = "{env:BEDROCK_API_TOKEN}";
           };
-          models = {
-            "qwen-a3b" = {
-              name = "Qwen A3B";
-              modalities = {
-                input = [ "text" "image" ];
-                output = [ "text" ];
-              };
-            };
-            "devstral" = { name = "Devstral"; };
-            "kimi-linear-reap-a3b" = { name = "Kimi Linear Reap A3B"; };
-            "glm-47" = { name = "GLM 47"; };
+          # models: set by team/host layer
+        };
+        ai-proxy = {
+          npm = "@ai-sdk/openai-compatible";
+          name = "AI Proxy";
+          options = {
+            # baseURL: set by team/host layer
+            apiKey = "{env:AI_PROXY_API_KEY}";
           };
+          # models: set by team/host layer
         };
       };
 
@@ -311,6 +332,79 @@ in
         context7.enable = true;
         sequentialThinking.enable = true;
         nixos.enable = true;
+      };
+
+      # Default agent files (file-based agents deployed to agents/)
+      defaultAgentFiles = {
+        pdf-indexer = {
+          description = "Extract TOC, metadata, and key content from PDF documents. Uses pdftotext via Bash to bypass Read tool token limits. Handles PDFs of any size.";
+          tools = [ "Bash" "Glob" ];
+          capabilities = [
+            "Extract metadata (title, pages, size) using pdfinfo"
+            "Extract text content using pdftotext with page range control"
+            "Size-based routing: full extraction for small PDFs, TOC-only for large"
+            "Structured markdown output with page references"
+          ];
+          instructions = ''
+            ## Why This Agent Exists
+
+            The Read tool has a 25,000 token limit for PDFs, which fails on documents > ~30 pages.
+            This agent uses `pdftotext` via Bash to extract text content, bypassing that limitation.
+
+            ## Required Tools
+
+            Use `poppler-utils` via nix-shell:
+
+            ```bash
+            nix-shell -p poppler-utils --run 'pdfinfo "file.pdf"'
+            nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 10 "file.pdf" -'
+            ```
+
+            ## Size-Based Extraction Strategy
+
+            **Small PDFs (<=50 pages):** Extract all pages
+            ```bash
+            nix-shell -p poppler-utils --run 'pdftotext "PATH" -' 2>/dev/null | head -500
+            ```
+
+            **Medium PDFs (51-200 pages):** Extract first 15 pages (usually contains TOC)
+            ```bash
+            nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 15 "PATH" -' 2>/dev/null
+            ```
+
+            **Large PDFs (>200 pages):** Extract first 20 pages only
+            ```bash
+            nix-shell -p poppler-utils --run 'pdftotext -f 1 -l 20 "PATH" -' 2>/dev/null
+            ```
+
+            ## Output Format
+
+            Return structured markdown with:
+            - Document title and revision
+            - Page count and file size
+            - Table of contents with page numbers
+            - Document type classification
+          '';
+          examples = [
+            "Index this PDF: /path/to/document.pdf"
+            "Index all PDFs in /path/to/docs/ and return a markdown table"
+            "Extract the TOC from /path/to/large-manual.pdf"
+          ];
+        };
+      };
+
+      # Default skills
+      defaultSkills = {
+        enable = true;
+        builtins.adr-writer = true;
+      };
+
+      # Default file-based slash commands (.md files deployed via fileCommands)
+      defaultFileCommands = {
+        analyze-package-updates = {
+          category = "maintenance";
+          content = builtins.readFile ../programs/claude-code/_hm/commands/maintenance/analyze-package-updates.md;
+        };
       };
 
       # Default slash commands
@@ -350,10 +444,11 @@ in
 
     claudeCode = {
       # Base config (enable, defaults, common settings)
+      # NOTE: defaultAccount intentionally omitted — each deployment layer sets its own.
+      # Dev-team sets "work", personal hosts override to "max".
       baseConfig = {
         enable = true;
         defaultModel = "opus";
-        defaultAccount = "max";
         taskAutomation.enable = true;
         skills.enable = true;
       };
@@ -383,33 +478,26 @@ in
         };
       };
 
-      # Work account (Code-Companion proxy) - only for work machines with VPN access
+      # Work account template - structural preset for enterprise AI proxy access.
+      # Deployment-specific values (baseUrl, bitwarden item, modelMappings) are
+      # set by the team or host layer that consumes this preset.
       workAccount = {
         work = {
           enable = true;
-          displayName = "Work Code-Companion";
+          displayName = "Work Bedrock";
           model = "sonnet";
           api = {
-            baseUrl = "https://codecompanionv2.d-dp.nextcloud.aero";
-            authMethod = "bearer";
-            disableApiKey = true;
-            modelMappings = {
-              haiku = "devstral";
-              sonnet = "qwen-a3b";
-              opus = "claude-sonnet-4-5-20250929";
-            };
+            # baseUrl: set by team/host layer
+            authMethod = "bedrock";
+            # modelMappings: set by team/host layer
           };
           secrets.bearerToken.bitwarden = {
-            item = "PAC Code Companion v2";
-            field = "API Key";
+            # item + field: set by team/host layer
           };
           extraEnvVars = {
             DISABLE_TELEMETRY = "1";
             CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
             DISABLE_ERROR_REPORTING = "1";
-            ANTHROPIC_DEFAULT_HAIKU_MODEL = "devstral";
-            ANTHROPIC_DEFAULT_SONNET_MODEL = "qwen-a3b";
-            ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-sonnet-4-5-20250929";
           };
         };
       };

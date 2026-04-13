@@ -63,6 +63,7 @@ with lib;
     ## Nix Flake Projects
 
     - ALWAYS stage relevant changed files (`git add --update` + `git add <relevant-untracked-files>`)
+    - NEVER run nix commands concurrently — no background nix tasks, no parallel Bash calls with nix. Concurrent nix evaluations cause OOM kills. Always serialize nix invocations.
   '';
 
   # Runtime environment detection - prevents AI from making incorrect host assumptions

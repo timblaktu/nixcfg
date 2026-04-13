@@ -16,8 +16,9 @@
 # Plugin state
 **/plugins/
 
-# Allow Nix-managed templates
+# Allow Nix-managed templates (except work — contains deployment-specific URLs)
 !**/settings.json
+.claude-work/settings.json
 !**/mcp.json
 !**/CLAUDE.md
 

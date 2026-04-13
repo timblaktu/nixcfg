@@ -1,5 +1,5 @@
 # modules/programs/shell-utils/shell-utils.nix
-# Shell utilities and libraries [nd]
+# Shell utilities and libraries
 #
 # Provides:
 #   flake.modules.homeManager.shell-utils - Shell utility scripts and libraries
