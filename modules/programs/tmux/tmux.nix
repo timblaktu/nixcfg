@@ -239,7 +239,8 @@ in
                 bind-key -T copy-mode-vi y send -X copy-selection-and-cancel
 
                 # ---- VIM INTEGRATION (Smart Pane Navigation) ----
-                is_vim="ps -o state= -o comm= -t '#{pane_tty}' | grep -iqE '^[^TXZ ]+ +(\\S+\\/)?g?(view|n?vim?x?)(diff)?''$'"
+                # %hidden required since tmux 3.5+ (bare variable assignments are syntax errors)
+                %hidden is_vim="ps -o state= -o comm= -t '#{pane_tty}' | grep -iqE '^[^TXZ ]+ +(\\S+\\/)?g?(view|n?vim?x?)(diff)?''$'"
                 bind-key -n 'C-h' if-shell "''$is_vim" 'send-keys C-h' 'select-pane -L'
                 bind-key -n 'C-j' if-shell "''$is_vim" 'send-keys C-j' 'select-pane -D'
                 bind-key -n 'C-k' if-shell "''$is_vim" 'send-keys C-k' 'select-pane -U'
@@ -253,11 +254,12 @@ in
                 bind-key -T copy-mode-vi 'C-\' select-pane -l
 
                 # ---- NESTED SESSION SUPPORT ----
-                style_normal="${activeScheme.style_normal}"
-                style_nested="${activeScheme.style_nested}"
-                style_current_window="${activeScheme.style_current_window}"
-                lock_closed="${activeScheme.lock_closed}"
-                lock_open="${activeScheme.lock_open}"
+                # %hidden required since tmux 3.5+ (bare variable assignments are syntax errors)
+                %hidden style_normal="${activeScheme.style_normal}"
+                %hidden style_nested="${activeScheme.style_nested}"
+                %hidden style_current_window="${activeScheme.style_current_window}"
+                %hidden lock_closed="${activeScheme.lock_closed}"
+                %hidden lock_open="${activeScheme.lock_open}"
 
                 # ---- STATUS BAR CONFIGURATION ----
                 set -g status on
@@ -360,7 +362,6 @@ in
                     # modules/programs/monitoring/monitoring.nix), so the impact is
                     # limited to that one pane after a restore. Re-launch manually
                     # with `dool` if needed.
-                    '
 
                     set -g @resurrect-save-command-strategy 'tmux-resurrect-cleanup'
                     bind-key S run-shell "tmux-save-with-rename"

@@ -29,7 +29,7 @@ graph TD
         Host["Thin host config<br/><i>Produces .wsl tarball</i>"]
     end
 
-    subgraph "Layer 4: pa161878-nixos (personal)"
+    subgraph "Layer 4: my-machine (personal)"
         Personal["Personal host<br/><i>Team layers + CUDA, personal modules</i>"]
     end
 
@@ -51,7 +51,7 @@ For the full dendritic pattern and repository structure, see [ARCHITECTURE.md](A
 | Enterprise | `wsl-enterprise` | `home-enterprise` | `modules/system/settings/wsl-enterprise/wsl-enterprise.nix` |
 | Dev-team | `wsl-dev-team` | `home-dev-team` | `modules/system/settings/wsl-dev-team/wsl-dev-team.nix` |
 | Host | — | — | `modules/hosts/nixos-wsl-dev-team [N]/nixos-wsl-dev-team.nix` |
-| Personal | — | — | `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix` |
+| Personal | — | — | *(in private repo, e.g., nixcfg-work)* |
 
 ---
 

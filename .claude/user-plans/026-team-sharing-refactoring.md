@@ -132,7 +132,7 @@ hardcode `systemDefault.userName = "tim"`.
 | `modules/hosts/thinky-ubuntu [nd]/thinky-ubuntu.nix` | 12 |
 | `modules/hosts/macbook-air [D]/macbook-air.nix` | 13 |
 | `modules/hosts/mbp [N]/mbp.nix` | 13 |
-| `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix` | 22 |
+| `modules/hosts/thinky-nixos [N]/thinky-nixos.nix` | 22 |
 | `modules/hosts/potato [N]/potato.nix` | 13 |
 
 **VM test configurations** (`modules/flake-parts/vm-tests.nix`):
@@ -198,7 +198,7 @@ set to "tim" — it would be set by each consumer.
 **Status**: TASK:COMPLETE (2026-03-14)
 **Priority**: HIGH — key enterprise compliance feature for WSL image
 **Depends on**: None (can proceed independently of Tasks 1-2)
-**Commit**: `be207f8` on `feat/usb-jetson-pa161878`
+**Commit**: `be207f8` on `feat/usb-jetson`
 
 ### Problem Statement
 
@@ -405,7 +405,7 @@ Option 1 is the most Nix-idiomatic for proprietary packages. The IT demo
 **Status**: TASK:COMPLETE (2026-03-14)
 **Priority**: HIGH — the core enabler for team consumption
 **Depends on**: Tasks 1-3 (clean state + CrowdStrike module in place)
-**Commit**: `6e5da5e` on `feat/usb-jetson-pa161878`
+**Commit**: `6e5da5e` on `feat/usb-jetson`
 
 ### Decision: Option A (No Repo Split)
 
@@ -479,7 +479,7 @@ imports = [ inputs.nixcfg.homeManagerModules.shell ];
 **Status**: TASK:COMPLETE (2026-03-18)
 **Priority**: MEDIUM — enables teammate self-service
 **Depends on**: Task 4 (shared flake must exist first)
-**Commit**: `20d1c00` on `feat/usb-jetson-pa161878`
+**Commit**: `20d1c00` on `feat/usb-jetson`
 
 ### Decisions Made
 
@@ -488,7 +488,7 @@ imports = [ inputs.nixcfg.homeManagerModules.shell ];
 - **Internal ref cleanup**: COMPLETE (commit `66fb5ca`)
   - All PAC/Code Companion/panasonic.aero refs removed from shared modules
   - lib.nix presets are now deployment-agnostic templates
-  - Deployment values moved to pa161878-nixos.nix personal host config
+  - Deployment values moved to thinky-nixos.nix personal host config
   - GitLab host is now a required option (no default) in dev-team
   - Plan files gitignored, internal-ref docs archived
 - **Private flake input**: Deferred — will create `nixcfg-private` repo for

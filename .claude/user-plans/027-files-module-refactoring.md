@@ -1,6 +1,6 @@
 # Plan 027: Files Module Refactoring — Detailed Breakdown
 
-**Branch**: `feat/usb-jetson-pa161878`
+**Branch**: `feat/usb-jetson`
 **Created**: 2026-03-14
 **Parent**: Plan 026 Task 1 (Files Module Refactoring F5)
 
@@ -509,7 +509,7 @@ misunderstanding — no change needed.
 ### Actions
 
 1. Run `nix flake check --no-build` — must pass
-2. Run HM dry-run for pa161878-nixos — must pass
+2. Run HM dry-run for thinky-nixos — must pass
 3. Verify all 7 consumer host configs evaluate:
    - wsl-enterprise, mbp, thinky-ubuntu, macbook-air, thinky-nixos, potato
    - tests.nix (lines 180, 562-625)

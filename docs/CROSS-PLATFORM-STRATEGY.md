@@ -154,7 +154,7 @@ This document outlines the comprehensive cross-platform support strategy for nix
 **Location**: Current nixcfg repository
 
 **Contents**:
-- Tim's specific machines (thinky-nixos, pa161878-nixos, etc.)
+- Tim's specific machines (thinky-nixos, etc.)
 - Personal secrets (SOPS encrypted)
 - Personal preferences, aliases, custom scripts
 - **Imports/composes from shared flake**

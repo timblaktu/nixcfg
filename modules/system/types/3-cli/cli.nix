@@ -537,6 +537,12 @@
               imagemagick
               yt-dlp
 
+              # Terminal capture
+              asciinema_3 # Record terminal sessions (.cast)
+              asciinema-agg # .cast → animated GIF
+              termshot # Static terminal screenshots (PNG)
+              svg-term # .cast → animated SVG
+
               # Development
               act # GitHub Actions local runner
               nix-diff

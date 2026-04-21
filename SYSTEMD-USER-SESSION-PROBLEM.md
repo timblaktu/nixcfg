@@ -1,7 +1,7 @@
 # Systemd User Session Failure on NixOS-WSL Boot
 
 **Date:** 2026-02-02
-**Host:** pa161878-nixos (thinky-nixos WSL instance)
+**Host:** thinky-nixos (NixOS-WSL instance)
 **Status:** Root cause identified, workaround implemented, permanent fix proposed
 
 ## Problem Summary
@@ -67,7 +67,7 @@ This creates `/mnt/wslg/run/user/1000` early in boot with `root:root` ownership.
 | File | Purpose | Relevant Content |
 |------|---------|-----------------|
 | `/etc/fstab` | WSL mounts | `/mnt/wslg/run/user/1000` as tmpfs |
-| `hosts/pa161878-nixos/hardware-config.nix` | NixOS mount config | Defines the WSLg tmpfs mount |
+| `hosts/thinky-nixos/hardware-config.nix` | NixOS mount config | Defines the WSLg tmpfs mount |
 | `hosts/common/default.nix` | Common NixOS config | Contains `linger = true` and an activation script fix |
 | `user-runtime-dir@.service` | Systemd unit | Creates `/run/user/UID` directories |
 
@@ -220,18 +220,18 @@ After implementing the permanent fix:
 ### Boot Failure (Jan 25, 2026)
 
 ```
-Jan 25 07:24:00 pa161878-nixos systemd[1]: Starting User Runtime Directory /run/user/1000...
-Jan 25 07:24:00 pa161878-nixos systemd[1]: Finished User Runtime Directory /run/user/1000.
-Jan 25 07:24:00 pa161878-nixos systemd[1]: Starting User Manager for UID 1000...
-Jan 25 07:24:00 pa161878-nixos (systemd)[385]: pam_systemd(systemd-user:session): Runtime directory '/run/user/1000' is not owned by UID 1000, as it should.
-Jan 25 07:24:00 pa161878-nixos (systemd)[385]: pam_systemd(systemd-user:session): Not setting $XDG_RUNTIME_DIR, as the directory is not in order.
-Jan 25 07:24:00 pa161878-nixos systemd[385]: Trying to run as user instance, but $XDG_RUNTIME_DIR is not set.
+Jan 25 07:24:00 thinky-nixos systemd[1]: Starting User Runtime Directory /run/user/1000...
+Jan 25 07:24:00 thinky-nixos systemd[1]: Finished User Runtime Directory /run/user/1000.
+Jan 25 07:24:00 thinky-nixos systemd[1]: Starting User Manager for UID 1000...
+Jan 25 07:24:00 thinky-nixos (systemd)[385]: pam_systemd(systemd-user:session): Runtime directory '/run/user/1000' is not owned by UID 1000, as it should.
+Jan 25 07:24:00 thinky-nixos (systemd)[385]: pam_systemd(systemd-user:session): Not setting $XDG_RUNTIME_DIR, as the directory is not in order.
+Jan 25 07:24:00 thinky-nixos systemd[385]: Trying to run as user instance, but $XDG_RUNTIME_DIR is not set.
 ```
 
 ### Successful Manual Fix (Feb 2, 2026)
 
 ```
-Feb 02 08:26:17 pa161878-nixos sudo[620413]: tim : COMMAND=/nix/store/.../chown -R tim:users /run/user/1000/
-Feb 02 08:26:17 pa161878-nixos systemd[620419]: Queued start job for default target Main User Target.
-Feb 02 08:26:17 pa161878-nixos systemd[620419]: Startup finished in 302ms.
+Feb 02 08:26:17 thinky-nixos sudo[620413]: tim : COMMAND=/nix/store/.../chown -R tim:users /run/user/1000/
+Feb 02 08:26:17 thinky-nixos systemd[620419]: Queued start job for default target Main User Target.
+Feb 02 08:26:17 thinky-nixos systemd[620419]: Startup finished in 302ms.
 ```

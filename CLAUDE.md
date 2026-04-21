@@ -74,17 +74,28 @@ Check: [relevant file path]
 
 ## Nix Concurrency Guard
 
-Agent wrapper scripts (claudemax, opencodepro, etc.) prepend a flock-based `nix` wrapper
-to PATH that serializes all nix evaluations system-wide. This prevents OOM kills from
-concurrent nix evaluations across multiple agent sessions.
+Agent wrapper scripts (claudemax, opencodepro, etc.) prepend a `nix` wrapper to PATH
+that runs each nix invocation inside a systemd cgroup scope with memory limits. This
+prevents OOM kills from runaway nix evaluations without the fd-leak problems of the
+previous flock-based approach.
 
-- **Lock file**: `/tmp/nix-eval-guard.lock`
-- **Timeout**: 600s (10 min) — if a nix process hangs, the lock is released after timeout
+- **Mechanism**: `systemd-run --user --scope` under `nix-eval.slice`
+- **Baseline**: `nix flake check --no-build` peaks at ~16.6G RSS on 27.4G RAM (measured 2026-04-18)
+- **Per-eval limits** (each nix invocation):
+  - MemoryHigh=65% — soft ceiling; kernel throttles (swaps aggressively) above this but doesn't kill
+  - MemoryMax=75% — hard ceiling; kernel OOM-kills the process immediately if reached
+- **Slice ceiling** (aggregate for all concurrent evals):
+  - MemoryHigh=80% — aggregate soft ceiling for all scopes in nix-eval.slice
+  - MemoryMax=90% — aggregate hard ceiling
+- **Adaptive killing**: `ManagedOOMMemoryPressure=kill` on slice registers with systemd-oomd. When memory pressure (PSI) exceeds 80% for 60s, oomd kills a process within the slice
+- **System safety nets**: `systemd-oomd` (pressure-based) + `earlyoom` (5% free threshold) enabled in system-default NixOS layer
 - **Bypass**: `NIX_NO_GUARD=1 nix <command>` skips the guard
-- **Contention logging**: When blocked, prints `[nix-guard] Waiting for lock...` to stderr
-- **Graceful degradation**: If flock fails (e.g., /tmp not writable), nix runs unguarded
+- **Tuning**: `NIX_GUARD_MEM_HIGH=70% NIX_GUARD_MEM_MAX=80%` for per-session overrides
+- **Graceful degradation**: If `systemd-run --user` fails (containers, CI), nix runs unguarded
 - **Source**: `claude-runtime/bin/nix-guarded.sh` (template), `modules/lib/nix-guarded.nix` (Nix package)
 - **Scope**: Only agent sessions — regular user `nix` commands are unaffected
+- **Diagnostics**: `systemctl --user status nix-eval.slice`, `systemd-cgtop`
+- **History**: See `docs/nix-guarded-fd-leak.md` for the flock-era fd-leak analysis and resolution
 
 # CLAUDE-CODE CONFIGURATION AND STATE MANAGEMENT
 
@@ -176,7 +187,7 @@ Four-layer architecture for distributable team WSL images:
 Layer 1: wsl-enterprise (module)     -- Company-wide base (system-cli + WSL)
 Layer 2: wsl-dev-team (module)        -- Team dev stack (Podman, Claude Code, GitLab)
 Layer 3: nixos-wsl-dev-team (host)   -- Thin host producing .wsl tarball
-Layer 4: pa161878-nixos (host)       -- Personal machine (uses team layers + personal config)
+Layer 4: <personal-host> (host)      -- Personal machine (uses team layers + personal config)
 ```
 
 **Key modules created**:
@@ -189,7 +200,7 @@ Layer 4: pa161878-nixos (host)       -- Personal machine (uses team layers + per
 - Dual-registration: each layer provides both NixOS and HM modules
 - Generic user `dev` with `setup-username` script for personalization
 - Tarball security check validates no personal data leaks
-- `pa161878-nixos` refactored to import `wsl-dev-team` + personal-only modules
+- Personal host refactored to import `wsl-dev-team` + personal-only modules (migrated to nixcfg-work)
 
 **Build**: `nix build '.#nixosConfigurations.nixos-wsl-dev-team.config.system.build.tarballBuilder'`
 **Run** (requires sudo): `sudo ./result/bin/nixos-wsl-tarball-builder`
@@ -553,9 +564,9 @@ DHCP Pool: 10.0.0.100-200
 
 ### ✅ **System Monitoring Dashboard** (COMPLETED - 2026-04-05)
 
-**Branch**: `feat/usb-jetson-pa161878`
+**Branch**: `feat/usb-jetson`
 **Plan**: `.claude/user-plans/030-tmux-monitoring-dashboard.md`
-**Status**: All T1-T8 complete. Deployed and validated on pa161878-nixos.
+**Status**: All T1-T8 complete. Deployed and validated.
 
 **Module**: `modules/programs/monitoring/monitoring.nix` (dual HM + NixOS registration)
 
@@ -577,9 +588,31 @@ DHCP Pool: 10.0.0.100-200
 
 ---
 
+### ✅ **Plan 031b: Nix Guard flock→cgroup Migration** (COMPLETED - 2026-04-14)
+
+**Branch**: `refactor/private-overlay`
+**Status**: All T1-T11 complete. Commits: `5109df3`, `2ca5756`, `461d4db`, `71e512f`.
+
+**What was done**: Replaced flock-based nix serialization (which caused fd-leak blocking
+from long-lived daemons like mcp-nixos) with systemd cgroup memory limits.
+
+- **T1-T3**: Wrapper rewritten to `systemd-run --user --scope`, nix-eval.slice deployed via HM
+- **T4**: systemd-oomd + earlyoom enabled in system-default NixOS layer
+- **T5**: Removed NIX_NO_GUARD=1 workaround from mcp-server-defs.nix
+- **T6**: Updated docs + CLAUDE.md
+- **T7**: Concurrent eval test — both scopes created, cgroup OOM killed correctly (exit 137)
+- **T8**: No fd-leak blocking — consecutive commands in 0.1s
+- **T9**: NIX_NO_GUARD=1 bypass verified
+- **T10**: Graceful fallback verified (invalid DBUS/XDG_RUNTIME_DIR)
+- **T11**: Removed /tmp/nix-eval-guard.lock, updated flock-era comments
+
+**WSL fix**: NixOS-WSL hardcodes `oomd.enable = false` — overridden with mkForce in
+`modules/system/settings/wsl/wsl.nix`. Upstream PR branch: `fix/oomd-psi-available` at
+`~/src/NixOS-WSL` (changes bare `false` → `lib.mkDefault false`).
+
 ### ✅ **Plan 031: Claude Code ↔ OpenCode Nix Module Parity** (COMPLETED - 2026-04-06)
 
-**Branch**: `feat/usb-jetson-pa161878`
+**Branch**: `feat/usb-jetson`
 **Status**: All T0-T9 complete. Commit `0e83352`.
 
 **What was done**:
@@ -611,7 +644,7 @@ modules/programs/opencode/
 
 ### 🚧 **USB/IP + Jetson Orin Nano Development** (IN PROGRESS)
 
-**Branch**: `feat/usb-jetson-pa161878`
+**Branch**: `feat/usb-jetson`
 **Status**: USB infrastructure complete, CI/CD + nixos-dev-team config added (2026-03-14)
 
 **What's implemented locally** (15 commits on branch):
@@ -619,7 +652,7 @@ modules/programs/opencode/
 - Activation script checking for `usbipd.exe` on Windows side (with corrected PATH)
 - Jetson Recovery Mode (APX) udev rule: VID:0955 PID:7523 (active)
 - Jetson L4T running udev rule: VID:0955 PID:7020 (commented out, needs verification)
-- `usbip.autoAttach = [ ]` placeholder in `pa161878-nixos.nix`
+- `usbip.autoAttach = [ ]` placeholder in personal host config (migrated to nixcfg-work)
 - `usbutils` + `kmod` in dev-team layer
 - WSL environment capture for systemd-spawned shells
 - `wsl-recover-mounts` script with 4 trigger points (boot, switch, shell, devshell)

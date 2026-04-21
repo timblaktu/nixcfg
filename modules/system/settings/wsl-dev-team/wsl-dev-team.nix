@@ -53,9 +53,13 @@
           # Team hostname (enterprise default: "nixos-wsl")
           wsl-settings.hostname = "nixos-wsl-dev-team";
 
+          # Add plugdev for hardware programmer access (Dediprog udev rule)
+          wsl-settings.userGroups = [ "wheel" "plugdev" ];
+
           # USB devices to auto-attach by hardware ID (VID:PID) via usbipd-win v5.x
           wsl-settings.usbip.autoAttachByHardwareId = [
             { hardwareId = "0403:6001"; description = "FTDI USB-UART adapter"; }
+            { hardwareId = "0483:dada"; description = "Dediprog SPI flash programmer (SF100/SF600/SF700)"; }
             { hardwareId = "0955:7523"; description = "NVIDIA Jetson Recovery Mode (APX)"; }
             { hardwareId = "1d6b:0104"; description = "Linux USB Mass Storage Gadget (Jetson initrd-flash)"; }
           ];

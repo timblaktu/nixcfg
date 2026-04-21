@@ -487,6 +487,17 @@
             # Hosts needing graphics without CUDA can use mkForce true.
             hardware.graphics.enable = lib.mkOverride 90 cfg.cuda.enable;
 
+            # Re-enable systemd-oomd: NixOS-WSL defaults oomd.enable to false
+            # (modules/systemd/default.nix) because older WSL2 kernels lacked PSI.
+            # Modern kernels (6.1+) support PSI via /proc/pressure/*.
+            # We need oomd for the nix-guarded cgroup memory limit integration
+            # (ManagedOOMMemoryPressure on nix-eval.slice).
+            # Upstream fix merged: https://github.com/nix-community/NixOS-WSL/pull/1028
+            systemd.oomd = {
+              enable = true;
+              enableUserSlices = true;
+            };
+
             # Disable services that don't make sense in WSL
             services.xserver.enable = lib.mkDefault false;
             services.printing.enable = lib.mkDefault false;

@@ -915,6 +915,48 @@
               })
             ];
 
+            # Aggregate memory ceiling for ALL concurrent nix scopes combined.
+            # Individual scopes get per-eval limits (MemoryHigh=65%/MemoryMax=75%
+            # in nix-guarded.sh); this slice caps the total and integrates with
+            # systemd-oomd for pressure-based adaptive killing.
+            #
+            # Tuned 2026-04-18: nix flake check peaks at ~16.6G on 27.4G RAM.
+            # Previous 60%/75% was below single-eval peak, causing oomd kills.
+            #
+            # MemoryHigh (80%): Soft aggregate ceiling. Kernel throttles (reclaims
+            #   pages) when combined RSS of all scopes in this slice exceeds this.
+            #   Set above single-eval peak so one eval runs without throttling;
+            #   two concurrent evals will exceed and trigger pressure.
+            # MemoryMax (90%): Hard aggregate ceiling. Kernel OOM-kills a process
+            #   if combined RSS reaches this. Safety net for truly runaway usage.
+            # ManagedOOMMemoryPressure=kill: Register this slice with systemd-oomd.
+            #   When memory pressure (PSI) exceeds the configured threshold (80%,
+            #   set system-wide via slice.d/overrides.conf) for the configured
+            #   duration, oomd selects and kills a process within this slice.
+            # ManagedOOMMemoryPressureDurationSec (60s): How long sustained pressure
+            #   must exceed the threshold before oomd acts. Raised from default 30s
+            #   to tolerate brief swap spikes during legitimate large evaluations.
+            systemd.user.slices.nix-eval = {
+              Unit.Description = "Memory-limited slice for nix evaluations";
+              Slice = {
+                MemoryHigh = "80%";
+                MemoryMax = "90%";
+                ManagedOOMMemoryPressure = "kill";
+                ManagedOOMMemoryPressureDurationSec = "60s";
+              };
+            };
+
+            # Clear failed transient scopes from OOM-killed nix evaluations.
+            # When the cgroup guard kills a runaway eval, systemd-run's transient
+            # scope transitions to "failed", which makes the user session "degraded"
+            # and triggers noisy warnings during HM activation. These scopes are
+            # ephemeral and not restartable — the failure was already logged to the
+            # journal (journalctl --user -u nix-eval.slice). Clearing them before
+            # reloadSystemd suppresses the false alarm.
+            home.activation.clearFailedNixScopes = lib.hm.dag.entryBefore [ "reloadSystemd" ] ''
+              ${pkgs.systemd}/bin/systemctl --user reset-failed 'run-*.scope' 2>/dev/null || true
+            '';
+
             home.activation.claudeConfigTemplates = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
               if [[ ! -d "${nixcfgPath}" ]]; then
                 echo "Error: nixcfgPath does not exist: ${nixcfgPath}"

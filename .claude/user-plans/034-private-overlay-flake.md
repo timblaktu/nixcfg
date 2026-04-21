@@ -1,13 +1,13 @@
 # Plan 034: Private Corporate Overlay Flake
 
-**Branch**: TBD (create from main at task start)
+**Branch**: refactor/private-overlay (nixcfg), main (nixcfg-work)
 **Created**: 2026-04-12
 **Related**: Plan 026 (Team-Sharing Refactoring, Task 4 chose "no repo split")
 **Related**: vte-cli Plan 002 (VTE CLI Agent Skill, Phase 2)
 
 ## Objective
 
-Create a private overlay flake (`nix-corp`) hosted on git.panasonic.aero that:
+Create a private overlay flake (`nixcfg-work`) hosted on git.panasonic.aero that:
 1. Imports nixcfg (public) and corporate tool flakes (vtecli, etc.) as inputs
 2. Owns all corporate host configurations (migrated from nixcfg)
 3. Distributes corporate AI skills (vtecli skill, etc.) via claude-code/opencode modules
@@ -20,7 +20,7 @@ hostnames) must not appear in a public GitHub repository.
 
 ## Security Motivation
 
-nixcfg is public at github.com/timblaktu/nixcfg. Today, pa161878-nixos.nix
+nixcfg is public at github.com/timblaktu/nixcfg. Today, thinky-nixos.nix
 contains corporate infrastructure references that are visible to anyone:
 
 - `git.panasonic.aero` (corporate GitLab hostname)
@@ -47,7 +47,7 @@ private repository while keeping nixcfg's module library fully public and functi
 
 ### What moves to nix-corp (private)
 
-- pa161878-nixos host config (the ONLY host with corporate references)
+- thinky-nixos host config (the ONLY host with corporate references)
 - Corporate tool integrations (vtecli skill registration, etc.)
 - Corporate-specific module overrides (populated work account values)
 - Any future corporate host configs
@@ -62,19 +62,19 @@ templates with unpopulated values), it stays in nixcfg.
 
 | Task | Category | Status | Description |
 |------|----------|--------|-------------|
-| 1 | Analysis | TASK:COMPLETE | Audit pa161878-nixos.nix: classify every config block as corporate vs personal |
-| 2 | Scaffold | TASK:PENDING | Create nix-corp flake skeleton on git.panasonic.aero |
-| 3 | Migration | TASK:PENDING | Move pa161878-nixos to nix-corp, verify nixos-rebuild works |
-| 4 | Validation | TASK:PENDING | Verify nixcfg builds cleanly without pa161878-nixos |
-| 5 | Integration | TASK:PENDING | Add vtecli as nix-corp input, register corporate skills |
-| 6 | Distribution | TASK:PENDING | Build corporate-enhanced .wsl tarball from nix-corp (optional) |
-| 7 | Documentation | TASK:PENDING | Document the three-repo architecture and onboarding |
+| 1 | Analysis | TASK:COMPLETE | Audit thinky-nixos.nix: classify every config block as corporate vs personal |
+| 2 | Scaffold | TASK:COMPLETE | Create nixcfg-work flake skeleton on git.panasonic.aero/blackt1/nixcfg-work |
+| 3 | Migration | TASK:COMPLETE | Move thinky-nixos to nix-corp, verify nixos-rebuild works |
+| 4 | Validation | TASK:COMPLETE | Verify nixcfg builds cleanly without thinky-nixos |
+| 5 | Integration | TASK:COMPLETE | Add vtecli as nix-corp input, register corporate skills |
+| 6 | Distribution | TASK:COMPLETE | Build corporate-enhanced .wsl tarball from nix-corp (optional) |
+| 7 | Documentation | TASK:COMPLETE | Document the three-repo architecture and onboarding |
 
 ## Task Details
 
-### Task 1: Audit pa161878-nixos.nix
+### Task 1: Audit thinky-nixos.nix
 
-Classify every configuration block in pa161878-nixos.nix:
+Classify every configuration block in thinky-nixos.nix:
 
 | Block | Classification | Destination |
 |-------|---------------|-------------|
@@ -115,8 +115,8 @@ nix-corp/
 ├── CLAUDE.md
 ├── .gitignore
 ├── hosts/
-│   └── pa161878-nixos/
-│       ├── pa161878-nixos.nix
+│   └── thinky-nixos/
+│       ├── thinky-nixos.nix
 │       └── _hardware-config.nix
 ├── modules/
 │   └── (corporate module overrides if needed)
@@ -155,10 +155,10 @@ nix-corp/
       ];
     };
   in {
-    nixosConfigurations.pa161878-nixos = nixpkgs.lib.nixosSystem {
+    nixosConfigurations.thinky-nixos = nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        ./hosts/pa161878-nixos/pa161878-nixos.nix
+        ./hosts/thinky-nixos/thinky-nixos.nix
         nixos-wsl.nixosModules.default
         sops-nix.nixosModules.sops
       ];
@@ -168,15 +168,15 @@ nix-corp/
       };
     };
 
-    homeConfigurations."tim@pa161878-nixos" = home-manager.lib.homeManagerConfiguration {
+    homeConfigurations."tim@thinky-nixos" = home-manager.lib.homeManagerConfiguration {
       inherit pkgs;
       modules = [
-        ./hosts/pa161878-nixos/home.nix
+        ./hosts/thinky-nixos/home.nix
         sops-nix.homeManagerModules.sops
       ];
       extraSpecialArgs = {
         inputs = nixcfg.inputs // { inherit vtecli; self = nixcfg; corp = self; };
-        hostname = "pa161878-nixos";
+        hostname = "thinky-nixos";
       };
     };
   };
@@ -197,13 +197,13 @@ nix-corp/
 - [ ] Can reference nixcfg modules via `inputs.self.modules.*`
 - [ ] CLAUDE.md documents the architecture
 
-### Task 3: Migrate pa161878-nixos
+### Task 3: Migrate thinky-nixos
 
-1. Copy `nixcfg/modules/hosts/pa161878-nixos [N]/` to `nix-corp/hosts/pa161878-nixos/`
+1. Copy `nixcfg/modules/hosts/thinky-nixos [N]/` to `nix-corp/hosts/thinky-nixos/`
 2. Update imports to reference nixcfg modules via the input path
 3. Add vtecli integration (programs.vtecli.enable, skill registration)
-4. Test: `nixos-rebuild switch --flake '/home/tim/src/nix-corp#pa161878-nixos'`
-5. Test: `home-manager switch --flake '/home/tim/src/nix-corp#tim@pa161878-nixos'`
+4. Test: `nixos-rebuild switch --flake '/home/tim/src/nix-corp#thinky-nixos'`
+5. Test: `home-manager switch --flake '/home/tim/src/nix-corp#tim@thinky-nixos'`
 
 **Import path changes:**
 
@@ -226,16 +226,16 @@ imports = [ inputs.self.modules.nixos.wsl-dev-team ];
 
 ### Task 4: Clean nixcfg
 
-1. Remove `modules/hosts/pa161878-nixos [N]/` from nixcfg
-2. Remove pa161878-nixos entry from `nixos-configurations.nix`
-3. Remove `tim@pa161878-nixos` entry from `home-configurations.nix`
+1. Remove `modules/hosts/thinky-nixos [N]/` from nixcfg
+2. Remove thinky-nixos entry from `nixos-configurations.nix`
+3. Remove `tim@thinky-nixos` entry from `home-configurations.nix`
 4. Run `nix flake check --no-build` to verify nixcfg still evaluates cleanly
 5. Verify all other hosts still build
 6. Verify team distribution images still build
 
 ### Definition of Done (Task 4)
 
-- [ ] pa161878-nixos directory removed from nixcfg
+- [ ] thinky-nixos directory removed from nixcfg
 - [ ] `nix flake check --no-build` passes on nixcfg
 - [ ] All remaining host configs evaluate (spot check 2-3)
 - [ ] `nixos-wsl-dev-team` tarball still buildable
@@ -243,7 +243,7 @@ imports = [ inputs.self.modules.nixos.wsl-dev-team ];
 
 ### Task 5: Corporate Skill Integration
 
-With vtecli as a nix-corp input and pa161878-nixos in nix-corp:
+With vtecli as a nix-corp input and thinky-nixos in nix-corp:
 
 1. vtecli's HM module (Plan 002 T11) auto-registers skill when both
    `programs.vtecli.enable` and `programs.claude-code.enable` are true
@@ -255,7 +255,7 @@ With vtecli as a nix-corp input and pa161878-nixos in nix-corp:
      # or: builtins.readFile "${inputs.vtecli}/.ai/skills/vtecli.md";
    };
    ```
-3. Verify `/vtecli` works in Claude Code from any project directory on pa161878-nixos
+3. Verify `/vtecli` works in Claude Code from any project directory on thinky-nixos
 
 **Prefer approach 1** (vtecli HM module self-registers) because:
 - Skill stays coupled to the tool version
@@ -264,7 +264,7 @@ With vtecli as a nix-corp input and pa161878-nixos in nix-corp:
 
 ### Definition of Done (Task 5)
 
-- [ ] `programs.vtecli.enable = true` in pa161878-nixos HM config
+- [ ] `programs.vtecli.enable = true` in thinky-nixos HM config
 - [ ] `/vtecli` slash command available in Claude Code from any project
 - [ ] Skill content matches `.ai/skills/vtecli.md` from vtecli repo
 
@@ -291,8 +291,8 @@ into their own host configs.
 2. Document the rebuild commands:
    ```bash
    # From nix-corp (corporate machine):
-   sudo nixos-rebuild switch --flake '/home/tim/src/nix-corp#pa161878-nixos'
-   home-manager switch --flake '/home/tim/src/nix-corp#tim@pa161878-nixos'
+   sudo nixos-rebuild switch --flake '/home/tim/src/nix-corp#thinky-nixos'
+   home-manager switch --flake '/home/tim/src/nix-corp#tim@thinky-nixos'
 
    # From nixcfg (personal machines, unchanged):
    sudo nixos-rebuild switch --flake '/home/tim/src/nixcfg#thinky-nixos'
@@ -332,7 +332,7 @@ git.panasonic.aero/.../nix-corp (PRIVATE)
 │   inputs: { nixcfg, vtecli, ... }
 │   follows: nixpkgs, home-manager, sops-nix
 ├── hosts/
-│   └── pa161878-nixos/     ← migrated from nixcfg
+│   └── thinky-nixos/     ← migrated from nixcfg
 │       ├── NixOS: imports nixcfg.modules.nixos.wsl-dev-team
 │       ├── HM: imports nixcfg.modules.homeManager.home-dev-team
 │       ├── CORPORATE: git.panasonic.aero, bedrock, artifactory
@@ -353,8 +353,8 @@ git.panasonic.aero/.../vte-cli (PRIVATE)
 |------|-----------|
 | `inputs.self` confusion (nixcfg vs nix-corp) | specialArgs maps `self = nixcfg`, `corp = self` |
 | Module option conflicts between nixcfg versions | nix-corp follows nixcfg's nixpkgs/HM exactly |
-| Breaking nixcfg when removing pa161878-nixos | Task 4 validates all other configs still evaluate |
-| Losing pa161878-nixos git history | Keep git history via `git filter-branch` or note the source commit |
+| Breaking nixcfg when removing thinky-nixos | Task 4 validates all other configs still evaluate |
+| Losing thinky-nixos git history | Keep git history via `git filter-branch` or note the source commit |
 | Teammate confusion about which flake to use | Task 7 documents everything clearly |
 
 ## Relationship to Plan 026

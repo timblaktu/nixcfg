@@ -39,7 +39,7 @@
         # Channel-aware DB migration helper for OpenCode session history
         channelMigrate = import ./_hm/channel-migrate.nix { inherit pkgs lib; };
 
-        # flock-based nix concurrency guard — prevents OOM from concurrent nix evaluations
+        # nix concurrency guard — cgroup memory limits prevent OOM from concurrent evaluations
         nixGuardedPkg = import ../../lib/nix-guarded.nix { inherit pkgs; };
 
         # OpenCode PermissionRule: either a flat action or a pattern-to-action map.
@@ -1134,8 +1134,8 @@
                 set -o nounset
                 set -o pipefail
 
-                # Prepend flock-based nix concurrency guard to PATH so agent nix
-                # invocations are serialized (prevents OOM from concurrent evals)
+                # Prepend nix concurrency guard to PATH so agent nix invocations
+                # run under systemd cgroup memory limits (prevents OOM from evals)
                 export PATH="${nixGuardedPkg}/bin:''$PATH"
 
                 ${envExports}

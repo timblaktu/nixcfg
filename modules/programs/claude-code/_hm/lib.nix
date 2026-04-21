@@ -14,7 +14,7 @@ let
   # Location: modules/lib/ (dendritic structure)
   rbwLib = import ../../../lib/rbw.nix { inherit pkgs lib; };
 
-  # flock-based nix concurrency guard — prevents OOM from concurrent nix evaluations
+  # systemd cgroup nix guard — prevents OOM from runaway nix evaluations
   nixGuardedPkg = import ../../../lib/nix-guarded.nix { inherit pkgs; };
 in
 {
@@ -145,8 +145,8 @@ in
         # Capture terminal width from real TTY before launching Claude Code
         # Claude's subprocesses cannot detect terminal dimensions (no real PTY)
         export CLAUDE_TERMINAL_WIDTH="''${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
-        # Prepend flock-based nix concurrency guard to PATH so agent nix
-        # invocations are serialized (prevents OOM from concurrent evals)
+        # Prepend nix concurrency guard to PATH so agent nix invocations
+        # run under systemd cgroup memory limits (prevents OOM from evals)
         export PATH="${nixGuardedPkg}/bin:$PATH"
         ${envSetupBlock}
       }

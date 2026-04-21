@@ -87,4 +87,4 @@ After all upgrades:
 
 - One commit per package upgrade (atomic, easy to bisect/revert)
 - Final commit deletes `package-update-analysis.md`
-- Branch: current `feat/usb-jetson-pa161878`
+- Branch: current `feat/usb-jetson`

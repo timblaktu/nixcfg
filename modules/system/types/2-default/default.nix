@@ -172,6 +172,19 @@
             # Security - only set if explicitly configured
             security.sudo.wheelNeedsPassword = lib.mkIf (cfg.wheelNeedsPassword != null) cfg.wheelNeedsPassword;
 
+            # OOM protection: systemd-oomd (pressure-based adaptive killing)
+            systemd.oomd = {
+              enable = lib.mkDefault true;
+              enableUserSlices = lib.mkDefault true;
+            };
+
+            # OOM protection: earlyoom (last-resort safety net)
+            services.earlyoom = {
+              enable = lib.mkDefault true;
+              freeMemThreshold = lib.mkDefault 5;
+              freeSwapThreshold = lib.mkDefault 5;
+            };
+
             # System packages - basic troubleshooting utilities
             # Power tools (tmux, ripgrep, fd) are in system-cli
             environment.systemPackages = with pkgs; [
@@ -368,11 +381,18 @@
               coreutils-full
               curl
               dua
+              ncdu
+              # Terminal capture toolkit (see docs/terminal-capture.md)
+              asciinema_3 # Record terminal sessions (.cast)
+              asciinema-agg # .cast → animated GIF
+              termshot # Static terminal screenshots (PNG)
+              svg-term # .cast → animated SVG
               fd
               ffmpeg
               ffmpegthumbnailer
               file
               fzf
+              gettext # provides envsubst
               glow
               htop
               imagemagick

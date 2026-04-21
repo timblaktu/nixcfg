@@ -112,7 +112,6 @@ jobs:
         check:
           # NixOS configs
           - eval-thinky-nixos
-          - eval-pa161878-nixos
           - eval-potato
           - eval-nixos-wsl-minimal
           - eval-mbp
@@ -122,7 +121,6 @@ jobs:
           - eval-nixos-dev-team-graviton
           # HM configs
           - eval-hm-thinky-nixos
-          - eval-hm-pa161878-nixos
           - eval-hm-thinky-ubuntu
           - eval-hm-mbp
           - eval-hm-nixvim-minimal
@@ -162,7 +160,6 @@ jobs:
           - opencode-mcp-structure
           # Tarball builder eval tests
           - build-tarball-dev-team-dryrun
-          - build-tarball-pa161878-dryrun
           - build-tarball-thinky-dryrun
           # Non-WSL build eval
           - build-nixos-dev-team-dryrun
@@ -187,8 +184,6 @@ jobs:
         include:
           - config: nixos-wsl-dev-team
             artifact: nixcfg-wsl-dev-team
-          - config: pa161878-nixos
-            artifact: nixcfg-pa161878-nixos
           - config: thinky-nixos
             artifact: nixcfg-thinky-nixos
     steps:

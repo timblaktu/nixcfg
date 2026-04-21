@@ -10,8 +10,8 @@ This is a **feature-centric Nix configuration** using the dendritic pattern:
 
 - **~26,000 lines of Nix code** across 98 files
 - **Dendritic architecture** with import-tree auto-discovery
-- **9 NixOS hosts** (3 WSL, 3 non-WSL dev-team variants, 1 template, 1 ARM SBC, 1 Intel laptop) + 1 Darwin host + 1 vanilla WSL
-- **7 home-manager configurations** (standalone approach)
+- **8 NixOS hosts** (2 WSL, 3 non-WSL dev-team variants, 1 template, 1 ARM SBC, 1 Intel laptop) + 1 Darwin host + 1 vanilla WSL
+- **6 home-manager configurations** (standalone approach)
 - **23 feature modules** in `modules/programs/`
 - **54 exported modules** (16 NixOS + 29 HM + 9 Darwin)
 - **4-layer system type hierarchy** for composition
@@ -102,7 +102,6 @@ nixcfg/
 │   │
 │   └── hosts/                   # Host-specific configurations
 │       ├── thinky-nixos/        # Primary WSL NixOS dev machine
-│       ├── pa161878-nixos [N]/  # Work WSL with CUDA + USB/IP
 │       ├── nixos-wsl-dev-team [N]/ # Distributable team WSL image
 │       ├── nixos-dev-team [N]/  # Non-WSL dev team (VM, bare metal)
 │       ├── nixos-dev-team-ec2 [N]/   # EC2 AMI variant
@@ -129,9 +128,9 @@ nixcfg/
 |--------|-------|
 | Total Nix files | 98 |
 | Lines of Nix code | ~26,000 |
-| NixOS hosts | 9 active |
+| NixOS hosts | 8 active |
 | Darwin hosts | 1 |
-| Home Manager configs | 7 |
+| Home Manager configs | 6 |
 | Feature modules (programs/) | 23 |
 | Exported modules total | 54 (16 NixOS + 29 HM + 9 Darwin) |
 | System type layers | 4 |
@@ -222,7 +221,7 @@ Directory names indicate platform support:
 
 | Notation | Meaning | Example |
 |----------|---------|---------|
-| `[N]` | NixOS only | `pa161878-nixos [N]/` |
+| `[N]` | NixOS only | `nixos-wsl-dev-team [N]/` |
 | `[D]` | Darwin only | `macbook-air [D]/` |
 | No brackets | Universal | `git/`, `shell/` |
 
@@ -361,13 +360,13 @@ darwinModules = {
 ```nix
 {
   nixosConfigurations = {
-    thinky-nixos, pa161878-nixos, mbp, potato,
+    thinky-nixos, mbp, potato,
     nixos-wsl-minimal, nixos-wsl-dev-team,
     nixos-dev-team, nixos-dev-team-ec2, nixos-dev-team-graviton,
   };
   darwinConfigurations = { macbook-air };
   homeConfigurations = {
-    "tim@thinky-nixos", "tim@pa161878-nixos", "tim@thinky-ubuntu",
+    "tim@thinky-nixos", "tim@thinky-ubuntu",
     "tim@mbp", "tim@potato", "tim@macbook-air", "tim@nixvim-minimal",
   };
 
@@ -457,7 +456,7 @@ Quick start: run `monitor` to launch the dashboard, or use individual tools dire
 1. **NixOS-WSL** (`nixos.wsl-base` + layer modules)
    - Full NixOS distribution in WSL
    - System-level WSL integration (wsl.conf, SSH, SOPS, CUDA, USB/IP)
-   - Used by: thinky-nixos, pa161878-nixos, nixos-wsl-dev-team
+   - Used by: thinky-nixos, nixos-wsl-dev-team
 
 2. **Home Manager on vanilla WSL** (`homeManager.wsl-home-base` module)
    - Any WSL distro (Ubuntu, Debian, etc.) + Nix + home-manager
@@ -482,8 +481,8 @@ nixos-wsl-dev-team (distributable image host)
 │   └── wsl-home-base   # WSL user-level tweaks
 └── Generic "dev" user + setup-username script
 
-Personal host (pa161878-nixos) adds:
-└── wsl-dev-team (all of the above) + CUDA + ESP-IDF + personal modules
+Personal hosts can add on top of any layer:
+└── wsl-dev-team (all of the above) + CUDA, ESP-IDF, or other personal modules
 ```
 
 ### Non-WSL Variant
@@ -528,7 +527,6 @@ thinky-ubuntu (HM only, no NixOS)
 | Host | Platform | Arch | System Layer | HM Config | Purpose |
 |------|----------|------|--------------|-----------|---------|
 | thinky-nixos | NixOS-WSL | x86_64 | system-cli + wsl | tim@thinky-nixos | Primary dev machine |
-| pa161878-nixos | NixOS-WSL | x86_64 | wsl-dev-team + CUDA | tim@pa161878-nixos | Work machine |
 | nixos-wsl-dev-team | NixOS-WSL | x86_64 | wsl-dev-team | (generic dev) | Distributable image |
 | nixos-dev-team | NixOS | x86_64 | dev-team | (generic dev) | VM / bare metal |
 | nixos-dev-team-ec2 | NixOS | x86_64 | dev-team + AMI | (generic dev) | Amazon EC2 |

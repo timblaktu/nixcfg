@@ -1,6 +1,6 @@
 # Plan 028: CrowdStrike WSL2 Security Analysis & IT Preparation
 
-**Branch**: `feat/usb-jetson-pa161878`
+**Branch**: `feat/usb-jetson`
 **Created**: 2026-03-18
 **Prerequisite for**: Plan 026 Task 6 (IT Demonstration)
 

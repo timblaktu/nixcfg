@@ -46,7 +46,6 @@ nixcfg/
 | Host | Purpose | Arch |
 |------|---------|------|
 | `thinky-nixos` | Primary WSL dev machine | x86_64 |
-| `pa161878-nixos` | Work WSL with CUDA + USB/IP | x86_64 |
 | `nixos-wsl-dev-team` | Distributable team WSL image | x86_64 |
 | `nixos-dev-team` | Non-WSL dev team (VM, bare metal) | x86_64 |
 | `nixos-dev-team-ec2` | EC2 AMI variant | x86_64 |
@@ -60,7 +59,6 @@ nixcfg/
 | Config | Platform |
 |--------|----------|
 | `tim@thinky-nixos` | NixOS-WSL |
-| `tim@pa161878-nixos` | NixOS-WSL |
 | `tim@thinky-ubuntu` | Ubuntu WSL (HM only) |
 | `tim@mbp` | NixOS bare metal |
 | `tim@potato` | NixOS ARM |

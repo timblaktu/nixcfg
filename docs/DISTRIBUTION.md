@@ -20,7 +20,7 @@ Configurations are organized in composable layers. Each layer imports the one
 below it and adds domain-specific concerns:
 
 ```
-Layer 4: pa161878-nixos (personal)
+Layer 4: my-machine (personal, in private repo)
          ├── Personal modules (esp-idf, awscli, etc.)
          └── imports ↓
 

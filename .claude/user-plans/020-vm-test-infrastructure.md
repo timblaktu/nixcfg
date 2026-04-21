@@ -12,7 +12,7 @@
 After the Plan 019 dendritic migration, the repository has 22 feature modules, 5 NixOS hosts, 7 HM configs, 1 Darwin config, and 6 custom packages. The existing test suite (`modules/flake-parts/tests.nix`) has 30+ checks, but they are almost entirely **eval-time attribute checks** — they verify that Nix expressions evaluate without error but never boot a system, start a service, or activate Home Manager.
 
 Additionally:
-- `pa161878-nixos` NixOS config has **no eval test** at all
+- `thinky-nixos` NixOS config has **no eval test** at all
 - **Zero** Home Manager config eval tests exist
 - The `test-integration` check is a **stub** (prints "AVAILABLE", runs no VMs)
 - The `regression-test` check is a **stub** (prints a message, tests nothing)
@@ -73,7 +73,7 @@ If validation fails at step 4, fix in-place and re-commit — do NOT leave broke
 | Task | Phase | Status | Validation | Description |
 |------|-------|--------|------------|-------------|
 | 1.1 | Gap Analysis | `TASK:COMPLETE` | N/A (analysis) | Gap matrix — done inline below |
-| 1.2 | Eval Coverage | `TASK:COMPLETE` | `nix flake check --no-build` | Add eval tests: pa161878 + 5 HM configs |
+| 1.2 | Eval Coverage | `TASK:COMPLETE` | `nix flake check --no-build` | Add eval tests: personal-host + 5 HM configs |
 | 1.3 | Fix Stubs | `TASK:COMPLETE` | `nix flake check --no-build` | Fix 4 stub checks to test real things |
 | 2.1 | Wire Existing | `TASK:COMPLETE` | `nix build '.#checks.x86_64-linux.vm-ssh-management' -L` | Wire ssh-management.nix into checks |
 | 2.2 | Wire Existing | `TASK:COMPLETE` | `nix build '.#checks.x86_64-linux.vm-sops-deployment' -L` | Wire sops-deployment.nix into checks (2026-02-10) |
@@ -102,7 +102,7 @@ Current eval test coverage:
 | Host | Eval Test | Notes |
 |------|-----------|-------|
 | thinky-nixos | eval-thinky-nixos | Has test |
-| pa161878-nixos | **MISSING** | No test at all |
+| thinky-nixos | **MISSING** | No test at all |
 | potato | eval-potato | Has test |
 | mbp | eval-mbp | Has test |
 | nixos-wsl-minimal | eval-nixos-wsl-minimal | Has test |
@@ -111,7 +111,7 @@ Current eval test coverage:
 | Config | Eval Test | Notes |
 |--------|-----------|-------|
 | tim@thinky-nixos | **MISSING** | Referenced in some tests but no eval |
-| tim@pa161878-nixos | **MISSING** | No test |
+| tim@thinky-nixos | **MISSING** | No test |
 | tim@thinky-ubuntu | **MISSING** | No test |
 | tim@mbp | **MISSING** | No test |
 | tim@potato | **MISSING** | No test (aarch64) |
@@ -144,7 +144,7 @@ Current eval test coverage:
 Add:
 ```nix
 # Missing NixOS eval
-eval-pa161878-nixos = mkEvalTest "pa161878-nixos" "pa161878-nixos";
+eval-thinky-nixos = mkEvalTest "thinky-nixos" "thinky-nixos";
 
 # Home Manager eval tests (new helper)
 mkHmEvalTest = name: configName:
@@ -159,7 +159,7 @@ mkHmEvalTest = name: configName:
   '';
 
 eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "tim@thinky-nixos";
-eval-hm-pa161878-nixos = mkHmEvalTest "pa161878-nixos" "tim@pa161878-nixos";
+eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "tim@thinky-nixos";
 eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "tim@thinky-ubuntu";
 eval-hm-mbp = mkHmEvalTest "mbp" "tim@mbp";
 eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "tim@nixvim-minimal";

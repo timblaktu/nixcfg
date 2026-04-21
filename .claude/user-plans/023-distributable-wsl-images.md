@@ -8,7 +8,7 @@
 
 Two parallel efforts require distributable NixOS-WSL `.wsl` tarball images:
 
-1. **Tiger Team image**: A development-focused WSL image for the user's immediate team, including full dev stack (binfmt, Podman, Claude Code enterprise, OpenCode, Code Companion, GitLab panasonic.aero). Teammates have identical Windows 11 laptops (same model as pa161878-nixos).
+1. **Tiger Team image**: A development-focused WSL image for the user's immediate team, including full dev stack (binfmt, Podman, Claude Code enterprise, OpenCode, Code Companion, GitLab panasonic.aero). Teammates have identical Windows 11 laptops (same model as thinky-nixos).
 
 2. **Enterprise base image**: A company-wide standard image coordinated with global IT, suitable for any employee using Windows laptops with daily Linux needs. Other teams (beyond tiger-team) will create their own team layers on top of this base.
 
@@ -33,7 +33,7 @@ Four-layer model using dendritic module pattern:
 │   Imports wsl-tiger-team module.                        │
 │   Produces .wsl tarball image.                          │
 ├─────────────────────────────────────────────────────────┤
-│ Layer 4: pa161878-nixos (HOST) - personal               │
+│ Layer 4: thinky-nixos (HOST) - personal               │
 │   Imports wsl-tiger-team + personal HM config.          │
 │   NOT distributed. (deferred refactor)                  │
 └─────────────────────────────────────────────────────────┘
@@ -45,7 +45,7 @@ Four-layer model using dendritic module pattern:
 wsl-enterprise (module)         -- required base for all
 ├── wsl-tiger-team (module)     -- your team
 │   ├── nixos-wsl-tiger-team (host) → .wsl tarball
-│   └── pa161878-nixos (host)       → personal machine
+│   └── thinky-nixos (host)       → personal machine
 ├── wsl-other-team (module)     -- another team (future)
 │   └── nixos-wsl-other-team (host) → .wsl tarball
 └── nixos-wsl-enterprise (host) -- IT-only base image (future)
@@ -65,7 +65,7 @@ both `flake.modules.nixos.*` and `flake.modules.homeManager.*` registrations.
 - Each layer only imports modules where it can set **meaningful shared defaults**
 - Repo hosting (personal github vs org) is deferred -- architecture supports moving later
 
-**HM Feature Module Assignment** (20 modules from current `tim@pa161878-nixos`):
+**HM Feature Module Assignment** (20 modules from current `tim@thinky-nixos`):
 
 Enterprise (`home-enterprise`) -- tools any Linux employee needs:
 - `home-default` (base HM layer, includes home-minimal)
@@ -81,7 +81,7 @@ Tiger-team (`home-tiger-team`) -- team dev workflow:
 - `development-tools` (team dev tools)
 - `windows-terminal` (standardized terminal appearance)
 
-Personal only (remain in `tim@pa161878-nixos`):
+Personal only (remain in `tim@thinky-nixos`):
 - `secrets-management` (personal bitwarden email)
 - `github-auth` (personal GitHub PATs)
 - `esp-idf` (personal embedded hobby)
@@ -110,7 +110,7 @@ Personal only (remain in `tim@pa161878-nixos`):
 | Task 1 | `TASK:COMPLETE` | Create wsl-enterprise module (NixOS + HM) |
 | Task 2 | `TASK:COMPLETE` | Create wsl-tiger-team module (NixOS + HM) |
 | Task 3 | `TASK:COMPLETE` | Create nixos-wsl-tiger-team host + registration |
-| Task 4 | `TASK:COMPLETE` | Refactor pa161878-nixos to use new layers |
+| Task 4 | `TASK:COMPLETE` | Refactor thinky-nixos to use new layers |
 | Task 5 | `TASK:COMPLETE` | Build tarball + validate + document |
 
 ---
@@ -314,14 +314,14 @@ flake.modules.nixos.nixos-wsl-tiger-team = { config, lib, pkgs, ... }: {
 
 ---
 
-## Task 4: Refactor pa161878-nixos to Use New Layers
+## Task 4: Refactor thinky-nixos to Use New Layers
 
-**Scope**: Replace the 20 individual HM imports in `tim@pa161878-nixos` with the new layer
+**Scope**: Replace the 20 individual HM imports in `tim@thinky-nixos` with the new layer
 modules, keeping only personal-specific imports and config.
 
 ### Files to Modify
 
-- `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix`
+- `modules/hosts/thinky-nixos [N]/thinky-nixos.nix`
 
 ### NixOS Side Changes
 
@@ -361,10 +361,10 @@ Remove config that is now set by the team layer (podman aliases, tmux autoReload
 windows-terminal defaults, etc.) -- only keep personal OVERRIDES of team defaults.
 
 ### Definition of Done
-1. `pa161878-nixos.nix` uses `wsl-tiger-team` (NixOS) and `home-tiger-team` (HM)
+1. `thinky-nixos.nix` uses `wsl-tiger-team` (NixOS) and `home-tiger-team` (HM)
 2. Personal-only modules remain as direct imports
 3. `nix flake check --no-build` passes
-4. `home-manager switch --flake '.#tim@pa161878-nixos' --dry-run` succeeds
+4. `home-manager switch --flake '.#tim@thinky-nixos' --dry-run` succeeds
 5. No functional changes to the resulting system (refactor only)
 6. Committed
 

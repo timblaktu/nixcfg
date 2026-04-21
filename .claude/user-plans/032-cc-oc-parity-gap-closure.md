@@ -147,8 +147,8 @@ and keeping tui keys out of opencode.json.
   stale `opencode.json.tui-migration.bak` left by prior upstream migrations.
 
 **Validation**: `nix flake check --no-build` passed; `home-manager switch
---flake '.#tim@pa161878-nixos' --dry-run` passed (opencodeTuiJson block
-correctly gated off since pa161878-nixos does not currently set any tui
+--flake '.#tim@thinky-nixos' --dry-run` passed (opencodeTuiJson block
+correctly gated off since thinky-nixos does not currently set any tui
 options). Plan 032 OC-G1, OC-G6 closed.
 
 ---

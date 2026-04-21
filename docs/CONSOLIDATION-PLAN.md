@@ -38,7 +38,6 @@ This plan implements the high-priority consolidation improvements from ARCHITECT
 
 **Use Cases**:
 - thinky-nixos (NixOS-WSL host)
-- pa161878-nixos (NixOS-WSL host)
 
 ### 2. Home Manager Module: `home/common/wsl-home-base.nix`
 **Platform**: ANY WSL distribution + Nix + home-manager ✅
@@ -56,7 +55,6 @@ This plan implements the high-priority consolidation improvements from ARCHITECT
 
 **Use Cases**:
 - thinky-nixos (NixOS-WSL host) - home-manager config
-- pa161878-nixos (NixOS-WSL host) - home-manager config
 - **Colleague on vanilla Ubuntu WSL** - portable config! ✅
 - Any other WSL distribution with Nix installed
 
@@ -120,10 +118,10 @@ When sharing with colleagues:
 | 1 | Centralize SSH keys | ~30 | Low | `nix flake check` |
 | 2a | Create NixOS wsl-base | - | Low | `nix flake check` |
 | 2b | Migrate thinky-nixos | ~50 | Medium | `nixos-rebuild build` |
-| 2c | Migrate pa161878-nixos | ~50 | Medium | `nixos-rebuild build` |
+| 2c | *(removed — host migrated to private repo)* | — | — | — |
 | 3a | Create home wsl-base | - | Low | `nix flake check` |
 | 3b | Migrate thinky home | ~75 | Medium | `home-manager build` |
-| 3c | Migrate pa161878 home | ~75 | Medium | `home-manager build` |
+| 3c | *(removed — host migrated to private repo)* | — | — | — |
 
 ---
 
@@ -138,10 +136,7 @@ authorizedKeys = [
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
 ];
 
-# hosts/pa161878-nixos/default.nix:45-47
-authorizedKeys = [
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
-];
+# (second host — now in private repo)
 ```
 
 ### Target State
@@ -164,8 +159,7 @@ in
 ### Steps
 1. Create `hosts/common/ssh-keys.nix`
 2. Update `hosts/thinky-nixos/default.nix` to use it
-3. Update `hosts/pa161878-nixos/default.nix` to use it
-4. Validate with `nix flake check`
+3. Validate with `nix flake check`
 5. Test SSH access to both hosts
 6. Commit changes
 
@@ -176,8 +170,7 @@ nix flake check
 
 # Verify SSH keys in generated config
 nix eval '.#nixosConfigurations.thinky-nixos.config.wslCommon.authorizedKeys' --json
-nix eval '.#nixosConfigurations.pa161878-nixos.config.wslCommon.authorizedKeys' --json
-# Both should show the same key
+# Should show the key
 ```
 
 ---
@@ -188,20 +181,20 @@ nix eval '.#nixosConfigurations.pa161878-nixos.config.wslCommon.authorizedKeys' 
 
 ### Current State (Analysis)
 
-**Common sections across thinky-nixos and pa161878-nixos:**
-- Identical imports (except CUDA module on pa161878)
+**Common sections across WSL hosts:**
+- Identical imports (except CUDA module on some hosts)
 - Identical `nixpkgs.config.allowUnfree`
 - Identical `base` module config (19-35)
 - Identical `wslCommon` config (38-48, except hostname)
 - Identical `wsl` config (51-57)
-- Identical SSH config (64-67 / 89-92)
-- Identical SOPS config (122-137 / 73-88)
-- Identical `system.stateVersion` (140-141 / 90-92)
+- Identical SSH config
+- Identical SOPS config
+- Identical `system.stateVersion`
 
 **Differences (host-specific):**
 - thinky: ESP32 udev rules (94-116)
 - thinky: Bare mount config (commented out, 58-86)
-- pa161878: CUDA support (11, 59-61)
+- Other hosts: CUDA support, etc.
 
 ### Batch 2a: Create hosts/common/wsl-base.nix
 
@@ -351,58 +344,7 @@ nix eval '.#nixosConfigurations.thinky-nixos.config.wslCommon' --json > /tmp/new
 # Compare with old config manually
 ```
 
-### Batch 2c: Migrate pa161878-nixos to wsl-base
-
-**Changes to** `hosts/pa161878-nixos/default.nix`:
-
-```nix
-# WSL NixOS configuration
-{ config, lib, pkgs, inputs, ... }:
-
-let
-  sshKeys = import ../common/ssh-keys.nix;
-in
-{
-  imports = [
-    ./hardware-config.nix
-    ../common/wsl-base.nix  # NEW: Use common WSL base
-    ../../modules/nixos/wsl-cuda.nix  # HOST-SPECIFIC: CUDA support
-  ];
-
-  # Host-specific WSL common configuration
-  wslCommon = {
-    hostname = "pa161878-nixos";
-    defaultUser = "tim";
-    sshPort = 2223;
-    userGroups = [ "wheel" "dialout" ];
-    authorizedKeys = [ sshKeys.timblaktu ];
-  };
-
-  # SSH service configuration
-  services.openssh.ports = [ 2223 ];
-
-  # WSL CUDA support - enables GPU passthrough for ML workloads (HOST-SPECIFIC)
-  # GPU: NVIDIA RTX 2000 Ada (8GB VRAM) via WSL2 passthrough
-  wslCuda.enable = true;
-
-  # User environment managed by standalone Home Manager
-  # Deploy with: home-manager switch --flake '.#tim@pa161878-nixos'
-}
-```
-
-**Steps**:
-1. Edit `hosts/pa161878-nixos/default.nix`
-2. Format with `nixpkgs-fmt`
-3. Validate with `nix flake check`
-4. Build config with `nixos-rebuild build --flake '.#pa161878-nixos'`
-5. Commit changes
-
-**Validation**:
-```bash
-nix flake check
-nixos-rebuild build --flake '.#pa161878-nixos'
-# Should succeed
-```
+### Batch 2c: *(Removed — host migrated to private repo)*
 
 ---
 
@@ -412,7 +354,7 @@ nixos-rebuild build --flake '.#pa161878-nixos'
 
 ### Current State (Analysis)
 
-**Common sections in thinky-nixos and pa161878-nixos home configs:**
+**Common sections in WSL host home configs:**
 - Identical `allowUnfree` (82, 172)
 - Identical `home/modules/base.nix` import (83, 173)
 - Nearly identical `homeBase` config (85-102, 175-192)
@@ -424,10 +366,10 @@ nixos-rebuild build --flake '.#pa161878-nixos'
 - Identical `targets.wsl` config (133-141, 198-206)
 
 **Differences:**
-- pa161878 has explicit `secretsManagement.enable = true` (109)
-- pa161878 has `githubAuth` config (115-131)
-- pa161878 has `windowsTerminal` config (144-157)
-- thinky only has `secretsManagement.rbw.email` (197)
+- Some hosts have explicit `secretsManagement.enable = true`
+- Some hosts have `githubAuth` config
+- Some hosts have `windowsTerminal` config
+- thinky only has `secretsManagement.rbw.email`
 
 ### Batch 3a: Create home/common/wsl-base.nix
 
@@ -536,91 +478,7 @@ home-manager switch --flake '.#tim@thinky-nixos' --dry-run
 # All should succeed
 ```
 
-### Batch 3c: Migrate pa161878-nixos home config to wsl-base
-
-**Changes to** `flake-modules/home-configurations.nix` (lines 78-166):
-
-```nix
-"tim@pa161878-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
-  inputs.home-manager-wsl.lib.homeManagerConfiguration {
-    inherit pkgs;
-    modules = [
-      { nixpkgs.config.allowUnfree = true; }
-      ../home/modules/base.nix
-      ../home/common/wsl-base.nix  # NEW: Use common WSL base
-      {
-        homeBase = {
-          username = "tim";
-          homeDirectory = "/home/tim";
-          # All other settings come from wsl-base.nix
-        };
-
-        # Secrets management (HOST-SPECIFIC)
-        secretsManagement = {
-          enable = true;
-          rbw.email = "timblaktu@gmail.com";
-        };
-
-        # GitHub and GitLab authentication (HOST-SPECIFIC)
-        githubAuth = {
-          enable = true;
-          mode = "bitwarden";
-          bitwarden = {
-            item = "github.com";
-            field = "PAT-timtam2026";
-          };
-          gitlab = {
-            enable = true;
-            host = "gitlab.example.com";
-            bitwarden = {
-              item = "GitLab Token";
-              field = "lord (access token)";
-            };
-            glab.enable = true;
-          };
-        };
-
-        # Windows Terminal settings management (HOST-SPECIFIC)
-        windowsTerminal = {
-          enable = true;
-          font = {
-            face = "CaskaydiaMono NFM, Noto Color Emoji";
-            size = 12;
-          };
-          keybindings = [
-            { id = "Terminal.CopyToClipboard"; keys = "ctrl+shift+c"; }
-            { id = "Terminal.PasteFromClipboard"; keys = "ctrl+shift+v"; }
-            { id = "Terminal.DuplicatePaneAuto"; keys = "alt+shift+d"; }
-            { id = "Terminal.NextTab"; keys = "alt+ctrl+l"; }
-            { id = "Terminal.PrevTab"; keys = "alt+ctrl+h"; }
-          ];
-        };
-      }
-    ];
-    extraSpecialArgs = {
-      inherit inputs;
-      inherit (inputs) nixpkgs-stable;
-      wslHostname = "pa161878-nixos";
-    };
-  }
-);
-```
-
-**Steps**:
-1. Edit `flake-modules/home-configurations.nix`
-2. Format with `nixpkgs-fmt`
-3. Validate with `nix flake check`
-4. Build with `nix build '.#homeConfigurations."tim@pa161878-nixos".activationPackage'`
-5. Test with `home-manager switch --flake '.#tim@pa161878-nixos' --dry-run`
-6. Commit changes
-
-**Validation**:
-```bash
-nix flake check
-nix build '.#homeConfigurations."tim@pa161878-nixos".activationPackage'
-home-manager switch --flake '.#tim@pa161878-nixos' --dry-run
-# All should succeed
-```
+### Batch 3c: *(Removed — host migrated to private repo)*
 
 ---
 
@@ -638,18 +496,15 @@ nix flake check
 ```bash
 # NixOS configs
 nixos-rebuild build --flake '.#thinky-nixos'
-nixos-rebuild build --flake '.#pa161878-nixos'
 
 # Home configs
 nix build '.#homeConfigurations."tim@thinky-nixos".activationPackage'
-nix build '.#homeConfigurations."tim@pa161878-nixos".activationPackage'
 ```
 
 ### 3. Dry-Run Switches
 ```bash
 # Test on actual machines (if accessible)
 home-manager switch --flake '.#tim@thinky-nixos' --dry-run
-home-manager switch --flake '.#tim@pa161878-nixos' --dry-run
 ```
 
 ### 4. Git Status
@@ -660,7 +515,6 @@ git status
 # - hosts/common/wsl-base.nix (new)
 # - home/common/wsl-base.nix (new)
 # - hosts/thinky-nixos/default.nix (modified)
-# - hosts/pa161878-nixos/default.nix (modified)
 # - flake-modules/home-configurations.nix (modified)
 # - docs/CONSOLIDATION-PLAN.md (new)
 # - CLAUDE.md (modified)

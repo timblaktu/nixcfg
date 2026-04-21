@@ -19,8 +19,8 @@ Compared Nix derivation outputs between `refactor/consolidate-wsl-config` and `d
 4. Confirming all builds succeed
 
 ### Configurations Tested
-- NixOS systems: thinky-nixos, pa161878-nixos
-- Home Manager: tim@thinky-nixos, tim@pa161878-nixos
+- NixOS systems: thinky-nixos
+- Home Manager: tim@thinky-nixos
 
 ## Derivation Comparison Results
 
@@ -31,26 +31,12 @@ Dev:      /nix/store/kn6rfi1x60dg8m429fazr7p0kxnfb8z6-nixos-system-thinky-nixos-
 ```
 **Status**: ✅ IDENTICAL (hash: kn6rfi1x60dg8m429fazr7p0kxnfb8z6)
 
-### 2. pa161878-nixos NixOS System
-```
-Refactor: /nix/store/ndqdarcv76ls0ny878j61d2mgarvdrfb-nixos-system-pa161878-nixos-26.05.20251208.addf7cf
-Dev:      /nix/store/ndqdarcv76ls0ny878j61d2mgarvdrfb-nixos-system-pa161878-nixos-26.05.20251208.addf7cf
-```
-**Status**: ✅ IDENTICAL (hash: ndqdarcv76ls0ny878j61d2mgarvdrfb)
-
-### 3. tim@thinky-nixos Home Manager
+### 2. tim@thinky-nixos Home Manager
 ```
 Refactor: /nix/store/zka334qdnzxmvws486llyqmyfdrv7sg4-home-manager-generation
 Dev:      /nix/store/zka334qdnzxmvws486llyqmyfdrv7sg4-home-manager-generation
 ```
 **Status**: ✅ IDENTICAL (hash: zka334qdnzxmvws486llyqmyfdrv7sg4)
-
-### 4. tim@pa161878-nixos Home Manager
-```
-Refactor: /nix/store/ndmkpjsp9icnp1s20q7nk0yp4y95ckrk-home-manager-generation
-Dev:      /nix/store/ndmkpjsp9icnp1s20q7nk0yp4y95ckrk-home-manager-generation
-```
-**Status**: ✅ IDENTICAL (hash: ndmkpjsp9icnp1s20q7nk0yp4y95ckrk)
 
 ## Build Validation
 
@@ -59,11 +45,9 @@ All builds completed successfully on both branches:
 ```bash
 # NixOS configurations
 ✅ nix build '.#nixosConfigurations.thinky-nixos.config.system.build.toplevel'
-✅ nix build '.#nixosConfigurations.pa161878-nixos.config.system.build.toplevel'
 
 # Home Manager configurations
 ✅ nix build '.#homeConfigurations."tim@thinky-nixos".activationPackage'
-✅ nix build '.#homeConfigurations."tim@pa161878-nixos".activationPackage'
 
 # Flake validation
 ✅ nix flake check
@@ -78,8 +62,7 @@ All builds completed successfully on both branches:
 
 ### Files Modified (6)
 1. `hosts/thinky-nixos/default.nix` - Migrated to use wsl-base
-2. `hosts/pa161878-nixos/default.nix` - Migrated to use wsl-base
-3. `flake-modules/home-configurations.nix` - Both home configs migrated to wsl-home-base
+2. `flake-modules/home-configurations.nix` - Home configs migrated to wsl-home-base
 4. `docs/CONSOLIDATION-PLAN.md` - Created during planning
 5. `docs/ARCHITECTURE.md` - Referenced improvement opportunities
 6. `CLAUDE.md` - Updated with consolidation status
@@ -122,14 +105,14 @@ evaluation warning: WSL CUDA support enabled. The NVIDIA driver is provided by W
                     - Ensure Windows has NVIDIA driver version 525.60+ for CUDA 12 support
                     - WSL CUDA stubs are at: /usr/lib/wsl/lib
 ```
-This warning appears on pa161878-nixos (has CUDA support) and is expected - not a validation failure.
+This warning appears on hosts with CUDA support and is expected - not a validation failure.
 
 ## Conclusion
 
 ### Validation Result: ✅ PASS
 
 **All validations passed successfully:**
-- ✅ Bit-for-bit identical derivations on all 4 configurations
+- ✅ Bit-for-bit identical derivations on all configurations
 - ✅ Zero behavior changes detected
 - ✅ All builds succeed (`nix flake check` passes)
 - ✅ Significant code reduction (~4,554 LOC)

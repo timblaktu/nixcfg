@@ -11,28 +11,6 @@ let
     config.allowUnfree = true;
   };
 
-  # Pinned nixpkgs for newer package versions not yet in our flake's nixpkgs
-  # claude-code 2.1.97 (2026-04-10)
-  pkgsClaudeCode = import
-    (builtins.fetchTarball {
-      url = "https://github.com/NixOS/nixpkgs/archive/a5673e674446d540fab626b2692e8be09365f776.tar.gz";
-      sha256 = "0i34kiq1nk93wyfsy7nx6f5l65nnw0qira1s3nr43mim02pavgg2";
-    })
-    {
-      inherit (prev) system;
-      config.allowUnfree = true;
-    };
-
-  # opencode 1.4.3 (2026-04-10)
-  pkgsOpenCode = import
-    (builtins.fetchTarball {
-      url = "https://github.com/NixOS/nixpkgs/archive/ca4120ec8edf1085d0c7f6c5b3ea37bf546333ec.tar.gz";
-      sha256 = "18326vfr7g24jyvvs4qw92mb2ql3pz3gprbspbkvl63n1sbb1bh9";
-    })
-    {
-      inherit (prev) system;
-      config.allowUnfree = true;
-    };
 in
 {
   # Custom packages and overrides go here
@@ -44,8 +22,63 @@ in
   inherit (pkgsDocling) docling;
 
   # Pinned package upgrades (ahead of our nixpkgs input)
-  inherit (pkgsClaudeCode) claude-code; # 2.1.97
-  inherit (pkgsOpenCode) opencode; # 1.4.3
+  # claude-code 2.1.97 — overrideAttrs to avoid importing a separate nixpkgs
+  claude-code =
+    let
+      cc-src = prev.fetchzip {
+        url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.97.tgz";
+        hash = "sha256-J92ILqBJmXyAueUPZ+HYZY0ls3OfN2EAhFyQHTOQF5A=";
+      };
+      cc-postPatch = ''
+        cp ${./claude-code-package-lock.json} package-lock.json
+        substituteInPlace cli.js \
+              --replace-fail '#!/bin/sh' '#!/usr/bin/env sh'
+      '';
+    in
+    prev.claude-code.overrideAttrs (old: {
+      version = "2.1.97";
+      src = cc-src;
+      postPatch = cc-postPatch;
+      npmDepsHash = "sha256-0fZu5r/zQjUSbm49FhZSqiIyMKdmH050NSxoVWd3XoU=";
+      npmDeps = prev.fetchNpmDeps {
+        name = "claude-code-2.1.97-npm-deps";
+        src = cc-src;
+        postPatch = cc-postPatch;
+        hash = "sha256-0fZu5r/zQjUSbm49FhZSqiIyMKdmH050NSxoVWd3XoU=";
+      };
+      postInstall = ''
+        wrapProgram $out/bin/claude \
+          --set DISABLE_AUTOUPDATER 1 \
+          --set-default FORCE_AUTOUPDATE_PLUGINS 1 \
+          --set DISABLE_INSTALLATION_CHECKS 1 \
+          --unset DEV \
+          --prefix PATH : ${
+            prev.lib.makeBinPath (
+              [ prev.procps ]
+              ++ prev.lib.optionals prev.stdenv.hostPlatform.isLinux [
+                prev.bubblewrap
+                prev.socat
+              ]
+            )
+          }
+      '';
+      meta = old.meta // {
+        sourceProvenance = with prev.lib.sourceTypes; [ binaryBytecode ];
+      };
+    });
+  # opencode 1.4.3 — requires bun ≥1.3.11 for undici support
+  opencode =
+    let
+      bun_1_3_11 = prev.bun.overrideAttrs (_old: {
+        version = "1.3.11";
+        src = prev.fetchurl {
+          url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-linux-x64.zip";
+          hash = "sha256-hhG6k1r4hvBabzh0ChUWAybBXl1dB63vlmEwtEk2B+0=";
+        };
+      });
+    in
+    prev.callPackage ../pkgs/opencode-pinned/package.nix { bun = bun_1_3_11; };
+  # glab: using nixpkgs version (1.82.0) — 1.91.0 requires Go 1.26.1 unavailable in our nixpkgs
 
   # Fix watchfiles test failure that affects MCP servers
   # Fallback: Disable problematic tests while working on version update

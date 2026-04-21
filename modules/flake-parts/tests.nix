@@ -141,7 +141,6 @@ in
       # Configuration snapshot baseline for validation
       snapshotBaseline = {
         "thinky-nixos" = { stateVersion = "24.11"; };
-        "pa161878-nixos" = { stateVersion = "24.11"; };
         "potato" = { stateVersion = "24.11"; };
         "nixos-wsl-minimal" = { stateVersion = "24.11"; };
         "mbp" = { stateVersion = "24.11"; };
@@ -227,7 +226,6 @@ in
         # === CONFIGURATION EVALUATION TESTS ===
         # NixOS configuration eval tests
         eval-thinky-nixos = mkEvalTest "thinky-nixos" "thinky-nixos";
-        eval-pa161878-nixos = mkEvalTest "pa161878-nixos" "pa161878-nixos";
         eval-potato = mkEvalTest "potato" "potato";
         eval-nixos-wsl-minimal = mkEvalTest "nixos-wsl-minimal" "nixos-wsl-minimal";
         eval-mbp = mkEvalTest "mbp" "mbp";
@@ -239,7 +237,6 @@ in
         # Home Manager configuration eval tests (x86_64-linux only)
         # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
         eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "${username}@thinky-nixos";
-        eval-hm-pa161878-nixos = mkHmEvalTest "pa161878-nixos" "${username}@pa161878-nixos";
         eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "${username}@thinky-ubuntu";
         eval-hm-mbp = mkHmEvalTest "mbp" "${username}@mbp";
         eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "${username}@nixvim-minimal";
@@ -283,14 +280,14 @@ in
         module-binfmt-integration = mkModuleTest {
           name = "module-binfmt-integration";
           description = "Testing binfmt cross-architecture build support";
-          hostName = "pa161878-nixos";
+          hostName = "thinky-nixos";
           attributes = {
-            binfmtEnabled = if self.nixosConfigurations.pa161878-nixos.config.wsl-settings.binfmt.enable then "1" else "0";
-            emulatedSystems = builtins.concatStringsSep " " self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.emulatedSystems;
-            preferStatic = if self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.preferStaticEmulators then "1" else "0";
-            hasAarch64Reg = if (builtins.hasAttr "aarch64-linux" self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.registrations) then "1" else "0";
-            matchCreds = if self.nixosConfigurations.pa161878-nixos.config.boot.binfmt.registrations.aarch64-linux.matchCredentials then "1" else "0";
-            extraPlatforms = builtins.concatStringsSep " " self.nixosConfigurations.pa161878-nixos.config.nix.settings.extra-platforms;
+            binfmtEnabled = if self.nixosConfigurations.thinky-nixos.config.wsl-settings.binfmt.enable then "1" else "0";
+            emulatedSystems = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.boot.binfmt.emulatedSystems;
+            preferStatic = if self.nixosConfigurations.thinky-nixos.config.boot.binfmt.preferStaticEmulators then "1" else "0";
+            hasAarch64Reg = if (builtins.hasAttr "aarch64-linux" self.nixosConfigurations.thinky-nixos.config.boot.binfmt.registrations) then "1" else "0";
+            matchCreds = if self.nixosConfigurations.thinky-nixos.config.boot.binfmt.registrations.aarch64-linux.matchCredentials then "1" else "0";
+            extraPlatforms = builtins.concatStringsSep " " self.nixosConfigurations.thinky-nixos.config.nix.settings.extra-platforms;
           };
           checks = ''
             [[ "$binfmtEnabled" == "1" ]] || (echo "FAIL: binfmt not enabled" && exit 1)
@@ -367,7 +364,6 @@ in
             };
             # Pre-evaluate all configurations to ensure they're valid
             thinkyVersion = self.nixosConfigurations.thinky-nixos.config.system.stateVersion;
-            pa161878Version = self.nixosConfigurations.pa161878-nixos.config.system.stateVersion;
             potatoVersion = self.nixosConfigurations.potato.config.system.stateVersion;
             wslVersion = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
             mbpVersion = self.nixosConfigurations.mbp.config.system.stateVersion;
@@ -380,7 +376,6 @@ in
             expected="${snapshotBaseline.${host}.stateVersion}"
             case "${host}" in
               thinky-nixos) actual="$thinkyVersion" ;;
-              pa161878-nixos) actual="$pa161878Version" ;;
               potato) actual="$potatoVersion" ;;
               nixos-wsl-minimal) actual="$wslVersion" ;;
               mbp) actual="$mbpVersion" ;;
@@ -580,21 +575,6 @@ in
           echo "Testing nixos-wsl-dev-team tarball builder evaluation..."
           echo "Tarball builder derivation: $tarballBuilder"
           echo "nixos-wsl-dev-team tarball builder evaluation passed"
-          touch $out
-        '';
-
-        build-tarball-pa161878-dryrun = pkgs.runCommand "build-tarball-pa161878-dryrun"
-          {
-            meta = {
-              description = "Dry-run eval of pa161878-nixos tarball builder";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            inherit (self.nixosConfigurations.pa161878-nixos.config.system.build) tarballBuilder;
-          } ''
-          echo "Testing pa161878-nixos tarball builder evaluation..."
-          echo "Tarball builder derivation: $tarballBuilder"
-          echo "pa161878-nixos tarball builder evaluation passed"
           touch $out
         '';
 
@@ -1207,7 +1187,6 @@ in
             };
             # Force evaluation of all NixOS configurations
             nixosThinky = self.nixosConfigurations.thinky-nixos.config.system.stateVersion;
-            nixosPa161878 = self.nixosConfigurations.pa161878-nixos.config.system.stateVersion;
             nixosPotato = self.nixosConfigurations.potato.config.system.stateVersion;
             nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
             nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
@@ -1216,7 +1195,6 @@ in
             nixosDevTeamGraviton = self.nixosConfigurations.nixos-dev-team-graviton.config.system.stateVersion;
             # Force evaluation of all 5 x86_64-linux Home Manager configurations
             hmThinky = self.homeConfigurations."${username}@thinky-nixos".config.home.homeDirectory;
-            hmPa161878 = self.homeConfigurations."${username}@pa161878-nixos".config.home.homeDirectory;
             hmUbuntu = self.homeConfigurations."${username}@thinky-ubuntu".config.home.homeDirectory;
             hmMbp = self.homeConfigurations."${username}@mbp".config.home.homeDirectory;
             hmNixvim = self.homeConfigurations."${username}@nixvim-minimal".config.home.homeDirectory;
@@ -1225,7 +1203,6 @@ in
           echo ""
           echo "NixOS configurations:"
           echo "  thinky-nixos:        stateVersion=$nixosThinky"
-          echo "  pa161878-nixos:      stateVersion=$nixosPa161878"
           echo "  potato:              stateVersion=$nixosPotato"
           echo "  mbp:                 stateVersion=$nixosMbp"
           echo "  nixos-wsl-minimal:   stateVersion=$nixosWslMinimal"
@@ -1235,12 +1212,11 @@ in
           echo ""
           echo "Home Manager configurations:"
           echo "  ${username}@thinky-nixos:   homeDir=$hmThinky"
-          echo "  ${username}@pa161878-nixos: homeDir=$hmPa161878"
           echo "  ${username}@thinky-ubuntu:  homeDir=$hmUbuntu"
           echo "  ${username}@mbp:            homeDir=$hmMbp"
           echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim"
           echo ""
-          echo "All 13 configurations evaluated successfully"
+          echo "All 11 configurations evaluated successfully"
           touch $out
         '';
       };

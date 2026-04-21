@@ -86,7 +86,6 @@
       default = {
         # NixOS hosts
         "thinky-nixos" = "x86_64-linux";
-        "pa161878-nixos" = "x86_64-linux";
         "nixos-wsl-minimal" = "x86_64-linux";
         "nixos-wsl-dev-team" = "x86_64-linux";
         "nixos-dev-team" = "x86_64-linux";

@@ -186,12 +186,87 @@ If you hit the leak mid-session and need to unblock:
    *your* session via the parent-chain walk in `CLAUDE.md` — multiple
    concurrent sessions are common.
 
+## Resolution: Migration to systemd cgroup memory limits (2026-04-14)
+
+The flock-based serialization mechanism was replaced entirely with systemd
+cgroup memory limits. This eliminates the fd-leak problem because there is
+no lock fd to leak — memory pressure is managed by the kernel cgroup
+controller, which is scoped to the process tree and released automatically
+when the scope exits.
+
+### New mechanism
+
+The `nix-guarded.sh` wrapper now uses `systemd-run --user --scope` instead
+of `flock`:
+
+```bash
+exec systemd-run --user --scope --quiet \
+  --slice=nix-eval.slice \
+  -p MemoryHigh="${NIX_GUARD_MEM_HIGH:-65%}" \
+  -p MemoryMax="${NIX_GUARD_MEM_MAX:-75%}" \
+  --description="nix $1" \
+  -- "$NIX_REAL" "$@"
+```
+
+Each nix invocation runs in its own systemd scope with per-process memory
+limits (MemoryHigh=65% soft throttle, MemoryMax=75% hard OOM-kill). A shared
+`nix-eval.slice` provides an aggregate ceiling (MemoryHigh=80%, MemoryMax=90%)
+and integrates with systemd-oomd for pressure-based adaptive killing
+(`ManagedOOMMemoryPressure=kill`, 60s duration before action).
+
+### Why this fixes the fd-leak
+
+- **No lock fd**: The cgroup scope is kernel-managed, not fd-based. There
+  is no file descriptor for child processes to inherit.
+- **Long-lived daemons are safe**: A process launched via `nix run` that
+  exec-chains into a daemon (e.g., mcp-nixos) simply inherits the cgroup
+  scope's memory limit. It does not block any other nix invocation.
+- **Concurrent nix is allowed**: Multiple nix evaluations each get their
+  own scope within the shared slice. The memory budget is the constraint,
+  not a mutex.
+
+### Environment variable overrides
+
+- `NIX_NO_GUARD=1` — bypass the guard entirely (unchanged from flock era)
+- `NIX_GUARD_MEM_HIGH=50%` — override per-scope soft limit
+- `NIX_GUARD_MEM_MAX=60%` — override per-scope hard limit
+
+### Diagnostic commands
+
+```bash
+# View nix-eval slice status and member scopes
+systemctl --user status nix-eval.slice
+
+# Monitor cgroup memory usage in real time
+systemd-cgtop
+
+# Journal entries for nix scopes
+journalctl --user -u nix-eval.slice
+
+# Check systemd-oomd status (system service)
+systemctl status systemd-oomd
+
+# Check earlyoom status (system service)
+systemctl status earlyoom
+```
+
+### Cleanup performed
+
+- `NIX_NO_GUARD=1` workaround removed from mcp-nixos in
+  `modules/lib/shared/mcp-server-defs.nix` (no longer needed)
+- `/tmp/nix-eval-guard.lock` is no longer created or referenced
+- `util-linux` (flock provider) replaced by `systemd` in wrapper
+  runtimeInputs
+
 ## References
 
-- `claude-runtime/bin/nix-guarded.sh` — the wrapper template
+- `claude-runtime/bin/nix-guarded.sh` — the wrapper template (rewritten for systemd-run)
 - `modules/lib/nix-guarded.nix` — Nix package builder
-- `modules/programs/claude-code/_hm/lib.nix:150` — where the wrapper is
+- `modules/programs/claude-code/_hm/lib.nix` — where the wrapper is
   prepended to PATH
-- `modules/programs/claude-code/_hm/mcp-servers.nix:154` — where mcp-nixos is
-  launched (target for Option 1 fix)
-- Linux `flock(2)` man page, "LOCK INHERITANCE AND PRESERVATION" section
+- `modules/programs/claude-code/_hm/claude-code.nix` — where nix-eval.slice
+  is deployed via home-manager
+- `modules/system/types/2-default/default.nix` — systemd-oomd + earlyoom
+  NixOS configuration
+- Linux cgroups v2 documentation, `memory.high` / `memory.max` controllers
+- `systemd-run(1)`, `systemd.slice(5)`, `oomd.conf(5)` man pages

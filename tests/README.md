@@ -168,11 +168,11 @@ This avoids WSL/hardware dependencies that cannot run in QEMU.
 ### T0: Eval Tests
 
 **NixOS configurations** (5):
-`eval-thinky-nixos`, `eval-pa161878-nixos`, `eval-potato`,
+`eval-thinky-nixos`, `eval-potato`,
 `eval-nixos-wsl-minimal`, `eval-mbp`
 
 **Home Manager configurations** (5, x86_64-linux only):
-`eval-hm-thinky-nixos`, `eval-hm-pa161878-nixos`, `eval-hm-thinky-ubuntu`,
+`eval-hm-thinky-nixos`, `eval-hm-thinky-ubuntu`,
 `eval-hm-mbp`, `eval-hm-nixvim-minimal`
 
 Skipped: `tim@potato` (aarch64-linux), `tim@macbook-air` (aarch64-darwin)

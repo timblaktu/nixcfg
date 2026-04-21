@@ -37,8 +37,7 @@
     home-manager-wsl.inputs.nixpkgs.follows = "nixpkgs";
 
     # NIXOS-WSL - custom fork for plugin-shim-integration (WIP)
-    nixos-wsl.url = "github:timblaktu/NixOS-WSL/plugin-shim-integration";
-    # nixos-wsl.url = "github:timblaktu/NixOS-WSL/feature/bare-mount-support";
+    nixos-wsl.url = "github:timblaktu/NixOS-WSL/nixcfg";
     # nixos-wsl.url = "git+file:///home/tim/src/NixOS-WSL";  # For local dev
     nixos-wsl.inputs.nixpkgs.follows = "nixpkgs";
 

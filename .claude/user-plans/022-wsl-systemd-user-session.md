@@ -3,11 +3,11 @@
 **Branch**: `refactor/dendritic-pattern`
 **Status**: IMPLEMENTED — awaiting deployment validation
 **Created**: 2026-02-12
-**Host affected**: pa161878-nixos (confirmed), thinky-nixos (unconfirmed — may differ)
+**Host affected**: thinky-nixos (confirmed), thinky-nixos (unconfirmed — may differ)
 
 ## Problem Statement
 
-On NixOS-WSL (pa161878-nixos), the systemd user session fails at boot because `/run/user/1000` is owned by `root:root` instead of `tim:users`. This causes:
+On NixOS-WSL (thinky-nixos), the systemd user session fails at boot because `/run/user/1000` is owned by `root:root` instead of `tim:users`. This causes:
 
 1. `user@1000.service` fails (exit status 1)
 2. No `$XDG_RUNTIME_DIR` set
@@ -16,7 +16,7 @@ On NixOS-WSL (pa161878-nixos), the systemd user session fails at boot because `/
 
 ## Root Cause Analysis
 
-### Mount Hierarchy (findmnt output on pa161878-nixos)
+### Mount Hierarchy (findmnt output on thinky-nixos)
 
 ```
 /run/user          none            tmpfs  rw,nosuid,nodev,noexec,noatime,mode=755  <- systemd
@@ -40,7 +40,7 @@ WSL's init process overlays its own tmpfs on `/run/user` **after** systemd creat
 
 ### Key Differentiator: hardware-config.nix
 
-**pa161878-nixos** (`modules/hosts/pa161878-nixos [N]/_hardware-config.nix`):
+**thinky-nixos** (`modules/hosts/thinky-nixos [N]/_hardware-config.nix`):
 - Full auto-generated config from `nixos-generate-config`
 - Declares ALL WSLg mounts including:
   - `/mnt/wslg` (tmpfs)
@@ -58,7 +58,7 @@ WSL's init process overlays its own tmpfs on `/run/user` **after** systemd creat
 
 **Hypothesis**: The presence of NixOS-managed WSLg mounts in hardware-config changes the mount ordering/behavior, potentially causing the WSL overlay on `/run/user` to persist after systemd's user-runtime-dir runs.
 
-### Current State on pa161878-nixos
+### Current State on thinky-nixos
 
 ```
 $ ls -ld /run/user/1000
@@ -169,7 +169,7 @@ instantiation while still being correct — the UID is resolved at evaluation ti
 `config.users.users.${cfg.defaultUser}.uid`.
 
 **Commits**:
-- `0c14942` — Add homeDefault.enableLocalAI flag, disable CUDA on pa161878-nixos
+- `0c14942` — Add homeDefault.enableLocalAI flag, disable CUDA on thinky-nixos
 - `f31c8b1` — Add WSL systemd user session fix (Plan 022)
 
 **What was implemented**:
@@ -180,7 +180,7 @@ instantiation while still being correct — the UID is resolved at evaluation ti
 
 **Also done (related)**:
 - Added `homeDefault.enableLocalAI` option to gate marker-pdf
-- Disabled CUDA + marker-pdf on pa161878-nixos
+- Disabled CUDA + marker-pdf on thinky-nixos
 
 ## Investigation TODO for Next Session
 
@@ -211,7 +211,7 @@ echo $XDG_RUNTIME_DIR
 # Expected: /run/user/1000
 
 # 5. nixos-rebuild switch clean
-sudo nixos-rebuild switch --flake '.#pa161878-nixos'
+sudo nixos-rebuild switch --flake '.#thinky-nixos'
 # Expected: no dbus error during "reloading user units for tim..."
 
 # 6. User linger enabled
@@ -224,11 +224,11 @@ loginctl show-user tim | grep Linger
 | File | Change |
 |------|--------|
 | `modules/system/settings/wsl/wsl.nix` | Add `systemdUserSession` options + service + tmpfiles |
-| `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix` | Enable if not default |
+| `modules/hosts/thinky-nixos [N]/thinky-nixos.nix` | Enable if not default |
 
 ## Definition of Done
 
-- [ ] `nixos-rebuild switch` on pa161878-nixos produces no dbus error
+- [ ] `nixos-rebuild switch` on thinky-nixos produces no dbus error
 - [ ] `/run/user/1000` owned by tim after reboot
 - [ ] `systemctl --user status` works
 - [ ] `$XDG_RUNTIME_DIR` and `$DBUS_SESSION_BUS_ADDRESS` set in new shells

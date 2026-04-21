@@ -15,6 +15,17 @@
 - After receiving tool results, carefully reflect on their quality and determine optimal next steps
 - ALWAYS invoke multiple independent tools simultaneously rather than sequentially
 
+## Response Format Rules
+
+- NEVER output long-form plans, documentation, or analysis directly in chat
+- ALWAYS write substantial content (>200 lines) to files, not chat responses
+- When creating plans or documentation:
+  1. Write to appropriate .md file (new or existing)
+  2. Use `xdg-open file.md#section` to open in browser
+  3. Use markdown anchors to jump to relevant sections
+  4. Provide brief summary in chat (2-3 sentences max)
+- Chat responses should be concise status updates, not full documents
+
 
 ## Git Commit Rules
 

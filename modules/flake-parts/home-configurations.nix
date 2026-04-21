@@ -50,22 +50,6 @@ in
         }
       );
 
-      # tim@pa161878-nixos: Dendritic pattern - module defined in modules/hosts/pa161878-nixos/
-      "${username}@pa161878-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
-        inputs.home-manager-wsl.lib.homeManagerConfiguration {
-          inherit pkgs;
-          modules = [
-            { nixpkgs.config.allowUnfree = true; }
-            self.modules.homeManager."${username}@pa161878-nixos"
-          ];
-          extraSpecialArgs = {
-            inherit inputs;
-            inherit (inputs) nixpkgs-stable;
-            wslHostname = "pa161878-nixos";
-          };
-        }
-      );
-
       # tim@thinky-nixos: Dendritic pattern - module defined in modules/hosts/thinky-nixos/
       "${username}@thinky-nixos" = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.home-manager-wsl.lib.homeManagerConfiguration {

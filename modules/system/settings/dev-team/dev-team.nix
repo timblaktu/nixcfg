@@ -44,8 +44,13 @@ _:
 
       # TODO: manage this secret via rbw (Bitwarden item: "dev-team VM Default User")
       # Default password for initial access (hash of "pac123")
-      users.users.${config.systemDefault.userName}.hashedPassword = lib.mkDefault
-        "$6$2VLAqVZZHeMdVqhL$TLfROheuwsIheXUaz4CHuceiXmdsRdTVtmQUEGTgRrHpTUgr7aiMzq7vGGqdS62x7pDI1Ryhxd4DWDloeCRc0/";
+      users.users.${config.systemDefault.userName} = {
+        hashedPassword = lib.mkDefault
+          "$6$2VLAqVZZHeMdVqhL$TLfROheuwsIheXUaz4CHuceiXmdsRdTVtmQUEGTgRrHpTUgr7aiMzq7vGGqdS62x7pDI1Ryhxd4DWDloeCRc0/";
+        # Note: On WSL, plugdev must also be in wsl-settings.userGroups (wsl-dev-team
+        # handles this) because wsl.nix uses mkOverride 90 on extraGroups.
+        extraGroups = lib.mkDefault [ "plugdev" ];
+      };
 
       # Passwordless sudo for wheel group (standard for dev images)
       security.sudo.wheelNeedsPassword = lib.mkDefault false;
@@ -81,7 +86,14 @@ _:
       environment.systemPackages = with pkgs; [
         usbutils # lsusb -- USB device enumeration (Jetson flashing, usbipd workflows)
         kmod # lsmod, modprobe, modinfo -- kernel module management
+        dediprog-sf100 # dpcmd -- SPI flash programmer CLI (SF100/SF600/SF700)
+        flashrom # Multi-programmer SPI flash tool (also supports Dediprog via -p dediprog)
       ];
+
+      # === Hardware Programmer Access ===
+      # Udev rules for team hardware programmers (non-root access via plugdev group)
+      services.udev.packages = [ pkgs.dediprog-sf100 ];
+      users.groups.plugdev = { };
     };
   };
 }

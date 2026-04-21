@@ -98,7 +98,7 @@ nixcfg/
 │   │
 │   ├── hosts/                        # Host-specific compositions
 │   │   ├── thinky-nixos [N]/        # WSL primary development
-│   │   ├── pa161878-nixos [N]/      # WSL work environment
+│   │   ├── thinky-nixos [N]/      # WSL work environment
 │   │   ├── thinky-ubuntu [nd]/      # Vanilla WSL (HM only)
 │   │   ├── mbp [N]/                 # Intel MacBook Pro
 │   │   ├── potato [N]/              # ARM SBC
@@ -285,7 +285,7 @@ in
 | Task | Description | Status |
 |------|-------------|--------|
 | 5.1 | thinky-nixos (WSL primary) | TASK:COMPLETE |
-| 5.2 | pa161878-nixos (WSL work) | TASK:COMPLETE |
+| 5.2 | thinky-nixos (WSL work) | TASK:COMPLETE |
 | 5.3 | thinky-ubuntu (HM only) | TASK:COMPLETE |
 | 5.4 | mbp (Intel Mac running NixOS) | TASK:COMPLETE |
 | 5.5 | potato (ARM SBC) | TASK:COMPLETE |
@@ -424,7 +424,7 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 2. Updated all 6 host files to use presets (~8 lines each instead of ~150):
    - Personal hosts: `accounts = inputs.self.lib.claudeCode.personalAccounts`
-   - Work host (pa161878-nixos): `accounts = personalAccounts // workAccount`
+   - Work host (thinky-nixos): `accounts = personalAccounts // workAccount`
 
 3. Removed ~150 LOC from `home/modules/base.nix`
 
@@ -453,7 +453,7 @@ content is evaluated by home-manager's evalModules, so `disabledModules` only wo
 
 2. Updated all 6 host files to use presets (~6 lines each instead of ~120):
    - Personal hosts: `accounts = inputs.self.lib.openCode.personalAccounts`
-   - Work host (pa161878-nixos): `accounts = personalAccounts // workAccount`, `provider = baseConfig.provider // workProvider`
+   - Work host (thinky-nixos): `accounts = personalAccounts // workAccount`, `provider = baseConfig.provider // workProvider`
 
 3. Removed ~120 LOC from `home/modules/base.nix` (config block + import)
 
@@ -721,7 +721,7 @@ dendritic module is unconditionally enabled when imported (standard dendritic pa
 **Files modified**:
 - `modules/system/types/2-default/default.nix` - Added packages, parallel, glow config
 - `modules/hosts/thinky-nixos/thinky-nixos.nix` - Removed base.nix, added files imports
-- `modules/hosts/pa161878-nixos [N]/pa161878-nixos.nix` - Removed base.nix, added files imports
+- `modules/hosts/thinky-nixos [N]/thinky-nixos.nix` - Removed base.nix, added files imports
 - `modules/hosts/thinky-ubuntu [nd]/thinky-ubuntu.nix` - Removed base.nix, added files imports
 - `modules/hosts/mbp [N]/mbp.nix` - Removed base.nix, added files imports
 - `modules/hosts/potato [N]/potato.nix` - Removed base.nix, migrated homeBase→homeDefault

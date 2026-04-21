@@ -14,7 +14,7 @@
 #   imports = [ inputs.self.modules.homeManager.jfrog-cli ];
 #   jfrogCli = {
 #     enable = true;
-#     host = "artifinity.nextcloud.aero";
+#     host = "artifactory.example.com";
 #     bitwarden = {
 #       item = "JFrog Artifactory";
 #       field = "access-token";
@@ -117,7 +117,7 @@
 
           host = mkOption {
             type = types.str;
-            description = "Artifactory hostname (e.g. artifinity.nextcloud.aero)";
+            description = "Artifactory hostname (e.g. artifactory.example.com)";
             example = "artifactory.example.com";
           };
 

@@ -66,13 +66,13 @@
           # Garbage collection settings
           gcDates = lib.mkOption {
             type = lib.types.str;
-            default = "weekly";
+            default = "daily";
             description = "When to run automatic garbage collection";
           };
 
           gcOptions = lib.mkOption {
             type = lib.types.str;
-            default = "--delete-older-than 30d";
+            default = "--delete-older-than 3d";
             description = "Options for garbage collection";
           };
         };
@@ -88,6 +88,15 @@
 
               # Optimize store to save disk space
               auto-optimise-store = lib.mkDefault true;
+
+              # Don't keep .drv files or build-time deps — saves significant space,
+              # at cost of losing nix why-depends on old paths (re-downloadable)
+              keep-derivations = lib.mkDefault false;
+              keep-outputs = lib.mkDefault false;
+
+              # Emergency GC during builds when disk gets low
+              min-free = lib.mkDefault 5368709120; # 5 GiB — trigger GC when free drops below
+              max-free = lib.mkDefault 10737418240; # 10 GiB — stop GC once this much is free
 
               # Trust wheel group for binary cache operations
               trusted-users = [ "root" "@wheel" ];
@@ -119,9 +128,21 @@
             # Automatic garbage collection
             gc = {
               automatic = lib.mkDefault true;
+              persistent = lib.mkDefault true;
               dates = lib.mkDefault cfg.gcDates;
               options = lib.mkDefault cfg.gcOptions;
             };
+          };
+
+          # Prune old NixOS system generations before GC runs (keep last 3)
+          systemd.services.nix-gc-generations = {
+            description = "Prune old NixOS system generations";
+            serviceConfig.Type = "oneshot";
+            script = ''
+              ${pkgs.nix}/bin/nix-env --delete-generations +3 -p /nix/var/nix/profiles/system
+            '';
+            before = [ "nix-gc.service" ];
+            wantedBy = [ "nix-gc.service" ];
           };
 
           # Minimal system packages - just enough to bootstrap
@@ -190,13 +211,13 @@
           # Garbage collection settings (Darwin uses interval, not dates)
           gcInterval = lib.mkOption {
             type = lib.types.attrs;
-            default = { Weekday = 0; Hour = 3; Minute = 0; }; # Sunday 3 AM
+            default = { Hour = 3; Minute = 0; }; # Daily at 3 AM
             description = "When to run automatic garbage collection (launchd interval)";
           };
 
           gcOptions = lib.mkOption {
             type = lib.types.str;
-            default = "--delete-older-than 30d";
+            default = "--delete-older-than 3d";
             description = "Options for garbage collection";
           };
         };
@@ -212,6 +233,14 @@
 
               # Optimize store to save disk space
               auto-optimise-store = lib.mkDefault true;
+
+              # Don't keep .drv files or build-time deps
+              keep-derivations = lib.mkDefault false;
+              keep-outputs = lib.mkDefault false;
+
+              # Emergency GC during builds when disk gets low
+              min-free = lib.mkDefault 5368709120; # 5 GiB
+              max-free = lib.mkDefault 10737418240; # 10 GiB
 
               # Trust admin group for binary cache operations
               trusted-users = [ "root" "@admin" ];
@@ -327,6 +356,8 @@
           targets.genericLinux.enable = lib.mkDefault pkgs.stdenv.isLinux;
 
           # Nix configuration
+          # Note: keep-derivations, keep-outputs, min-free, max-free are daemon
+          # settings — they go in the NixOS/Darwin module, not HM.
           nix = {
             package = lib.mkDefault pkgs.nix;
             settings = {
@@ -335,6 +366,14 @@
               experimental-features = [ "nix-command" "flakes" ];
             };
           };
+
+          # Prune old Home Manager generations on every activation (keep last 3 days).
+          # Runs after linkGeneration so the new generation is already active.
+          home.activation.pruneHmGenerations = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+            echo "Pruning Home Manager generations older than 3 days..."
+            PATH="${lib.makeBinPath [ pkgs.home-manager pkgs.nix pkgs.coreutils ]}:$PATH" \
+              home-manager expire-generations '-3 days' 2>&1 || true
+          '';
         };
       };
   };

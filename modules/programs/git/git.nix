@@ -138,16 +138,21 @@ in
                 echo "✅ Rust code formatted"
               fi
 
-              # Run flake check if in a flake project (but don't fail on warnings)
+              # Run flake check only when .nix files or flake.lock are staged
+              # (avoids ~8 GB eval for non-Nix commits)
               if [ -f flake.nix ] && command -v nix >/dev/null 2>&1; then
-                echo "🔍 Running flake check..."
-                if ! nix flake check --no-build 2>/dev/null; then
-                  echo "⚠️  Flake check failed - consider running 'nix flake check' manually"
-                  echo "💡 To skip this check: git commit --no-verify"
-                  echo "💡 To include GitHub Actions: Enable in github-actions.nix"
-                  exit 1
+                if git diff --cached --name-only | grep -qE '\.(nix)$|^flake\.lock$'; then
+                  echo "🔍 Running flake check..."
+                  if ! nix flake check --no-build 2>/dev/null; then
+                    echo "⚠️  Flake check failed - consider running 'nix flake check' manually"
+                    echo "💡 To skip this check: git commit --no-verify"
+                    echo "💡 To include GitHub Actions: Enable in github-actions.nix"
+                    exit 1
+                  fi
+                  echo "✅ Flake check passed"
+                else
+                  echo "ℹ️  No .nix files staged, skipping flake check"
                 fi
-                echo "✅ Flake check passed"
               fi
             '';
           };
