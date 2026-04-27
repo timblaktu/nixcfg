@@ -179,14 +179,28 @@
 
         # ===== GitHub CLI wrappers =====
 
-        # Per-org credential helper scripts (for git credential, independent of gh wrapper)
+        # Per-org credential helper scripts (for git credential)
+        # NOTE: These output credentials directly instead of calling
+        # `gh auth git-credential`, because that subcommand ignores GH_TOKEN
+        # and always returns the token from `gh auth login` storage.
         orgCredentialHelpers = mapAttrs
           (orgName: orgCfg:
             let bwCfg = resolveBwConfig orgCfg.bitwarden;
             in pkgs.writeShellScript "gh-credential-${orgName}" ''
               ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
-              export GH_TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwCfg) item field; }} 2>/dev/null)"
-              exec ${pkgs.gh}/bin/gh auth git-credential "$@"
+              case "$1" in
+                get)
+                  TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwCfg) item field; }} 2>/dev/null)"
+                  if [ -n "$TOKEN" ]; then
+                    # Read and echo back the input (protocol, host, etc.)
+                    while IFS= read -r line && [ -n "$line" ]; do
+                      echo "$line"
+                    done
+                    echo "username=x-access-token"
+                    echo "password=$TOKEN"
+                  fi
+                  ;;
+              esac
             '')
           cfg.orgs;
 
@@ -416,21 +430,76 @@
           };
 
           # Git credential configuration for GitHub
+          #
+          # IMPORTANT: git's credential URL matching ignores path components by
+          # default. [credential "https://github.com"] matches ALL github.com URLs,
+          # so per-org [credential "https://github.com/<org>"] sections are unreachable
+          # — the generic section's helper is called first and returns credentials.
+          #
+          # Solution: use a SINGLE credential helper for github.com that reads the
+          # URL path from stdin, checks against configured orgs, and dispatches to
+          # the correct token source. Per-org sections are NOT used.
           programs.git.settings = mkIf cfg.git.enableCredentialHelper {
             credential = mkMerge [
-              # Per-org credential helpers (more specific URL prefix wins in git)
-              (mapAttrs'
-                (orgName: _orgCfg:
-                  nameValuePair "https://github.com/${orgName}" {
-                    helper = mkForce "!${orgCredentialHelpers.${orgName}}";
-                  }
-                )
-                cfg.orgs)
-              # Default credential helpers
               {
                 "https://github.com" = mkMerge [
                   {
-                    helper = mkForce "!${ghWrapper}/bin/gh auth git-credential";
+                    helper = mkForce "!${
+                      let
+                        bwConfig = resolveBwConfig cfg.bitwarden;
+                        # Build org case branches that match on path=<org>/*
+                        orgCaseBranches =
+                          if cfg.orgs == { } then ""
+                          else concatStringsSep "\n" (mapAttrsToList
+                            (orgName: orgCfg:
+                              let bwCfg = resolveBwConfig orgCfg.bitwarden;
+                              in ''
+                                ${orgName}/*)
+                                  TOKEN="$(${rbwLib.mkRbwGetCommand { inherit (bwCfg) item field; }} 2>/dev/null)"
+                                  ;;'')
+                            cfg.orgs);
+                      in pkgs.writeShellScript "gh-credential-github" ''
+                        ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
+                        case "$1" in
+                          get)
+                            # Parse git credential protocol input, capture path for org detection
+                            _GH_PATH=""
+                            _GH_INPUT=""
+                            while IFS= read -r line && [ -n "$line" ]; do
+                              _GH_INPUT="$_GH_INPUT$line"$'\n'
+                              case "$line" in
+                                path=*) _GH_PATH="''${line#path=}" ;;
+                              esac
+                            done
+
+                            # Check path against configured orgs
+                            TOKEN=""
+                            ${lib.optionalString (cfg.orgs != { }) ''
+                            case "$_GH_PATH" in
+                            ${orgCaseBranches}
+                            esac
+                            ''}
+
+                            if [ -n "$TOKEN" ]; then
+                              # Org match: emit credentials directly (gh auth git-credential
+                              # ignores GH_TOKEN, so we can't delegate to it)
+                              echo "$_GH_INPUT"
+                              echo "username=x-access-token"
+                              echo "password=$TOKEN"
+                            else
+                              # No org match: delegate to gh auth git-credential for default token
+                              echo "$_GH_INPUT" | ${pkgs.gh}/bin/gh auth git-credential get
+                            fi
+                            ;;
+                          store|erase)
+                            exec ${pkgs.gh}/bin/gh auth git-credential "$1"
+                            ;;
+                        esac
+                      ''
+                    }";
+                    # useHttpPath tells git to send the URL path to the credential
+                    # helper, which we need for org detection in the path=<org>/* field
+                    useHttpPath = true;
                   }
                   (mkIf (cfg.git.userName != null) {
                     username = cfg.git.userName;
