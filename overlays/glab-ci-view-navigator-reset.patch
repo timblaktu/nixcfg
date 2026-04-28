@@ -1,8 +1,8 @@
 diff --git a/internal/commands/ci/view/view.go b/internal/commands/ci/view/view.go
-index d0a2b8c9..3cb67908 100644
+index dc06f2d2..6223023d 100644
 --- a/internal/commands/ci/view/view.go
 +++ b/internal/commands/ci/view/view.go
-@@ -276,7 +276,7 @@ func (o *options) run(ctx context.Context) error {
+@@ -266,7 +266,7 @@ func (o *options) run(ctx context.Context) error {
  	defer recoverPanic(app)
  
  	var navi navigator
@@ -11,21 +11,7 @@ index d0a2b8c9..3cb67908 100644
  	go updateJobs(app, jobsCh, forceUpdateCh, client, commit)
  	go func() {
  		defer recoverPanic(app)
-@@ -294,11 +294,12 @@ func (o *options) run(ctx context.Context) error {
- 
- // handleBridgeJobSelection handles the user pressing Enter on a bridge job (downstream pipeline trigger).
- // It navigates to the downstream pipeline if it exists, or shows an informational modal if it doesn't.
--func handleBridgeJobSelection(app *tview.Application, root *tview.Pages, forceUpdateCh chan<- bool) {
-+func handleBridgeJobSelection(app *tview.Application, root *tview.Pages, navi *navigator, forceUpdateCh chan<- bool) {
- 	// If downstream pipeline exists, navigate to it
- 	if curJob.OriginalBridge.DownstreamPipeline != nil {
- 		pipelines = append(pipelines, *curJob.OriginalBridge.DownstreamPipeline)
- 		curJob = nil
-+		navi.Reset()
- 		forceUpdateCh <- true
- 		app.ForceDraw()
- 		return
-@@ -340,7 +341,7 @@ func inputCapture(
+@@ -286,7 +286,7 @@ func inputCapture(
  	ctx context.Context,
  	app *tview.Application,
  	root *tview.Pages,
@@ -34,7 +20,7 @@ index d0a2b8c9..3cb67908 100644
  	inputCh chan<- struct{},
  	forceUpdateCh chan<- bool,
  	opts *options,
-@@ -367,6 +368,7 @@ func inputCapture(
+@@ -313,6 +313,7 @@ func inputCapture(
  			case len(pipelines) > 0:
  				pipelines = pipelines[:len(pipelines)-1]
  				curJob = nil
@@ -42,16 +28,15 @@ index d0a2b8c9..3cb67908 100644
  				forceUpdateCh <- true
  				app.ForceDraw()
  			default:
-@@ -465,7 +467,7 @@ func inputCapture(
- 					app.ForceDraw()
+@@ -412,6 +413,7 @@ func inputCapture(
  				} else {
- 					// Downstream pipeline trigger selected
--					handleBridgeJobSelection(app, root, forceUpdateCh)
-+					handleBridgeJobSelection(app, root, navi, forceUpdateCh)
+ 					pipelines = append(pipelines, *curJob.OriginalBridge.DownstreamPipeline)
+ 					curJob = nil
++					navi.Reset()
+ 					forceUpdateCh <- true
+ 					app.ForceDraw()
  				}
- 				return nil
- 			}
-@@ -583,9 +585,20 @@ type navigator struct {
+@@ -531,9 +533,20 @@ type navigator struct {
  	depth, idx int
  }
  
@@ -73,7 +58,7 @@ index d0a2b8c9..3cb67908 100644
  	prev, next := adjacentStages(jobs, stage)
  	switch event.Key() {
 diff --git a/internal/commands/ci/view/view_test.go b/internal/commands/ci/view/view_test.go
-index 88b5c3eb..af014049 100644
+index f75ebc82..9ad80923 100644
 --- a/internal/commands/ci/view/view_test.go
 +++ b/internal/commands/ci/view/view_test.go
 @@ -1156,6 +1156,56 @@ func Test_handleNavigation(t *testing.T) {
