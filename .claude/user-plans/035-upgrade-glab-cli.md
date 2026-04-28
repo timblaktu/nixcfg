@@ -2,6 +2,7 @@
 
 **Status**: COMPLETE  
 **Created**: 2026-04-15  
+**Updated**: 2026-04-28  
 **Priority**: LOW (quality-of-life improvement)  
 **Repo**: `~/src/nixcfg`
 
@@ -14,9 +15,11 @@
 2. Terminal is not a TTY
 3. User sends SIGTERM/SIGKILL from another terminal
 
-**Current version**: glab 1.82.0 (from nixpkgs 25.11 stable)  
-**Available upgrade**: glab 1.91.0 (from nixpkgs-unstable)  
-**Latest upstream**: glab 1.92.1 (GitLab, 2025)
+**Previous version**: glab 1.82.0 (from nixpkgs 25.11 stable)  
+**Upgraded to**: glab 1.92.1 (from nixpkgs-unstable, via overlay)  
+**Latest upstream**: glab 1.93.0 (GitLab, 2026)  
+**Navigator crash fix**: Applied as local patch (unfixed upstream through v1.93.0)  
+**Upstream MR**: Pending — fix at `~/src/gitlab-cli` branch `fix/ci-view-navigator-reset`
 
 **Discovered during**: Plan 125 (PaaS VTE deployment) while monitoring CI pipeline with `glab ci status --live --branch feat/CONVSW-1694-basic-paas-package-test`
 
