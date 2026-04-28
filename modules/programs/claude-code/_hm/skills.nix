@@ -206,11 +206,33 @@ in
     home.activation.claudeSkillsDeployment = lib.hm.dag.entryAfter [ "claudeConfigTemplates" ] ''
       echo "🎯 Deploying Claude Code skills..."
 
+      # Known skill names for pruning stale directories
+      declaredSkills=(${concatStringsSep " " (attrNames allSkills)})
+
       # Deploy skills to each enabled account
       ${concatStringsSep "\n" (mapAttrsToList (accountName: account: ''
         if [[ "${toString account.enable}" == "1" ]]; then
           accountSkillsDir="${runtimePath}/.claude-${accountName}/skills"
           $DRY_RUN_CMD mkdir -p "$accountSkillsDir"
+
+          # Prune skill directories that are no longer declared
+          if [[ -d "$accountSkillsDir" ]]; then
+            for existing in "$accountSkillsDir"/*/; do
+              [[ -d "$existing" ]] || continue
+              skillName="$(basename "$existing")"
+              found=0
+              for declared in "''${declaredSkills[@]}"; do
+                if [[ "$skillName" == "$declared" ]]; then
+                  found=1
+                  break
+                fi
+              done
+              if [[ "$found" -eq 0 ]]; then
+                echo "  🗑️  Removing stale skill: $skillName from ${accountName}"
+                $DRY_RUN_CMD rm -rf "$existing"
+              fi
+            done
+          fi
 
           ${concatStringsSep "\n" (mapAttrsToList (skillName: skillDef: ''
             skillDir="$accountSkillsDir/${skillName}"
@@ -239,6 +261,25 @@ in
       ${optionalString (cfg.defaultAccount != null) ''
         baseSkillsDir="${runtimePath}/.claude/skills"
         $DRY_RUN_CMD mkdir -p "$baseSkillsDir"
+
+        # Prune stale skills from base directory
+        if [[ -d "$baseSkillsDir" ]]; then
+          for existing in "$baseSkillsDir"/*/; do
+            [[ -d "$existing" ]] || continue
+            skillName="$(basename "$existing")"
+            found=0
+            for declared in "''${declaredSkills[@]}"; do
+              if [[ "$skillName" == "$declared" ]]; then
+                found=1
+                break
+              fi
+            done
+            if [[ "$found" -eq 0 ]]; then
+              echo "  🗑️  Removing stale skill: $skillName from base"
+              $DRY_RUN_CMD rm -rf "$existing"
+            fi
+          done
+        fi
 
         ${concatStringsSep "\n" (mapAttrsToList (skillName: skillDef: ''
           skillDir="$baseSkillsDir/${skillName}"
