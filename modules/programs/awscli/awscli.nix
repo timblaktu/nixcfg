@@ -45,6 +45,73 @@
         hasCredentials = bw.credentialItem != null;
         hasRoleArn = bw.roleArnItem != null || cfg.azureAuth.defaultRoleArn != null;
 
+        # Patched aws-azure-login: fix password handler infinite loop.
+        # Upstream bug: after clicking submit, the 500ms delay is too short for
+        # Azure AD to process the AJAX request and navigate away. The password
+        # field is re-detected, causing the password to be typed repeatedly
+        # (appended each iteration). Fix: clear field before typing + wait for
+        # navigation after submit instead of a fixed delay.
+        # Affects v3.6.1-3.6.5. Upstream: github.com/sportradar/aws-azure-login
+        #
+        # WORKAROUND — remove when upstream fixes password state handler
+        # ERROR: "Found state: password input" loops infinitely with --no-prompt
+        patchPasswordHandler = pkgs.writeText "patch-password-handler.py" ''
+          import sys
+          f = sys.argv[1]
+          with open(f) as fh:
+              lines = fh.readlines()
+
+          # Find the password handler's "Focusing on password input" line
+          i = 0
+          patched = False
+          while i < len(lines):
+              line = lines[i]
+              if 'debug("Focusing on password input")' in line and not patched:
+                  # Next line should be the page.focus call
+                  if i + 1 < len(lines) and 'page.focus' in lines[i + 1]:
+                      # Insert field-clear commands after the focus line
+                      indent = "            "
+                      clear_lines = [
+                          f'{indent}debug("Clearing existing password input");\n',
+                          f'{indent}await page.keyboard.down("Control");\n',
+                          f'{indent}await page.keyboard.press("a");\n',
+                          f'{indent}await page.keyboard.up("Control");\n',
+                          f'{indent}await page.keyboard.press("Backspace");\n',
+                      ]
+                      lines = lines[:i+2] + clear_lines + lines[i+2:]
+                      i += 2 + len(clear_lines)
+
+                      # Find "Waiting for a delay" + delay(500) in the password handler
+                      # (within the next ~10 lines)
+                      for j in range(i, min(i + 10, len(lines))):
+                          if 'debug("Waiting for a delay")' in lines[j]:
+                              lines[j] = lines[j].replace(
+                                  'debug("Waiting for a delay")',
+                                  'debug("Waiting for navigation after password submit")'
+                              )
+                              if j + 1 < len(lines) and 'delay(500)' in lines[j + 1]:
+                                  lines[j + 1] = f'{indent}try {{ await page.waitForNavigation({{ waitUntil: "domcontentloaded", timeout: 10000 }}); }} catch (e) {{ debug("Navigation wait timed out: " + e.message); }}\n{indent}await bluebird_1.default.delay(1000);\n'
+                              patched = True
+                              break
+                      continue
+              i += 1
+
+          if not patched:
+              print(f"ERROR: Could not find password handler to patch in {f}", file=sys.stderr)
+              sys.exit(1)
+
+          with open(f, "w") as fh:
+              fh.writelines(lines)
+          print(f"Patched {f}: password handler clears field + waits for navigation")
+        '';
+
+        aws-azure-login-patched = pkgs.aws-azure-login.overrideAttrs (old: {
+          postInstall = (old.postInstall or "") + ''
+            ${pkgs.python3}/bin/python3 ${patchPasswordHandler} \
+              "$out/lib/node_modules/aws-azure-login/lib/login.js"
+          '';
+        });
+
         # ===== Inline rbw helper library =====
         rbwLib = rec {
           defaultStaleSeconds = 300;
@@ -217,13 +284,13 @@
           ${if hasCredentials && cfg.azureAuth.autoTotp then ''
             # Fully non-interactive: expect handles TOTP prompt
             exec ${expectScript} \
-              ${pkgs.aws-azure-login}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
+              ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
           '' else if hasCredentials then ''
             # Semi-interactive: credentials from rbw, user types TOTP
-            exec ${pkgs.aws-azure-login}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
+            exec ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
           '' else ''
             # Interactive: only tenant/app config injected
-            exec ${pkgs.aws-azure-login}/bin/aws-azure-login --no-sandbox "$@"
+            exec ${aws-azure-login-patched}/bin/aws-azure-login --no-sandbox "$@"
           ''}
         '';
 
