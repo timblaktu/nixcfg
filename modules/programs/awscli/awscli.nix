@@ -8,23 +8,32 @@
 #   - AWS CLI v2 installation via programs.awscli
 #   - Azure AD SSO via aws-azure-login with rbw credential injection
 #   - Nix-managed ~/.aws/config (region, output format, session duration)
-#   - Runtime credential injection from Bitwarden (no secrets on disk)
+#   - Runtime credential injection from Bitwarden via ephemeral tmpfs config
+#   - Optional fully non-interactive mode with auto-TOTP via expect
 #   - Flexible profile support for multi-account setups
 #
 # Usage in host config:
 #   imports = [ inputs.self.modules.homeManager.awscli ];
 #   awscli = {
 #     enable = true;
-#     azureAuth.enable = true;
+#     azureAuth = {
+#       enable = true;
+#       # Fully non-interactive with TOTP:
+#       bitwarden.credentialItem = "PAC Microsoft account";
+#       bitwarden.roleArnItem = "AWS Role ARN";
+#       autoTotp = true;
+#     };
 #   };
 #
 # Authentication flow:
 #   1. User runs `aws-azure-login` (wrapper)
-#   2. Wrapper fetches Azure Tenant ID + App ID URI from Bitwarden via rbw
-#   3. Wrapper sets AZURE_TENANT_ID and AZURE_APP_ID_URI env vars
-#   4. Real aws-azure-login handles Azure AD SAML auth (browser-based)
-#   5. Temporary AWS STS credentials written to ~/.aws/credentials
-#   6. AWS CLI uses those credentials for subsequent commands
+#   2. Wrapper fetches credentials from Bitwarden via rbw
+#   3. Wrapper creates ephemeral config on tmpfs ($XDG_RUNTIME_DIR)
+#   4. AWS_CONFIG_FILE points to ephemeral config (secrets never touch disk)
+#   5. Real aws-azure-login handles Azure AD SAML auth (headless Chromium)
+#   6. If autoTotp: expect auto-fills TOTP from `rbw code`
+#   7. Temporary AWS STS credentials written to ~/.aws/credentials
+#   8. Ephemeral config cleaned up on exit (trap)
 { config, lib, inputs, ... }:
 {
   flake.modules = {
@@ -32,6 +41,80 @@
       with lib;
       let
         cfg = config.awscli;
+        bw = cfg.azureAuth.bitwarden;
+        hasCredentials = bw.credentialItem != null;
+        hasRoleArn = bw.roleArnItem != null || cfg.azureAuth.defaultRoleArn != null;
+
+        # Patched aws-azure-login: fix password handler infinite loop.
+        # Upstream bug: after clicking submit, the 500ms delay is too short for
+        # Azure AD to process the AJAX request and navigate away. The password
+        # field is re-detected, causing the password to be typed repeatedly
+        # (appended each iteration). Fix: clear field before typing + wait for
+        # navigation after submit instead of a fixed delay.
+        # Affects v3.6.1-3.6.5. Upstream: github.com/sportradar/aws-azure-login
+        #
+        # WORKAROUND — remove when upstream fixes password state handler
+        # ERROR: "Found state: password input" loops infinitely with --no-prompt
+        patchPasswordHandler = pkgs.writeText "patch-password-handler.py" ''
+          import sys
+          f = sys.argv[1]
+          with open(f) as fh:
+              lines = fh.readlines()
+
+          # Find the password handler's "Focusing on password input" line
+          i = 0
+          patched = False
+          while i < len(lines):
+              line = lines[i]
+              if 'debug("Focusing on password input")' in line and not patched:
+                  # Next line should be the page.focus call
+                  if i + 1 < len(lines) and 'page.focus' in lines[i + 1]:
+                      # Insert field-clear commands after the focus line
+                      indent = "            "
+                      clear_lines = [
+                          f'{indent}debug("Clearing existing password input");\n',
+                          f'{indent}await page.keyboard.down("Control");\n',
+                          f'{indent}await page.keyboard.press("a");\n',
+                          f'{indent}await page.keyboard.up("Control");\n',
+                          f'{indent}await page.keyboard.press("Backspace");\n',
+                      ]
+                      lines = lines[:i+2] + clear_lines + lines[i+2:]
+                      i += 2 + len(clear_lines)
+
+                      # Find "Waiting for a delay" + delay(500) in the password handler
+                      # (within the next ~10 lines)
+                      for j in range(i, min(i + 10, len(lines))):
+                          if 'debug("Waiting for a delay")' in lines[j]:
+                              lines[j] = lines[j].replace(
+                                  'debug("Waiting for a delay")',
+                                  'debug("Waiting for navigation after password submit")'
+                              )
+                              if j + 1 < len(lines) and 'delay(500)' in lines[j + 1]:
+                                  lines[j + 1] = (
+                                      f'{indent}try {{ await page.waitForNavigation({{ waitUntil: "domcontentloaded", timeout: 10000 }}); }}'
+                                      f' catch (e) {{ debug("Navigation wait timed out: " + e.message); }}\n'
+                                      f'{indent}await bluebird_1.default.delay(1000);\n'
+                                  )
+                              patched = True
+                              break
+                      continue
+              i += 1
+
+          if not patched:
+              print(f"ERROR: Could not find password handler to patch in {f}", file=sys.stderr)
+              sys.exit(1)
+
+          with open(f, "w") as fh:
+              fh.writelines(lines)
+          print(f"Patched {f}: password handler clears field + waits for navigation")
+        '';
+
+        aws-azure-login-patched = pkgs.aws-azure-login.overrideAttrs (old: {
+          postInstall = (old.postInstall or "") + ''
+            ${pkgs.python3}/bin/python3 ${patchPasswordHandler} \
+              "$out/lib/node_modules/aws-azure-login/lib/login.js"
+          '';
+        });
 
         # ===== Inline rbw helper library =====
         rbwLib = rec {
@@ -66,35 +149,159 @@
             '';
         };
 
+        # ===== Python script to merge secrets into AWS config =====
+        # Reads AAL_* env vars and injects them into the ini file
+        configMergeScript = pkgs.writeScript "aws-config-merge.py" ''
+          #!${pkgs.python3}/bin/python3
+          import configparser, sys, os
+
+          f = sys.argv[1]
+          c = configparser.RawConfigParser()
+          c.read(f)
+
+          section = "default"
+          if not c.has_section(section):
+              c.add_section(section)
+
+          env_to_key = {
+              "AAL_TENANT_ID": "azure_tenant_id",
+              "AAL_APP_ID_URI": "azure_app_id_uri",
+              "AAL_USERNAME": "azure_default_username",
+              "AAL_PASSWORD": "azure_default_password",
+              "AAL_ROLE_ARN": "azure_default_role_arn",
+          }
+
+          def escape_ini_value(v):
+              """Escape # and ; for the npm 'ini' parser which treats them as inline comments."""
+              return v.replace("\\", "\\\\").replace(";", "\\;").replace("#", "\\#")
+
+          for envvar, key in env_to_key.items():
+              val = os.environ.get(envvar)
+              if val:
+                  c.set(section, key, escape_ini_value(val))
+
+          # Auto-click "stay signed in" when credentials are injected
+          if os.environ.get("AAL_USERNAME"):
+              c.set(section, "azure_default_remember_me", "true")
+
+          with open(f, "w") as fh:
+              c.write(fh)
+        '';
+
+        # ===== Expect script for auto-TOTP injection =====
+        # Spawns aws-azure-login, watches for TOTP prompt, feeds code from rbw
+        expectScript = pkgs.writeScript "aws-azure-login-expect" ''
+          #!${pkgs.expect}/bin/expect -f
+          set timeout 300
+          log_user 1
+
+          set args [lrange ''$argv 0 end]
+          spawn {*}''$args
+
+          expect {
+            "Verification Code:" {
+              log_user 0
+              set totp [exec ${pkgs.rbw}/bin/rbw code {${bw.credentialItem}}]
+              send "''$totp\r"
+              log_user 1
+              exp_continue
+            }
+            eof
+          }
+
+          catch wait result
+          exit [lindex ''$result 3]
+        '';
+
         # ===== aws-azure-login wrapper =====
-        # Injects Azure AD credentials from Bitwarden, then delegates to real binary
+        # Creates ephemeral config on tmpfs, injects rbw secrets, delegates to real binary
         aws-azure-login-wrapper = pkgs.writeShellScriptBin "aws-azure-login" ''
+          set -euo pipefail
+
           ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
 
-          AZURE_TENANT_ID="$(${rbwLib.mkRbwGetCommand {
-            inherit (cfg.azureAuth.bitwarden) item;
-            field = cfg.azureAuth.bitwarden.tenantIdField;
+          # Fetch Azure AD config from Bitwarden
+          AAL_TENANT_ID="$(${rbwLib.mkRbwGetCommand {
+            inherit (bw) item;
+            field = bw.tenantIdField;
           }} 2>/dev/null)" || {
             echo "Error: Failed to retrieve Azure Tenant ID from Bitwarden" >&2
-            echo "  Item: ${cfg.azureAuth.bitwarden.item}" >&2
-            echo "  Field: ${cfg.azureAuth.bitwarden.tenantIdField}" >&2
+            echo "  Item: ${bw.item}, Field: ${bw.tenantIdField}" >&2
             echo "  Ensure rbw is unlocked: rbw unlock" >&2
             exit 1
           }
-          export AZURE_TENANT_ID
+          export AAL_TENANT_ID
 
-          AZURE_APP_ID_URI="$(${rbwLib.mkRbwGetCommand {
-            inherit (cfg.azureAuth.bitwarden) item;
-            field = cfg.azureAuth.bitwarden.appIdUriField;
+          AAL_APP_ID_URI="$(${rbwLib.mkRbwGetCommand {
+            inherit (bw) item;
+            field = bw.appIdUriField;
           }} 2>/dev/null)" || {
             echo "Error: Failed to retrieve Azure App ID URI from Bitwarden" >&2
-            echo "  Item: ${cfg.azureAuth.bitwarden.item}" >&2
-            echo "  Field: ${cfg.azureAuth.bitwarden.appIdUriField}" >&2
+            echo "  Item: ${bw.item}, Field: ${bw.appIdUriField}" >&2
             exit 1
           }
-          export AZURE_APP_ID_URI
+          export AAL_APP_ID_URI
 
-          exec ${pkgs.aws-azure-login}/bin/aws-azure-login "$@"
+          ${optionalString hasCredentials ''
+            # Fetch user credentials from Bitwarden
+            AAL_USERNAME="$(${rbwLib.mkRbwGetCommand {
+              item = bw.credentialItem;
+              field = bw.usernameField;
+            }} 2>/dev/null)" || {
+              echo "Error: Failed to retrieve username from Bitwarden" >&2
+              echo "  Item: ${bw.credentialItem}, Field: ${toString bw.usernameField}" >&2
+              exit 1
+            }
+            export AAL_USERNAME
+
+            AAL_PASSWORD="$(${rbwLib.mkRbwGetCommand {
+              item = bw.credentialItem;
+              field = bw.passwordField;
+            }} 2>/dev/null)" || {
+              echo "Error: Failed to retrieve password from Bitwarden" >&2
+              echo "  Item: ${bw.credentialItem}" >&2
+              exit 1
+            }
+            export AAL_PASSWORD
+          ''}
+
+          ${optionalString (bw.roleArnItem != null) ''
+            AAL_ROLE_ARN="$(${rbwLib.mkRbwGetCommand {
+              item = bw.roleArnItem;
+              field = bw.roleArnField;
+            }} 2>/dev/null)" || {
+              echo "Error: Failed to retrieve Role ARN from Bitwarden" >&2
+              echo "  Item: ${bw.roleArnItem}, Field: ${toString bw.roleArnField}" >&2
+              exit 1
+            }
+            export AAL_ROLE_ARN
+          ''}
+
+          # Create ephemeral config on tmpfs (secrets never touch persistent storage)
+          _TMPCONFIG="$(mktemp "''${XDG_RUNTIME_DIR:-/tmp}/aws-config.XXXXXX")"
+          trap 'rm -f "$_TMPCONFIG"' EXIT
+
+          # Copy HM-generated config as base, then inject secrets
+          if [ -f "$HOME/.aws/config" ]; then
+            cp "$HOME/.aws/config" "$_TMPCONFIG"
+          else
+            touch "$_TMPCONFIG"
+          fi
+          ${configMergeScript} "$_TMPCONFIG"
+
+          export AWS_CONFIG_FILE="$_TMPCONFIG"
+
+          ${if hasCredentials && cfg.azureAuth.autoTotp then ''
+            # Fully non-interactive: expect handles TOTP prompt
+            exec ${expectScript} \
+              ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
+          '' else if hasCredentials then ''
+            # Semi-interactive: credentials from rbw, user types TOTP
+            exec ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
+          '' else ''
+            # Interactive: only tenant/app config injected
+            exec ${aws-azure-login-patched}/bin/aws-azure-login --no-sandbox "$@"
+          ''}
         '';
 
       in
@@ -131,7 +338,7 @@
               item = mkOption {
                 type = types.str;
                 default = "Azure AD";
-                description = "Bitwarden item name containing Azure AD credentials";
+                description = "Bitwarden item name containing Azure AD tenant/app config";
               };
 
               tenantIdField = mkOption {
@@ -145,6 +352,66 @@
                 default = "Azure App ID URI";
                 description = "Custom field name within the Bitwarden item for Azure App ID URI";
               };
+
+              credentialItem = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = ''
+                  Bitwarden item containing Azure AD login credentials (username/password).
+                  When set, enables non-interactive mode (--no-prompt) with credentials
+                  auto-filled from this item. The item should also have TOTP configured
+                  if autoTotp is enabled.
+                '';
+                example = "PAC Microsoft account";
+              };
+
+              usernameField = mkOption {
+                type = types.nullOr types.str;
+                default = "username";
+                description = ''
+                  Field name for the username within the credential item.
+                  "username" (default) retrieves the built-in Bitwarden username field.
+                  Set to a custom field name if your item stores it differently.
+                '';
+              };
+
+              passwordField = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = ''
+                  Field name for the password within the credential item.
+                  null (default) retrieves the item's main password field.
+                  Set to a custom field name if needed.
+                '';
+              };
+
+              roleArnItem = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = ''
+                  Bitwarden item containing the AWS Role ARN to assume.
+                  Overrides defaultRoleArn when set. Required for non-interactive
+                  mode when your account has multiple roles.
+                '';
+                example = "AWS Role ARN";
+              };
+
+              roleArnField = mkOption {
+                type = types.nullOr types.str;
+                default = "Role ARN";
+                description = "Field name for the role ARN within the Bitwarden item";
+              };
+            };
+
+            autoTotp = mkOption {
+              type = types.bool;
+              default = false;
+              description = ''
+                Automatically fill the TOTP verification code from Bitwarden
+                using `rbw code`. Requires credentialItem to be configured
+                with TOTP set up on the item. Uses expect to inject the code
+                into the interactive TOTP prompt.
+              '';
             };
 
             defaultDurationHours = mkOption {
@@ -161,8 +428,9 @@
               default = null;
               description = ''
                 Default IAM role ARN to assume after Azure AD authentication.
-                If null, aws-azure-login will prompt for role selection
-                when multiple roles are available.
+                If null and roleArnItem is not set, aws-azure-login will prompt
+                for role selection when multiple roles are available.
+                Overridden by roleArnItem when both are set.
               '';
               example = "arn:aws:iam::123456789012:role/MyRole";
             };
@@ -224,11 +492,17 @@
                 assertion = config.secretsManagement.enable or false;
                 message = "awscli.azureAuth requires secretsManagement.enable = true (for rbw/Bitwarden)";
               }
+              {
+                assertion = !cfg.azureAuth.autoTotp || bw.credentialItem != null;
+                message = "awscli.azureAuth.autoTotp requires bitwarden.credentialItem to be configured";
+              }
             ];
 
             warnings =
               optional ((config.secretsManagement.rbw.email or null) == null)
-                "awscli.azureAuth: Bitwarden integration enabled but secretsManagement.rbw.email not set. Run 'rbw-init' to configure.";
+                "awscli.azureAuth: Bitwarden integration enabled but secretsManagement.rbw.email not set. Run 'rbw-init' to configure."
+              ++ optional (hasCredentials && !hasRoleArn)
+                "awscli.azureAuth: Non-interactive mode enabled but no role ARN configured. If your account has multiple AWS roles, login will fail. Set azureAuth.defaultRoleArn or azureAuth.bitwarden.roleArnItem.";
           })
         ]);
       };
