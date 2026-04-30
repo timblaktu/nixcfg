@@ -41,14 +41,21 @@ get_cpu_usage() {
     # Total = idle + non-idle
     local cur_total=$((cur_idle_total + cur_nonidle))
     
-    # Check if we have a previous reading
-    if [[ -f "$stat_file" ]]; then
+    # Check if we have a valid previous reading
+    if [[ -f "$stat_file" ]] && [[ -s "$stat_file" ]]; then
         # Read previous values
         local prev_stat
         prev_stat=$(cat "$stat_file")
         local cpu_prev
         read -ra cpu_prev <<< "$prev_stat"
-        
+
+        # Validate previous reading has enough fields (cpu + at least 8 values)
+        if [[ ${#cpu_prev[@]} -lt 5 ]]; then
+            echo "$current_stat" > "$stat_file"
+            echo 0
+            return
+        fi
+
         # Parse previous values
         local prev_user="${cpu_prev[1]}"
         local prev_nice="${cpu_prev[2]}"
