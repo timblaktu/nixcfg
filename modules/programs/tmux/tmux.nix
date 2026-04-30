@@ -122,14 +122,14 @@ in
         activeScheme = colorSchemes.${colorScheme};
 
         # Fixed conditional logic using >= comparisons instead of < to avoid nesting issues
-        cpuRamSection = ''
-          #{?#{>=:#{client_width},${mediumWidth}},#(tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(tmux-cpu-mem medium),#(tmux-cpu-mem narrow)}}
-        '';
+        cpuRamSection = "#{?#{>=:#{client_width},${mediumWidth}},#(tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(tmux-cpu-mem medium),#(tmux-cpu-mem narrow)}}";
+
+        batterySection = "#(tmux-battery)";
 
         # Status bar components - pointer char only shown when nested
         pointerChar = "→";
         statusLeft = "#[''$lock_open]#(pgrep tmux | wc -l | awk '$1 > 1 {print \"${pointerChar}\"}')#[''$style_normal]#{=10;p10:host_short} %b %d %T";
-        statusRight = "${cpuRamSection}";
+        statusRight = "${batterySection} ${cpuRamSection}";
       in
       {
         options.programs.tmux.autoReload = {
@@ -449,6 +449,13 @@ in
                 name = "tmux-cpu-mem";
                 text = builtins.readFile ./files/tmux-cpu-mem;
                 runtimeInputs = with pkgs; [ procps coreutils ];
+              })
+
+              # Tmux battery status display (reads WSL2-exposed sysfs)
+              (pkgs.writeShellApplication {
+                name = "tmux-battery";
+                text = builtins.readFile ./files/tmux-battery;
+                runtimeInputs = with pkgs; [ coreutils ];
               })
 
               # Tmux save with auto-rename

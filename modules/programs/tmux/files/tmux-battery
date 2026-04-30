@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Battery status for tmux with colored block fill indicator
+# Reads from /sys/class/power_supply (WSL2 exposes Windows battery here)
+# Usage: tmux-battery
+
+BAT_PATH="/sys/class/power_supply/BAT1"
+
+# No battery present — output nothing
+[[ -d "$BAT_PATH" ]] || exit 0
+
+capacity=$(cat "$BAT_PATH/capacity" 2>/dev/null) || exit 0
+status=$(cat "$BAT_PATH/status" 2>/dev/null || echo "Unknown")
+
+# Block elements filling bottom-up (U+2581..U+2588)
+# 8 levels matching the 8-level braille scale in tmux-cpu-mem
+block_chars=(
+    "▁"   #  0- 12%
+    "▂"   # 13- 25%
+    "▃"   # 26- 37%
+    "▄"   # 38- 50%
+    "▅"   # 51- 62%
+    "▆"   # 63- 75%
+    "▇"   # 76- 87%
+    "█"   # 88-100%
+)
+
+# Color by level: red (critical) → yellow (low) → green (good)
+# Reverse of cpu-mem: high is good for battery
+level=$(( capacity > 100 ? 7 : capacity * 7 / 100 ))
+
+case $level in
+    0)   color="brightred,bold" ;;
+    1)   color="brightred" ;;
+    2)   color="red" ;;
+    3)   color="brightyellow" ;;
+    4)   color="yellow" ;;
+    5)   color="brightgreen" ;;
+    6|7) color="green" ;;
+esac
+
+icon="${block_chars[$level]}"
+
+# Charging indicator: flash/bolt overlays the color
+case "$status" in
+    Charging)     color="cyan" ;;
+    Not\ charging) ;;  # full but plugged in — keep level color
+    Full)         color="green" ;;
+esac
+
+printf "#[fg=%s]%s#[default]" "$color" "$icon"
