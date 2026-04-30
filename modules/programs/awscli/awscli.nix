@@ -90,7 +90,11 @@
                                   'debug("Waiting for navigation after password submit")'
                               )
                               if j + 1 < len(lines) and 'delay(500)' in lines[j + 1]:
-                                  lines[j + 1] = f'{indent}try {{ await page.waitForNavigation({{ waitUntil: "domcontentloaded", timeout: 10000 }}); }} catch (e) {{ debug("Navigation wait timed out: " + e.message); }}\n{indent}await bluebird_1.default.delay(1000);\n'
+                                  lines[j + 1] = (
+                                      f'{indent}try {{ await page.waitForNavigation({{ waitUntil: "domcontentloaded", timeout: 10000 }}); }}'
+                                      f' catch (e) {{ debug("Navigation wait timed out: " + e.message); }}\n'
+                                      f'{indent}await bluebird_1.default.delay(1000);\n'
+                                  )
                               patched = True
                               break
                       continue
@@ -167,10 +171,14 @@
               "AAL_ROLE_ARN": "azure_default_role_arn",
           }
 
+          def escape_ini_value(v):
+              """Escape # and ; for the npm 'ini' parser which treats them as inline comments."""
+              return v.replace("\\", "\\\\").replace(";", "\\;").replace("#", "\\#")
+
           for envvar, key in env_to_key.items():
               val = os.environ.get(envvar)
               if val:
-                  c.set(section, key, val)
+                  c.set(section, key, escape_ini_value(val))
 
           # Auto-click "stay signed in" when credentials are injected
           if os.environ.get("AAL_USERNAME"):
@@ -192,8 +200,10 @@
 
           expect {
             "Verification Code:" {
+              log_user 0
               set totp [exec ${pkgs.rbw}/bin/rbw code {${bw.credentialItem}}]
               send "''$totp\r"
+              log_user 1
               exp_continue
             }
             eof
