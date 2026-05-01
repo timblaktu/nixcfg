@@ -323,8 +323,23 @@
               wslu # WSL utilities (wslview, wslfetch, wslvar, etc.)
             ];
 
-            # xdg-open → wslview: opens URLs/files in the Windows default application
-            home.file.".local/bin/xdg-open".source = "${pkgs.wslu}/bin/wslview";
+            # xdg-open → wslview wrapper that recovers Windows mounts if needed.
+            # wslview relies on /mnt/c (for reg.exe, powershell.exe, etc.) and
+            # wslpath (/bin/wslpath), both of which can be unavailable: mounts get
+            # unmounted by isar/kas builds, and NixOS doesn't include /bin on PATH.
+            home.file.".local/bin/xdg-open" = {
+              executable = true;
+              text = ''
+                #!/bin/sh
+                # Recover Windows drive mounts if isar/kas builds unmounted them
+                if ! mountpoint -q /mnt/c 2>/dev/null; then
+                  wsl-recover-mounts -q -s 2>/dev/null || true
+                fi
+                # wslpath lives at /bin which NixOS doesn't include on PATH
+                export PATH="/bin:$PATH"
+                exec "${pkgs.wslu}/bin/wslview" "$@"
+              '';
+            };
           }
 
           # === Windows Terminal Target Configuration ===
