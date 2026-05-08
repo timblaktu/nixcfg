@@ -78,19 +78,8 @@ in
       rbw.email = "timblaktu@gmail.com";
     };
 
-    # GitHub authentication (dendritic module)
-    gitAuth.github = {
-      enable = true;
-      mode = "bitwarden";
-      bitwarden = {
-        item = "github.com";
-        field = "PAT-timtam2026";
-      };
-      cli.tokenOverrides.pr = {
-        item = "github.com";
-        field = "PAT-pubclassic";
-      };
-    };
+    # GitHub authentication (shared preset)
+    gitAuth.github = inputs.self.lib.gitAuthPresets.github;
 
     # HOST-SPECIFIC: Windows integration shell aliases
     # Vanilla Ubuntu WSL uses .exe suffixes for Windows binaries

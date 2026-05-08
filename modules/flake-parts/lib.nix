@@ -442,6 +442,27 @@ in
       };
     };
 
+    # Shared GitHub authentication presets for all personal hosts.
+    # Usage: gitAuth.github = inputs.self.lib.gitAuthPresets.github;
+    gitAuthPresets.github = {
+      enable = true;
+      mode = "bitwarden";
+      bitwarden = {
+        item = "github.com";
+        field = "PAT-timtam2026";
+      };
+      cli.tokenOverrides.pr = {
+        item = "github.com";
+        field = "PAT-pubclassic";
+      };
+      orgs.kyosaku-kai = {
+        bitwarden = {
+          item = "github.com";
+          field = "kyosaku-kai-2026";
+        };
+      };
+    };
+
     claudeCode = {
       # Base config (enable, defaults, common settings)
       # NOTE: defaultAccount intentionally omitted — each deployment layer sets its own.
