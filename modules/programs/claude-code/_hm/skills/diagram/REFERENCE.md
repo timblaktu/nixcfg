@@ -227,6 +227,55 @@ Every diagram MUST have these two cells:
 </mxCell>
 ```
 
+### Custom Polygon (Stencil)
+
+For L-shapes, T-shapes, U-shapes, and arbitrary polygons. The stencil data
+must be compressed (`encodeURIComponent → deflateRaw → base64`) — raw base64 silently fails,
+rendering a full-size rectangle over the bounding box.
+
+In a cell style:
+
+```
+shape=stencil(COMPRESSED_STRING);fillColor=#f8cecc;strokeColor=#b85450;opacity=40;
+```
+
+```xml
+<mxCell id="lshape-1" value=""
+        style="shape=stencil(COMPRESSED_STRING);fillColor=#f8cecc;strokeColor=#b85450;opacity=40;"
+        vertex="1" parent="1">
+  <mxGeometry x="40" y="80" width="400" height="300" as="geometry"/>
+</mxCell>
+```
+
+**Label placement**: Use a separate text mxCell. Do NOT put text in the stencil
+cell's value — it centers in the bounding box, not the visible shape.
+
+**Z-order**: Declare the stencil cell BEFORE any children it should contain.
+
+**Connections**: Arrows route to the bounding box edge, not the shape outline.
+Custom `<connections>` in the stencil XML do not change this behavior.
+
+**L-shape orientations** (arm_w=0.5, arm_h=0.4):
+
+```
+bl (bottom-left)     br (bottom-right)    tl (top-left)       tr (top-right)
+┌──┐                      ┌──┐            ┌────────┐          ┌────────┐
+│  │                      │  │            │        │          │        │
+│  └─────┐          ┌─────┘  │            └──┐     │          │     ┌──┘
+│        │          │        │               │     │          │     │
+└────────┘          └────────┘               └─────┘          └─────┘
+```
+
+**JSON spec** (via `drawio_gen.py generate`):
+
+```json
+{"id": "l1", "type": "stencil", "stencil": "L", "orientation": "br",
+ "arm_w": 0.5, "arm_h": 0.4, "x": 40, "y": 80, "w": 400, "h": 300,
+ "style": "fillColor=#f8cecc;strokeColor=#b85450;opacity=40;"}
+```
+
+Supported stencil types: `L` (4 orientations), `T` (stem_w, bar_h), `U` (arm_w, bar_h).
+
 ### Shape Type Summary
 
 | Shape | Style Start | Key Attributes |
@@ -236,6 +285,7 @@ Every diagram MUST have these two cells:
 | Text | `text;` | `html=1;` |
 | Ellipse | `ellipse;` | `whiteSpace=wrap;html=1;` |
 | Cloud | `ellipse;shape=cloud;` | `whiteSpace=wrap;html=1;` |
+| Stencil | `shape=stencil(DATA);` | Compressed XML polygon |
 | Module | `shape=module;` | `jettyWidth=8;jettyHeight=4;` |
 | Process | `shape=process;` | `whiteSpace=wrap;html=1;` |
 | UML Lifeline | `shape=umlLifeline;` | `perimeter=lifelinePerimeter;html=1;container=1;` |

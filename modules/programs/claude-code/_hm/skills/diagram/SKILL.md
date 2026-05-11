@@ -5,10 +5,16 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.5.0
-**Last Updated**: 2026-02-03
+**Version**: 1.6.0
+**Last Updated**: 2026-05-11
 
 ## Changelog
+
+### v1.6.0 (2026-05-11)
+- Added Section 32: Custom Shape Containers (L/T/U stencil polygons via `drawio_gen.py`)
+- Added `compress_stencil()`, `make_lshape_stencil()`, `make_tshape_stencil()`, `make_ushape_stencil()` to `drawio_gen.py`
+- Added `"type": "stencil"` support in JSON spec cell processing
+- Added Custom Polygon (Stencil) section to REFERENCE.md
 
 ### v1.5.0 (2026-02-03)
 - Added Section 29: Proactive Best Practices (consolidates defaults to apply when CREATING diagrams)
@@ -2982,7 +2988,7 @@ The `--render` flag on `generate` runs `drawio-svg-sync`, re-injects content if 
 }
 ```
 
-**Cell types**: `box` (default), `container`, `text`, `edge`
+**Cell types**: `box` (default), `container`, `text`, `edge`, `stencil`
 
 **Parenting**: Set `"parent": "container-id"` to nest cells inside containers.
 
@@ -2997,3 +3003,76 @@ The `--render` flag on `generate` runs `drawio-svg-sync`, re-injects content if 
 `blue-arrow`, `purple-arrow`, `green-arrow`, `green-dashed`, `red-arrow`, `orange-arrow`, `no-arrow`, `dashed`
 
 Run `python3 drawio_gen.py presets` for colors and details.
+
+## Section 32: Custom Shape Containers (Stencils)
+
+When you need non-rectangular background shapes — L-shapes wrapping asymmetric box groups, T-shapes for top bars with stems, U-shapes for side-by-side arms — use DrawIO's inline `shape=stencil(DATA)` syntax with compressed stencil XML.
+
+### When to Use Custom Stencils vs Alternatives
+
+| Approach | Use When |
+|----------|----------|
+| **Custom stencil** | Need a single unified polygon fill (L, T, U shapes) with no visible seams |
+| **Grouped rectangles** | Acceptable seams, or shapes that decompose into non-overlapping rectangles |
+| **Dashed container** | Logical grouping only, no filled background needed |
+
+### Compression Requirement
+
+DrawIO requires stencil data to be compressed: `encodeURIComponent(xml) → zlib deflateRaw → base64`. Raw base64 **silently fails** — DrawIO's `Graph.decompress()` falls back to rendering a full-size rectangle over the bounding box with no error message.
+
+The `drawio_gen.py` tool handles compression automatically via the `"type": "stencil"` cell type. Never manually construct `shape=stencil()` strings.
+
+### Label Strategy
+
+**Always use a separate text cell for labels on stencil shapes.** The stencil cell's `value` attribute must be `""` (empty string). DrawIO's built-in label positioning centers text in the bounding box, which lands in the empty space of non-rectangular shapes.
+
+```json
+{"id": "tier-band", "type": "stencil", "stencil": "L", "orientation": "br",
+ "arm_w": 0.5, "arm_h": 0.4, "x": 40, "y": 80, "w": 400, "h": 300,
+ "style": "fillColor=#f8cecc;strokeColor=#b85450;opacity=40;"},
+{"id": "tier-label", "type": "text", "label": "<b>Tier 1</b>",
+ "x": 45, "y": 85, "w": 80, "h": 20,
+ "style": {"fontSize": "11", "fontColor": "#b85450"}}
+```
+
+### Z-Order Rule
+
+Declare the stencil cell **before** any children it should contain. XML declaration order = rendering order: earlier elements render behind later ones (Section 26).
+
+### Connection Limitation
+
+Arrows route to the **bounding box** edge, not the visible shape outline. Custom `<connections>` defined in the stencil XML do not change this behavior for inline stencils. This is acceptable for background containers (which rarely have arrows pointing at them) but worth noting if you need precise arrow targeting — use standard rectangles instead.
+
+### Quick Recipe: L-Shaped Tier Band
+
+The most common use case is an L-shaped background wrapping two groups of boxes arranged asymmetrically (e.g., 3 boxes on top, 2 on the side).
+
+```json
+{
+  "page": {"width": 800, "height": 600},
+  "cells": [
+    {"id": "tier1-bg", "type": "stencil", "stencil": "L", "orientation": "br",
+     "arm_w": 0.5, "arm_h": 0.4, "x": 40, "y": 80, "w": 400, "h": 300,
+     "style": "fillColor=#f8cecc;strokeColor=#b85450;opacity=40;"},
+    {"id": "tier1-label", "type": "text", "label": "<b>Tier 1</b>",
+     "x": 45, "y": 85, "w": 80, "h": 20,
+     "style": {"fontSize": "11", "fontColor": "#b85450"}},
+    {"id": "box-a", "type": "box", "label": "Service A", "preset": "red",
+     "x": 260, "y": 100, "w": 160, "h": 60},
+    {"id": "box-b", "type": "box", "label": "Service B", "preset": "red",
+     "x": 260, "y": 200, "w": 160, "h": 60},
+    {"id": "box-c", "type": "box", "label": "Worker", "preset": "red",
+     "x": 60, "y": 260, "w": 160, "h": 60}
+  ]
+}
+```
+
+### Stencil Parameters
+
+| Stencil | Parameters | Default |
+|---------|-----------|---------|
+| `L` | `orientation` (bl/br/tl/tr), `arm_w`, `arm_h` | bl, 0.5, 0.4 |
+| `T` | `stem_w`, `bar_h` | 0.4, 0.3 |
+| `U` | `arm_w`, `bar_h` | 0.3, 0.3 |
+
+All ratio parameters are fractions of the total bounding box (0.0–1.0). Ratios are baked into the stencil at generation time — resizing in DrawIO preserves the ratio proportionally.

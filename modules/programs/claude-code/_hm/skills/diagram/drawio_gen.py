@@ -17,13 +17,16 @@ Usage:
 """
 
 import argparse
+import base64
 import html
 import json
 import os
 import re
 import subprocess
 import sys
+import zlib
 from datetime import datetime
+from urllib.parse import quote
 
 # ── Style Presets ──────────────────────────────────────────────────────────────
 
@@ -55,6 +58,95 @@ EDGE_PRESETS = {
     "no-arrow":      {"strokeColor": "#666666", "endArrow": "none"},
     "dashed":        {"strokeColor": "#666666", "endArrow": "classic", "dashed": "1"},
 }
+
+# ── Custom Stencil Shapes ─────────────────────────────────────────────────────
+
+def compress_stencil(xml: str) -> str:
+    """Compress stencil XML for DrawIO inline shape=stencil() syntax.
+
+    Pipeline matches DrawIO's Graph.decompress(): encodeURIComponent → deflateRaw → base64.
+    The [2:-4] slice strips the zlib header (2 bytes) and checksum trailer (4 bytes)
+    to produce raw deflate output matching JavaScript's pako.deflateRaw().
+    """
+    encoded = quote(xml, safe='')
+    compressed = zlib.compress(encoded.encode('utf-8'))[2:-4]
+    return base64.b64encode(compressed).decode('utf-8')
+
+
+def make_lshape_stencil(orientation: str, arm_w: float = 0.5, arm_h: float = 0.4) -> str:
+    """Generate compressed stencil for an L-shaped polygon.
+
+    Args:
+        orientation: 'bl' (bottom-left), 'br' (bottom-right),
+                    'tl' (top-left), 'tr' (top-right)
+        arm_w: width of vertical arm as fraction of total (0.0-1.0)
+        arm_h: height of horizontal arm as fraction of total (0.0-1.0)
+    """
+    w = round(arm_w * 100)
+    h = round(arm_h * 100)
+
+    points = {
+        'bl': [(0, 0), (w, 0), (w, 100 - h), (100, 100 - h), (100, 100), (0, 100)],
+        'br': [(0, 100 - h), (100 - w, 100 - h), (100 - w, 0), (100, 0), (100, 100), (0, 100)],
+        'tl': [(0, 0), (100, 0), (100, h), (w, h), (w, 100), (0, 100)],
+        'tr': [(0, 0), (100, 0), (100, 100), (100 - w, 100), (100 - w, h), (0, h)],
+    }
+
+    pts = points[orientation]
+    path = f'<move x="{pts[0][0]}" y="{pts[0][1]}"/>'
+    for x, y in pts[1:]:
+        path += f'<line x="{x}" y="{y}"/>'
+    path += '<close/>'
+
+    xml = (f'<shape h="100" w="100" aspect="variable" strokewidth="inherit">'
+           f'<background><path>{path}</path></background>'
+           f'<foreground><fillstroke/></foreground></shape>')
+    return compress_stencil(xml)
+
+
+def make_tshape_stencil(stem_w: float = 0.4, bar_h: float = 0.3) -> str:
+    """T-shape: full-width top bar + centered vertical stem."""
+    w = round(stem_w * 100)
+    h = round(bar_h * 100)
+    left = round((100 - w) / 2)
+    right = left + w
+    xml = (f'<shape h="100" w="100" aspect="variable" strokewidth="inherit">'
+           f'<background><path>'
+           f'<move x="0" y="0"/><line x="100" y="0"/><line x="100" y="{h}"/>'
+           f'<line x="{right}" y="{h}"/><line x="{right}" y="100"/>'
+           f'<line x="{left}" y="100"/><line x="{left}" y="{h}"/>'
+           f'<line x="0" y="{h}"/><close/>'
+           f'</path></background><foreground><fillstroke/></foreground></shape>')
+    return compress_stencil(xml)
+
+
+def make_ushape_stencil(arm_w: float = 0.3, bar_h: float = 0.3) -> str:
+    """U-shape: two vertical arms connected at bottom."""
+    w = round(arm_w * 100)
+    h = round(bar_h * 100)
+    xml = (f'<shape h="100" w="100" aspect="variable" strokewidth="inherit">'
+           f'<background><path>'
+           f'<move x="0" y="0"/><line x="{w}" y="0"/><line x="{w}" y="{100 - h}"/>'
+           f'<line x="{100 - w}" y="{100 - h}"/><line x="{100 - w}" y="0"/>'
+           f'<line x="100" y="0"/><line x="100" y="100"/>'
+           f'<line x="0" y="100"/><close/>'
+           f'</path></background><foreground><fillstroke/></foreground></shape>')
+    return compress_stencil(xml)
+
+
+STENCIL_GENERATORS = {
+    'L': lambda cell: make_lshape_stencil(
+        cell.get('orientation', 'bl'),
+        cell.get('arm_w', 0.5),
+        cell.get('arm_h', 0.4)),
+    'T': lambda cell: make_tshape_stencil(
+        cell.get('stem_w', 0.4),
+        cell.get('bar_h', 0.3)),
+    'U': lambda cell: make_ushape_stencil(
+        cell.get('arm_w', 0.3),
+        cell.get('bar_h', 0.3)),
+}
+
 
 # ── XML Generation ─────────────────────────────────────────────────────────────
 
@@ -187,6 +279,39 @@ def _build_cell_xml(cell, indent="        "):
             attrs.append(_attr("target", cell["target"]))
         lines = [f'{indent}<mxCell {" ".join(attrs)}>']
         lines.append(f'{indent}  <mxGeometry relative="1" as="geometry"/>')
+        lines.append(f'{indent}</mxCell>')
+    elif ctype == "stencil":
+        stencil_type = cell.get("stencil", "L")
+        gen = STENCIL_GENERATORS.get(stencil_type)
+        if not gen:
+            raise ValueError(f"Unknown stencil type: {stencil_type!r} (supported: {', '.join(STENCIL_GENERATORS)})")
+        compressed = gen(cell)
+        # Build style: shape=stencil(DATA) prepended to user style overrides
+        style_parts = f"shape=stencil({compressed});"
+        if "style" in cell:
+            if isinstance(cell["style"], dict):
+                style_parts += _style_str(cell["style"])
+            else:
+                style_parts += cell["style"]
+        label = ""  # stencil cells always have empty value; labels go in separate text cells
+        style = style_parts
+
+        attrs = [
+            _attr("id", cid),
+            _attr("value", label),
+            _attr("style", style),
+            'vertex="1"',
+            _attr("parent", parent),
+        ]
+        x = cell.get("x", 0)
+        y = cell.get("y", 0)
+        w = cell.get("w", 120)
+        h = cell.get("h", 60)
+        lines = [f'{indent}<mxCell {" ".join(attrs)}>']
+        lines.append(
+            f'{indent}  <mxGeometry x="{x}" y="{y}" '
+            f'width="{w}" height="{h}" as="geometry"/>'
+        )
         lines.append(f'{indent}</mxCell>')
     else:
         if ctype == "container":
