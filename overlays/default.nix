@@ -66,18 +66,8 @@ in
         sourceProvenance = with prev.lib.sourceTypes; [ binaryBytecode ];
       };
     });
-  # opencode 1.4.3 — requires bun ≥1.3.11 for undici support
-  opencode =
-    let
-      bun_1_3_11 = prev.bun.overrideAttrs (_old: {
-        version = "1.3.11";
-        src = prev.fetchurl {
-          url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-linux-x64.zip";
-          hash = "sha256-hhG6k1r4hvBabzh0ChUWAybBXl1dB63vlmEwtEk2B+0=";
-        };
-      });
-    in
-    prev.callPackage ../pkgs/opencode-pinned/package.nix { bun = bun_1_3_11; };
+  # opencode 1.14.48 — pinned ahead of nixpkgs input (which has 1.2.5)
+  opencode = prev.callPackage ../pkgs/opencode-pinned/package.nix { };
   # glab: patch fixes index-out-of-range panic when navigating to/from
   # downstream pipelines in ci view (unfixed upstream through v1.93.0)
   # Upstream MR: https://gitlab.com/gitlab-org/cli/-/merge_requests/3179
