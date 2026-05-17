@@ -42,6 +42,9 @@
         # nix concurrency guard — cgroup memory limits prevent OOM from concurrent evaluations
         nixGuardedPkg = import ../../lib/nix-guarded.nix { inherit pkgs; };
 
+        # Model discovery script for querying /v1/models endpoints
+        discoverModelsPkg = import ./_hm/model-discovery.nix { inherit pkgs; };
+
         # OpenCode PermissionRule: either a flat action or a pattern-to-action map.
         # Flat:   bash = "allow"
         # Object: bash = { "*" = "allow"; "rm -rf /*" = "deny"; }
@@ -465,6 +468,22 @@
                   };
                   default = { };
                   description = "Secret management configuration for this account";
+                };
+
+                discovery = {
+                  enable = mkEnableOption "automatic model discovery from /v1/models endpoints";
+
+                  cacheTtlMinutes = mkOption {
+                    type = types.int;
+                    default = 30;
+                    description = "Cache TTL before re-querying endpoints (minutes)";
+                  };
+
+                  timeoutSeconds = mkOption {
+                    type = types.int;
+                    default = 3;
+                    description = "Max seconds to wait for discovery before launching opencode";
+                  };
                 };
               };
             });
@@ -1127,6 +1146,80 @@
                     }
                   )
                   accountCfg.secrets.envTokens);
+
+                # --- Model discovery ---
+                # Detect providers with options.baseURL set and apiKey matching {env:*}
+                discoveryCfg = accountCfg.discovery;
+                discoverableProviders =
+                  if !discoveryCfg.enable then { }
+                  else
+                    filterAttrs
+                      (_name: prov:
+                        prov.options != null
+                        && prov.options.baseURL or null != null
+                        && prov.options.apiKey or null != null
+                        && builtins.match "[{]env:(.+)[}]" (prov.options.apiKey) != null
+                      )
+                      cfg.provider;
+
+                # Extract env var name from {env:NAME} pattern
+                extractEnvVar = apiKeyStr:
+                  let m = builtins.match "[{]env:(.+)[}]" apiKeyStr;
+                  in if m != null then builtins.head m else null;
+
+                # Build static model ID list for a provider
+                staticModelIds = prov:
+                  if prov.models == null then ""
+                  else concatStringsSep "," (attrNames prov.models);
+
+                # Generate the discovery shell snippet
+                discoverySnippet = optionalString (discoverableProviders != { }) (
+                  let
+                    timeoutSec = toString discoveryCfg.timeoutSeconds;
+                    cacheTtl = toString discoveryCfg.cacheTtlMinutes;
+                    providerCmds = mapAttrsToList
+                      (provId: prov:
+                        let
+                          envVar = extractEnvVar prov.options.apiKey;
+                          baseUrl = prov.options.baseURL;
+                          staticModels = staticModelIds prov;
+                        in
+                        ''
+                          ${discoverModelsPkg}/bin/opencode-discover-models \
+                            --provider-id ${escapeShellArg provId} \
+                            --base-url ${escapeShellArg baseUrl} \
+                            --api-key-env ${escapeShellArg envVar} \
+                            --cache-dir "$_OC_DISC_DIR" \
+                            --cache-ttl ${cacheTtl} \
+                            --static-models ${escapeShellArg staticModels} &
+                          _oc_disc_pids+=($!)
+                        ''
+                      )
+                      discoverableProviders;
+                  in
+                  ''
+                    # --- Model discovery ---
+                    _OC_DISC_DIR="$HOME/.cache/opencode-discovery/${accountName}"
+                    mkdir -p "$_OC_DISC_DIR"
+
+                    _oc_disc_pids=()
+                    ${concatStringsSep "\n" providerCmds}
+
+                    # Wait with timeout
+                    for _pid in "''${_oc_disc_pids[@]}"; do
+                      timeout ${timeoutSec} tail --pid="$_pid" -f /dev/null 2>/dev/null || true
+                    done
+
+                    # Merge cached fragments into OPENCODE_CONFIG_CONTENT
+                    if compgen -G "$_OC_DISC_DIR/*.json" >/dev/null 2>&1; then
+                      _oc_merged=$(jq -s 'reduce .[] as $item ({}; . * $item)' \
+                        "$_OC_DISC_DIR"/*.json 2>/dev/null || echo '{}')
+                      if [[ "$_oc_merged" != "{}" ]]; then
+                        export OPENCODE_CONFIG_CONTENT="$_oc_merged"
+                      fi
+                    fi
+                  ''
+                );
               in
               pkgs.writeShellScriptBin "opencode${accountName}" ''
                 #!/usr/bin/env bash
@@ -1142,6 +1235,7 @@
                 ${channelMigrate.mkChannelMigrateSnippet { ocPackage = cfg.package; }}
                 ${bitwardenFetch}
                 ${envTokenFetches}
+                ${discoverySnippet}
 
                 exec ${cfg.package}/bin/opencode "$@"
               '';

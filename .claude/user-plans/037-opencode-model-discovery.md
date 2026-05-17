@@ -40,11 +40,11 @@ CCv2 (ai-proxy) and Bedrock proxy endpoints change models frequently — 7 new m
 
 | ID | Task | Status |
 |----|------|--------|
-| T1 | Create `opencode-discover-models` shell script package | TASK:PENDING |
-| T2 | Add `discovery` option schema to opencode module | TASK:PENDING |
-| T3 | Integrate discovery into wrapper generation | TASK:PENDING |
-| T4 | Enable discovery for work account in nixcfg-work | TASK:PENDING |
-| T5 | End-to-end testing and verification | TASK:PENDING |
+| T1 | Create `opencode-discover-models` shell script package | TASK:COMPLETE |
+| T2 | Add `discovery` option schema to opencode module | TASK:COMPLETE |
+| T3 | Integrate discovery into wrapper generation | TASK:COMPLETE |
+| T4 | Enable discovery for work account in nixcfg-work | TASK:COMPLETE |
+| T5 | End-to-end testing and verification | TASK:COMPLETE |
 
 ---
 
