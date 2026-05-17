@@ -4,10 +4,16 @@
 
 CCv2 (ai-proxy) and Bedrock proxy endpoints change models frequently — 7 new models appeared in 6 weeks (2026-04-04 to 2026-05-15). Currently, adding models requires editing Nix config → rebuild → switch. This plan adds a pre-flight discovery mechanism to the opencode wrapper that queries `/v1/models` endpoints and injects discovered models via `OPENCODE_CONFIG_CONTENT` (an official opencode env var with highest merge precedence).
 
-**What was already done this session:**
+**What was already done (2026-05-15, on main — should have been on a branch):**
 - Synced model lists to live API (nixcfg-work commit `14c2a5a`, `53d053a`)
 - Upgraded opencode 1.4.3 → 1.14.48 (nixcfg commit `b7c4337`)
 - Verified `OPENCODE_CONFIG_CONTENT` is a real, tested opencode feature
+
+## Branching
+
+**nixcfg**: Create branch `feat/opencode-model-discovery` from current `main` (which already has the opencode upgrade). All T1-T3 work goes here.
+
+**nixcfg-work**: Create branch `feat/opencode-model-discovery` from current `main` (which already has the model sync + flake.lock update). T4 work goes here. Its flake.lock `nixcfg` input must be updated to point at the nixcfg feature branch before T5 testing.
 
 ## Design
 
