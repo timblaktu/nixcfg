@@ -485,6 +485,17 @@
                     description = "Max seconds to wait for discovery before launching opencode";
                   };
                 };
+
+                disabledProviders = mkOption {
+                  type = types.nullOr (types.listOf types.str);
+                  default = null;
+                  description = ''
+                    Per-account provider IDs to disable. Merged with the module-level
+                    disabledProviders list. Use this to hide built-in providers (e.g.
+                    "anthropic", "opencode") for specific accounts without affecting others.
+                  '';
+                  example = [ "anthropic" "opencode" ];
+                };
               };
             });
             default = { };
@@ -1007,7 +1018,15 @@
                 in
                 optionalAttrs (nonEmpty != { }) { provider = nonEmpty; }
               )
-              // optionalAttrs (cfg.disabledProviders != null) { disabled_providers = cfg.disabledProviders; }
+              // (
+                let
+                  # Merge module-level and per-account disabled providers
+                  moduleDis = if cfg.disabledProviders != null then cfg.disabledProviders else [ ];
+                  accountDis = if accountCfg.disabledProviders != null then accountCfg.disabledProviders else [ ];
+                  merged = unique (moduleDis ++ accountDis);
+                in
+                optionalAttrs (merged != [ ]) { disabled_providers = merged; }
+              )
               // optionalAttrs (cfg.enabledProviders != null) { enabled_providers = cfg.enabledProviders; }
               // (
                 let
