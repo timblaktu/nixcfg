@@ -871,7 +871,12 @@
           in
           mkIf cfg.enable {
             home.packages = with pkgs; optional (cfg.defaultAccount == null) pkgs.claude-code
-              ++ (with pkgs; [
+              ++ [
+              (pkgs.writeShellApplication {
+                name = "claude-browse";
+                text = builtins.readFile ./files/claude-browse;
+              })
+            ] ++ (with pkgs; [
               nodejs_22
               git
               ripgrep

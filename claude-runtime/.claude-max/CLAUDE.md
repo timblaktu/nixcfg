@@ -10,6 +10,7 @@
 - ALWAYS ensure shell commands support both bash AND zsh
 - ALWAYS properly escape or quote special shell characters
 - **WSL interop**: Windows executables are callable directly from WSL (e.g., `usbipd.exe list`, `powershell.exe -c "command"`). NEVER tell user to "open PowerShell" or "run from Windows" — call the `.exe` directly from the current shell. Windows PATH is on `$PATH` via `appendWindowsPath` (wsl module default).
+- **Opening files and URLs**: Use `claude-browse <path-or-url>` to open files or URLs in the user's browser. Session opens are grouped into a single browser window automatically (first open = new window, subsequent = tabs). Falls back to xdg-open if claude-browse is not available.
 - **Screenshots (WSL)**: Find dynamically with `fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-`
 - NEVER create files unless absolutely necessary - prefer editing existing files
 - ALWAYS add documentation to existing markdown files - ASK where if ambiguous
@@ -31,6 +32,7 @@
 - **UPDATE MEMORY BEFORE CONTINUATION PROMPT** - update project memory first, then provide the combined summary+prompt
 - **COMMIT DIAGRAM CHANGES IMMEDIATELY** - `.drawio.svg` files with uncommitted pages can be lost if `git checkout` is used; commit after each significant diagram edit
 - **LOCAL-FIRST RESEARCH** - When researching topics involving source code or repositories, ALWAYS start by looking in `~/src/` for existing clones. Most upstream repos are already cloned there. If a repo is not yet cloned locally, `git clone` it into `~/src/` rather than using web searches or WebFetch. Read source code directly from local checkouts — it's faster, more accurate, and avoids token-heavy web fetching. Web search is a last resort for non-code information (release notes, mailing list discussions, etc.).
+- **NEVER hard-wrap lines in files** - Do NOT insert newlines to enforce any column width in markdown, docs, prose, YAML comments, code comments, or any file. Let lines run as long as they naturally are. Editors/renderers handle wrapping. Hard wraps cause ugly reflow diffs.
 
 ## Terminal-Width-Aware Output Formatting
 
@@ -68,6 +70,22 @@ Note: The wrapper scripts (claudemax, claudepro, etc.) capture the real terminal
 - Pattern recognition benefits from alignment
 
 **File output**: May exceed terminal width since files are viewed in editors/renderers with horizontal scroll.
+
+## Proactive Browser Integration
+
+The user's dev environment is Terminal + Browser. Proactively `claude-browse` content that the user would naturally want to view or review. Do not ask or announce -- just open it.
+
+**Always open automatically:**
+- URLs produced as output of an action: PR/MR links after creation, pipeline URLs after triggering, GitHub/GitLab pages after interaction
+- Diagram files (`.drawio.svg`, rendered Mermaid) after creating or significantly editing them
+- Documentation files after creating or substantially rewriting them (not minor edits)
+- Any URL the user would need to visit as a next step (e.g., "approve this MR")
+
+**Do not open automatically:**
+- Files you only read or made small edits to (the user is already in the terminal)
+- Build logs, test output, or other transient operational output
+- The same URL/file twice in one session
+- More than 3 items in quick succession: list them and let the user choose which to open. Exception: a single action producing multiple related URLs (e.g., MR link + pipeline link) counts as one logical open.
 
 ## CI/CD and Testing Philosophy
 

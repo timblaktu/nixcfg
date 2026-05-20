@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# claude-browse - Session-grouped browser window management for AI agent workflows
+#
+# Opens URLs/files in the browser with session-aware window grouping:
+# - First open in a session creates a new browser window
+# - Subsequent opens become tabs in that window
+# - Falls back to xdg-open/open if no session-aware browser is available
+#
+# Environment:
+#   CLAUDE_BROWSE_STATE - Path to session state file (set by Claude wrapper scripts)
+#                         If unset, every open creates a new window (no grouping)
+
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: claude-browse <url-or-path>" >&2
+  exit 1
+fi
+
+url="$1"
+
+# Determine if this is the first open in the session
+new_window=true
+if [[ -n "${CLAUDE_BROWSE_STATE:-}" ]]; then
+  if [[ -f "$CLAUDE_BROWSE_STATE" ]]; then
+    new_window=false
+  else
+    touch "$CLAUDE_BROWSE_STATE"
+  fi
+fi
+
+# Detect platform and open appropriately
+if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+  # WSL: use edge.exe directly (bypasses wslview overhead, enables window control)
+  if command -v edge.exe &>/dev/null; then
+    if [[ "$new_window" == true ]]; then
+      edge.exe --new-window "$url" &>/dev/null &
+    else
+      edge.exe "$url" &>/dev/null &
+    fi
+  elif command -v wslview &>/dev/null; then
+    wslview "$url"
+  else
+    echo "Error: No browser found (tried edge.exe, wslview)" >&2
+    exit 1
+  fi
+
+elif [[ "${OSTYPE:-}" == darwin* ]]; then
+  # macOS: use open -a for Edge, fall back to plain open
+  if [[ -d "/Applications/Microsoft Edge.app" ]]; then
+    if [[ "$new_window" == true ]]; then
+      open -na "Microsoft Edge" --args --new-window "$url"
+    else
+      open -a "Microsoft Edge" "$url"
+    fi
+  else
+    open "$url"
+  fi
+
+else
+  # Bare Linux: try microsoft-edge, then xdg-open
+  if command -v microsoft-edge &>/dev/null; then
+    if [[ "$new_window" == true ]]; then
+      microsoft-edge --new-window "$url" &>/dev/null &
+    else
+      microsoft-edge "$url" &>/dev/null &
+    fi
+  elif command -v xdg-open &>/dev/null; then
+    xdg-open "$url"
+  else
+    echo "Error: No browser found (tried microsoft-edge, xdg-open)" >&2
+    exit 1
+  fi
+fi

@@ -148,6 +148,12 @@ in
         # Prepend nix concurrency guard to PATH so agent nix invocations
         # run under systemd cgroup memory limits (prevents OOM from evals)
         export PATH="${nixGuardedPkg}/bin:$PATH"
+        # Session-scoped browser state for claude-browse window grouping
+        # mktemp creates a unique path; we remove the file so claude-browse
+        # can detect "first open" by checking file existence
+        CLAUDE_BROWSE_STATE="$(mktemp -t claude-browse-XXXXXX)"
+        rm -f "$CLAUDE_BROWSE_STATE"
+        export CLAUDE_BROWSE_STATE
         ${envSetupBlock}
       }
 
