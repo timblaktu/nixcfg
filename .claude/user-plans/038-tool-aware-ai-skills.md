@@ -39,7 +39,7 @@ The skill content is defined inline in the program module (via `skillContent`), 
 | T2 | `TASK:COMPLETE` | glab CLI skill (gitlab-auth module) |
 | T3 | `TASK:COMPLETE` | Pulumi skill (pulumi module) |
 | T4 | `TASK:PENDING` | vtecli skill - belongs in nixcfg-work (proprietary tool) |
-| T5 | `TASK:PENDING` | Verify skill injection pattern works (home-manager switch + test) |
+| T5 | `TASK:COMPLETE` | Verify skill injection pattern works (home-manager switch + test) |
 
 ## Task Details
 

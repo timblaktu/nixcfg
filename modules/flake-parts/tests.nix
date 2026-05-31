@@ -517,6 +517,129 @@ in
           touch $out
         '';
 
+        # === TOOL-AWARE SKILL INJECTION TESTS ===
+        # Verify that program modules inject Claude Code skills when both
+        # the program and claude-code are enabled (Plan 038)
+        skill-injection-awscli =
+          let
+            hmConfig = (inputs.home-manager.lib.homeManagerConfiguration {
+              inherit pkgs;
+              modules = [
+                self.modules.homeManager.home-minimal
+                self.modules.homeManager.claude-code
+                self.modules.homeManager.awscli
+                {
+                  homeMinimal = { username = "testuser"; homeDirectory = "/home/testuser"; };
+                  programs.claude-code.enable = true;
+                  programs.claude-code.accounts.max.enable = true;
+                  awscli.enable = true;
+                }
+              ];
+              extraSpecialArgs = { inherit inputs; };
+            }).config;
+            hasSkill = builtins.hasAttr "aws-cli" hmConfig.programs.claude-code.skills.custom;
+            skillDesc = if hasSkill then hmConfig.programs.claude-code.skills.custom.aws-cli.description else "";
+          in
+          pkgs.runCommand "skill-injection-awscli"
+            {
+              meta = { description = "Verify awscli injects Claude Code skill"; timeout = 30; };
+              inherit hasSkill skillDesc;
+            } ''
+            [[ "$hasSkill" == "1" ]] || (echo "FAIL: aws-cli skill not injected" && exit 1)
+            [[ -n "$skillDesc" ]] || (echo "FAIL: aws-cli skill has empty description" && exit 1)
+            echo "aws-cli skill injected with description: $skillDesc"
+            touch $out
+          '';
+
+        skill-injection-glab =
+          let
+            hmConfig = (inputs.home-manager.lib.homeManagerConfiguration {
+              inherit pkgs;
+              modules = [
+                self.modules.homeManager.home-minimal
+                self.modules.homeManager.claude-code
+                self.modules.homeManager.gitlab-auth
+                self.modules.homeManager.secrets-management
+                {
+                  homeMinimal = { username = "testuser"; homeDirectory = "/home/testuser"; };
+                  programs.claude-code.enable = true;
+                  programs.claude-code.accounts.max.enable = true;
+                  secretsManagement.enable = true;
+                  gitAuth.gitlab.enable = true;
+                }
+              ];
+              extraSpecialArgs = { inherit inputs; };
+            }).config;
+            hasSkill = builtins.hasAttr "glab-cli" hmConfig.programs.claude-code.skills.custom;
+          in
+          pkgs.runCommand "skill-injection-glab"
+            {
+              meta = { description = "Verify gitlab-auth injects Claude Code skill"; timeout = 30; };
+              hasSkill = if hasSkill then "1" else "0";
+            } ''
+            [[ "$hasSkill" == "1" ]] || (echo "FAIL: glab-cli skill not injected" && exit 1)
+            echo "glab-cli skill injected"
+            touch $out
+          '';
+
+        skill-injection-pulumi =
+          let
+            hmConfig = (inputs.home-manager.lib.homeManagerConfiguration {
+              inherit pkgs;
+              modules = [
+                self.modules.homeManager.home-minimal
+                self.modules.homeManager.claude-code
+                self.modules.homeManager.pulumi
+                {
+                  homeMinimal = { username = "testuser"; homeDirectory = "/home/testuser"; };
+                  programs.claude-code.enable = true;
+                  programs.claude-code.accounts.max.enable = true;
+                  pulumi.enable = true;
+                }
+              ];
+              extraSpecialArgs = { inherit inputs; };
+            }).config;
+            hasSkill = builtins.hasAttr "pulumi" hmConfig.programs.claude-code.skills.custom;
+          in
+          pkgs.runCommand "skill-injection-pulumi"
+            {
+              meta = { description = "Verify pulumi injects Claude Code skill"; timeout = 30; };
+              hasSkill = if hasSkill then "1" else "0";
+            } ''
+            [[ "$hasSkill" == "1" ]] || (echo "FAIL: pulumi skill not injected" && exit 1)
+            echo "pulumi skill injected"
+            touch $out
+          '';
+
+        # Negative test: skills NOT injected when claude-code is disabled
+        skill-injection-negative =
+          let
+            hmConfig = (inputs.home-manager.lib.homeManagerConfiguration {
+              inherit pkgs;
+              modules = [
+                self.modules.homeManager.home-minimal
+                self.modules.homeManager.claude-code
+                self.modules.homeManager.awscli
+                {
+                  homeMinimal = { username = "testuser"; homeDirectory = "/home/testuser"; };
+                  # claude-code NOT enabled, awscli IS enabled
+                  awscli.enable = true;
+                }
+              ];
+              extraSpecialArgs = { inherit inputs; };
+            }).config;
+            skillCount = builtins.length (builtins.attrNames hmConfig.programs.claude-code.skills.custom);
+          in
+          pkgs.runCommand "skill-injection-negative"
+            {
+              meta = { description = "Verify skills NOT injected when claude-code disabled"; timeout = 30; };
+              skillCount = toString skillCount;
+            } ''
+            [[ "$skillCount" == "0" ]] || (echo "FAIL: $skillCount skills injected when claude-code disabled" && exit 1)
+            echo "No skills injected when claude-code disabled (correct)"
+            touch $out
+          '';
+
         # === PACKAGE BUILD TESTS (T1) ===
         # Referencing packages in checks forces nix flake check to build them.
         # These verify that all custom packages build successfully.
