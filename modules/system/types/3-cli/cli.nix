@@ -273,6 +273,9 @@
                 dates = lib.mkDefault "weekly";
               };
             };
+
+            # Enable cgroup delegation for rootless containers (required by kind/k3d)
+            systemd.services."user@".serviceConfig.Delegate = "yes";
           })
 
           # Claude Code Enterprise Settings
