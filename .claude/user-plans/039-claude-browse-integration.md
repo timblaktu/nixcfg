@@ -74,8 +74,8 @@ On non-WSL platforms, `claude-browse` fallback calls `xdg-open` (Linux) or `open
 | T3 | `TASK:COMPLETE` | Package script and wire into `claude-code.nix` home.packages |
 | T4 | `TASK:COMPLETE` | Update global CLAUDE.md rules to reference `claude-browse` instead of `xdg-open` |
 | T5 | `TASK:COMPLETE` | Add quantity guardrail to CLAUDE.md "Proactive Browser Integration" section |
-| T6 | `TASK:PENDING` | Test on WSL (primary dev env) |
-| T7 | `TASK:PENDING` | Verify graceful degradation (unset CLAUDE_BROWSE_STATE, missing browser) |
+| T6 | `TASK:COMPLETE` | Test on WSL (primary dev env) |
+| T7 | `TASK:COMPLETE` | Verify graceful degradation (unset CLAUDE_BROWSE_STATE, missing browser) |
 
 ## Task Details
 
