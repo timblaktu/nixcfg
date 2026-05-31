@@ -169,10 +169,9 @@ wsl-enterprise (module) -> wsl-dev-team (module) -> nixos-wsl-dev-team (host) ->
 ## Active Work
 
 ### USB/IP + Jetson Orin Nano Development
-**Branch**: `feat/usb-jetson` (15 commits, not yet merged)
-**Status**: USB infrastructure complete, needs hardware verification
-**Remaining**: autoAttachByHardwareId, NixOS-WSL usbip.nix upstream PR, Jetson flashing workflow
-**Details**: See branch commits and `docs/NIXOS-WSL-BARE-MOUNT-CONTRIBUTION-PLAN.md`
+**Status**: USB infrastructure merged to main, needs hardware verification
+**Remaining**: NixOS-WSL usbip.nix upstream PR, Jetson flashing workflow
+**Details**: `modules/system/settings/wsl/wsl.nix` (usbip options), `docs/NIXOS-WSL-BARE-MOUNT-CONTRIBUTION-PLAN.md`
 
 ## Deferred Work
 
