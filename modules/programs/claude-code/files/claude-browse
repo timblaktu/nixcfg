@@ -29,19 +29,41 @@ if [[ -n "${CLAUDE_BROWSE_STATE:-}" ]]; then
   fi
 fi
 
-# Detect platform and open appropriately
-if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-  # WSL: use edge.exe directly (bypasses wslview overhead, enables window control)
-  if command -v edge.exe &>/dev/null; then
+# Detect platform
+is_wsl=false
+if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; then
+  is_wsl=true
+fi
+
+# Find Edge on WSL by checking known install paths
+find_edge_wsl() {
+  local candidates=(
+    "msedge.exe"
+    "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+    "/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe"
+  )
+  for c in "${candidates[@]}"; do
+    if command -v "$c" &>/dev/null || [[ -x "$c" ]]; then
+      echo "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Open appropriately
+if [[ "$is_wsl" == true ]]; then
+  # WSL: use msedge.exe directly (bypasses wslview overhead, enables window control)
+  if edge_cmd=$(find_edge_wsl); then
     if [[ "$new_window" == true ]]; then
-      edge.exe --new-window "$url" &>/dev/null &
+      "$edge_cmd" --new-window "$url" &>/dev/null &
     else
-      edge.exe "$url" &>/dev/null &
+      "$edge_cmd" "$url" &>/dev/null &
     fi
   elif command -v wslview &>/dev/null; then
     wslview "$url"
   else
-    echo "Error: No browser found (tried edge.exe, wslview)" >&2
+    echo "Error: No browser found (tried msedge.exe, wslview)" >&2
     exit 1
   fi
 
