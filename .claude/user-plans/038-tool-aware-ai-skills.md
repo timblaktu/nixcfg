@@ -35,10 +35,10 @@ The skill content is defined inline in the program module (via `skillContent`), 
 
 | Task | Status | Description |
 |------|--------|-------------|
-| T1 | `TASK:PENDING` | AWS CLI + SSM skill (awscli module) |
-| T2 | `TASK:PENDING` | glab CLI skill (gitlab-auth module) |
-| T3 | `TASK:PENDING` | Pulumi skill (pulumi module) |
-| T4 | `TASK:PENDING` | vtecli skill (location TBD, may need new module) |
+| T1 | `TASK:COMPLETE` | AWS CLI + SSM skill (awscli module) |
+| T2 | `TASK:COMPLETE` | glab CLI skill (gitlab-auth module) |
+| T3 | `TASK:COMPLETE` | Pulumi skill (pulumi module) |
+| T4 | `TASK:PENDING` | vtecli skill - belongs in nixcfg-work (proprietary tool) |
 | T5 | `TASK:PENDING` | Verify skill injection pattern works (home-manager switch + test) |
 
 ## Task Details
