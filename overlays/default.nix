@@ -66,7 +66,7 @@ in
         sourceProvenance = with prev.lib.sourceTypes; [ binaryBytecode ];
       };
     });
-  # opencode 1.14.48 — pinned ahead of nixpkgs input (which has 1.2.5)
+  # opencode 1.14.48 - pinned ahead of nixpkgs input (which has 1.2.5)
   opencode = prev.callPackage ../pkgs/opencode-pinned/package.nix { };
   # glab: patch fixes index-out-of-range panic when navigating to/from
   # downstream pipelines in ci view (unfixed upstream through v1.93.0)
