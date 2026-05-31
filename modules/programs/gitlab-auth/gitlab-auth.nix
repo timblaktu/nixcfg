@@ -265,74 +265,138 @@
           };
         };
 
-        config = mkIf cfg.enable {
-          # Install glab wrapper
-          home.packages = mkIf cfg.cli.enable [ glabWrapper ];
+        config = mkIf cfg.enable (mkMerge [
+          # Inject Claude Code skill when both gitlab-auth and claude-code are enabled
+          (mkIf (config.programs.claude-code.enable or false) {
+            programs.claude-code.skills.custom.glab-cli = {
+              description = "GitLab CLI (glab) recipes for MRs, pipelines, API calls, and runner management. Use when interacting with GitLab via CLI.";
+              skillContent = ''
+                # GitLab CLI (glab) Operations Skill
 
-          # Git credential configuration for GitLab
-          programs.git.settings = mkIf cfg.git.enableCredentialHelper {
-            credential."https://${cfg.host}" = mkMerge [
+                ## Token Retrieval
+                ```bash
+                # CORRECT - get token for a specific host:
+                glab config get token --host <hostname>
+
+                # WRONG - this subcommand does NOT exist:
+                # glab auth token  <-- DO NOT USE
+                ```
+
+                ## Pipeline Operations
+                ```bash
+                # Trigger a pipeline
+                glab ci run --branch <branch> --variables KEY:VALUE
+                # Note: variable separator is COLON (:), not equals (=)
+
+                # Check pipeline status
+                glab ci status --branch <branch>
+                # Note: there is no "glab ci view <pipeline-id>" command
+                ```
+
+                ## Merge Requests
+                ```bash
+                # Create MR
+                glab mr create --title "..." --description "..."
+
+                # List MRs
+                glab mr list --state opened
+                ```
+
+                ## API Calls
+                ```bash
+                # Simple REST API call
+                glab api <endpoint>
+
+                # For pipeline variables, use curl with JSON body
+                # (glab api -f doesn't pass pipeline variables correctly)
+                curl -X POST \
+                  -H "PRIVATE-TOKEN: $(glab config get token --host <hostname>)" \
+                  -H "Content-Type: application/json" \
+                  -d '{"ref":"main","variables":[{"key":"FOO","value":"bar"}]}' \
+                  "https://<hostname>/api/v4/projects/<id>/pipeline"
+
+                # Runner management
+                glab api -X PUT runners/<id> -f paused=true
+                ```
+
+                ## Common Gotchas
+                - `glab auth token` does NOT exist - use `glab config get token --host`
+                - Pipeline variable separator is `:` not `=` in `--variables`
+                - `glab api -f` doesn't work for pipeline trigger variables
+                - Config file is at `~/.config/glab-cli/config.yml`
+              '';
+            };
+          })
+
+          {
+            # Install glab wrapper
+            home.packages = mkIf cfg.cli.enable [ glabWrapper ];
+
+            # Git credential configuration for GitLab
+            programs.git.settings = mkIf cfg.git.enableCredentialHelper {
+              credential."https://${cfg.host}" = mkMerge [
+                {
+                  helper = mkForce "!${glabWrapper}/bin/glab auth git-credential";
+                }
+                (mkIf (cfg.git.userName != null) {
+                  username = cfg.git.userName;
+                })
+              ];
+            };
+
+            # Create glab config file (token provided via GITLAB_TOKEN env var)
+            home.activation.glabConfig = mkIf cfg.cli.enable
+              (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+                      mkdir -p "$HOME/.config/glab-cli"
+                      CONFIG_FILE="$HOME/.config/glab-cli/config.yml"
+
+                      # Remove symlink if it exists
+                      if [ -L "$CONFIG_FILE" ]; then
+                        rm -f "$CONFIG_FILE"
+                      fi
+
+                      # Create config WITHOUT token field
+                      cat > "$CONFIG_FILE" <<EOF
+                # GitLab CLI configuration
+                # Token provided via GITLAB_TOKEN environment variable at runtime
+                host: ${cfg.host}
+                ${lib.optionalString (cfg.cli.apiUser != null) "user: ${cfg.cli.apiUser}"}
+                hosts:
+                  ${cfg.host}:
+                    git_protocol: ${cfg.protocol}
+                    api_protocol: https
+                display_hyperlinks: true
+                glamour_style: dark
+                editor: ${config.home.sessionVariables.EDITOR or "vim"}
+                EOF
+                      chmod 600 "$CONFIG_FILE"
+                      $DRY_RUN_CMD echo "GitLab CLI configured for ${cfg.host} (token via env var)"
+              '');
+
+            # Bitwarden mode: informational activation check
+            home.activation.gitlabAuthBitwarden = mkIf (cfg.mode == "bitwarden")
+              (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+                if ! ${pkgs.rbw}/bin/rbw unlocked >/dev/null 2>&1; then
+                  $DRY_RUN_CMD echo "Note: Bitwarden vault is locked. GitLab auth will fail until you run: rbw unlock"
+                else
+                  $DRY_RUN_CMD echo "Bitwarden unlocked - GitLab authentication ready (${cfg.host})"
+                fi
+              '');
+
+            # Assertions
+            assertions = [
               {
-                helper = mkForce "!${glabWrapper}/bin/glab auth git-credential";
+                assertion = cfg.mode == "bitwarden" -> (config.secretsManagement.enable or false);
+                message = "gitAuth.gitlab with bitwarden mode requires secretsManagement.enable = true";
               }
-              (mkIf (cfg.git.userName != null) {
-                username = cfg.git.userName;
-              })
             ];
-          };
 
-          # Create glab config file (token provided via GITLAB_TOKEN env var)
-          home.activation.glabConfig = mkIf cfg.cli.enable
-            (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
-                    mkdir -p "$HOME/.config/glab-cli"
-                    CONFIG_FILE="$HOME/.config/glab-cli/config.yml"
-
-                    # Remove symlink if it exists
-                    if [ -L "$CONFIG_FILE" ]; then
-                      rm -f "$CONFIG_FILE"
-                    fi
-
-                    # Create config WITHOUT token field
-                    cat > "$CONFIG_FILE" <<EOF
-              # GitLab CLI configuration
-              # Token provided via GITLAB_TOKEN environment variable at runtime
-              host: ${cfg.host}
-              ${lib.optionalString (cfg.cli.apiUser != null) "user: ${cfg.cli.apiUser}"}
-              hosts:
-                ${cfg.host}:
-                  git_protocol: ${cfg.protocol}
-                  api_protocol: https
-              display_hyperlinks: true
-              glamour_style: dark
-              editor: ${config.home.sessionVariables.EDITOR or "vim"}
-              EOF
-                    chmod 600 "$CONFIG_FILE"
-                    $DRY_RUN_CMD echo "GitLab CLI configured for ${cfg.host} (token via env var)"
-            '');
-
-          # Bitwarden mode: informational activation check
-          home.activation.gitlabAuthBitwarden = mkIf (cfg.mode == "bitwarden")
-            (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-              if ! ${pkgs.rbw}/bin/rbw unlocked >/dev/null 2>&1; then
-                $DRY_RUN_CMD echo "Note: Bitwarden vault is locked. GitLab auth will fail until you run: rbw unlock"
-              else
-                $DRY_RUN_CMD echo "Bitwarden unlocked - GitLab authentication ready (${cfg.host})"
-              fi
-            '');
-
-          # Assertions
-          assertions = [
-            {
-              assertion = cfg.mode == "bitwarden" -> (config.secretsManagement.enable or false);
-              message = "gitAuth.gitlab with bitwarden mode requires secretsManagement.enable = true";
-            }
-          ];
-
-          # Warnings
-          warnings =
-            optional (cfg.mode == "bitwarden" && (config.secretsManagement.rbw.email or null) == null)
-              "gitAuth.gitlab: bitwarden mode enabled but secretsManagement.rbw.email not set. Run 'rbw-init' to configure.";
-        };
+            # Warnings
+            warnings =
+              optional (cfg.mode == "bitwarden" && (config.secretsManagement.rbw.email or null) == null)
+                "gitAuth.gitlab: bitwarden mode enabled but secretsManagement.rbw.email not set. Run 'rbw-init' to configure.";
+          }
+        ]);
       };
   };
 }

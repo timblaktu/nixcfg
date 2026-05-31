@@ -456,6 +456,86 @@
         };
 
         config = mkIf cfg.enable (mkMerge [
+          # Inject Claude Code skill when both awscli and claude-code are enabled
+          (mkIf (config.programs.claude-code.enable or false) {
+            programs.claude-code.skills.custom.aws-cli = {
+              description = "AWS CLI and SSM recipes for EC2 instance management, remote command execution, and infrastructure operations. Use when running commands on EC2 via SSM, managing AMIs, or debugging AWS infrastructure.";
+              skillContent = ''
+                # AWS CLI + SSM Operations Skill
+
+                ## SSM Command Execution
+
+                Two modes for running commands on EC2 instances via SSM:
+
+                ### send-command (fire-and-forget, buffered output)
+                - Output is buffered for ~30 seconds before becoming available
+                - Good for short, simple commands where you don't need real-time output
+                - Retrieve output with `list-command-invocations --details`
+
+                ```bash
+                # Send a command
+                aws ssm send-command \
+                  --instance-ids i-xxx \
+                  --document-name AWS-RunShellScript \
+                  --parameters commands=["your-command-here"]
+
+                # Get output (wait ~30s for buffer flush)
+                aws ssm list-command-invocations \
+                  --command-id <id> \
+                  --details \
+                  --query 'CommandInvocations[0].CommandPlugins[0].Output'
+                ```
+
+                For complex commands, use a JSON parameters file:
+                ```bash
+                aws ssm send-command \
+                  --instance-ids i-xxx \
+                  --document-name AWS-RunShellScript \
+                  --parameters file:///tmp/params.json
+                ```
+
+                ### start-session (real-time WebSocket streaming)
+                - Real-time output, no buffering
+                - Requires `session-manager-plugin` installed locally
+                - Use for long-running builds, monitoring, or interactive work
+
+                ```bash
+                # Real-time streaming recipe (pipe commands into session)
+                (echo "your-command-here" && cat && exit && exit) | \
+                  aws ssm start-session --target i-xxx
+                ```
+
+                **CRITICAL**: Always prefer `start-session` for builds or any command >30 seconds.
+                `send-command` output truncates at 48000 chars and the 30s buffer makes monitoring impossible.
+
+                ## EC2 Operations
+
+                ### AMI Lifecycle
+                ```bash
+                # Root volume gotcha: DescribeInstances doesn't include VolumeSize
+                # in BlockDeviceMappings. Use describe-volumes separately:
+                aws ec2 describe-volumes --volume-ids vol-xxx \
+                  --query 'Volumes[0].Size'
+                ```
+
+                ### Instance Profile Auth
+                EC2 instances with IAM roles need no credentials - the instance profile provides them automatically. Do NOT set `AWS_ACCESS_KEY_ID` on EC2 instances.
+
+                ## SSM Parameter Store
+                ```bash
+                # Read (with decryption for SecureString)
+                aws ssm get-parameter --name /path/to/param --with-decryption
+
+                # Write
+                aws ssm put-parameter --name /path/to/param --type SecureString --value "secret"
+                ```
+
+                ## Prerequisites
+                - `session-manager-plugin` must be installed for `start-session` to work
+                - It is a separate install from AWS CLI itself
+              '';
+            };
+          })
           # Base: AWS CLI v2 with Nix-managed config
           {
             programs.awscli = {
