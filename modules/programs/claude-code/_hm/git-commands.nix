@@ -110,6 +110,16 @@ in
                  fi
                  ```
 
+              5. **Run post-checkout hook manually**
+                 git's post-checkout hook does NOT fire during `git worktree add` (confirmed git 2.52).
+                 Run it explicitly so hooks like user-plans symlink setup execute.
+                 ```bash
+                 HOOK="$NEW_WORKTREE/.githooks/post-checkout"
+                 if [[ -x "$HOOK" ]]; then
+                   (cd "$NEW_WORKTREE" && "$HOOK" 0000000000000000000000000000000000000000 "$(git rev-parse HEAD)" 1)
+                 fi
+                 ```
+
               ## Output Format
 
               On success, display:

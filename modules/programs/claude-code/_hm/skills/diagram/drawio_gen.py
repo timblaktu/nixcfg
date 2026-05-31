@@ -510,6 +510,121 @@ def cmd_generate(args):
             _render_and_reinject(outpath)
 
 
+def _collapse_light_dark(text):
+    """Replace every light-dark(lightVal, darkVal) with lightVal.
+
+    Handles nested functions like light-dark(rgb(1,2,3), rgb(4,5,6)) by
+    tracking parenthesis depth rather than using regex.
+    """
+    result = []
+    i = 0
+    needle = "light-dark("
+    while i < len(text):
+        idx = text.find(needle, i)
+        if idx == -1:
+            result.append(text[i:])
+            break
+        result.append(text[i:idx])
+        # Find the matching close paren, tracking depth
+        j = idx + len(needle)
+        depth = 1
+        # Extract first argument: everything up to the comma at depth 1
+        arg_start = j
+        first_arg = None
+        while j < len(text) and depth > 0:
+            ch = text[j]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    if first_arg is None:
+                        first_arg = text[arg_start:j].strip()
+                    break
+            elif ch == "," and depth == 1 and first_arg is None:
+                first_arg = text[arg_start:j].strip()
+            j += 1
+        result.append(first_arg or "")
+        i = j + 1
+    return "".join(result)
+
+
+def _fix_dark_mode_svg(filepath):
+    """Force draw.io SVG exports to render in light mode only.
+
+    draw.io v29+ exports SVGs with dark-mode-aware CSS:
+    - color-scheme: light dark (or just "dark") on root <svg>
+    - light-dark(lightVal, darkVal) on color, fill, stroke properties
+    - var(--ge-dark-color, fallback) for dark backgrounds
+    - Flat color:#ffffff on inner text divs (older v29 builds)
+
+    In dark-mode browsers/OS, these cause: white text on light fills,
+    inverted stroke/fill colors, and dark backgrounds. All values have a
+    perfectly good light-mode variant as the first argument — we just need
+    to lock the SVG to that variant.
+
+    Strategy (applied in order):
+    1. Strip color-scheme declarations (everywhere, not just root)
+    2. Collapse light-dark(X, Y) → X globally (paren-aware parser)
+    3. Remove var(--ge-dark-color, ...) and --ge-* custom property defs
+    4. Fix legacy flat color:#ffffff dark-mode artifacts on text divs
+    5. Insert white background rect covering full viewBox (many markdown
+       renderers strip CSS background on embedded SVGs)
+    """
+    with open(filepath, "r", encoding="utf-8") as f:
+        svg = f.read()
+
+    original = svg
+
+    # 1. Strip all color-scheme declarations
+    svg = re.sub(r'color-scheme:\s*[^;\"]+;?\s*', '', svg)
+
+    # 2. Collapse light-dark(X, Y) → X with proper nested-paren handling
+    svg = _collapse_light_dark(svg)
+
+    # 3. Remove var(--ge-dark-color, ...) references and --ge-* definitions
+    #    var(--ge-dark-color, #121212) → nothing (remove entire property:value)
+    svg = re.sub(r'[\w-]+:\s*var\(--ge-[^)]+\);?\s*', '', svg)
+    #    --ge-dark-color definitions (unlikely in inline styles, but be safe)
+    svg = re.sub(r'--ge-[\w-]+:\s*[^;\"]+;?\s*', '', svg)
+
+    # 4. Fix legacy format: outer div color:#000000, inner div color:#ffffff.
+    #    Steps 1-2 handle the modern format; this catches older v29 builds.
+    def fix_legacy_text_colors(m):
+        full = m.group(0)
+        parts = full.split('display: inline-block', 1)
+        if len(parts) == 2:
+            outer, inner = parts
+            if re.search(r'color:\s*#000000\s*;', outer) and \
+               re.search(r'color:\s*#ffffff\s*;', inner):
+                inner = re.sub(r'color:\s*#ffffff\s*;', 'color: #000000;', inner, count=1)
+                return outer + 'display: inline-block' + inner
+        return full
+
+    svg = re.sub(
+        r'<foreignObject[^>]*>.*?</foreignObject>',
+        fix_legacy_text_colors,
+        svg,
+        flags=re.DOTALL,
+    )
+
+    # 5. Insert white background rect if not already present.
+    #    CSS "background" on <svg> is ignored by many markdown renderers
+    #    (GitHub, VS Code preview, etc.) when embedding SVGs as images.
+    if 'data-bg-rect="true"' not in svg:
+        vb = re.search(r'viewBox="\d+\s+\d+\s+(\d+)\s+(\d+)"', svg)
+        first_g = svg.find("<g>")
+        if vb and first_g != -1:
+            w, h = vb.group(1), vb.group(2)
+            bg = f'<rect data-bg-rect="true" x="0" y="0" width="{w}" height="{h}" fill="#ffffff" stroke="none"/>'
+            svg = svg[:first_g + 3] + bg + svg[first_g + 3:]
+
+    if svg != original:
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(svg)
+        print("Fixed draw.io dark-mode SVG export artifacts", file=sys.stderr)
+
+
 def _render_and_reinject(filepath):
     """Run drawio-svg-sync, then re-inject content attribute."""
     # Save content before render (drawio-svg-sync preserves it, but be safe)
@@ -533,6 +648,9 @@ def _render_and_reinject(filepath):
     if not current:
         print("Re-injecting content attribute (stripped by renderer)...", file=sys.stderr)
         inject_content_attr(filepath, mxfile_xml)
+
+    # Fix draw.io dark-mode SVG export bug (color-scheme:dark, white text)
+    _fix_dark_mode_svg(filepath)
 
     # Final verification
     ok, msgs = verify_file(filepath)
