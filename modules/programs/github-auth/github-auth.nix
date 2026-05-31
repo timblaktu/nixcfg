@@ -441,6 +441,19 @@
           # the correct token source. Per-org sections are NOT used.
           programs.git.settings = mkIf cfg.git.enableCredentialHelper {
             credential = mkMerge [
+              # Per-org credential helpers
+              # useHttpPath is required: without it, git ignores the path component
+              # when matching credential contexts, so https://github.com/orgName
+              # matches the same as https://github.com and the generic helper wins.
+              (mapAttrs'
+                (orgName: _orgCfg:
+                  nameValuePair "https://github.com/${orgName}" {
+                    helper = mkForce "!${orgCredentialHelpers.${orgName}}";
+                    useHttpPath = true;
+                  }
+                )
+                cfg.orgs)
+              # Default credential helpers
               {
                 "https://github.com" = mkMerge [
                   {
