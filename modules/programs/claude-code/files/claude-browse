@@ -31,9 +31,50 @@ fi
 
 # Detect platform
 is_wsl=false
-if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; then
+if [[ -n "${WSL_DISTRO_NAME:-${WSL_DISTRO:-}}" ]] || grep -qi microsoft /proc/version 2>/dev/null; then
   is_wsl=true
 fi
+
+# Convert a Linux path to a Windows-accessible path for WSL.
+# Uses wslpath if available, otherwise constructs \\wsl.localhost\DISTRO\path manually.
+# URLs (http://, https://, file://) pass through unchanged.
+wsl_winpath() {
+  local path="$1"
+  # URLs don't need conversion
+  if [[ "$path" =~ ^https?:// ]] || [[ "$path" =~ ^file:// ]]; then
+    echo "$path"
+    return
+  fi
+  # Resolve to absolute path
+  if [[ -e "$path" ]]; then
+    path="$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
+  fi
+  # Use wslpath if available
+  if command -v wslpath &>/dev/null; then
+    wslpath -w "$path"
+    return
+  fi
+  # Determine distro name: WSL_DISTRO_NAME (standard), WSL_DISTRO (NixOS WSL), or wsl.exe query
+  local distro="${WSL_DISTRO_NAME:-${WSL_DISTRO:-}}"
+  if [[ -z "$distro" ]]; then
+    # wsl.exe -l -q lists distros; the default (running) one is usually first
+    # Output has null bytes from UTF-16, strip them
+    distro=$(wsl.exe -l -q 2>/dev/null | tr -d '\0\r' | head -1)
+  fi
+  if [[ -z "$distro" ]]; then
+    # Can't determine distro name - return empty to signal caller should use wslview
+    return 1
+  fi
+  # Convert /mnt/c/... paths to C:\...
+  if [[ "$path" =~ ^/mnt/([a-zA-Z])/(.*) ]]; then
+    local drive="${BASH_REMATCH[1]^^}"
+    local rest="${BASH_REMATCH[2]}"
+    printf '%s\n' "${drive}:\\${rest//\//\\}"
+  else
+    # Linux paths become \\wsl.localhost\distro\path
+    printf '%s\n' "\\\\wsl.localhost\\${distro}${path//\//\\}"
+  fi
+}
 
 # Find Edge on WSL by checking known install paths
 find_edge_wsl() {
@@ -54,13 +95,15 @@ find_edge_wsl() {
 # Open appropriately
 if [[ "$is_wsl" == true ]]; then
   # WSL: use msedge.exe directly (bypasses wslview overhead, enables window control)
-  if edge_cmd=$(find_edge_wsl); then
+  # Must convert Linux paths to Windows-accessible paths for Windows executables
+  if win_url=$(wsl_winpath "$url") && edge_cmd=$(find_edge_wsl); then
     if [[ "$new_window" == true ]]; then
-      "$edge_cmd" --new-window "$url" &>/dev/null &
+      "$edge_cmd" --new-window "$win_url" &>/dev/null &
     else
-      "$edge_cmd" "$url" &>/dev/null &
+      "$edge_cmd" "$win_url" &>/dev/null &
     fi
   elif command -v wslview &>/dev/null; then
+    # wslview handles path conversion internally
     wslview "$url"
   else
     echo "Error: No browser found (tried msedge.exe, wslview)" >&2
