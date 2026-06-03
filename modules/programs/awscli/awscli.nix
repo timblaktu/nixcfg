@@ -408,25 +408,16 @@
           complete -F _aws_azure_login aws-azure-login
         '';
 
-        zshCompletionContent =
-          let
-            # Format: value:description with colons escaped as \: in the description
-            roleDescriptions = concatStringsSep " " (mapAttrsToList
-              (name: arn:
-                "${name}:${replaceStrings [":"] ["\\:"] arn}"
-              )
-              roles);
-          in
-          ''
-            #compdef aws-azure-login
-            _aws-azure-login() {
-              _arguments -s \
-                '--role-arn[AWS role ARN or known role name]:role:((${roleDescriptions}))' \
-                '--list-roles[List known role names and ARNs]' \
-                '*:: :_default'
-            }
-            _aws-azure-login "$@"
-          '';
+        zshCompletionContent = ''
+          #compdef aws-azure-login
+          _aws-azure-login() {
+            _arguments -s \
+              '--role-arn[AWS role ARN or known role name]:role:(${roleNamesStr})' \
+              '--list-roles[List known role names and ARNs]' \
+              '*::: '
+          }
+          _aws-azure-login "$@"
+        '';
 
       in
       {
@@ -686,6 +677,7 @@
                   "default" = {
                     region = cfg.defaultRegion;
                     output = cfg.outputFormat;
+                    cli_pager = "";
                   };
                 }
                 (mkIf cfg.azureAuth.enable {
