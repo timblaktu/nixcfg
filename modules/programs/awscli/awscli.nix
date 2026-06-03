@@ -45,6 +45,28 @@
         hasCredentials = bw.credentialItem != null;
         hasRoleArn = bw.roleArnItem != null || cfg.azureAuth.defaultRoleArn != null;
 
+        roles = cfg.azureAuth.knownRoles;
+        roleNames = attrNames roles;
+        roleNamesStr = concatStringsSep " " roleNames;
+
+        # Shell case arms to resolve role shortnames to full ARNs
+        roleCaseArms = concatStringsSep "\n" (mapAttrsToList
+          (name: arn:
+            "      ${escapeShellArg name}) _AAL_ROLE_ARN=${escapeShellArg arn} ;;"
+          )
+          roles);
+
+        # --list-roles output
+        listRolesLines =
+          if roles == { } then
+            ''  echo "  (none configured - add roles to awscli.azureAuth.knownRoles)"''
+          else
+            concatStringsSep "\n" (mapAttrsToList
+              (name: arn:
+                ''  printf '  %-20s %s\n' ${escapeShellArg name} ${escapeShellArg arn}''
+              )
+              roles);
+
         # Patched aws-azure-login: fix password handler infinite loop.
         # Upstream bug: after clicking submit, the 500ms delay is too short for
         # Azure AD to process the AJAX request and navigate away. The password
@@ -189,11 +211,18 @@
         '';
 
         # ===== Expect script for auto-TOTP injection =====
-        # Spawns aws-azure-login, watches for TOTP prompt, feeds code from rbw
+        # Spawns aws-azure-login, watches for TOTP prompt, feeds code from rbw.
+        # When AAL_INTERACTIVE=1 (no --role-arn), hands control to user after TOTP
+        # so they can respond to the interactive role selection prompt.
         expectScript = pkgs.writeScript "aws-azure-login-expect" ''
           #!${pkgs.expect}/bin/expect -f
           set timeout 300
           log_user 1
+
+          set interactive 0
+          if {[info exists env(AAL_INTERACTIVE)] && ''$env(AAL_INTERACTIVE) == 1} {
+            set interactive 1
+          }
 
           set args [lrange ''$argv 0 end]
           spawn {*}''$args
@@ -204,19 +233,64 @@
               set totp [exec ${pkgs.rbw}/bin/rbw code {${bw.credentialItem}}]
               send "''$totp\r"
               log_user 1
-              exp_continue
+              if {''$interactive} {
+                # Hand control to user for role selection prompt
+                interact
+              } else {
+                exp_continue
+              }
             }
             eof
           }
 
           catch wait result
-          exit [lindex ''$result 3]
+          if {[llength ''$result] >= 4} {
+            exit [lindex ''$result 3]
+          }
+          exit 0
         '';
 
         # ===== aws-azure-login wrapper =====
-        # Creates ephemeral config on tmpfs, injects rbw secrets, delegates to real binary
+        # Creates ephemeral config on tmpfs, injects rbw secrets, delegates to real binary.
+        # Supports --role-arn <name-or-arn> for non-interactive role selection,
+        # or omit for interactive role picker after SAML auth.
         aws-azure-login-wrapper = pkgs.writeShellScriptBin "aws-azure-login" ''
           set -euo pipefail
+
+          # --- Parse wrapper-specific arguments ---
+          _AAL_ROLE_ARN=""
+          _AAL_PASSTHROUGH=()
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --role-arn)
+                [[ $# -lt 2 ]] && { echo "Error: --role-arn requires a value" >&2; exit 1; }
+                _AAL_ROLE_ARN="$2"; shift 2 ;;
+              --role-arn=*)
+                _AAL_ROLE_ARN="''${1#--role-arn=}"; shift ;;
+              --list-roles)
+                echo "Known roles:"
+                ${listRolesLines}
+                echo ""
+                echo "Use --role-arn <name> or --role-arn <full-arn> for non-interactive login."
+                echo "Omit --role-arn for interactive role selection."
+                exit 0 ;;
+              *)
+                _AAL_PASSTHROUGH+=("$1"); shift ;;
+            esac
+          done
+          set -- "''${_AAL_PASSTHROUGH[@]+"''${_AAL_PASSTHROUGH[@]}"}"
+
+          # --- Resolve role shortnames to full ARNs ---
+          if [[ -n "$_AAL_ROLE_ARN" ]] && [[ "$_AAL_ROLE_ARN" != arn:* ]]; then
+            case "$_AAL_ROLE_ARN" in
+          ${roleCaseArms}
+              *)
+                echo "Error: Unknown role name '$_AAL_ROLE_ARN'" >&2
+                echo "Known roles: ${if roleNamesStr == "" then "(none configured)" else roleNamesStr}" >&2
+                echo "Use a full ARN or add to awscli.azureAuth.knownRoles in nix config." >&2
+                exit 1 ;;
+            esac
+          fi
 
           ${rbwLib.mkRbwSyncIfStale { staleSeconds = cfg.rbwSyncInterval; }}
 
@@ -265,17 +339,10 @@
             export AAL_PASSWORD
           ''}
 
-          ${optionalString (bw.roleArnItem != null) ''
-            AAL_ROLE_ARN="$(${rbwLib.mkRbwGetCommand {
-              item = bw.roleArnItem;
-              field = bw.roleArnField;
-            }} 2>/dev/null)" || {
-              echo "Error: Failed to retrieve Role ARN from Bitwarden" >&2
-              echo "  Item: ${bw.roleArnItem}, Field: ${toString bw.roleArnField}" >&2
-              exit 1
-            }
-            export AAL_ROLE_ARN
-          ''}
+          # Set role ARN only if explicitly provided via --role-arn
+          if [[ -n "$_AAL_ROLE_ARN" ]]; then
+            export AAL_ROLE_ARN="$_AAL_ROLE_ARN"
+          fi
 
           # Create ephemeral config on tmpfs (secrets never touch persistent storage)
           _TMPCONFIG="$(mktemp "''${XDG_RUNTIME_DIR:-/tmp}/aws-config.XXXXXX")"
@@ -289,20 +356,70 @@
           fi
           ${configMergeScript} "$_TMPCONFIG"
 
+          # When no role specified, strip any default role ARN from config
+          # so aws-azure-login shows the interactive role picker
+          if [[ -z "$_AAL_ROLE_ARN" ]]; then
+            ${pkgs.gnused}/bin/sed -i '/^azure_default_role_arn/d' "$_TMPCONFIG"
+          fi
+
           export AWS_CONFIG_FILE="$_TMPCONFIG"
 
+          # Set interactive flag for expect script (enables role picker after TOTP)
+          if [[ -z "$_AAL_ROLE_ARN" ]]; then
+            export AAL_INTERACTIVE=1
+          fi
+
           ${if hasCredentials && cfg.azureAuth.autoTotp then ''
-            # Fully non-interactive: expect handles TOTP prompt
+            # Credentials + TOTP automated via expect; role picker if AAL_INTERACTIVE=1
             exec ${expectScript} \
               ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
           '' else if hasCredentials then ''
-            # Semi-interactive: credentials from rbw, user types TOTP
+            # Credentials from rbw, user handles TOTP + role selection interactively
             exec ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
           '' else ''
-            # Interactive: only tenant/app config injected
+            # Fully interactive: only tenant/app config injected
             exec ${aws-azure-login-patched}/bin/aws-azure-login --no-sandbox "$@"
           ''}
         '';
+
+        # ===== Shell completions for --role-arn =====
+        bashCompletionContent = ''
+          _aws_azure_login() {
+            local cur prev
+            COMPREPLY=()
+            cur="''${COMP_WORDS[COMP_CWORD]}"
+            prev="''${COMP_WORDS[COMP_CWORD-1]}"
+
+            case "$prev" in
+              --role-arn)
+                COMPREPLY=($(compgen -W "${roleNamesStr}" -- "$cur"))
+                return ;;
+            esac
+
+            COMPREPLY=($(compgen -W "--role-arn --list-roles" -- "$cur"))
+          }
+          complete -F _aws_azure_login aws-azure-login
+        '';
+
+        zshCompletionContent =
+          let
+            # Format: value:description with colons escaped as \: in the description
+            roleDescriptions = concatStringsSep " " (mapAttrsToList
+              (name: arn:
+                "${name}:${replaceStrings [":"] ["\\:"] arn}"
+              )
+              roles);
+          in
+          ''
+            #compdef aws-azure-login
+            _aws-azure-login() {
+              _arguments -s \
+                '--role-arn[AWS role ARN or known role name]:role:((${roleDescriptions}))' \
+                '--list-roles[List known role names and ARNs]' \
+                '*:: :_default'
+            }
+            _aws-azure-login "$@"
+          '';
 
       in
       {
@@ -427,12 +544,28 @@
               type = types.nullOr types.str;
               default = null;
               description = ''
-                Default IAM role ARN to assume after Azure AD authentication.
-                If null and roleArnItem is not set, aws-azure-login will prompt
-                for role selection when multiple roles are available.
-                Overridden by roleArnItem when both are set.
+                Default IAM role ARN baked into ~/.aws/config. Only used when
+                --role-arn is passed (the config merge injects it). When omitted
+                and no --role-arn is given, the interactive role picker appears.
+                Prefer knownRoles for named role shortcuts.
               '';
               example = "arn:aws:iam::123456789012:role/MyRole";
+            };
+
+            knownRoles = mkOption {
+              type = types.attrsOf types.str;
+              default = { };
+              description = ''
+                Named AWS role ARNs for the --role-arn shorthand and shell completion.
+                Keys are short names used on the CLI, values are full IAM role ARNs.
+                Run `aws-azure-login --list-roles` to see configured roles.
+              '';
+              example = literalExpression ''
+                {
+                  dev = "arn:aws:iam::205930615774:role/app-developer";
+                  vrack = "arn:aws:iam::780648478424:role/eks-admin";
+                }
+              '';
             };
           };
 
@@ -567,6 +700,10 @@
           (mkIf cfg.azureAuth.enable {
             home.packages = [ aws-azure-login-wrapper ];
 
+            # Shell completions for --role-arn
+            home.file.".local/share/bash-completion/completions/aws-azure-login".text = bashCompletionContent;
+            home.file.".local/share/zsh/site-functions/_aws-azure-login".text = zshCompletionContent;
+
             assertions = [
               {
                 assertion = config.secretsManagement.enable or false;
@@ -580,9 +717,7 @@
 
             warnings =
               optional ((config.secretsManagement.rbw.email or null) == null)
-                "awscli.azureAuth: Bitwarden integration enabled but secretsManagement.rbw.email not set. Run 'rbw-init' to configure."
-              ++ optional (hasCredentials && !hasRoleArn)
-                "awscli.azureAuth: Non-interactive mode enabled but no role ARN configured. If your account has multiple AWS roles, login will fail. Set azureAuth.defaultRoleArn or azureAuth.bitwarden.roleArnItem.";
+                "awscli.azureAuth: Bitwarden integration enabled but secretsManagement.rbw.email not set. Run 'rbw-init' to configure.";
           })
         ]);
       };
