@@ -370,9 +370,16 @@
           fi
 
           ${if hasCredentials && cfg.azureAuth.autoTotp then ''
-            # Credentials + TOTP automated via expect; role picker if AAL_INTERACTIVE=1
-            exec ${expectScript} \
-              ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
+            if [[ -n "$AAL_INTERACTIVE" ]]; then
+              # Interactive role selection: skip expect so arrow keys work in
+              # the inquirer prompt (expect's interact mangles escape sequences).
+              # User types TOTP manually.
+              exec ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
+            else
+              # Fully non-interactive: expect handles TOTP prompt
+              exec ${expectScript} \
+                ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
+            fi
           '' else if hasCredentials then ''
             # Credentials from rbw, user handles TOTP + role selection interactively
             exec ${aws-azure-login-patched}/bin/aws-azure-login --no-prompt --no-sandbox "$@"
