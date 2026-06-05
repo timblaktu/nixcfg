@@ -1,7 +1,7 @@
 # Mikrotik Management Skill - Test Cases
 
-**Skill Version**: 1.0.0 (Phase 1)
-**Last Updated**: 2026-01-27
+**Skill Version**: 2.2.0
+**Last Updated**: 2026-06-05
 **Test Environment**: Mikrotik CRS326-24G-2S+ at factory defaults
 
 ---
@@ -236,6 +236,181 @@ ssh admin@192.168.88.1 "/ip address print"
 
 ---
 
+### Test 9: DHCP Operations
+
+**Purpose**: Verify DHCP pool, server, network, and lease management.
+
+**Prerequisites**: Bridge `bridge-attic` with IP `10.0.0.1/24` must exist (deploy L1.0 or complete Tests 2-4 first).
+
+**Test Steps**:
+1. [ ] Request: "Create a DHCP pool named pool-attic with range 10.0.0.100-10.0.0.200"
+   - Expected: Pool created via `/ip pool add`
+2. [ ] Request: "Create a DHCP server named dhcp-attic on bridge-attic using pool-attic"
+   - Expected: Server created via `/ip dhcp-server add`
+3. [ ] Request: "Configure DHCP network 10.0.0.0/24 with gateway 10.0.0.1, DNS 10.0.0.1, domain attic.local"
+   - Expected: Network params configured via `/ip dhcp-server network add`
+4. [ ] Request: "Add a static DHCP lease for 10.0.0.10 with MAC XX:XX:XX:XX:XX:XX"
+   - Expected: Static lease created via `/ip dhcp-server lease add`
+5. [ ] Request: "List all DHCP leases"
+   - Expected: Shows static lease and any active dynamic leases
+
+**Verification**:
+```bash
+ssh admin@192.168.88.1 "/ip pool print"
+ssh admin@192.168.88.1 "/ip dhcp-server print"
+ssh admin@192.168.88.1 "/ip dhcp-server network print"
+ssh admin@192.168.88.1 "/ip dhcp-server lease print"
+```
+
+**Pass Criteria**: All DHCP components created correctly, static lease visible
+
+---
+
+### Test 10: DNS Operations
+
+**Purpose**: Verify DNS upstream configuration and static entry management.
+
+**Test Steps**:
+1. [ ] Request: "Configure upstream DNS servers 1.1.1.1 and 8.8.8.8 with remote requests enabled"
+   - Expected: DNS servers set via `/ip dns set`
+2. [ ] Request: "Add DNS static entry nux.attic.local pointing to 10.0.0.10"
+   - Expected: Static entry created via `/ip dns static add`
+3. [ ] Request: "Show DNS configuration"
+   - Expected: Displays upstream servers, allow-remote-requests, cache status
+4. [ ] Request: "List DNS static entries"
+   - Expected: Shows nux.attic.local entry
+5. [ ] Request: "Flush DNS cache"
+   - Expected: Cache flushed via `/ip dns cache flush`
+
+**Verification**:
+```bash
+ssh admin@192.168.88.1 "/ip dns print"
+ssh admin@192.168.88.1 "/ip dns static print"
+```
+
+**Pass Criteria**: DNS configured correctly, static entries resolve, cache operations work
+
+---
+
+### Test 11: Configuration State Management
+
+**Purpose**: Verify backup, export, and state inspection operations.
+
+**Test Steps**:
+1. [ ] Request: "Create a binary backup of the current configuration"
+   - Expected: Backup created via `/system backup save`, file stored on device
+2. [ ] Request: "Export the current configuration as text"
+   - Expected: Text export via `/export`, output displayed or saved
+3. [ ] Request: "What is the current configuration state - is this L1.0 or factory default?"
+   - Expected: Skill inspects bridge, DHCP, DNS presence and reports state
+4. [ ] Request: "Download the text export to local filesystem"
+   - Expected: Export retrieved via SCP/SSH and saved locally
+5. [ ] Verify backup files exist on device:
+   ```bash
+   ssh admin@192.168.88.1 "/file print"
+   ```
+
+**Pass Criteria**: Binary backup and text export created, state detection accurate
+
+---
+
+### Test 12: Factory Reset and Immutable Deployment
+
+**Purpose**: Verify factory reset safety guardrails and reset-then-configure workflow.
+
+**Test Steps**:
+1. [ ] Request: "Reset the switch to factory defaults"
+   - Expected: Skill shows safety warning, asks for confirmation before proceeding
+2. [ ] Confirm reset
+   - Expected: Reset executed via `/system reset-configuration`, switch reboots
+3. [ ] Wait for switch to come back online (factory IP 192.168.88.1)
+4. [ ] Request: "Deploy L1.0 configuration from scratch (immutable deployment)"
+   - Expected: Full L1.0 workflow executed - bridge, ports, IP, DHCP, DNS
+5. [ ] Verify full configuration:
+   ```bash
+   ssh admin@192.168.88.1 "/interface bridge print"
+   ssh admin@192.168.88.1 "/interface bridge port print"
+   ssh admin@192.168.88.1 "/ip address print"
+   ssh admin@192.168.88.1 "/ip dhcp-server print"
+   ssh admin@192.168.88.1 "/ip dns print"
+   ```
+
+**Pass Criteria**: Reset completes safely, full L1.0 config deployed from clean slate
+
+---
+
+### Test 13: Local .rsc Design Workflow
+
+**Purpose**: Verify local config file generation, editing, and deployment.
+
+**Test Steps**:
+1. [ ] Request: "Generate an L1.0 configuration file locally"
+   - Expected: `.rsc` file created with bridge, ports, IP, DHCP, DNS commands
+2. [ ] Review the generated file - verify RouterOS syntax is valid
+3. [ ] Edit the file (e.g., change DHCP pool range to 10.0.0.150-10.0.0.250)
+4. [ ] Request: "Deploy the local .rsc configuration to the switch"
+   - Expected: File uploaded and executed via SSH
+5. [ ] Request: "Parse the .rsc file and show what it would configure"
+   - Expected: Human-readable summary of .rsc contents
+
+**Verification**:
+```bash
+ssh admin@192.168.88.1 "/ip pool print"
+# Should show updated pool range if edited
+```
+
+**Pass Criteria**: .rsc generation, deployment, and parsing all work correctly
+
+---
+
+### Test 14: Status Printing
+
+**Purpose**: Verify compact status display for all configuration components.
+
+**Test Steps**:
+1. [ ] On factory-default switch, request: "Show switch status"
+   - Expected: Shows switch model/version, reports no bridge/DHCP/DNS configured
+2. [ ] Deploy L1.0 configuration, then request: "Show switch status"
+   - Expected: Hierarchical display showing all components:
+     ```
+     Switch: CRS326-24G-2S+ (RouterOS 7.x, uptime ...)
+     +-- Bridge: bridge-attic
+         +-- Ports: 8 active
+         +-- IP: 10.0.0.1/24
+         +-- DHCP: dhcp-attic (pool 10.0.0.100-200)
+         +-- DNS: 1.1.1.1, 8.8.8.8
+     ```
+3. [ ] Disconnect ethernet cable, request: "Show switch status"
+   - Expected: Connection failure reported gracefully, no crash
+4. [ ] With partial config (bridge only, no DHCP), request: "Show switch status"
+   - Expected: Shows bridge info, marks DHCP/DNS as "Not configured"
+
+**Pass Criteria**: Status works for all states - factory, partial, full, disconnected
+
+---
+
+### Test 15: Drift Detection
+
+**Purpose**: Verify detection of configuration changes that differ from expected state.
+
+**Test Steps**:
+1. [ ] Deploy L1.0 configuration
+2. [ ] Request: "Validate configuration against L1.0 spec"
+   - Expected: All checks pass
+3. [ ] Manually introduce drift:
+   ```bash
+   ssh admin@192.168.88.1 "/interface bridge port remove [find where interface=ether8]"
+   ssh admin@192.168.88.1 "/ip dns set servers=9.9.9.9"
+   ```
+4. [ ] Request: "Validate configuration against L1.0 spec"
+   - Expected: Reports drift - ether8 missing from bridge, DNS servers changed
+5. [ ] Request: "Fix the detected drift"
+   - Expected: Re-adds ether8 to bridge, restores DNS servers to 1.1.1.1,8.8.8.8
+
+**Pass Criteria**: Drift accurately detected and reported, remediation works
+
+---
+
 ## Test Results
 
 **Date**: ___________
@@ -252,6 +427,13 @@ ssh admin@192.168.88.1 "/ip address print"
 | 6 | Configuration Validation | ⬜ PASS / ⬜ FAIL | |
 | 7 | Error Handling | ⬜ PASS / ⬜ FAIL | |
 | 8 | Cleanup | ⬜ PASS / ⬜ FAIL | |
+| 9 | DHCP Operations | ⬜ PASS / ⬜ FAIL | |
+| 10 | DNS Operations | ⬜ PASS / ⬜ FAIL | |
+| 11 | Config State Management | ⬜ PASS / ⬜ FAIL | |
+| 12 | Factory Reset & Deploy | ⬜ PASS / ⬜ FAIL | |
+| 13 | Local .rsc Design | ⬜ PASS / ⬜ FAIL | |
+| 14 | Status Printing | ⬜ PASS / ⬜ FAIL | |
+| 15 | Drift Detection | ⬜ PASS / ⬜ FAIL | |
 
 **Overall Result**: ⬜ ALL PASS / ⬜ PARTIAL / ⬜ FAIL
 
