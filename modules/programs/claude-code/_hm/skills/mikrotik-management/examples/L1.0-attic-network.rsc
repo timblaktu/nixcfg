@@ -29,8 +29,8 @@
 /ip dhcp-server network add address=10.0.0.0/24 gateway=10.0.0.1 dns-server=10.0.0.1 domain=attic.local
 
 # Static lease for NUC
-# TODO: Replace XX:XX:XX:XX:XX:XX with actual NUC MAC address
-/ip dhcp-server lease add address=10.0.0.10 mac-address=XX:XX:XX:XX:XX:XX server=dhcp-attic comment="nux static lease"
+# TODO: Replace XX:XX:XX:XX:XX:XX with actual NUC MAC address, then uncomment the line below
+# /ip dhcp-server lease add address=10.0.0.10 mac-address=XX:XX:XX:XX:XX:XX server=dhcp-attic comment="nux static lease"
 
 # --- DNS ---
 /ip dns set servers=1.1.1.1,8.8.8.8 allow-remote-requests=yes

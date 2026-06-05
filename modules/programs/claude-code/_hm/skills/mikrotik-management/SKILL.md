@@ -641,608 +641,6 @@ validate_vlan "vlan-attic" "10" "bridge-attic"
 
 ---
 
-## Configuration Workflows
-
-### L1.0 Complete Workflow - Attic Network Setup (Updated 2026-01-27)
-
-This workflow implements the complete L1.0 configuration per user requirements:
-- Bridge: bridge-attic (flat bridge, no VLAN tagging)
-- Ports: ether1-ether8 (8 ports for multiple devices)
-- IP: 10.0.0.1/24 (gateway)
-- DHCP: Pool 10.0.0.100-200 with static lease for NUC (10.0.0.10)
-- DNS: Upstream 1.1.1.1,8.8.8.8 with static entries for nux.attic.local
-
-**Complete Script**:
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Configuration target state
-BRIDGE_NAME="bridge-attic"
-IP_ADDRESS="10.0.0.1/24"
-PORTS=("ether1" "ether2" "ether3" "ether4" "ether5" "ether6" "ether7" "ether8")
-PORT_COMMENTS=(
-    "NUC NIC 1 (management)"
-    "NUC NIC 2 (data)"
-    "Port 3 (available)"
-    "Port 4 (available)"
-    "Port 5 (available)"
-    "Port 6 (available)"
-    "Port 7 (available)"
-    "Port 8 (available)"
-)
-
-# DHCP configuration
-DHCP_POOL_NAME="pool-attic"
-DHCP_POOL_RANGE="10.0.0.100-10.0.0.200"
-DHCP_SERVER_NAME="dhcp-attic"
-DHCP_NETWORK="10.0.0.0/24"
-DHCP_GATEWAY="10.0.0.1"
-DHCP_DNS="10.0.0.1"
-DHCP_DOMAIN="attic.local"
-
-# NUC static lease (REPLACE MAC ADDRESS!)
-NUC_IP="10.0.0.10"
-NUC_MAC="XX:XX:XX:XX:XX:XX"  # TODO: Replace with actual NUC MAC address
-
-# DNS configuration
-DNS_UPSTREAM="1.1.1.1,8.8.8.8"
-DNS_ENTRIES=(
-    "nux.attic.local:10.0.0.10:Attic server"
-    "attic.local:10.0.0.10:Attic server alias"
-)
-
-# Enable dry-run mode if desired
-# export DRY_RUN=1
-
-echo "=========================================="
-echo "L1.0 Mikrotik Network Setup - Attic"
-echo "=========================================="
-echo ""
-
-# Step 0: Test connectivity
-echo "[STEP 0] Testing SSH connectivity..."
-if ! ssh_exec "/system resource print" >/dev/null 2>&1; then
-    echo "[ERROR] Cannot connect to 192.168.88.1"
-    echo "Check: 1) Ethernet cable connected, 2) Your IP is 192.168.88.50/24"
-    exit 1
-fi
-echo "[OK] Connected to RouterOS"
-echo ""
-
-# Step 1: Backup configuration
-echo "[STEP 1] Backing up current configuration..."
-BACKUP_FILE=$(config_backup)
-echo "[OK] Backup created: $BACKUP_FILE"
-echo ""
-
-# Step 2: Validate interfaces
-echo "[STEP 2] Validating interfaces..."
-for PORT in "${PORTS[@]}"; do
-    validate_interface "$PORT"
-done
-echo ""
-
-# Step 3: Create bridge
-echo "[STEP 3] Creating bridge..."
-bridge_create "$BRIDGE_NAME" "no" "Attic server isolated network - 8 port flat bridge"
-echo ""
-
-# Step 4: Add ports to bridge
-echo "[STEP 4] Adding ports to bridge..."
-for i in "${!PORTS[@]}"; do
-    PORT="${PORTS[$i]}"
-    COMMENT="${PORT_COMMENTS[$i]}"
-    bridge_port_add "$BRIDGE_NAME" "$PORT" "$COMMENT"
-done
-echo ""
-
-# Step 5: Add IP address to bridge
-echo "[STEP 5] Adding IP address to bridge..."
-ip_address_add "$IP_ADDRESS" "$BRIDGE_NAME" "Attic network gateway and DHCP server"
-echo ""
-
-# Step 6: Create DHCP pool
-echo "[STEP 6] Creating DHCP pool..."
-dhcp_pool_create "$DHCP_POOL_NAME" "$DHCP_POOL_RANGE" "Attic DHCP pool"
-echo ""
-
-# Step 7: Create DHCP server
-echo "[STEP 7] Creating DHCP server..."
-dhcp_server_create "$DHCP_SERVER_NAME" "$BRIDGE_NAME" "$DHCP_POOL_NAME" "Attic DHCP server"
-echo ""
-
-# Step 8: Configure DHCP network
-echo "[STEP 8] Configuring DHCP network..."
-dhcp_network_add "$DHCP_NETWORK" "$DHCP_GATEWAY" "$DHCP_DNS" "$DHCP_DOMAIN" "Attic network DHCP config"
-echo ""
-
-# Step 9: Add static DHCP lease for NUC
-echo "[STEP 9] Adding static DHCP lease for NUC..."
-if [ "$NUC_MAC" = "XX:XX:XX:XX:XX:XX" ]; then
-    echo "[WARNING] NUC MAC address not configured. Skipping static lease."
-    echo "[WARNING] Update NUC_MAC variable in this script and re-run."
-else
-    dhcp_lease_add "$NUC_IP" "$NUC_MAC" "$DHCP_SERVER_NAME" "nux static lease"
-fi
-echo ""
-
-# Step 10: Configure DNS servers
-echo "[STEP 10] Configuring DNS servers..."
-dns_server_set "$DNS_UPSTREAM" "yes"
-echo ""
-
-# Step 11: Add static DNS entries
-echo "[STEP 11] Adding static DNS entries..."
-for ENTRY in "${DNS_ENTRIES[@]}"; do
-    IFS=':' read -r NAME ADDRESS COMMENT <<< "$ENTRY"
-    dns_static_add "$NAME" "$ADDRESS" "$COMMENT"
-done
-echo ""
-
-# Step 12: Validate complete configuration
-echo "[STEP 12] Validating complete configuration..."
-validate_bridge "$BRIDGE_NAME" "no"
-for PORT in "${PORTS[@]}"; do
-    validate_bridge_port "$BRIDGE_NAME" "$PORT"
-done
-validate_ip_address "$BRIDGE_NAME" "10.0.0"
-validate_dhcp "$DHCP_SERVER_NAME" "$BRIDGE_NAME" "$DHCP_POOL_NAME"
-validate_dns "$DNS_UPSTREAM"
-echo ""
-
-# Step 13: Display final status summary
-echo "[STEP 13] Displaying configuration status..."
-mikrotik_status "$BRIDGE_NAME"
-echo ""
-
-echo "=========================================="
-echo "L1.0 Configuration Complete!"
-echo "=========================================="
-echo ""
-echo "Summary:"
-echo "  Bridge: $BRIDGE_NAME"
-echo "  Ports: ${PORTS[*]}"
-echo "  IP: $IP_ADDRESS"
-echo "  DHCP Pool: $DHCP_POOL_RANGE"
-echo "  DHCP Server: $DHCP_SERVER_NAME on $BRIDGE_NAME"
-echo "  DHCP Domain: $DHCP_DOMAIN"
-echo "  DNS Upstream: $DNS_UPSTREAM"
-echo "  Static Lease: $NUC_IP → $NUC_MAC (nux)"
-echo "  DNS Entries: nux.attic.local, attic.local → $NUC_IP"
-echo "  Backup: $BACKUP_FILE.rsc"
-echo ""
-echo "Testing:"
-echo "  1. Connect laptop to ether3-ether8"
-echo "  2. Should receive IP in range $DHCP_POOL_RANGE via DHCP"
-echo "  3. Test DNS: nslookup nux.attic.local $DHCP_DNS"
-echo "  4. NUC should receive $NUC_IP via DHCP (MAC-based static lease)"
-echo ""
-echo "Next steps:"
-echo "  1. Proceed to L1.1 (Infrastructure Survey)"
-```
-
-### Validation Workflow - Verify Expected State
-
-**Script to Check Current Configuration**:
-```bash
-#!/usr/bin/env bash
-
-echo "Mikrotik Configuration Validation"
-echo "=================================="
-echo ""
-
-echo "Bridges:"
-ssh_exec "/interface bridge print"
-echo ""
-
-echo "Bridge Ports:"
-ssh_exec "/interface bridge port print"
-echo ""
-
-echo "IP Addresses:"
-ssh_exec "/ip address print"
-echo ""
-
-echo "DHCP Pools:"
-ssh_exec "/ip pool print"
-echo ""
-
-echo "DHCP Servers:"
-ssh_exec "/ip dhcp-server print"
-echo ""
-
-echo "DHCP Networks:"
-ssh_exec "/ip dhcp-server network print"
-echo ""
-
-echo "DHCP Leases:"
-ssh_exec "/ip dhcp-server lease print"
-echo ""
-
-echo "DNS Configuration:"
-ssh_exec "/ip dns print"
-echo ""
-
-echo "DNS Static Entries:"
-ssh_exec "/ip dns static print"
-echo ""
-
-echo "=================================="
-```
-
----
-
-## 8. Status and Monitoring Operations
-
-### mikrotik-status - Display Compact Multi-Resource Status
-
-**Purpose**: Single-command status check for complete L1.0 configuration with graceful error handling.
-
-**Usage**:
-```bash
-mikrotik_status() {
-    local bridge="${1:-bridge-attic}"
-
-    echo "=== Mikrotik Status: $bridge ==="
-
-    # Gather status from all subsystems (continue on errors)
-    _status_switch
-    _status_bridge "$bridge"
-    _status_ip "$bridge"
-    _status_dhcp "$bridge"
-    _status_dns
-
-    echo "======================================"
-}
-
-# Helper: Switch hardware and software status
-_status_switch() {
-    local output=$(ssh_exec "/system resource print" 2>&1)
-
-    if parse_errors "$output"; then
-        echo "Switch    : [ERROR: Cannot query system info]"
-        return 1
-    fi
-
-    local model=$(echo "$output" | grep -oP '(?<=board-name: ).*' | head -1)
-    local version=$(echo "$output" | grep -oP '(?<=version: )[\d.]+' | head -1)
-    local uptime=$(echo "$output" | grep -oP '(?<=uptime: ).*' | head -1)
-
-    echo "Switch    : ${model:-unknown} | v${version:-?} | Up ${uptime:-?}"
-}
-
-# Helper: Bridge and port status
-_status_bridge() {
-    local bridge="$1"
-    local output=$(ssh_exec "/interface bridge print detail where name=$bridge" 2>&1)
-
-    if parse_errors "$output" || ! echo "$output" | grep -q "name=$bridge"; then
-        echo "Bridge    : [NOT FOUND: $bridge]"
-        echo "Ports     : [SKIPPED: No bridge]"
-        return 1
-    fi
-
-    local vlan_filtering=$(parse_print_output "$output" "vlan-filtering")
-
-    # Count bridge ports
-    local port_output=$(ssh_exec "/interface bridge port print count-only where bridge=$bridge" 2>&1)
-    local port_count=$(parse_count "$port_output")
-
-    # Get port list (compact: ether1-8)
-    local port_list=$(ssh_exec "/interface bridge port print terse where bridge=$bridge" 2>&1 | \
-                      grep -oP '(?<=interface=)\S+' | tr '\n' ',' | sed 's/,$//')
-
-    echo "Bridge    : $bridge | ${port_count:-0} ports | VLAN: ${vlan_filtering:-unknown}"
-
-    if [ "$port_count" -gt 0 ]; then
-        echo "Ports     : ${port_list:-none} ✓"
-    else
-        echo "Ports     : [NONE CONFIGURED]"
-    fi
-}
-
-# Helper: IP address status
-_status_ip() {
-    local interface="$1"
-    local output=$(ssh_exec "/ip address print detail where interface=$interface" 2>&1)
-
-    if parse_errors "$output" || ! echo "$output" | grep -q "interface=$interface"; then
-        echo "IP        : [NOT CONFIGURED on $interface]"
-        return 1
-    fi
-
-    local address=$(parse_print_output "$output" "address")
-    local network=$(parse_print_output "$output" "network")
-
-    echo "IP        : ${address:-unknown} (${network:-unknown})"
-}
-
-# Helper: DHCP server and lease status
-_status_dhcp() {
-    local bridge="$1"
-
-    # Find DHCP server on this interface
-    local server_output=$(ssh_exec "/ip dhcp-server print detail where interface=$bridge" 2>&1)
-
-    if parse_errors "$server_output" || ! echo "$server_output" | grep -q "interface=$bridge"; then
-        echo "DHCP Pool : [NOT CONFIGURED]"
-        echo "DHCP Srv  : [NOT CONFIGURED on $bridge]"
-        echo "DHCP Net  : [NOT CONFIGURED]"
-        echo "DHCP Lease: [NOT CONFIGURED]"
-        return 1
-    fi
-
-    local server_name=$(parse_print_output "$server_output" "name")
-    local address_pool=$(parse_print_output "$server_output" "address-pool")
-    local disabled=$(parse_print_output "$server_output" "disabled")
-    local status=$([ "$disabled" = "yes" ] && echo "Disabled" || echo "Enabled")
-
-    # Get pool details
-    if [ -n "$address_pool" ]; then
-        local pool_output=$(ssh_exec "/ip pool print detail where name=$address_pool" 2>&1)
-        local ranges=$(parse_print_output "$pool_output" "ranges")
-        echo "DHCP Pool : $address_pool | ${ranges:-unknown}"
-    else
-        echo "DHCP Pool : [UNKNOWN]"
-    fi
-
-    echo "DHCP Srv  : ${server_name:-unknown} | $bridge | $status"
-
-    # Get network configuration
-    local net_output=$(ssh_exec "/ip dhcp-server network print detail" 2>&1)
-    if ! parse_errors "$net_output"; then
-        local net_address=$(echo "$net_output" | grep -oP '(?<=address=)[^\s]+' | head -1)
-        local net_gateway=$(echo "$net_output" | grep -oP '(?<=gateway=)[^\s]+' | head -1)
-        local net_dns=$(echo "$net_output" | grep -oP '(?<=dns-server=)[^\s]+' | head -1)
-        local net_domain=$(echo "$net_output" | grep -oP '(?<=domain=)[^\s]+' | head -1)
-
-        echo "DHCP Net  : ${net_address:-?} | GW: ${net_gateway:-?} | DNS: ${net_dns:-?} | ${net_domain:-no-domain}"
-    else
-        echo "DHCP Net  : [NOT CONFIGURED]"
-    fi
-
-    # Count static leases
-    local lease_count=$(ssh_exec "/ip dhcp-server lease print count-only where server=$server_name and !dynamic" 2>&1)
-    lease_count=$(parse_count "$lease_count")
-
-    if [ "$lease_count" -gt 0 ]; then
-        # Show first static lease as example
-        local lease_detail=$(ssh_exec "/ip dhcp-server lease print detail where server=$server_name and !dynamic" 2>&1 | head -20)
-        local lease_address=$(echo "$lease_detail" | grep -oP '(?<=address=)[^\s]+' | head -1)
-        local lease_mac=$(echo "$lease_detail" | grep -oP '(?<=mac-address=)[^\s]+' | head -1)
-        echo "DHCP Lease: $lease_count static ($lease_address → $lease_mac)"
-    else
-        echo "DHCP Lease: 0 static"
-    fi
-}
-
-# Helper: DNS configuration status
-_status_dns() {
-    local dns_output=$(ssh_exec "/ip dns print detail" 2>&1)
-
-    if parse_errors "$dns_output"; then
-        echo "DNS       : [ERROR: Cannot query DNS config]"
-        echo "DNS Static: [ERROR: Cannot query DNS static]"
-        return 1
-    fi
-
-    local servers=$(echo "$dns_output" | grep -oP '(?<=servers: ).*' | head -1)
-    local allow_remote=$(echo "$dns_output" | grep -oP '(?<=allow-remote-requests: ).*' | head -1)
-
-    echo "DNS       : ${servers:-none} | remote: ${allow_remote:-no}"
-
-    # Count static entries
-    local static_count=$(ssh_exec "/ip dns static print count-only" 2>&1)
-    static_count=$(parse_count "$static_count")
-
-    if [ "$static_count" -gt 0 ]; then
-        # Show static entries (compact: name → address)
-        local static_list=$(ssh_exec "/ip dns static print terse" 2>&1 | \
-                            grep -oP '(name=\S+|address=\S+)' | \
-                            paste -d' ' - - | \
-                            sed 's/name=//;s/ address=/ → /' | \
-                            tr '\n' ', ' | sed 's/, $//')
-        echo "DNS Static: $static_count entries ($static_list)"
-    else
-        echo "DNS Static: 0 entries"
-    fi
-}
-
-# Example usage:
-# mikrotik_status "bridge-attic"
-```
-
-**Example Output** (Success Case):
-```
-=== Mikrotik Status: bridge-attic ===
-Switch    : CRS326-24G-2S+ | v7.16.1 | Up 3d 4h
-Bridge    : bridge-attic | 8 ports | VLAN: no
-Ports     : ether1,ether2,ether3,ether4,ether5,ether6,ether7,ether8 ✓
-IP        : 10.0.0.1/24 (10.0.0.0)
-DHCP Pool : pool-attic | 10.0.0.100-10.0.0.200
-DHCP Srv  : dhcp-attic | bridge-attic | Enabled
-DHCP Net  : 10.0.0.0/24 | GW: 10.0.0.1 | DNS: 10.0.0.1 | attic.local
-DHCP Lease: 1 static (10.0.0.10 → AA:BB:CC:DD:EE:FF)
-DNS       : 1.1.1.1,8.8.8.8 | remote: yes
-DNS Static: 2 entries (nux.attic.local → 10.0.0.10, attic.local → 10.0.0.10)
-======================================
-```
-
-**Example Output** (Partial Failure - Missing DHCP):
-```
-=== Mikrotik Status: bridge-attic ===
-Switch    : CRS326-24G-2S+ | v7.16.1 | Up 3d 4h
-Bridge    : bridge-attic | 8 ports | VLAN: no
-Ports     : ether1,ether2,ether3,ether4,ether5,ether6,ether7,ether8 ✓
-IP        : 10.0.0.1/24 (10.0.0.0)
-DHCP Pool : [NOT CONFIGURED]
-DHCP Srv  : [NOT CONFIGURED on bridge-attic]
-DHCP Net  : [NOT CONFIGURED]
-DHCP Lease: [NOT CONFIGURED]
-DNS       : 1.1.1.1,8.8.8.8 | remote: yes
-DNS Static: 0 entries
-======================================
-```
-
-**Design Notes**:
-1. **Graceful Degradation**: Each helper function handles errors independently, returning error markers but allowing status to continue
-2. **Clear Error Markers**: `[NOT FOUND]`, `[NOT CONFIGURED]`, `[ERROR: ...]` make issues immediately visible
-3. **Compact Output**: Single line per resource type, ~10-12 lines total
-4. **Information Density**: Key details (counts, states, identifiers) packed efficiently
-5. **Visual Indicators**: Checkmarks (✓) for positive confirmation, brackets for issues
-
----
-
-### Rollback Workflow - Restore from Backup
-
-**Script to Restore Previous Configuration**:
-```bash
-#!/usr/bin/env bash
-
-BACKUP_FILE="${1:-}"
-
-if [ -z "$BACKUP_FILE" ]; then
-    echo "Usage: $0 <backup-filename>"
-    echo ""
-    echo "Available backups:"
-    ssh_exec "/file print where name~'backup'"
-    exit 1
-fi
-
-echo "Rolling back to: $BACKUP_FILE"
-read -p "Are you sure? (yes/no): " confirm
-
-if [ "$confirm" = "yes" ]; then
-    config_restore "$BACKUP_FILE"
-    echo "[OK] Configuration restored from $BACKUP_FILE"
-else
-    echo "Rollback cancelled"
-fi
-```
-
----
-
-## Testing Hooks
-
-### Test Mode
-
-Export these variables before running workflows to enable test mode:
-
-```bash
-# Dry-run mode (generate commands without executing)
-export DRY_RUN=1
-
-# Verbose mode (show all command output)
-export VERBOSE=1
-```
-
-### Test Connectivity Script
-
-```bash
-#!/usr/bin/env bash
-# Test basic SSH connectivity
-
-echo "Testing Mikrotik SSH connection..."
-
-if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@192.168.88.1 "/system resource print" 2>/dev/null; then
-    echo "[OK] Connected to RouterOS successfully"
-    exit 0
-else
-    echo "[ERROR] Cannot connect to RouterOS at 192.168.88.1"
-    echo ""
-    echo "Troubleshooting:"
-    echo "  1. Check ethernet cable is connected to management port"
-    echo "  2. Verify your IP: ip addr show (should have 192.168.88.x/24)"
-    echo "  3. Set static IP if needed: sudo ip addr add 192.168.88.50/24 dev <interface>"
-    echo "  4. Test ping: ping 192.168.88.1"
-    exit 1
-fi
-```
-
----
-
-## Usage Examples
-
-### Example 1: Query Current Configuration
-
-```bash
-# Source the skill functions (this would be loaded automatically when skill is invoked)
-
-# List all bridges
-echo "Current bridges:"
-ssh_exec "/interface bridge print"
-
-# List all bridge ports
-echo "Current bridge ports:"
-ssh_exec "/interface bridge port print"
-
-# List all IP addresses
-echo "Current IP addresses:"
-ssh_exec "/ip address print"
-```
-
-### Example 2: Dry-Run Mode
-
-```bash
-# Enable dry-run mode
-export DRY_RUN=1
-
-# Run L1.0 workflow - will show commands without executing
-./l1.0-complete-workflow.sh
-
-# Disable dry-run to actually apply
-export DRY_RUN=0
-./l1.0-complete-workflow.sh
-```
-
-### Example 3: Idempotent Re-Application
-
-```bash
-# Run workflow first time - creates resources
-./l1.0-complete-workflow.sh
-
-# Run workflow second time - all operations are idempotent, no errors
-./l1.0-complete-workflow.sh
-
-# Output will show "[OK] ... already exists (idempotent)" for each resource
-```
-
-### Example 4: Validation Only
-
-```bash
-# Run validation without making changes
-validate_bridge "bridge-attic" "no"
-validate_bridge_port "bridge-attic" "ether1"
-validate_bridge_port "bridge-attic" "ether2"
-validate_ip_address "bridge-attic" "10.0.0"
-validate_vlan "vlan-attic" "10" "bridge-attic"
-```
-
----
-
-## Error Handling
-
-### Common Errors and Solutions
-
-**Error: `failure: already have interface with such name`**
-- **Cause**: Resource already exists
-- **Solution**: This is expected on re-runs (idempotency). Check if resource has correct properties.
-
-**Error: `failure: no such item`**
-- **Cause**: Referenced resource doesn't exist (e.g., bridge doesn't exist when adding port)
-- **Solution**: Check dependency order. Create bridges before adding ports.
-
-**Error: `expected end of command`**
-- **Cause**: Syntax error in RouterOS CLI command
-- **Solution**: Check command syntax, ensure proper quoting of strings with spaces
-
-**Error: SSH connection timeout**
-- **Cause**: Cannot reach 192.168.88.1
-- **Solution**: Check physical connection, verify your IP is in 192.168.88.0/24 range
-
----
-
 ## 6. DHCP Server Operations (Full)
 
 ### dhcp-pool-list - List IP Pools
@@ -1499,7 +897,6 @@ validate_dhcp "dhcp-attic" "bridge-attic" "pool-attic"
 ```
 
 ---
-
 ## 7. DNS Configuration (Full)
 
 ### dns-config-show - Show DNS Configuration
@@ -1660,7 +1057,6 @@ validate_dns "1.1.1.1,8.8.8.8"
 ```
 
 ---
-
 ## 8. Configuration State Management
 
 **Philosophy**: Treat configuration as ephemeral and version-controllable. RouterOS provides two mechanisms:
@@ -1824,7 +1220,6 @@ config_restore "pre-L1.0-deployment"
 ```
 
 ---
-
 ## 9. Reset & Deploy Operations
 
 **Philosophy**: Immutable infrastructure - reset to known state, apply desired configuration, validate deployment.
@@ -1959,7 +1354,6 @@ apply_incremental_changes "add-static-route" \
 ```
 
 ---
-
 ## 10. Validation & Drift Detection
 
 **Philosophy**: Continuously validate that deployed configuration matches specification.
@@ -2051,8 +1445,7 @@ config_drift_report "$HOME/.config/mikrotik/192.168.88.1/exports/L1.0-deployed-b
 ```
 
 ---
-
-## Section 11: Local Configuration Design & Deployment
+## 11. Local Configuration Design & Deployment
 
 Design and edit RouterOS configurations locally before deploying to hardware.
 
@@ -2521,7 +1914,7 @@ add address=192.168.1.1/24 interface=bridge1
 
 ---
 
-## Section 12: Status Printing
+## 12. Status Printing
 
 Compact hierarchical status display for quick inspection of switch configuration state. Uses targeted SSH queries to minimize round-trips and handles missing/unconfigured components gracefully.
 
@@ -2800,6 +2193,389 @@ Switch: CRS326-24G-2S+RM (RouterOS 7.14.3, uptime 5d 3h 12m)
 ```
 Switch: OFFLINE (cannot reach 192.168.88.1)
 ```
+
+---
+
+## Configuration Workflows
+
+### L1.0 Complete Workflow - Attic Network Setup (Updated 2026-01-27)
+
+This workflow implements the complete L1.0 configuration per user requirements:
+- Bridge: bridge-attic (flat bridge, no VLAN tagging)
+- Ports: ether1-ether8 (8 ports for multiple devices)
+- IP: 10.0.0.1/24 (gateway)
+- DHCP: Pool 10.0.0.100-200 with static lease for NUC (10.0.0.10)
+- DNS: Upstream 1.1.1.1,8.8.8.8 with static entries for nux.attic.local
+
+**Complete Script**:
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Configuration target state
+BRIDGE_NAME="bridge-attic"
+IP_ADDRESS="10.0.0.1/24"
+PORTS=("ether1" "ether2" "ether3" "ether4" "ether5" "ether6" "ether7" "ether8")
+PORT_COMMENTS=(
+    "NUC NIC 1 (management)"
+    "NUC NIC 2 (data)"
+    "Port 3 (available)"
+    "Port 4 (available)"
+    "Port 5 (available)"
+    "Port 6 (available)"
+    "Port 7 (available)"
+    "Port 8 (available)"
+)
+
+# DHCP configuration
+DHCP_POOL_NAME="pool-attic"
+DHCP_POOL_RANGE="10.0.0.100-10.0.0.200"
+DHCP_SERVER_NAME="dhcp-attic"
+DHCP_NETWORK="10.0.0.0/24"
+DHCP_GATEWAY="10.0.0.1"
+DHCP_DNS="10.0.0.1"
+DHCP_DOMAIN="attic.local"
+
+# NUC static lease (REPLACE MAC ADDRESS!)
+NUC_IP="10.0.0.10"
+NUC_MAC="XX:XX:XX:XX:XX:XX"  # TODO: Replace with actual NUC MAC address
+
+# DNS configuration
+DNS_UPSTREAM="1.1.1.1,8.8.8.8"
+DNS_ENTRIES=(
+    "nux.attic.local:10.0.0.10:Attic server"
+    "attic.local:10.0.0.10:Attic server alias"
+)
+
+# Enable dry-run mode if desired
+# export DRY_RUN=1
+
+echo "=========================================="
+echo "L1.0 Mikrotik Network Setup - Attic"
+echo "=========================================="
+echo ""
+
+# Step 0: Test connectivity
+echo "[STEP 0] Testing SSH connectivity..."
+if ! ssh_exec "/system resource print" >/dev/null 2>&1; then
+    echo "[ERROR] Cannot connect to 192.168.88.1"
+    echo "Check: 1) Ethernet cable connected, 2) Your IP is 192.168.88.50/24"
+    exit 1
+fi
+echo "[OK] Connected to RouterOS"
+echo ""
+
+# Step 1: Backup configuration
+echo "[STEP 1] Backing up current configuration..."
+BACKUP_FILE=$(config_backup)
+echo "[OK] Backup created: $BACKUP_FILE"
+echo ""
+
+# Step 2: Validate interfaces
+echo "[STEP 2] Validating interfaces..."
+for PORT in "${PORTS[@]}"; do
+    validate_interface "$PORT"
+done
+echo ""
+
+# Step 3: Create bridge
+echo "[STEP 3] Creating bridge..."
+bridge_create "$BRIDGE_NAME" "no" "Attic server isolated network - 8 port flat bridge"
+echo ""
+
+# Step 4: Add ports to bridge
+echo "[STEP 4] Adding ports to bridge..."
+for i in "${!PORTS[@]}"; do
+    PORT="${PORTS[$i]}"
+    COMMENT="${PORT_COMMENTS[$i]}"
+    bridge_port_add "$BRIDGE_NAME" "$PORT" "$COMMENT"
+done
+echo ""
+
+# Step 5: Add IP address to bridge
+echo "[STEP 5] Adding IP address to bridge..."
+ip_address_add "$IP_ADDRESS" "$BRIDGE_NAME" "Attic network gateway and DHCP server"
+echo ""
+
+# Step 6: Create DHCP pool
+echo "[STEP 6] Creating DHCP pool..."
+dhcp_pool_create "$DHCP_POOL_NAME" "$DHCP_POOL_RANGE" "Attic DHCP pool"
+echo ""
+
+# Step 7: Create DHCP server
+echo "[STEP 7] Creating DHCP server..."
+dhcp_server_create "$DHCP_SERVER_NAME" "$BRIDGE_NAME" "$DHCP_POOL_NAME" "Attic DHCP server"
+echo ""
+
+# Step 8: Configure DHCP network
+echo "[STEP 8] Configuring DHCP network..."
+dhcp_network_add "$DHCP_NETWORK" "$DHCP_GATEWAY" "$DHCP_DNS" "$DHCP_DOMAIN" "Attic network DHCP config"
+echo ""
+
+# Step 9: Add static DHCP lease for NUC
+echo "[STEP 9] Adding static DHCP lease for NUC..."
+if [ "$NUC_MAC" = "XX:XX:XX:XX:XX:XX" ]; then
+    echo "[WARNING] NUC MAC address not configured. Skipping static lease."
+    echo "[WARNING] Update NUC_MAC variable in this script and re-run."
+else
+    dhcp_lease_add "$NUC_IP" "$NUC_MAC" "$DHCP_SERVER_NAME" "nux static lease"
+fi
+echo ""
+
+# Step 10: Configure DNS servers
+echo "[STEP 10] Configuring DNS servers..."
+dns_server_set "$DNS_UPSTREAM" "yes"
+echo ""
+
+# Step 11: Add static DNS entries
+echo "[STEP 11] Adding static DNS entries..."
+for ENTRY in "${DNS_ENTRIES[@]}"; do
+    IFS=':' read -r NAME ADDRESS COMMENT <<< "$ENTRY"
+    dns_static_add "$NAME" "$ADDRESS" "$COMMENT"
+done
+echo ""
+
+# Step 12: Validate complete configuration
+echo "[STEP 12] Validating complete configuration..."
+validate_bridge "$BRIDGE_NAME" "no"
+for PORT in "${PORTS[@]}"; do
+    validate_bridge_port "$BRIDGE_NAME" "$PORT"
+done
+validate_ip_address "$BRIDGE_NAME" "10.0.0"
+validate_dhcp "$DHCP_SERVER_NAME" "$BRIDGE_NAME" "$DHCP_POOL_NAME"
+validate_dns "$DNS_UPSTREAM"
+echo ""
+
+# Step 13: Display final status summary
+echo "[STEP 13] Displaying configuration status..."
+mikrotik_status "$BRIDGE_NAME"
+echo ""
+
+echo "=========================================="
+echo "L1.0 Configuration Complete!"
+echo "=========================================="
+echo ""
+echo "Summary:"
+echo "  Bridge: $BRIDGE_NAME"
+echo "  Ports: ${PORTS[*]}"
+echo "  IP: $IP_ADDRESS"
+echo "  DHCP Pool: $DHCP_POOL_RANGE"
+echo "  DHCP Server: $DHCP_SERVER_NAME on $BRIDGE_NAME"
+echo "  DHCP Domain: $DHCP_DOMAIN"
+echo "  DNS Upstream: $DNS_UPSTREAM"
+echo "  Static Lease: $NUC_IP → $NUC_MAC (nux)"
+echo "  DNS Entries: nux.attic.local, attic.local → $NUC_IP"
+echo "  Backup: $BACKUP_FILE.rsc"
+echo ""
+echo "Testing:"
+echo "  1. Connect laptop to ether3-ether8"
+echo "  2. Should receive IP in range $DHCP_POOL_RANGE via DHCP"
+echo "  3. Test DNS: nslookup nux.attic.local $DHCP_DNS"
+echo "  4. NUC should receive $NUC_IP via DHCP (MAC-based static lease)"
+echo ""
+echo "Next steps:"
+echo "  1. Proceed to L1.1 (Infrastructure Survey)"
+```
+
+### Validation Workflow - Verify Expected State
+
+**Script to Check Current Configuration**:
+```bash
+#!/usr/bin/env bash
+
+echo "Mikrotik Configuration Validation"
+echo "=================================="
+echo ""
+
+echo "Bridges:"
+ssh_exec "/interface bridge print"
+echo ""
+
+echo "Bridge Ports:"
+ssh_exec "/interface bridge port print"
+echo ""
+
+echo "IP Addresses:"
+ssh_exec "/ip address print"
+echo ""
+
+echo "DHCP Pools:"
+ssh_exec "/ip pool print"
+echo ""
+
+echo "DHCP Servers:"
+ssh_exec "/ip dhcp-server print"
+echo ""
+
+echo "DHCP Networks:"
+ssh_exec "/ip dhcp-server network print"
+echo ""
+
+echo "DHCP Leases:"
+ssh_exec "/ip dhcp-server lease print"
+echo ""
+
+echo "DNS Configuration:"
+ssh_exec "/ip dns print"
+echo ""
+
+echo "DNS Static Entries:"
+ssh_exec "/ip dns static print"
+echo ""
+
+echo "=================================="
+```
+
+---
+
+### Rollback Workflow - Restore from Backup
+
+**Script to Restore Previous Configuration**:
+```bash
+#!/usr/bin/env bash
+
+BACKUP_FILE="${1:-}"
+
+if [ -z "$BACKUP_FILE" ]; then
+    echo "Usage: $0 <backup-filename>"
+    echo ""
+    echo "Available backups:"
+    ssh_exec "/file print where name~'backup'"
+    exit 1
+fi
+
+echo "Rolling back to: $BACKUP_FILE"
+read -p "Are you sure? (yes/no): " confirm
+
+if [ "$confirm" = "yes" ]; then
+    config_restore "$BACKUP_FILE"
+    echo "[OK] Configuration restored from $BACKUP_FILE"
+else
+    echo "Rollback cancelled"
+fi
+```
+
+---
+
+## Testing Hooks
+
+### Test Mode
+
+Export these variables before running workflows to enable test mode:
+
+```bash
+# Dry-run mode (generate commands without executing)
+export DRY_RUN=1
+
+# Verbose mode (show all command output)
+export VERBOSE=1
+```
+
+### Test Connectivity Script
+
+```bash
+#!/usr/bin/env bash
+# Test basic SSH connectivity
+
+echo "Testing Mikrotik SSH connection..."
+
+if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@192.168.88.1 "/system resource print" 2>/dev/null; then
+    echo "[OK] Connected to RouterOS successfully"
+    exit 0
+else
+    echo "[ERROR] Cannot connect to RouterOS at 192.168.88.1"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. Check ethernet cable is connected to management port"
+    echo "  2. Verify your IP: ip addr show (should have 192.168.88.x/24)"
+    echo "  3. Set static IP if needed: sudo ip addr add 192.168.88.50/24 dev <interface>"
+    echo "  4. Test ping: ping 192.168.88.1"
+    exit 1
+fi
+```
+
+---
+
+## Usage Examples
+
+### Example 1: Query Current Configuration
+
+```bash
+# Source the skill functions (this would be loaded automatically when skill is invoked)
+
+# List all bridges
+echo "Current bridges:"
+ssh_exec "/interface bridge print"
+
+# List all bridge ports
+echo "Current bridge ports:"
+ssh_exec "/interface bridge port print"
+
+# List all IP addresses
+echo "Current IP addresses:"
+ssh_exec "/ip address print"
+```
+
+### Example 2: Dry-Run Mode
+
+```bash
+# Enable dry-run mode
+export DRY_RUN=1
+
+# Run L1.0 workflow - will show commands without executing
+./l1.0-complete-workflow.sh
+
+# Disable dry-run to actually apply
+export DRY_RUN=0
+./l1.0-complete-workflow.sh
+```
+
+### Example 3: Idempotent Re-Application
+
+```bash
+# Run workflow first time - creates resources
+./l1.0-complete-workflow.sh
+
+# Run workflow second time - all operations are idempotent, no errors
+./l1.0-complete-workflow.sh
+
+# Output will show "[OK] ... already exists (idempotent)" for each resource
+```
+
+### Example 4: Validation Only
+
+```bash
+# Run validation without making changes
+validate_bridge "bridge-attic" "no"
+validate_bridge_port "bridge-attic" "ether1"
+validate_bridge_port "bridge-attic" "ether2"
+validate_ip_address "bridge-attic" "10.0.0"
+validate_vlan "vlan-attic" "10" "bridge-attic"
+```
+
+---
+
+## Error Handling
+
+### Common Errors and Solutions
+
+**Error: `failure: already have interface with such name`**
+- **Cause**: Resource already exists
+- **Solution**: This is expected on re-runs (idempotency). Check if resource has correct properties.
+
+**Error: `failure: no such item`**
+- **Cause**: Referenced resource doesn't exist (e.g., bridge doesn't exist when adding port)
+- **Solution**: Check dependency order. Create bridges before adding ports.
+
+**Error: `expected end of command`**
+- **Cause**: Syntax error in RouterOS CLI command
+- **Solution**: Check command syntax, ensure proper quoting of strings with spaces
+
+**Error: SSH connection timeout**
+- **Cause**: Cannot reach 192.168.88.1
+- **Solution**: Check physical connection, verify your IP is in 192.168.88.0/24 range
+
+---
 
 ---
 
