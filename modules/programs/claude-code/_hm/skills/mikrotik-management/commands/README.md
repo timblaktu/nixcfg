@@ -1,56 +1,32 @@
 # Mikrotik Management Skill - Helper Commands
 
-This directory contains executable helper scripts that the mikrotik-management skill uses to interact with RouterOS switches.
+Standalone bash scripts for common Mikrotik RouterOS operations. These work from any terminal with SSH access to the switch - no Nix or Claude Code required.
 
-## Future Scripts (L0.4+)
+## Available Scripts
 
-When Nix derivation testing utilities are integrated (task L0.4), this directory will contain:
+### mikrotik-status.sh
 
-- **query-vlans.sh** - Query VLAN configuration (JSON output)
-- **configure-bridge.sh** - Create/modify bridge configurations
-- **validate-interface.sh** - Verify interface state and configuration
-- **apply-config.sh** - Apply RouterOS configuration from declarative format
-- **backup-config.sh** - Export current configuration for disaster recovery
+Compact hierarchical status display (standalone version of SKILL.md Section 12).
+
+```bash
+./mikrotik-status.sh                    # Default: 192.168.88.1, admin
+./mikrotik-status.sh 10.0.0.1           # Custom host
+./mikrotik-status.sh 10.0.0.1 myuser    # Custom host and user
+```
+
+### mikrotik-backup.sh
+
+Quick backup to local filesystem. Creates both binary (.backup) and text (.rsc) exports.
+
+```bash
+./mikrotik-backup.sh                          # Default host, save to current dir
+./mikrotik-backup.sh 10.0.0.1                 # Custom host
+./mikrotik-backup.sh 10.0.0.1 admin ./backups # Custom host, user, output dir
+```
 
 ## Design Principles
 
-All scripts will follow these conventions:
-
-1. **--help flag**: Every script includes usage information
-   ```bash
-   ./query-vlans.sh --help
-   ```
-
-2. **JSON output**: Machine-readable output for Claude to parse
-   ```bash
-   ./query-vlans.sh 192.168.88.1 admin
-   # Returns: [{"id": 100, "name": "vlan100", "interface": "ether2"}]
-   ```
-
-3. **Dry-run mode**: Support `--dry-run` flag to preview changes
-   ```bash
-   ./configure-bridge.sh --dry-run bridge-attic ether1 ether2
-   # Prints commands without executing
-   ```
-
-4. **Error handling**: Exit codes and stderr for error conditions
-   - Exit 0: Success
-   - Exit 1: Configuration error
-   - Exit 2: Connection error
-   - Exit 3: Validation failure
-
-5. **Nix integration**: Built with `pkgs.writers.makeBashScript`
-   - Automatic shellcheck validation
-   - Dependency management (ssh, jq, etc.)
-   - Reproducible builds
-
-## Current Status
-
-**Status**: Placeholder (L0.4 task deferred)
-
-The skill currently generates SSH commands directly. Helper scripts will be added when:
-- L0.3 manual testing proves skill functionality
-- Need for automation/CI emerges
-- Nix-based testing infrastructure is beneficial
-
-See Plan 013 task L0.4 for implementation details.
+- **Standalone**: Pure bash + SSH, no dependencies beyond standard Unix tools
+- **Safe**: Read-only by default (status is read-only; backup creates files but doesn't modify config)
+- **Configurable**: SSH target via positional arguments (default 192.168.88.1)
+- **Human-readable**: Output designed for terminal display

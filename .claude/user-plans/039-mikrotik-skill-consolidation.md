@@ -1,10 +1,10 @@
 # Plan 039: Mikrotik Skill Consolidation Before Hardware Testing
 
 **Created**: 2026-06-05
-**Status**: Planning - Ready for execution
+**Status**: COMPLETE (all 6 tasks done 2026-06-05)
 **Priority**: High - user has physical access to CRS326-24G-2S+ now
 **Parent**: Plan 013 (Distributed Nix Binary Caching) - Phase 0 prerequisites
-**Branch**: TBD (ask user before starting)
+**Branch**: feat/mikrotik-skill-consolidation
 
 ---
 
@@ -41,7 +41,7 @@ The mikrotik-management skill has been developed iteratively across 8 commits (d
 ## Tasks
 
 ### Task 1: Version Alignment and Header Cleanup
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE`
 
 Update version strings and metadata across all mikrotik skill files to reflect actual state.
 
@@ -55,7 +55,7 @@ Update version strings and metadata across all mikrotik skill files to reflect a
 ---
 
 ### Task 2: Update Test Cases for v2.2.0 Coverage
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE`
 
 Extend `test-cases.md` to cover all v2.2.0 capabilities. The existing 8 tests are a good skeleton for core infrastructure. Need to add tests for:
 
@@ -75,7 +75,7 @@ Extend `test-cases.md` to cover all v2.2.0 capabilities. The existing 8 tests ar
 ---
 
 ### Task 3: Implement Status Printing Feature
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE`
 
 Add Section 12 to SKILL.md implementing compact status display. Design doc is at `.claude/user-plans/013-L1.0-status-printing-feature.md`.
 
@@ -114,7 +114,7 @@ Switch: CRS326-24G-2S+ (RouterOS 7.14, uptime 5d 3h)
 ---
 
 ### Task 4: Create L1.0 Example .rsc Configuration
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE`
 
 Generate the concrete L1.0 network config as a `.rsc` file in `examples/`. This is the actual config that will be deployed to the switch.
 
@@ -138,7 +138,7 @@ Generate the concrete L1.0 network config as a `.rsc` file in `examples/`. This 
 ---
 
 ### Task 5: Update L1.0 Implementation Plan
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE`
 
 Clean up `013-L1.0-implementation-plan.md` to reflect current state.
 
@@ -158,7 +158,7 @@ Clean up `013-L1.0-implementation-plan.md` to reflect current state.
 ---
 
 ### Task 6: Add Helper Scripts to commands/
-**Status**: `TASK:PENDING`
+**Status**: `TASK:COMPLETE`
 
 Create minimal standalone helper scripts that can be used outside the skill context.
 
