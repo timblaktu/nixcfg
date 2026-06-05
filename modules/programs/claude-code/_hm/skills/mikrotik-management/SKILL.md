@@ -1995,10 +1995,10 @@ _status_bridge() {
 
         # DHCP
         _status_dhcp "$host" "$name"
-
-        # DNS (global, not per-bridge, but shown under first bridge)
-        _status_dns "$host"
     done
+
+    # DNS (global, shown once after all bridges)
+    _status_dns "$host"
 }
 ```
 
@@ -2130,11 +2130,11 @@ _status_dns() {
         "/ip dns get allow-remote-requests" 2>/dev/null) || allow_remote="unknown"
 
     if [ -z "$dns_servers" ]; then
-        echo "    +-- DNS: Not configured"
+        echo "+-- DNS: Not configured"
         return
     fi
 
-    echo "    +-- DNS: $dns_servers"
+    echo "+-- DNS: $dns_servers"
 
     # Static entries
     local static_count
@@ -2150,7 +2150,7 @@ _status_dns() {
             sname=$(echo "$line" | sed -n 's/.*name=\([^ ]*\).*/\1/p')
             saddr=$(echo "$line" | sed -n 's/.*address=\([^ ]*\).*/\1/p')
             [ -z "$sname" ] && continue
-            echo "        +-- $sname -> $saddr"
+            echo "    +-- $sname -> $saddr"
         done
     fi
 }
@@ -2184,9 +2184,9 @@ Switch: CRS326-24G-2S+RM (RouterOS 7.14.3, uptime 5d 3h 12m)
     |   +-- Active Leases: 2
     |   +-- Static Leases: 1
     |       +-- 10.0.0.10 (nux static lease)
-    +-- DNS: 1.1.1.1,8.8.8.8
-        +-- nux.attic.local -> 10.0.0.10
-        +-- attic.local -> 10.0.0.10
++-- DNS: 1.1.1.1,8.8.8.8
+    +-- nux.attic.local -> 10.0.0.10
+    +-- attic.local -> 10.0.0.10
 ```
 
 **Connection failure**:

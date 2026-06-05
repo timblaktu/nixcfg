@@ -240,6 +240,8 @@ ssh admin@192.168.88.1 "/ip address print"
 
 **Purpose**: Verify DHCP pool, server, network, and lease management.
 
+**Prerequisites**: Bridge `bridge-attic` with IP `10.0.0.1/24` must exist (deploy L1.0 or complete Tests 2-4 first).
+
 **Test Steps**:
 1. [ ] Request: "Create a DHCP pool named pool-attic with range 10.0.0.100-10.0.0.200"
    - Expected: Pool created via `/ip pool add`

@@ -4,17 +4,20 @@
 # Default: host=192.168.88.1, user=admin, output-dir=.
 #
 # Creates both binary backup (.backup) and text export (.rsc) locally.
+#
+# Security note: StrictHostKeyChecking=no is used for lab/initial setup convenience.
+# For production use, add the device's host key to ~/.ssh/known_hosts and remove this flag.
 set -euo pipefail
 
 HOST="${1:-192.168.88.1}"
-USER="${2:-admin}"
+MIKROTIK_USER="${2:-admin}"
 OUTPUT_DIR="${3:-.}"
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_NAME="backup-$TIMESTAMP"
 
 ssh_exec() {
-    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes "${USER}@${HOST}" "$1" 2>/dev/null
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes "${MIKROTIK_USER}@${HOST}" "$1" 2>/dev/null
 }
 
 # Test connectivity
@@ -37,9 +40,10 @@ ssh_exec "/export file=$BACKUP_NAME" || { echo "[ERROR] Text export failed"; exi
 echo "  Created: $BACKUP_NAME.rsc"
 
 # Download both files
+mkdir -p "$OUTPUT_DIR"
 echo "[3/4] Downloading backup files..."
-scp -o StrictHostKeyChecking=no -o BatchMode=yes "${USER}@${HOST}:/${BACKUP_NAME}.backup" "${OUTPUT_DIR}/" || { echo "[ERROR] Download .backup failed"; exit 1; }
-scp -o StrictHostKeyChecking=no -o BatchMode=yes "${USER}@${HOST}:/${BACKUP_NAME}.rsc" "${OUTPUT_DIR}/" || { echo "[ERROR] Download .rsc failed"; exit 1; }
+scp -o StrictHostKeyChecking=no -o BatchMode=yes "${MIKROTIK_USER}@${HOST}:/${BACKUP_NAME}.backup" "${OUTPUT_DIR}/" || { echo "[ERROR] Download .backup failed"; exit 1; }
+scp -o StrictHostKeyChecking=no -o BatchMode=yes "${MIKROTIK_USER}@${HOST}:/${BACKUP_NAME}.rsc" "${OUTPUT_DIR}/" || { echo "[ERROR] Download .rsc failed"; exit 1; }
 
 # Clean up device files
 echo "[4/4] Cleaning up device files..."

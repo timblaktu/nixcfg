@@ -2,13 +2,16 @@
 # mikrotik-status.sh - Compact status display for Mikrotik RouterOS switch
 # Usage: ./mikrotik-status.sh [host] [user]
 # Default: host=192.168.88.1, user=admin
+#
+# Security note: StrictHostKeyChecking=no is used for lab/initial setup convenience.
+# For production use, add the device's host key to ~/.ssh/known_hosts and remove this flag.
 set -euo pipefail
 
 HOST="${1:-192.168.88.1}"
-USER="${2:-admin}"
+MIKROTIK_USER="${2:-admin}"
 
 ssh_exec() {
-    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes "${USER}@${HOST}" "$1" 2>/dev/null
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes "${MIKROTIK_USER}@${HOST}" "$1" 2>/dev/null
 }
 
 # Test connectivity
@@ -88,21 +91,22 @@ echo "$bridges" | while IFS= read -r line; do
         done
     fi
 
-    # DNS (global)
-    dns_servers=$(ssh_exec "/ip dns get servers" || echo "")
-    if [ -z "$dns_servers" ]; then
-        echo "    +-- DNS: Not configured"
-    else
-        echo "    +-- DNS: $dns_servers"
-        static_count=$(ssh_exec "/ip dns static print count-only" || echo "0")
-        if [ "$static_count" != "0" ]; then
-            static_entries=$(ssh_exec "/ip dns static print terse")
-            echo "$static_entries" | while IFS= read -r sline; do
-                sname=$(echo "$sline" | sed -n 's/.*name=\([^ ]*\).*/\1/p')
-                saddr=$(echo "$sline" | sed -n 's/.*address=\([^ ]*\).*/\1/p')
-                [ -z "$sname" ] && continue
-                echo "        +-- $sname -> $saddr"
-            done
-        fi
-    fi
 done
+
+# DNS (global, not per-bridge)
+dns_servers=$(ssh_exec "/ip dns get servers" || echo "")
+if [ -z "$dns_servers" ]; then
+    echo "+-- DNS: Not configured"
+else
+    echo "+-- DNS: $dns_servers"
+    static_count=$(ssh_exec "/ip dns static print count-only" || echo "0")
+    if [ "$static_count" != "0" ]; then
+        static_entries=$(ssh_exec "/ip dns static print terse")
+        echo "$static_entries" | while IFS= read -r sline; do
+            sname=$(echo "$sline" | sed -n 's/.*name=\([^ ]*\).*/\1/p')
+            saddr=$(echo "$sline" | sed -n 's/.*address=\([^ ]*\).*/\1/p')
+            [ -z "$sname" ] && continue
+            echo "    +-- $sname -> $saddr"
+        done
+    fi
+fi
