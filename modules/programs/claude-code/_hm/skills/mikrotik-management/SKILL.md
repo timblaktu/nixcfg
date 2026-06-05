@@ -5,17 +5,17 @@ description: Automate Mikrotik RouterOS configuration for VLANs, bridges, ports,
 
 # Mikrotik RouterOS Configuration Management Skill
 
-**Version**: 2.1.0 (Configuration Management Complete)
+**Version**: 2.2.0 (Local Config Design + Status Printing)
 **Target**: Mikrotik CRS326-24G-2S+ Switch
 **RouterOS Version**: 7.x
 **Connection**: SSH to 192.168.88.1 (admin with blank password)
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-06-05
 
 ## Overview
 
 This skill manages Mikrotik RouterOS switch configuration via SSH CLI commands. It provides structured operations for configuring bridges, VLANs, ports, IP addresses, DHCP servers, and DNS with safety features including dry-run mode, idempotency checks, and configuration backups.
 
-**Current Capabilities** (v2.1.0):
+**Current Capabilities** (v2.2.0):
 
 **Infrastructure Operations**:
 - Interface validation (read-only)
@@ -35,7 +35,7 @@ This skill manages Mikrotik RouterOS switch configuration via SSH CLI commands. 
   - Static DNS entries
   - DNS cache management
 
-**Configuration Management** - NEW in v2.1.0:
+**Configuration Management** (v2.1.0):
 - State inspection (detect L1.0 vs factory vs unknown)
 - Binary backups (device + local storage)
 - Text exports (version-controllable)
@@ -43,6 +43,17 @@ This skill manages Mikrotik RouterOS switch configuration via SSH CLI commands. 
 - Immutable deployment (reset → configure → validate)
 - Incremental changes (experimental mode)
 - Drift detection and validation
+
+**Local Config Design** (v2.2.0):
+- Generate .rsc config files locally
+- Edit and review before deployment
+- Deploy .rsc to device via SSH
+- Parse .rsc files for validation
+
+**Status & Monitoring** (v2.2.0):
+- Compact hierarchical status display
+- Component-level queries (switch, bridge, IP, DHCP, DNS)
+- Graceful handling of missing/unconfigured components
 
 **Deployment Workflows**:
 - L1.0 complete workflow (8-port bridge + DHCP + DNS)
@@ -2507,6 +2518,288 @@ add address=192.168.1.1/24 interface=bridge1
 - `.rsc` = Text, editable, for version control and design
 - Use `.rsc` for local design workflow
 - Use `.backup` for device flash safety backups
+
+---
+
+## Section 12: Status Printing
+
+Compact hierarchical status display for quick inspection of switch configuration state. Uses targeted SSH queries to minimize round-trips and handles missing/unconfigured components gracefully.
+
+### mikrotik_status() - Full Switch Status
+
+```bash
+# Usage: mikrotik_status [host]
+# Default host: 192.168.88.1
+mikrotik_status() {
+    local host="${1:-192.168.88.1}"
+
+    # Test connectivity first
+    if ! ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" "/system resource print" >/dev/null 2>&1; then
+        echo "Switch: OFFLINE (cannot reach $host)"
+        return 1
+    fi
+
+    _status_switch "$host"
+    _status_bridge "$host"
+}
+```
+
+### _status_switch() - System Information
+
+```bash
+_status_switch() {
+    local host="$1"
+    local model version uptime
+
+    model=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/system routerboard get model" 2>/dev/null) || model="Unknown"
+    version=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/system resource get version" 2>/dev/null) || version="Unknown"
+    uptime=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/system resource get uptime" 2>/dev/null) || uptime="Unknown"
+
+    echo "Switch: $model (RouterOS $version, uptime $uptime)"
+}
+```
+
+### _status_bridge() - Bridge, Ports, IP, DHCP, DNS
+
+```bash
+_status_bridge() {
+    local host="$1"
+
+    # Find bridges
+    local bridge_count
+    bridge_count=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/interface bridge print count-only" 2>/dev/null) || bridge_count="0"
+
+    if [ "$bridge_count" = "0" ]; then
+        echo "+-- Bridge: Not configured"
+        return
+    fi
+
+    # Get bridge names
+    local bridges
+    bridges=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/interface bridge print terse" 2>/dev/null)
+
+    echo "$bridges" | while IFS= read -r line; do
+        local name vlan_filtering
+        name=$(echo "$line" | sed -n 's/.*name=\([^ ]*\).*/\1/p')
+        [ -z "$name" ] && continue
+        vlan_filtering=$(echo "$line" | sed -n 's/.*vlan-filtering=\([^ ]*\).*/\1/p')
+
+        echo "+-- Bridge: $name"
+
+        # VLAN filtering
+        echo "    +-- VLAN Filtering: ${vlan_filtering:-unknown}"
+
+        # Ports
+        _status_ports "$host" "$name"
+
+        # IP addresses
+        _status_ip "$host" "$name"
+
+        # DHCP
+        _status_dhcp "$host" "$name"
+
+        # DNS (global, not per-bridge, but shown under first bridge)
+        _status_dns "$host"
+    done
+}
+```
+
+### _status_ports() - Bridge Port Members
+
+```bash
+_status_ports() {
+    local host="$1" bridge="$2"
+    local port_count ports
+
+    port_count=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/interface bridge port print count-only where bridge=$bridge" 2>/dev/null) || port_count="0"
+
+    echo "    +-- Ports: $port_count active"
+
+    if [ "$port_count" != "0" ]; then
+        ports=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+            "/interface bridge port print terse where bridge=$bridge" 2>/dev/null)
+        echo "$ports" | while IFS= read -r line; do
+            local iface comment
+            iface=$(echo "$line" | sed -n 's/.*interface=\([^ ]*\).*/\1/p')
+            comment=$(echo "$line" | sed -n 's/.*comment=\([^"]*\).*/\1/p')
+            [ -z "$iface" ] && continue
+            if [ -n "$comment" ]; then
+                echo "    |   +-- $iface ($comment)"
+            else
+                echo "    |   +-- $iface"
+            fi
+        done
+    fi
+}
+```
+
+### _status_ip() - IP Addresses on Bridge
+
+```bash
+_status_ip() {
+    local host="$1" bridge="$2"
+    local ip_count ips
+
+    ip_count=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/ip address print count-only where interface=$bridge" 2>/dev/null) || ip_count="0"
+
+    if [ "$ip_count" = "0" ]; then
+        echo "    +-- IP: Not configured"
+        return
+    fi
+
+    ips=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/ip address print terse where interface=$bridge" 2>/dev/null)
+    echo "$ips" | while IFS= read -r line; do
+        local addr
+        addr=$(echo "$line" | sed -n 's/.*address=\([^ ]*\).*/\1/p')
+        [ -z "$addr" ] && continue
+        echo "    +-- IP: $addr"
+    done
+}
+```
+
+### _status_dhcp() - DHCP Server on Bridge
+
+```bash
+_status_dhcp() {
+    local host="$1" bridge="$2"
+    local dhcp_count
+
+    dhcp_count=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/ip dhcp-server print count-only where interface=$bridge" 2>/dev/null) || dhcp_count="0"
+
+    if [ "$dhcp_count" = "0" ]; then
+        echo "    +-- DHCP: Not configured"
+        return
+    fi
+
+    local dhcp_info
+    dhcp_info=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/ip dhcp-server print terse where interface=$bridge" 2>/dev/null)
+
+    echo "$dhcp_info" | while IFS= read -r line; do
+        local name pool
+        name=$(echo "$line" | sed -n 's/.*name=\([^ ]*\).*/\1/p')
+        pool=$(echo "$line" | sed -n 's/.*address-pool=\([^ ]*\).*/\1/p')
+        [ -z "$name" ] && continue
+
+        # Get pool range
+        local pool_range
+        pool_range=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+            "/ip pool get $pool ranges" 2>/dev/null) || pool_range="unknown"
+
+        # Count leases
+        local active_leases static_leases
+        active_leases=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+            "/ip dhcp-server lease print count-only where server=$name and status=bound" 2>/dev/null) || active_leases="0"
+        static_leases=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+            "/ip dhcp-server lease print count-only where server=$name and dynamic=no" 2>/dev/null) || static_leases="0"
+
+        echo "    +-- DHCP: $name"
+        echo "    |   +-- Pool: $pool_range"
+        echo "    |   +-- Active Leases: $active_leases"
+
+        # Show static leases
+        if [ "$static_leases" != "0" ]; then
+            local static_info
+            static_info=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+                "/ip dhcp-server lease print terse where server=$name and dynamic=no" 2>/dev/null)
+            echo "    |   +-- Static Leases: $static_leases"
+            echo "$static_info" | while IFS= read -r sline; do
+                local saddr scomment
+                saddr=$(echo "$sline" | sed -n 's/.*address=\([^ ]*\).*/\1/p')
+                scomment=$(echo "$sline" | sed -n 's/.*comment=\([^"]*\).*/\1/p')
+                [ -z "$saddr" ] && continue
+                echo "    |       +-- $saddr${scomment:+ ($scomment)}"
+            done
+        fi
+    done
+}
+```
+
+### _status_dns() - DNS Configuration
+
+```bash
+_status_dns() {
+    local host="$1"
+
+    local dns_servers allow_remote
+    dns_servers=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/ip dns get servers" 2>/dev/null) || dns_servers=""
+    allow_remote=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/ip dns get allow-remote-requests" 2>/dev/null) || allow_remote="unknown"
+
+    if [ -z "$dns_servers" ]; then
+        echo "    +-- DNS: Not configured"
+        return
+    fi
+
+    echo "    +-- DNS: $dns_servers"
+
+    # Static entries
+    local static_count
+    static_count=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+        "/ip dns static print count-only" 2>/dev/null) || static_count="0"
+
+    if [ "$static_count" != "0" ]; then
+        local static_entries
+        static_entries=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no admin@"$host" \
+            "/ip dns static print terse" 2>/dev/null)
+        echo "$static_entries" | while IFS= read -r line; do
+            local sname saddr
+            sname=$(echo "$line" | sed -n 's/.*name=\([^ ]*\).*/\1/p')
+            saddr=$(echo "$line" | sed -n 's/.*address=\([^ ]*\).*/\1/p')
+            [ -z "$sname" ] && continue
+            echo "        +-- $sname -> $saddr"
+        done
+    fi
+}
+```
+
+### Example Output
+
+**Factory-default switch**:
+```
+Switch: CRS326-24G-2S+RM (RouterOS 7.14.3, uptime 0:05:00)
++-- Bridge: Not configured
+```
+
+**Fully configured L1.0 switch**:
+```
+Switch: CRS326-24G-2S+RM (RouterOS 7.14.3, uptime 5d 3h 12m)
++-- Bridge: bridge-attic
+    +-- VLAN Filtering: no
+    +-- Ports: 8 active
+    |   +-- ether1 (NUC NIC 1 (management))
+    |   +-- ether2 (NUC NIC 2 (data))
+    |   +-- ether3 (Port 3 (available))
+    |   +-- ether4 (Port 4 (available))
+    |   +-- ether5 (Port 5 (available))
+    |   +-- ether6 (Port 6 (available))
+    |   +-- ether7 (Port 7 (available))
+    |   +-- ether8 (Port 8 (available))
+    +-- IP: 10.0.0.1/24
+    +-- DHCP: dhcp-attic
+    |   +-- Pool: 10.0.0.100-10.0.0.200
+    |   +-- Active Leases: 2
+    |   +-- Static Leases: 1
+    |       +-- 10.0.0.10 (nux static lease)
+    +-- DNS: 1.1.1.1,8.8.8.8
+        +-- nux.attic.local -> 10.0.0.10
+        +-- attic.local -> 10.0.0.10
+```
+
+**Connection failure**:
+```
+Switch: OFFLINE (cannot reach 192.168.88.1)
+```
 
 ---
 

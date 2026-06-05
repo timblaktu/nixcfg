@@ -1,28 +1,32 @@
 # Mikrotik Management Skill - Examples
 
-This directory contains reference implementations and example configurations for common Mikrotik RouterOS management tasks.
+Reference configurations for common Mikrotik RouterOS management tasks.
 
-## Planned Examples
+## Available Configurations
 
-- **L1.0-attic-network-setup.md** - Complete Attic network deployment (bridge, VLAN, IPs, ports)
-- **basic-bridge-setup.md** - Simple bridge creation with port assignments
-- **vlan-configuration.md** - VLAN interface setup with tagging
-- **dual-nic-server.md** - Configure dual NIC server connectivity
-- **disaster-recovery.md** - Restore configuration after factory reset
+### [L1.0-attic-network.rsc](L1.0-attic-network.rsc)
 
-## Usage
+Complete L1.0 attic network deployment for the CRS326-24G-2S+:
+- Bridge: bridge-attic (8 ports, no VLAN filtering)
+- IP: 10.0.0.1/24 on bridge-attic
+- DHCP: pool 10.0.0.100-200, server on bridge-attic, static lease for NUC (10.0.0.10)
+- DNS: upstream 1.1.1.1 + 8.8.8.8, static entries for nux.attic.local
 
-These examples demonstrate end-to-end workflows using the mikrotik-management skill. Each example includes:
-- Prerequisites and network topology
-- Step-by-step configuration commands
-- Validation steps
-- Expected output
+**Usage**:
+```bash
+# Via skill workflow (recommended)
+# Ask: "Deploy L1.0 configuration from examples/L1.0-attic-network.rsc"
 
-## Contributing
+# Via direct SSH upload
+scp examples/L1.0-attic-network.rsc admin@192.168.88.1:/
+ssh admin@192.168.88.1 "/import file-name=L1.0-attic-network.rsc"
+```
 
-When adding new examples:
-1. Use descriptive filenames (kebab-case)
-2. Start with network diagram or topology description
-3. Include all commands and expected outputs
-4. Add validation steps
-5. Document any gotchas or common mistakes
+**Before deploying**: Replace `XX:XX:XX:XX:XX:XX` in the static lease with the actual NUC MAC address.
+
+## Adding New Examples
+
+1. Use `.rsc` extension for RouterOS script files
+2. Include header comments with target device, network description, and prerequisites
+3. Use descriptive filenames (kebab-case)
+4. Mark TODO items clearly for values that need customization (MAC addresses, etc.)
