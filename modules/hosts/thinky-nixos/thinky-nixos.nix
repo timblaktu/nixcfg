@@ -39,9 +39,12 @@ in
       hostname = "thinky-nixos";
       defaultUser = username;
       sshPort = 2223;
-      userGroups = [ "wheel" "dialout" ];
+      userGroups = [ "wheel" "dialout" "plugdev" ];
       sshAuthorizedKeys = [ sshKeys.timblaktu sshKeys.termux ];
       usbip.autoAttach = [ "3-1" "3-2" ];
+      usbip.autoAttachByHardwareId = [
+        { hardwareId = "0483:374b"; description = "ST-LINK/V2-1 (STM32 Nucleo/Discovery)"; }
+      ];
       # Enable QEMU user-mode emulation for cross-arch builds (aarch64)
       binfmt.enable = true;
       extraShellAliases = {
@@ -49,8 +52,9 @@ in
       };
     };
 
-    # USB device management for ESP32 development
+    # USB device udev rules (non-root access via dialout/plugdev groups)
     services.udev.packages = [
+      pkgs.openocd # ST-LINK, CMSIS-DAP, J-Link debug probes (plugdev group)
       (pkgs.writeTextFile {
         name = "10-esp32-usb";
         destination = "/etc/udev/rules.d/10-esp32-usb.rules";

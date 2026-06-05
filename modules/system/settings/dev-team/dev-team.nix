@@ -92,7 +92,9 @@ _:
 
       # === Hardware Programmer Access ===
       # Udev rules for team hardware programmers (non-root access via plugdev group)
-      services.udev.packages = [ pkgs.dediprog-sf100 ];
+      # - dediprog-sf100: SPI flash programmer
+      # - openocd: ST-LINK/V2-1, CMSIS-DAP, J-Link, and other JTAG/SWD debug probes
+      services.udev.packages = [ pkgs.dediprog-sf100 pkgs.openocd ];
       users.groups.plugdev = { };
     };
   };
