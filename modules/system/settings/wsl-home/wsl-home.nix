@@ -14,7 +14,7 @@
 # Features:
 #   - User-level WSL tweaks (shell aliases, environment variables)
 #   - Windows Terminal settings management (via targets.wsl)
-#   - WSL utilities (wslu package)
+#   - WSL utilities (xdg-open wrapper via powershell.exe)
 #   - Windows interop tools (explorer.exe, code.exe aliases)
 #   - Wi-Fi priority management via netsh.exe (wifiTools option group)
 #
@@ -319,14 +319,9 @@
 
           # === WSL Utilities ===
           {
-            home.packages = with pkgs; [
-              wslu # WSL utilities (wslview, wslfetch, wslvar, etc.)
-            ];
-
-            # xdg-open → wslview wrapper that recovers Windows mounts if needed.
-            # wslview relies on /mnt/c (for reg.exe, powershell.exe, etc.) and
-            # wslpath (/bin/wslpath), both of which can be unavailable: mounts get
-            # unmounted by isar/kas builds, and NixOS doesn't include /bin on PATH.
+            # xdg-open wrapper that opens URLs/files in the Windows default handler.
+            # Uses powershell.exe Start-Process directly since wslu was removed from
+            # nixpkgs (project discontinued). Recovers Windows mounts if needed.
             home.file.".local/bin/xdg-open" = {
               executable = true;
               text = ''
@@ -335,9 +330,8 @@
                 if ! mountpoint -q /mnt/c 2>/dev/null; then
                   wsl-recover-mounts -q -s 2>/dev/null || true
                 fi
-                # wslpath lives at /bin which NixOS doesn't include on PATH
-                export PATH="/bin:$PATH"
-                exec "${pkgs.wslu}/bin/wslview" "$@"
+                # Use powershell.exe to open in Windows default handler
+                powershell.exe -NoProfile -Command "Start-Process '$1'" 2>/dev/null
               '';
             };
           }

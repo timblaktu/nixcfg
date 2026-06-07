@@ -71,8 +71,8 @@ in
         default = {
           py = "${pkgs.black}/bin/black \"$file_path\" 2>/dev/null || true";
           nix = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt \"$file_path\" 2>/dev/null || true";
-          js = "${pkgs.nodePackages.prettier}/bin/prettier --write \"$file_path\" 2>/dev/null || true";
-          json = "${pkgs.nodePackages.prettier}/bin/prettier --write \"$file_path\" 2>/dev/null || true";
+          js = "${pkgs.prettier}/bin/prettier --write \"$file_path\" 2>/dev/null || true";
+          json = "${pkgs.prettier}/bin/prettier --write \"$file_path\" 2>/dev/null || true";
           rs = "${pkgs.rustfmt}/bin/rustfmt \"$file_path\" 2>/dev/null || true";
           go = "${pkgs.go}/bin/gofmt -w \"$file_path\" 2>/dev/null || true";
         };
@@ -86,7 +86,7 @@ in
         type = types.attrsOf types.str;
         default = {
           py = "${pkgs.python3Packages.pylint}/bin/pylint \"$file_path\" 2>/dev/null || true";
-          js = "${pkgs.nodePackages.eslint}/bin/eslint \"$file_path\" 2>/dev/null || true";
+          js = "${pkgs.eslint}/bin/eslint \"$file_path\" 2>/dev/null || true";
         };
         description = "Linting commands by file extension";
       };
@@ -204,7 +204,7 @@ in
               *.nix)   ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt "$file_path" 2>/dev/null || true ;;
               *.py)    ${pkgs.black}/bin/black "$file_path" 2>/dev/null || true ;;
               *.rs)    ${pkgs.rustfmt}/bin/rustfmt "$file_path" 2>/dev/null || true ;;
-              *.js|*.json) ${pkgs.nodePackages.prettier}/bin/prettier --write "$file_path" 2>/dev/null || true ;;
+              *.js|*.json) ${pkgs.prettier}/bin/prettier --write "$file_path" 2>/dev/null || true ;;
             esac
           '';
           continueOnError = true;

@@ -96,6 +96,8 @@ in
         # Networking handled by WSL
         networkmanager.enable = false;
         firewall.enable = false;
+        # WSL manages /etc/resolv.conf directly (generateResolvConf = true default)
+        resolvconf.enable = false;
       };
 
       # User configuration - minimal setup with generic user
@@ -121,9 +123,6 @@ in
         curl
         htop
         tree
-
-        # WSL utilities
-        wslu
 
         # Nix tools
         nixpkgs-fmt

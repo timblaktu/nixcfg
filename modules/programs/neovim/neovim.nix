@@ -1274,7 +1274,7 @@
             nixpkgs-fmt
             rustfmt
             black
-            nodePackages.prettier
+            prettier
 
             # Tools
             ripgrep
