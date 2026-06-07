@@ -455,6 +455,13 @@
             # Hostname
             networking.hostName = cfg.hostname;
 
+            # Disable resolvconf — WSL manages /etc/resolv.conf directly via
+            # wsl.wslConf.network.generateResolvConf (NixOS-WSL sets
+            # environment.etc."resolv.conf".enable = false). Nixpkgs asserts
+            # that resolvconf must be disabled when environment.etc."resolv.conf"
+            # is defined by another service.
+            networking.resolvconf.enable = false;
+
             # User configuration — fully declarative (no imperative useradd/passwd)
             users.mutableUsers = lib.mkDefault false;
             users.users.${cfg.defaultUser} = {
@@ -476,7 +483,7 @@
 
             # WSL-specific packages
             environment.systemPackages = with pkgs; [
-              wslu # WSL utilities
+              # wslu removed from nixpkgs (project discontinued/archived)
             ];
 
             # Disable Mesa/LLVM graphics drivers unless CUDA is needed (~791 MiB savings).

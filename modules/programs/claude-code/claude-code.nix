@@ -891,13 +891,13 @@
             ] ++ optionals cfg.hooks.formatting.enable [
               nixpkgs-fmt
               black
-              nodePackages.prettier
+              prettier
               rustfmt
               go
               shfmt
             ] ++ optionals cfg.hooks.linting.enable [
               python3Packages.pylint
-              nodePackages.eslint
+              eslint
               shellcheck
             ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
               libnotify

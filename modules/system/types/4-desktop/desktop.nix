@@ -202,7 +202,7 @@
             (lib.mkIf (actualDM == "gdm") {
               services.displayManager.gdm = {
                 enable = true;
-                wayland = lib.mkDefault useWayland;
+                # wayland option removed in GNOME 50 (always Wayland now)
               };
             })
 
