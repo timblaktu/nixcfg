@@ -12,7 +12,7 @@
 #   - Task automation
 #   - Git commands integration
 #   - Statusline variants (powerline, minimal, context, box, fast)
-#   - Memory commands for persistent AI guidance
+#   - Nix-managed account CLAUDE.md (per-account from shared template)
 #   - WSL integration with clipboard support
 #
 # Usage in host config:
@@ -45,8 +45,6 @@
           ./_hm/hooks.nix
           ./_hm/sub-agents.nix
           ./_hm/slash-commands.nix
-          ./_hm/memory-commands.nix
-          ./_hm/memory-commands-static.nix
           ./_hm/task-automation.nix
           ./_hm/skills.nix
           ./_hm/git-commands.nix
@@ -639,22 +637,15 @@
             inherit (cfg) nixcfgPath;
             runtimePath = "${nixcfgPath}/claude-runtime";
 
-            userGlobalMemoryContent = builtins.readFile ./_hm/claude-code-user-memory-template.md;
+            userGlobalMemoryTemplate = builtins.readFile ./_hm/claude-code-user-memory-template.md;
 
-            memoryUpdateScript = pkgs.writeScriptBin "claude-memory-update" ''
-              #!${pkgs.bash}/bin/bash
-              set -euo pipefail
-
-              echo "Memory updated, rebuilding claude-code configuration..."
-              cd "${nixcfgPath}"
-
-              ${pkgs.git}/bin/git add modules/programs/claude-code/_hm/claude-code-user-memory-template.md
-              ${pkgs.git}/bin/git commit -m "Update Claude Code user-global memory" || true
-
-              ${pkgs.home-manager}/bin/home-manager switch --flake .
-
-              echo "Memory updated and propagated to all accounts"
-            '';
+            # Per-account CLAUDE.md: substitute {{ACCOUNT}} with the account name
+            mkClaudeMdTemplate = name:
+              let
+                accountLabel = lib.toUpper name;
+                content = builtins.replaceStrings [ "{{ACCOUNT}}" ] [ accountLabel ] userGlobalMemoryTemplate;
+              in
+              pkgs.writeText "claude-memory-${name}.md" content;
 
             isWSLEnabled = config.targets.wsl.enable or false;
             wslDistroName =
@@ -812,7 +803,8 @@
               mcpServers = claudeCodeMcpServers;
             });
 
-            claudeMdTemplate = pkgs.writeText "claude-memory.md" userGlobalMemoryContent;
+            claudeMdTemplates = mapAttrs (name: _: mkClaudeMdTemplate name)
+              (filterAttrs (_n: a: a.enable) cfg.accounts);
 
             agentTemplates = mapAttrs
               (name: agent:
@@ -883,7 +875,6 @@
               fd
               jq
               uv
-              memoryUpdateScript
             ]) ++ optionals (cfg.mcpServers.sequentialThinkingPython.enable or false) [
               (pkgs.writers.writeBashBin "sequential-thinking-mcp" ''
                 exec ${nixmcp.packages.${pkgs.stdenv.hostPlatform.system}.sequential-thinking-mcp}/bin/sequential-thinking-mcp "$@"
@@ -1016,14 +1007,9 @@
                   copy_template "${mcpTemplate}" "$accountDir/.mcp.json"
                   echo "Updated MCP servers configuration: $accountDir/.mcp.json"
 
-                  if [[ -f "$accountDir/CLAUDE.md" ]]; then
-                    echo "Preserved existing memory file: $accountDir/CLAUDE.md"
-                    $DRY_RUN_CMD chmod ${if cfg.memoryCommands.makeWritable then "644" else "444"} "$accountDir/CLAUDE.md"
-                  else
-                    copy_template "${claudeMdTemplate}" "$accountDir/CLAUDE.md"
-                    $DRY_RUN_CMD chmod ${if cfg.memoryCommands.makeWritable then "644" else "444"} "$accountDir/CLAUDE.md"
-                    echo "Created memory file: $accountDir/CLAUDE.md"
-                  fi
+                  copy_template "${
+                    claudeMdTemplates.${name} or (mkClaudeMdTemplate name)
+                  }" "$accountDir/CLAUDE.md"
 
                   if [[ -f "$accountDir/.claude.json" ]]; then
                     echo "Enforcing Nix-managed settings in .claude.json..."
