@@ -101,7 +101,7 @@ When applying version-incompatibility workarounds:
 2. Update memory (project and user-global if learnings occurred)
 3. Update plan files with task status
 4. Commit changes
-5. Provide continuation prompt (self-contained, merged with summary)
+5. Pipe continuation prompt to clipboard via `clip.exe` (see Continuation Prompt Protocol below)
 6. STOP - wait for user to start new session
 
 **Exception**: User explicitly grants permission to continue.
@@ -116,9 +116,16 @@ When applying version-incompatibility workarounds:
 
 **Continuation Prompt**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the prompt. Deliver via `cat <<'CONT' | clip.exe` (or `/tmp/continuation.md` + `claude-browse` for >4KB). Never reference "previous session context".
 
-## Continuation Prompt Protocol
+## Continuation Prompt Protocol (MANDATORY - NEVER SKIP)
 
-EVERY response completing a plan task MUST produce a continuation prompt. The prompt must be **self-contained**. **UPDATE MEMORY BEFORE** providing the prompt. Task summaries go INSIDE the continuation prompt, not as a separate section.
+**EVERY session that works on a plan MUST end with a continuation prompt on the clipboard.** This is non-negotiable - treat it like committing code. A session without a continuation prompt is incomplete work.
+
+1. Update memory and plan files with task status
+2. Pipe continuation prompt to clipboard: `cat <<'CONT' | clip.exe` (or write `/tmp/continuation.md` + `claude-browse` if >4KB)
+3. Print a short confirmation: "Continuation prompt copied to clipboard (topic: <brief>)"
+4. Do NOT print the continuation prompt inline in chat - it clutters output
+
+The prompt must be **self-contained** - include: (1) memory file path, (2) plan file path, (3) which task to resume, (4) enough context that the next session starts without questions. Task summaries go INSIDE the prompt, not as a separate chat section. Never reference "previous session context".
 
 ## Long-Running Task Strategy
 
