@@ -32,7 +32,7 @@
 
 - Use `echo "${WSL_DISTRO_NAME:-$WSL_DISTRO}"` to determine WSL instance (NixOS WSL sets `WSL_DISTRO`, not `WSL_DISTRO_NAME`); access others at `/mnt/wsl/$WSL_DISTRO/`
 - **Windows executables callable directly from WSL** (e.g., `usbipd.exe list`, `powershell.exe -c "command"`). NEVER tell user to "open PowerShell" - call `.exe` directly. Windows PATH is on `$PATH` via `appendWindowsPath`.
-- **Opening files and URLs**: Use `claude-browse <path-or-url>` to open in browser. Falls back to xdg-open.
+- **Opening files and URLs**: Use `xdg-open <path-or-url>` to open in browser. On WSL this routes through wslview with automatic mount recovery.
 
 ## Nix and Git Safety
 
@@ -53,7 +53,7 @@ nix build '.#checks.x86_64-linux.TEST_NAME'  # Specific test
 
 ## Proactive Browser Integration
 
-The user's dev environment is Terminal + Browser. Proactively `claude-browse` content that would naturally need viewing.
+The user's dev environment is Terminal + Browser. Proactively `xdg-open` content that would naturally need viewing.
 
 **Always open automatically**: PR/MR links after creation, pipeline URLs, diagram files after editing, docs after substantial rewriting, URLs user needs to visit next.
 
@@ -114,14 +114,14 @@ When applying version-incompatibility workarounds:
 
 **CRITICAL: Plan files must be self-contained** - save the FULL plan to disk, not a summary. New sessions cannot access previous session's chat. Every specification needed to execute remaining tasks MUST be in the plan file. Test: Could a new session execute the next task using ONLY the plan file + CLAUDE.md + codebase?
 
-**Continuation Prompt**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the prompt. Deliver via `cat <<'CONT' | clip.exe` (or `/tmp/continuation.md` + `claude-browse` for >4KB). Never reference "previous session context".
+**Continuation Prompt**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the prompt. Deliver via `cat <<'CONT' | clip.exe` (or `/tmp/continuation.md` + `xdg-open` for >4KB). Never reference "previous session context".
 
 ## Continuation Prompt Protocol (MANDATORY - NEVER SKIP)
 
 **EVERY session that works on a plan MUST end with a continuation prompt on the clipboard.** This is non-negotiable - treat it like committing code. A session without a continuation prompt is incomplete work.
 
 1. Update memory and plan files with task status
-2. Pipe continuation prompt to clipboard: `cat <<'CONT' | clip.exe` (or write `/tmp/continuation.md` + `claude-browse` if >4KB)
+2. Pipe continuation prompt to clipboard: `cat <<'CONT' | clip.exe` (or write `/tmp/continuation.md` + `xdg-open` if >4KB)
 3. Print a short confirmation: "Continuation prompt copied to clipboard (topic: <brief>)"
 4. Do NOT print the continuation prompt inline in chat - it clutters output
 

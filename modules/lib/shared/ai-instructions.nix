@@ -28,9 +28,7 @@ with lib;
   gitCommitRules = ''
     ## Git Commit Rules
 
-    - NEVER include AI identity in commit messages
-    - Do NOT add "Generated with Claude Code" or "Co-Authored-By: Claude" footers
-    - Do NOT add "Generated with OpenCode" or similar AI attribution
+    - **NO AI attribution in commit messages** - they should appear human-authored. NO "Generated with Claude Code", NO "Co-Authored-By: Claude", NO "Generated with OpenCode", NO emoji robots
     - Write commit messages as if authored by the human user
     - Keep commit messages concise and focused on the technical changes
   '';
