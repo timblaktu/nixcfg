@@ -1,10 +1,10 @@
 # Plan 013: Distributed Nix Binary Caching with Attic
 
 **Created**: 2026-01-27
-**Status**: Planning - L0.1-L0.2 complete, L0.3 blocked (hardware), L1.0 READY (skill v2.2.0 + local design workflow complete)
+**Status**: HARDWARE TESTING - Plan 039 complete, skill v2.2.0 consolidated and merged to main. Next: hardware testing session.
 **Priority**: High - Directly improves developer productivity and build times
-**Current Phase**: Phase 0 (Mikrotik prerequisites) - skill v2.2.0 implemented with local config design, ready for hardware deployment
-**Last Updated**: 2026-01-28 - Skill extended to v2.2.0 (added Section 11: Local Configuration Design & Deployment)
+**Current Phase**: L1.0 hardware deployment - connect to CRS326-24G-2S+ and run test cases
+**Last Updated**: 2026-06-07 - Plan 039 (mikrotik skill consolidation) complete. Skill v2.2.0 merged to main. Ready for hardware testing.
 
 ---
 
