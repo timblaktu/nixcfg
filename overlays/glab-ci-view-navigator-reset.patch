@@ -1,17 +1,18 @@
-diff --git a/internal/commands/ci/view/view.go b/internal/commands/ci/view/view.go
-index dc06f2d2..6223023d 100644
---- a/internal/commands/ci/view/view.go
-+++ b/internal/commands/ci/view/view.go
+diff --git i/internal/commands/ci/view/view.go w/internal/commands/ci/view/view.go
+index 2d52383..b6bc184 100644
+--- i/internal/commands/ci/view/view.go
++++ w/internal/commands/ci/view/view.go
 @@ -278,7 +278,7 @@ func (o *options) run(ctx context.Context) error {
  	defer recoverPanic(app)
-
+ 
  	var navi navigator
 -	app.SetInputCapture(inputCapture(ctx, app, root, navi, inputCh, forceUpdateCh, o, client, projectID, commitSHA))
 +	app.SetInputCapture(inputCapture(ctx, app, root, &navi, inputCh, forceUpdateCh, o, client, projectID, commitSHA))
  	go updateJobs(app, jobsCh, forceUpdateCh, client, commit)
  	go func() {
  		defer recoverPanic(app)
-@@ -297,7 +297,7 @@ func (o *options) run(ctx context.Context) error {
+@@ -296,11 +296,12 @@ func (o *options) run(ctx context.Context) error {
+ 
  // handleBridgeJobSelection handles the user pressing Enter on a bridge job (downstream pipeline trigger).
  // It navigates to the downstream pipeline if it exists, or shows an informational modal if it doesn't.
 -func handleBridgeJobSelection(app *tview.Application, root *tview.Pages, forceUpdateCh chan<- bool) {
@@ -24,7 +25,7 @@ index dc06f2d2..6223023d 100644
  		forceUpdateCh <- true
  		app.ForceDraw()
  		return
-@@ -342,7 +342,7 @@ func inputCapture(
+@@ -342,7 +343,7 @@ func inputCapture(
  	ctx context.Context,
  	app *tview.Application,
  	root *tview.Pages,
@@ -33,7 +34,7 @@ index dc06f2d2..6223023d 100644
  	inputCh chan<- struct{},
  	forceUpdateCh chan<- bool,
  	opts *options,
-@@ -369,6 +369,7 @@ func inputCapture(
+@@ -369,6 +370,7 @@ func inputCapture(
  			case len(pipelines) > 0:
  				pipelines = pipelines[:len(pipelines)-1]
  				curJob = nil
@@ -41,7 +42,8 @@ index dc06f2d2..6223023d 100644
  				forceUpdateCh <- true
  				app.ForceDraw()
  			default:
-@@ -468,7 +469,7 @@ func inputCapture(
+@@ -467,7 +469,7 @@ func inputCapture(
+ 					app.ForceDraw()
  				} else {
  					// Downstream pipeline trigger selected
 -					handleBridgeJobSelection(app, root, forceUpdateCh)
@@ -49,10 +51,10 @@ index dc06f2d2..6223023d 100644
  				}
  				return nil
  			}
-@@ -586,9 +587,20 @@ type navigator struct {
+@@ -585,9 +587,20 @@ type navigator struct {
  	depth, idx int
  }
-
+ 
 +// Reset resets the navigator to the initial state. This must be called when
 +// the jobs slice changes (e.g., navigating to/from a downstream pipeline)
 +// to avoid an index-out-of-range panic in Navigate.
@@ -70,14 +72,14 @@ index dc06f2d2..6223023d 100644
  	stage := jobs[n.idx].Stage
  	prev, next := adjacentStages(jobs, stage)
  	switch event.Key() {
-diff --git a/internal/commands/ci/view/view_test.go b/internal/commands/ci/view/view_test.go
-index f75ebc82..9ad80923 100644
---- a/internal/commands/ci/view/view_test.go
-+++ b/internal/commands/ci/view/view_test.go
-@@ -1156,6 +1156,56 @@ func Test_handleNavigation(t *testing.T) {
+diff --git i/internal/commands/ci/view/view_test.go w/internal/commands/ci/view/view_test.go
+index 88b5c3e..1595be1 100644
+--- i/internal/commands/ci/view/view_test.go
++++ w/internal/commands/ci/view/view_test.go
+@@ -1156,6 +1156,51 @@ func Test_handleNavigation(t *testing.T) {
  	}
  }
-
+ 
 +func Test_navigatorResetOnPipelineTransition(t *testing.T) {
 +	t.Parallel()
 +
@@ -99,35 +101,30 @@ index f75ebc82..9ad80923 100644
 +
 +	var navi navigator
 +
-+	// Navigate deep into the parent pipeline (idx=7, the last job)
 +	for _, e := range []*tcell.EventKey{
-+		tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone), // stage: test
-+		tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone), // stage: lint
-+		tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone), // stage: deploy
-+		tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone), // deploy-prod
-+		tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone), // trigger-downstream
++		tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone),
++		tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone),
++		tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone),
++		tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone),
++		tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone),
 +	} {
 +		navi.Navigate(parentJobs, e)
 +	}
 +	assert.Equal(t, 7, navi.idx, "should be at last parent job")
 +
-+	// Simulate pipeline transition: reset navigator, switch to smaller job list
 +	navi.Reset()
 +	assert.Equal(t, 0, navi.idx, "idx should be 0 after Reset")
 +	assert.Equal(t, 0, navi.depth, "depth should be 0 after Reset")
 +
-+	// Navigate in the downstream pipeline — must not panic
 +	job := navi.Navigate(downstreamJobs, tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone))
 +	assert.Equal(t, "child-test", job.Name)
 +	assert.Equal(t, 1, navi.idx)
 +
-+	// Also test the defensive bounds check: if Reset is NOT called,
-+	// Navigate should still not panic (it clamps idx)
-+	navi.idx = 100 // simulate stale state
++	navi.idx = 100
 +	job = navi.Navigate(downstreamJobs, tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
 +	assert.NotNil(t, job, "should not panic with stale idx")
 +}
 +
  func Test_bracketEscaper(t *testing.T) {
  	t.Parallel()
-
+ 
