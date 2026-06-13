@@ -2,16 +2,29 @@ diff --git a/internal/commands/ci/view/view.go b/internal/commands/ci/view/view.
 index dc06f2d2..6223023d 100644
 --- a/internal/commands/ci/view/view.go
 +++ b/internal/commands/ci/view/view.go
-@@ -266,7 +266,7 @@ func (o *options) run(ctx context.Context) error {
+@@ -278,7 +278,7 @@ func (o *options) run(ctx context.Context) error {
  	defer recoverPanic(app)
- 
+
  	var navi navigator
 -	app.SetInputCapture(inputCapture(ctx, app, root, navi, inputCh, forceUpdateCh, o, client, projectID, commitSHA))
 +	app.SetInputCapture(inputCapture(ctx, app, root, &navi, inputCh, forceUpdateCh, o, client, projectID, commitSHA))
  	go updateJobs(app, jobsCh, forceUpdateCh, client, commit)
  	go func() {
  		defer recoverPanic(app)
-@@ -286,7 +286,7 @@ func inputCapture(
+@@ -297,7 +297,7 @@ func (o *options) run(ctx context.Context) error {
+ // handleBridgeJobSelection handles the user pressing Enter on a bridge job (downstream pipeline trigger).
+ // It navigates to the downstream pipeline if it exists, or shows an informational modal if it doesn't.
+-func handleBridgeJobSelection(app *tview.Application, root *tview.Pages, forceUpdateCh chan<- bool) {
++func handleBridgeJobSelection(app *tview.Application, root *tview.Pages, forceUpdateCh chan<- bool, navi *navigator) {
+ 	// If downstream pipeline exists, navigate to it
+ 	if curJob.OriginalBridge.DownstreamPipeline != nil {
+ 		pipelines = append(pipelines, *curJob.OriginalBridge.DownstreamPipeline)
+ 		curJob = nil
++		navi.Reset()
+ 		forceUpdateCh <- true
+ 		app.ForceDraw()
+ 		return
+@@ -342,7 +342,7 @@ func inputCapture(
  	ctx context.Context,
  	app *tview.Application,
  	root *tview.Pages,
@@ -20,7 +33,7 @@ index dc06f2d2..6223023d 100644
  	inputCh chan<- struct{},
  	forceUpdateCh chan<- bool,
  	opts *options,
-@@ -313,6 +313,7 @@ func inputCapture(
+@@ -369,6 +369,7 @@ func inputCapture(
  			case len(pipelines) > 0:
  				pipelines = pipelines[:len(pipelines)-1]
  				curJob = nil
@@ -28,18 +41,18 @@ index dc06f2d2..6223023d 100644
  				forceUpdateCh <- true
  				app.ForceDraw()
  			default:
-@@ -412,6 +413,7 @@ func inputCapture(
+@@ -468,7 +469,7 @@ func inputCapture(
  				} else {
- 					pipelines = append(pipelines, *curJob.OriginalBridge.DownstreamPipeline)
- 					curJob = nil
-+					navi.Reset()
- 					forceUpdateCh <- true
- 					app.ForceDraw()
+ 					// Downstream pipeline trigger selected
+-					handleBridgeJobSelection(app, root, forceUpdateCh)
++					handleBridgeJobSelection(app, root, forceUpdateCh, navi)
  				}
-@@ -531,9 +533,20 @@ type navigator struct {
+ 				return nil
+ 			}
+@@ -586,9 +587,20 @@ type navigator struct {
  	depth, idx int
  }
- 
+
 +// Reset resets the navigator to the initial state. This must be called when
 +// the jobs slice changes (e.g., navigating to/from a downstream pipeline)
 +// to avoid an index-out-of-range panic in Navigate.
@@ -64,7 +77,7 @@ index f75ebc82..9ad80923 100644
 @@ -1156,6 +1156,56 @@ func Test_handleNavigation(t *testing.T) {
  	}
  }
- 
+
 +func Test_navigatorResetOnPipelineTransition(t *testing.T) {
 +	t.Parallel()
 +
@@ -117,4 +130,4 @@ index f75ebc82..9ad80923 100644
 +
  func Test_bracketEscaper(t *testing.T) {
  	t.Parallel()
- 
+
