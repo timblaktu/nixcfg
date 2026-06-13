@@ -21,51 +21,10 @@ in
   # ISOLATED: docling from custom nixpkgs (temporary until PR #184 merges)
   inherit (pkgsDocling) docling;
 
-  # Pinned package upgrades (ahead of our nixpkgs input)
-  # claude-code 2.1.97 — overrideAttrs to avoid importing a separate nixpkgs
-  claude-code =
-    let
-      cc-src = prev.fetchzip {
-        url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.97.tgz";
-        hash = "sha256-J92ILqBJmXyAueUPZ+HYZY0ls3OfN2EAhFyQHTOQF5A=";
-      };
-      cc-postPatch = ''
-        cp ${./claude-code-package-lock.json} package-lock.json
-        substituteInPlace cli.js \
-              --replace-fail '#!/bin/sh' '#!/usr/bin/env sh'
-      '';
-    in
-    prev.claude-code.overrideAttrs (old: {
-      version = "2.1.97";
-      src = cc-src;
-      postPatch = cc-postPatch;
-      npmDepsHash = "sha256-0fZu5r/zQjUSbm49FhZSqiIyMKdmH050NSxoVWd3XoU=";
-      npmDeps = prev.fetchNpmDeps {
-        name = "claude-code-2.1.97-npm-deps";
-        src = cc-src;
-        postPatch = cc-postPatch;
-        hash = "sha256-0fZu5r/zQjUSbm49FhZSqiIyMKdmH050NSxoVWd3XoU=";
-      };
-      postInstall = ''
-        wrapProgram $out/bin/claude \
-          --set DISABLE_AUTOUPDATER 1 \
-          --set-default FORCE_AUTOUPDATE_PLUGINS 1 \
-          --set DISABLE_INSTALLATION_CHECKS 1 \
-          --unset DEV \
-          --prefix PATH : ${
-            prev.lib.makeBinPath (
-              [ prev.procps ]
-              ++ prev.lib.optionals prev.stdenv.hostPlatform.isLinux [
-                prev.bubblewrap
-                prev.socat
-              ]
-            )
-          }
-      '';
-      meta = old.meta // {
-        sourceProvenance = with prev.lib.sourceTypes; [ binaryBytecode ];
-      };
-    });
+  # claude-code: using upstream nixpkgs (2.1.158 binary distribution)
+  # Previous pin to 2.1.97 npm build removed — upstream switched to binary packaging.
+  # FORCE_AUTOUPDATE_PLUGINS was the only extra flag; re-add here if needed.
+
   # opencode 1.14.48 - pinned ahead of nixpkgs input (which has 1.2.5)
   opencode = prev.callPackage ../pkgs/opencode-pinned/package.nix { };
   # glab: patch fixes index-out-of-range panic when navigating to/from
