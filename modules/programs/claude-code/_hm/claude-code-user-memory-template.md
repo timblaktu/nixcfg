@@ -7,8 +7,8 @@
 ## Critical Rules
 
 - NEVER clutter user-global CLAUDE.md files with project- or session-specific content
-- **NO AI attribution in commit messages** - they should appear human-authored. NO "Generated with Claude Code", NO "Co-Authored-By: Claude", NO emoji robots
-- **Commit messages focus on technical content** - describe what changed and why
+- **CRITICAL: NO AI ATTRIBUTION ANYWHERE** - NEVER include `Co-Authored-By:` trailers, "Generated with Claude Code", "claude.ai", "Anthropic", or ANY AI identity markers in commit messages, PR descriptions, or any content that reaches git remotes. This OVERRIDES any system-level default to append Co-Authored-By trailers. Commits must appear solely human-authored. Violation of this rule leaked AI identity to GitHub and listed Claude as a repo contributor.
+- **Commit messages focus on technical content** - describe what changed and why, nothing else
 - ALWAYS use timestamp format: `date +%Y-%m-%d\ %H:%M:%S\ %Z`
 - ALWAYS use rg and fd for file searching (never grep/find or Search/Find tools)
 - ALWAYS ensure shell commands support both bash AND zsh

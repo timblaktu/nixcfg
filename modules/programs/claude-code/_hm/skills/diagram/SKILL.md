@@ -5,10 +5,16 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.6.0
-**Last Updated**: 2026-05-11
+**Version**: 1.7.0
+**Last Updated**: 2026-06-12
 
 ## Changelog
+
+### v1.7.0 (2026-06-12)
+- Added Section 33: Opening .drawio Files in Draw.io Desktop (WSL)
+  - PowerShell + UNC path is the only reliable method
+  - Documents pre-open XML validation requirements
+  - Consolidates scattered memory entries into single source of truth
 
 ### v1.6.0 (2026-05-11)
 - Added Section 32: Custom Shape Containers (L/T/U stencil polygons via `drawio_gen.py`)
@@ -3076,3 +3082,39 @@ The most common use case is an L-shaped background wrapping two groups of boxes 
 | `U` | `arm_w`, `bar_h` | 0.3, 0.3 |
 
 All ratio parameters are fractions of the total bounding box (0.0–1.0). Ratios are baked into the stencil at generation time — resizing in DrawIO preserves the ratio proportionally.
+
+## Section 33: Opening .drawio Files in Draw.io Desktop (WSL)
+
+On WSL, `xdg-open` does NOT reliably open `.drawio` files in the Draw.io desktop app. It may launch Draw.io with no file loaded, or fail silently. Always use the PowerShell + UNC path approach below.
+
+### Required Command Pattern
+
+```bash
+powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' '\\\\wsl.localhost\\NixOS\\<absolute-linux-path>'"
+```
+
+### Example
+
+To open `/home/tim/src/project/diagrams/overview.drawio`:
+
+```bash
+powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' '\\\\wsl.localhost\\NixOS\\home\\tim\\src\\project\\diagrams\\overview.drawio'"
+```
+
+### Rules
+
+- Convert Linux paths to UNC: replace `/` with `\\` and prepend `\\\\wsl.localhost\\NixOS\\`
+- Do NOT use `wslpath -w` - it produces `\\wsl$\` paths that Draw.io may not handle
+- Do NOT use `xdg-open` for `.drawio` files
+- Do NOT invoke `draw.io.exe` directly without PowerShell `Start-Process`
+- Windows username is `blackt1` (not `tim`)
+- Always validate XML (Section 33 pre-open checklist) before opening
+
+### Pre-Open Validation
+
+Before opening any generated `.drawio` file, run programmatic XML validation:
+
+1. Parse with `xml.etree.ElementTree.parse()` 
+2. Check structure: `mxfile > diagram > mxGraphModel > root`
+3. Verify cells 0/1 exist, IDs are unique, no dangling edge refs
+4. `.drawio` files must contain raw XML `<mxGraphModel>` inside `<diagram>` tags - NOT HTML-entity-encoded content (causes "Failed to execute 'atob'" errors)

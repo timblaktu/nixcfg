@@ -36,14 +36,18 @@ Every task follows this pattern - adapt depth based on complexity:
 - Verify expected behavior
 - **Only mark COMPLETE after validation passes**
 
-## End of Session
-Always provide continuation prompt:
+## End of Session (MANDATORY - NO EXCEPTIONS)
+At the END of every session, you MUST pipe a continuation prompt to the clipboard via `clip.exe`:
+```bash
+printf '%s' "continuation prompt text" | clip.exe
 ```
-Continue Plan 019.
-Last completed: [task ID and brief description]
-Next task: [task ID] - [one-line description]
-Check: [relevant file path]
-```
+Then tell the user it's on their clipboard. The prompt must include:
+- Which worktree/branch the work was on
+- What was just accomplished (1-2 lines)
+- What the next session should do
+- Any pending items (pipeline IDs, blockers)
+
+NEVER end a session without doing this. If you forget, you have already failed.
 
 ---
 
