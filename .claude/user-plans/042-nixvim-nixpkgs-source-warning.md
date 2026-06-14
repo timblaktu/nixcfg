@@ -1,6 +1,6 @@
 # Plan 042: Fix Nixvim nixpkgs.source Warning
 
-## Status: PENDING
+## Status: COMPLETE
 
 ## Problem
 
@@ -36,19 +36,25 @@ In `flake.nix:23-28`, the nixvim input uses `inputs.nixpkgs.follows = "nixpkgs-u
 
 ## Tasks
 
-- [ ] TASK 1: Research where `programs.nixvim` is configured in the dendritic modules
-  - Check `modules/programs/` for nixvim module
-  - Identify which hosts import it
-  - Determine if Option A can be applied at the module level
+- [x] TASK 1: Research where `programs.nixvim` is configured in the dendritic modules
+  - Configured in `modules/programs/neovim/neovim.nix` under `flake.modules.homeManager.neovim`
+  - The deferredModule's outer args already expose `inputs`, so Option A applies at module level
 
-- [ ] TASK 2: Implement the chosen option
-  - If Option A: add `programs.nixvim.nixpkgs.source` in the nixvim module
-  - If Option B: remove the `follows` line from `flake.nix:27`
-  - Test with `nix flake check --no-build`
+- [x] TASK 2: Implement the chosen option (Option A)
+  - Added `programs.nixvim.nixpkgs.source = inputs.nixpkgs-unstable;` in `neovim.nix`
+  - `nix flake check --no-build` passes; nixvim source warning no longer emitted
 
-- [ ] TASK 3: Verify warning is gone
-  - Run `home-manager switch --flake '.#tim@$(hostname)' --dry-run`
-  - Confirm no nixvim source warning in output
+- [x] TASK 3: Verify warning is gone
+  - `nix run home-manager -- switch --flake '.#tim@pa161878-nixos' --dry-run` succeeds (exit 0)
+  - No nixvim / nixpkgs.source / warning lines in output
+
+## Resolution
+
+Chose **Option A**. Set `programs.nixvim.nixpkgs.source = inputs.nixpkgs-unstable;` in
+`modules/programs/neovim/neovim.nix`, explicitly acknowledging the `follows` override from
+`flake.nix:27`. Single nixpkgs eval preserved, postgres-lsp/other LSP packages still resolve
+against nixpkgs-unstable, warning suppressed. Verified via `nix flake check` and home-manager
+dry-run on pa161878-nixos.
 
 ## Context
 

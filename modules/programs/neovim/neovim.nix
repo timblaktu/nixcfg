@@ -34,6 +34,13 @@
           viAlias = true;
           vimAlias = true;
 
+          # Explicitly acknowledge that nixvim's nixpkgs follows our nixpkgs-unstable
+          # input (see flake.nix: inputs.nixvim.inputs.nixpkgs.follows = "nixpkgs-unstable").
+          # This suppresses nixvim's warning about its pinned nixpkgs being overridden via
+          # `follows`. We intentionally use nixpkgs-unstable so LSP server definitions
+          # (e.g. postgres-lsp) resolve against the packages they expect.
+          nixpkgs.source = inputs.nixpkgs-unstable;
+
           # Fix VIMRUNTIME environment variable for LSP functionality
           env = {
             VIMRUNTIME = "${pkgs.neovim-unwrapped}/share/nvim/runtime";
