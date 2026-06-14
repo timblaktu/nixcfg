@@ -383,7 +383,7 @@
               dua
               ncdu
               # Terminal capture toolkit (see docs/terminal-capture.md)
-              asciinema_3 # Record terminal sessions (.cast)
+              asciinema # Record terminal sessions (.cast)
               asciinema-agg # .cast → animated GIF
               termshot # Static terminal screenshots (PNG)
               svg-term # .cast → animated SVG

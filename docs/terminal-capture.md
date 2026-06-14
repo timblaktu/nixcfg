@@ -3,7 +3,7 @@
 Headless-compatible tools for recording and screenshotting terminal sessions.
 No WSLg/X11 required -- works purely with terminal I/O.
 
-**Packages**: `asciinema_3`, `asciinema-agg`, `termshot`, `svg-term`
+**Packages**: `asciinema`, `asciinema-agg`, `termshot`, `svg-term`
 **Location**: `modules/system/types/3-cli/cli.nix` (home-cli cliPackages)
 
 ## Quick Reference
