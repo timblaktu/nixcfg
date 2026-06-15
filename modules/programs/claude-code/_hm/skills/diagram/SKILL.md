@@ -5,10 +5,21 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.7.0
-**Last Updated**: 2026-06-12
+**Version**: 1.8.0
+**Last Updated**: 2026-06-14
 
 ## Changelog
+
+### v1.8.0 (2026-06-14)
+- Rewrote Section 33 to make the backslash-escaping rule unmissable:
+  - Added "THE #1 GOTCHA" explainer - bash double-quotes eat one backslash from
+    every `\\`, so UNC paths need FOUR leading + double separators (`\\\\...\\`).
+    Documents the exact symptom (app opens, no file) as an under-escaped path.
+  - Added mandatory Test-Path / Write-Output verification step before launching.
+  - Added distro-name note (`nixos` via `$WSL_DISTRO`, case-insensitive host).
+  - Added `-ArgumentList` to the canonical command; single-instance caveat.
+  - Added general principle for Windows paths in ANY WSL interop call.
+  - Added headless export recipe (PNG/SVG/PDF; `-p` is 1-BASED; GPU errors harmless).
 
 ### v1.7.0 (2026-06-12)
 - Added Section 33: Opening .drawio Files in Draw.io Desktop (WSL)
@@ -3087,10 +3098,29 @@ All ratio parameters are fractions of the total bounding box (0.0–1.0). Ratios
 
 On WSL, `xdg-open` does NOT reliably open `.drawio` files in the Draw.io desktop app. It may launch Draw.io with no file loaded, or fail silently. Always use the PowerShell + UNC path approach below.
 
+### THE #1 GOTCHA: backslash escaping (read this first)
+
+A WSL file referenced from Windows uses a UNC path that begins with TWO backslashes and separates components with single backslashes:
+
+```
+\\wsl.localhost\nixos\home\tim\src\project\diagrams\overview.drawio
+```
+
+That is the string draw.io must ultimately receive. The trap is that when you wrap the PowerShell call in a **bash double-quoted** `-Command "..."`, bash consumes one backslash from every `\\` pair BEFORE PowerShell ever runs. So you must DOUBLE every backslash in the source so it survives bash:
+
+| Layer | Leading UNC marker | Each separator |
+|-------|--------------------|----------------|
+| What draw.io needs | `\\` | `\` |
+| What you must TYPE inside bash `"-Command \"...\""` | `\\\\` | `\\` |
+
+Net rule: **inside a bash double-quoted command, type `\\\\wsl.localhost\\nixos\\home\\tim\\...` - four backslashes to start, two between every component.**
+
+Symptom of getting this wrong: draw.io launches but shows an empty/new canvas with NO file loaded. That means an under-escaped path (e.g. a single leading `\`) reached draw.io - it is not a draw.io bug, it is a lost-backslash bug. Verify with the Test-Path step below before blaming anything else.
+
 ### Required Command Pattern
 
 ```bash
-powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' '\\\\wsl.localhost\\NixOS\\<absolute-linux-path>'"
+powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' -ArgumentList '\\\\wsl.localhost\\nixos\\<absolute-linux-path-with-\\-separators>'"
 ```
 
 ### Example
@@ -3098,17 +3128,56 @@ powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Loca
 To open `/home/tim/src/project/diagrams/overview.drawio`:
 
 ```bash
-powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' '\\\\wsl.localhost\\NixOS\\home\\tim\\src\\project\\diagrams\\overview.drawio'"
+powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' -ArgumentList '\\\\wsl.localhost\\nixos\\home\\tim\\src\\project\\diagrams\\overview.drawio'"
+```
+
+### ALWAYS verify the path resolves BEFORE launching
+
+Run `Test-Path` with the EXACT same escaped string. `True` means draw.io will get a real file; `False` means your escaping (or distro name) is wrong - fix it before launching, do not just retry the open:
+
+```bash
+powershell.exe -NoProfile -Command "Test-Path '\\\\wsl.localhost\\nixos\\home\\tim\\src\\project\\diagrams\\overview.drawio'"
+```
+
+If you ever need to SEE what string PowerShell actually receives, echo it - this is the fastest way to debug lost backslashes:
+
+```bash
+powershell.exe -NoProfile -Command "Write-Output '\\\\wsl.localhost\\nixos\\home\\tim'"
+# must print:  \\wsl.localhost\nixos\home\tim   (two leading, one each separator)
 ```
 
 ### Rules
 
-- Convert Linux paths to UNC: replace `/` with `\\` and prepend `\\\\wsl.localhost\\NixOS\\`
-- Do NOT use `wslpath -w` - it produces `\\wsl$\` paths that Draw.io may not handle
-- Do NOT use `xdg-open` for `.drawio` files
-- Do NOT invoke `draw.io.exe` directly without PowerShell `Start-Process`
-- Windows username is `blackt1` (not `tim`)
-- Always validate XML (Section 33 pre-open checklist) before opening
+- Convert Linux paths to UNC: prepend `\\wsl.localhost\<distro>\` and replace `/` with `\` - then double every backslash for bash (see gotcha table above).
+- **Distro name**: get it from `echo "${WSL_DISTRO:-$WSL_DISTRO_NAME}"`. NixOS-WSL reports `nixos` (lowercase) in `$WSL_DISTRO`, not `$WSL_DISTRO_NAME`. The UNC host is case-insensitive (`nixos` and `NixOS` both resolve), but prefer the real lowercase name.
+- Prefer `\\wsl.localhost\<distro>\` over `\\wsl$\<distro>\`; do NOT use `wslpath -w` (it emits the `\\wsl$\` form which draw.io may not handle).
+- Use `-ArgumentList` so the path is passed as one argument (robust if it ever contains spaces).
+- Single-instance caveat: if draw.io is already running, a second launch may just focus the existing window. If a file seems not to load, check `Get-Process -Name 'draw.io'` and close stale instances, or open via File > Open inside the running app.
+- Do NOT use `xdg-open` for `.drawio` files; do NOT invoke `draw.io.exe` directly without `Start-Process`.
+- Windows username is `blackt1` (not `tim`).
+- Always validate XML (pre-open checklist below) before opening.
+
+### General principle: Windows paths in any WSL interop call
+
+This escaping rule is NOT draw.io-specific - it applies to ANY `powershell.exe -Command "..."` or `.exe` call from a bash double-quoted string that carries a backslash path. Two ways to stay safe:
+1. **Double every backslash** for the bash double-quote layer (the table above), and confirm with a `Write-Output`/`Test-Path` echo.
+2. **Avoid backslashes entirely**: drive a `/mnt/c/...` POSIX path for Windows-local files, or copy the file to a Windows-local dir first (e.g. `cp f /mnt/c/Users/blackt1/AppData/Local/Temp/`) and reference the plain `C:\...` path (single backslashes there are inside PowerShell single-quotes, which bash leaves alone when the separators are not doubled - still verify with Test-Path).
+
+### Headless export to PNG/SVG/PDF (for review images or animated GIFs)
+
+The desktop CLI can render pages without a window - useful to self-verify a diagram or build a GIF from a multi-page story file:
+
+```bash
+# Copy to a Windows-local path first (UNC input occasionally flakes), then export page N:
+cp file.drawio /mnt/c/Users/blackt1/AppData/Local/Temp/x.drawio
+powershell.exe -NoProfile -Command "& 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' -x -f png -p N --scale 2 -o 'C:\Users\blackt1\AppData\Local\Temp\out.png' 'C:\Users\blackt1\AppData\Local\Temp\x.drawio'"
+# Read back from /mnt/c/Users/blackt1/AppData/Local/Temp/out.png
+```
+
+- **`-p` / `--page-index` is 1-BASED** (beat/page 1 = `-p 1`; `-p 0` falls back to page 1). Assuming 0-based makes every page render identically - the most common export mistake.
+- Exported bytes differ run-to-run (embedded timestamps), so an md5 diff is NOT a reliable "did it change" check - read the image.
+- `ERROR ... Gpu Cache Creation failed` / `Unable to create cache` lines are harmless; export still succeeds.
+- Flags: `-x` export, `-f` png|svg|pdf|jpg, `-s/--scale`, `-a` all-pages (PDF only), `-g from..to` page range (PDF only). For per-page PNGs, loop `-p`.
 
 ### Pre-Open Validation
 
