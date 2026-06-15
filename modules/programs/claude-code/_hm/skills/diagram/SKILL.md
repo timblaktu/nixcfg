@@ -5,10 +5,18 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.8.0
+**Version**: 1.9.0
 **Last Updated**: 2026-06-14
 
 ## Changelog
+
+### v1.9.0 (2026-06-14)
+- Section 20: hardened the no-background-on-edge-labels rule into a hard prohibition with a
+  single narrow exception (user asks, or a container legend on its own border), and added the
+  label-offset technique as the readable alternative.
+- Section 29: added "Container / Group Title Justification (Default: Left)" - left-justify
+  container titles to reserve the top-right corner for badges/annotations; added two
+  anti-pattern rows (edge-label background, centered container title).
 
 ### v1.8.0 (2026-06-14)
 - Rewrote Section 33 to make the backslash-escaping rule unmissable:
@@ -2313,10 +2321,20 @@ value="lock/&lt;br&gt;unlock"
 
 ### Core Rules
 
-1. **NO background color**: Always use `labelBackgroundColor=none`
+1. **NEVER put a background color behind a label on a line or arrow.** Do not set
+   `labelBackgroundColor` to any color (`#ffffff`, etc.) on an edge. Use
+   `labelBackgroundColor=none` or omit it entirely. This is a hard rule - a filled box
+   behind arrow text looks like a sticker and breaks visual consistency.
+   - **Only exception:** the user explicitly asks for it, OR a label is unavoidably sitting
+     ON A BORDER/GRID LINE where it would otherwise be bisected (the fieldset/legend pattern -
+     a *container* title centered on its own dashed border, NOT an arrow label). Even then,
+     prefer offsetting the label off the line (Rule 5) over adding a background.
 2. **Match line color**: `fontColor` should match `strokeColor` of the edge
 3. **Consider vertical formatting**: Long labels can use `<br>` to stack vertically
 4. **Contrast**: Choose foreground color that contrasts with underlying objects
+5. **Offset the label off the line** instead of reaching for a background: add
+   `<mxPoint x="0" y="-7" as="offset"/>` inside the edge `<mxGeometry>` so the text floats just
+   above the stroke. This is what keeps a no-background label readable (see Section 27).
 
 ### Color Matching Reference
 
@@ -2803,6 +2821,27 @@ This section consolidates patterns that should be applied **when creating diagra
 - `x="-15"` - Label left of vertical line
 - `x="15"` - Label right of vertical line
 
+### Container / Group Title Justification (Default: Left)
+
+**Left-justify the title of any container or group box** (`align=left;spacingLeft=6;` with
+`verticalAlign=top`), rather than the draw.io default of center. A centered title runs along the
+middle of the top edge and collides with anything you later place in the top-right corner
+(status badges, annotations, counts, icons). Left-justifying parks the title in the top-left and
+permanently reserves the top-right corner for annotations.
+
+```
+CENTERED (default) - title fights top-right badge:        LEFT-JUSTIFIED (preferred):
++---------------------------------+                       +---------------------------------+
+|        Chassis Core Board [BADGE]|  <- overlap          | Chassis Core Board       [BADGE]|  <- clear
+|   ...                           |                       |   ...                           |
+```
+
+- Apply consistently to ALL sibling container titles in a diagram (boxes, boards, modules,
+  groups) so it reads as an intentional standard, not a one-off. Leaf/content labels (a single
+  CPU block, a daemon pill) can stay centered.
+- This also frees the top edge for more consistent port/connector indicator placement.
+- Do NOT instead shrink or rename the title to dodge an overlap - that loses meaning and is fragile.
+
 ### Creation Checklist
 
 Before running drawio-svg-sync on a new diagram, verify:
@@ -2824,6 +2863,8 @@ Before running drawio-svg-sync on a new diagram, verify:
 | Separate text boxes for edge labels | Don't move with edge | Use `value` attribute on edge |
 | Missing anchor points | Edges detach on resize | Always specify exit/entry X/Y/Dx/Dy |
 | Large strokeWidth on edges | Oversized arrowheads | Use strokeWidth=1 or 2 max |
+| Background behind an arrow/line label | Looks like a sticker, breaks consistency | Never set `labelBackgroundColor` to a color on an edge; offset the label instead (Section 20) |
+| Centered container title | Collides with top-right badges/annotations | Left-justify: `align=left;spacingLeft=6` |
 
 ### Quick Reference: Recommended Defaults
 
