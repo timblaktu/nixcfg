@@ -701,6 +701,38 @@ in
           touch $out
         '';
 
+        # Regression guard: the setup-username bootstrap script must target the
+        # user the image actually ships (wsl-settings.defaultUser). A hardcoded
+        # "dev" previously made setup-username abort on every distributed image,
+        # which ships "user". The script now derives its "from" user from the
+        # same option; this check fails if that wiring ever regresses.
+        wsl-dev-team-setup-username-user =
+          let
+            devTeamCfg = self.nixosConfigurations.nixos-wsl-dev-team.config;
+            shippedUser = devTeamCfg.wsl-settings.defaultUser;
+            setupUsername = lib.findFirst
+              (p: (p.name or "") == "setup-username")
+              null
+              devTeamCfg.environment.systemPackages;
+          in
+          assert setupUsername != null;
+          pkgs.runCommand "wsl-dev-team-setup-username-user"
+            {
+              meta = {
+                description = "setup-username targets the shipped WSL default user";
+                maintainers = [ ];
+                timeout = 30;
+              };
+              inherit shippedUser;
+              script = "${setupUsername}/bin/setup-username";
+            } ''
+            echo "Shipped default user: $shippedUser"
+            grep -qF "BOOTSTRAP_USER=\"$shippedUser\"" "$script" \
+              || (echo "❌ setup-username BOOTSTRAP_USER does not match wsl-settings.defaultUser ($shippedUser)" && exit 1)
+            echo "✅ setup-username bootstraps from '$shippedUser'"
+            touch $out
+          '';
+
         build-tarball-thinky-dryrun = pkgs.runCommand "build-tarball-thinky-dryrun"
           {
             meta = {

@@ -80,17 +80,27 @@
         # mkDefault (1000) for WSL-only options -- overridable by host.
         {
           # setup-username: Bootstrap script for distributed WSL images.
-          # Performs imperative user rename from default 'dev' to chosen username.
-          # This is a one-time bootstrap operation -- NixOS declarative user config
-          # takes over after the user clones the flake and rebuilds.
+          # Performs imperative user rename from the shipped default user to the
+          # chosen username. This is a one-time bootstrap operation -- NixOS
+          # declarative user config takes over after the user clones the flake
+          # and rebuilds.
+          #
+          # The "from" user is derived at build time from wsl-settings.defaultUser
+          # (the option that actually sets wsl.defaultUser and creates the user),
+          # so the script always targets the user the image really ships -- whether
+          # that is "user", "dev", or anything else. Hardcoding "dev" here made the
+          # script abort on every shipped image (which defaults to "user").
           environment.systemPackages = with pkgs; [
             (pkgs.writeShellScriptBin "setup-username" ''
               set -euo pipefail
 
+              # Injected at build time from the system's configured default user.
+              BOOTSTRAP_USER="${config.wsl-settings.defaultUser}"
+
               if [ $# -ne 1 ]; then
                 echo "Usage: setup-username <new-username>"
                 echo ""
-                echo "Renames the default 'dev' user to your preferred username."
+                echo "Renames the default '$BOOTSTRAP_USER' user to your preferred username."
                 echo "This is a one-time bootstrap for distributed WSL images."
                 echo ""
                 echo "After renaming, restart WSL:"
@@ -102,10 +112,16 @@
               NEW_USER="$1"
               CURRENT_USER=$(whoami)
 
-              if [ "$CURRENT_USER" != "dev" ]; then
-                echo "Error: This script can only be run by the 'dev' user."
+              if [ "$CURRENT_USER" != "$BOOTSTRAP_USER" ]; then
+                echo "Error: This script can only be run by the default '$BOOTSTRAP_USER' user."
                 echo "Current user: $CURRENT_USER"
-                echo "(Username already changed from default.)"
+                echo "(Username already changed from the default.)"
+                exit 1
+              fi
+
+              if [ "$NEW_USER" = "$BOOTSTRAP_USER" ]; then
+                echo "Error: New username matches the current default ('$BOOTSTRAP_USER')."
+                echo "Nothing to do -- choose a different username."
                 exit 1
               fi
 
@@ -117,7 +133,7 @@
                 exit 1
               fi
 
-              echo "This will rename user 'dev' to '$NEW_USER'."
+              echo "This will rename user '$BOOTSTRAP_USER' to '$NEW_USER'."
               echo "You will be logged out. Restart WSL to continue."
               echo ""
               read -rp "Proceed? (y/N) " CONFIRM
@@ -128,15 +144,15 @@
               fi
 
               # Rename user, move home directory, rename primary group
-              sudo ${pkgs.shadow}/bin/usermod -l "$NEW_USER" dev
+              sudo ${pkgs.shadow}/bin/usermod -l "$NEW_USER" "$BOOTSTRAP_USER"
               sudo ${pkgs.shadow}/bin/usermod -d "/home/$NEW_USER" -m "$NEW_USER"
-              sudo ${pkgs.shadow}/bin/groupmod -n "$NEW_USER" dev 2>/dev/null || true
+              sudo ${pkgs.shadow}/bin/groupmod -n "$NEW_USER" "$BOOTSTRAP_USER" 2>/dev/null || true
 
               # Update WSL default user in wsl.conf
-              sudo ${pkgs.gnused}/bin/sed -i "s/^default=dev$/default=$NEW_USER/" /etc/wsl.conf
+              sudo ${pkgs.gnused}/bin/sed -i "s/^default=$BOOTSTRAP_USER$/default=$NEW_USER/" /etc/wsl.conf
 
               echo ""
-              echo "User renamed: dev -> $NEW_USER"
+              echo "User renamed: $BOOTSTRAP_USER -> $NEW_USER"
               echo ""
               echo "Next steps:"
               echo "  1. Close this terminal"
