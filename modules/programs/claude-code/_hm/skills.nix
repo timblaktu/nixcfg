@@ -56,6 +56,16 @@ let
         "drawio_gen.py" = ./skills/diagram/drawio_gen.py;
       };
     };
+    screencast = {
+      name = "screencast";
+      description = "Record terminal sessions and post-process them into standalone, narration-free screencasts. Use when asked to record a terminal demo, capture a CLI session for a presentation, compress/annotate a recording, turn a session into a GIF/MP4, or embed a terminal recording in an HTML deck. Built on asciinema + agg + ffmpeg.";
+      files = {
+        "SKILL.md" = ./skills/screencast/SKILL.md;
+        "scripts/record.sh" = ./skills/screencast/scripts/record.sh;
+        "scripts/annotate.py" = ./skills/screencast/scripts/annotate.py;
+        "scripts/embed.sh" = ./skills/screencast/scripts/embed.sh;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -170,6 +180,16 @@ in
           Supports .drawio, .drawio.svg, Mermaid, and ASCII input formats.
         '';
       };
+      screencast = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the screencast skill: record terminal sessions with asciinema and
+          post-process them (compress idle gaps, add title cards + scrubber markers)
+          into standalone, narration-free screencasts that embed in an HTML deck or
+          export to GIF/MP4. Pulls asciinema, agg, ffmpeg, and vhs into the profile.
+        '';
+      };
     };
 
     custom = mkOption {
@@ -202,6 +222,14 @@ in
   };
 
   config = mkIf (cfg.enable && skillsCfg.enable) {
+    # Toolchain for the screencast skill (record/annotate/embed/export).
+    home.packages = lib.optionals skillsCfg.builtins.screencast [
+      pkgs.asciinema # record / convert / play terminal sessions
+      pkgs.asciinema-agg # .cast -> animated GIF
+      pkgs.ffmpeg # GIF -> MP4/WebM
+      pkgs.vhs # optional: scripted deterministic .tape recordings
+    ];
+
     # Extend the activation script to deploy skills
     home.activation.claudeSkillsDeployment = lib.hm.dag.entryAfter [ "claudeConfigTemplates" ] ''
       echo "🎯 Deploying Claude Code skills..."
@@ -242,8 +270,8 @@ in
               let
                 # Handle both path (builtins) and derivation (custom) files
                 sourceFile = if isPath filePath then filePath else filePath;
-                # Python scripts need executable permission
-                fileMode = if hasSuffix ".py" fileName then "755" else "644";
+                # Script files need executable permission
+                fileMode = if hasSuffix ".py" fileName || hasSuffix ".sh" fileName then "755" else "644";
               in ''
                 # Create parent directories if needed (for nested paths like templates/foo.md)
                 $DRY_RUN_CMD mkdir -p "$(dirname "$skillDir/${fileName}")"
@@ -287,7 +315,7 @@ in
 
           ${concatStringsSep "\n" (mapAttrsToList (fileName: filePath:
             let
-              fileMode = if hasSuffix ".py" fileName then "755" else "644";
+              fileMode = if hasSuffix ".py" fileName || hasSuffix ".sh" fileName then "755" else "644";
             in ''
             $DRY_RUN_CMD mkdir -p "$(dirname "$skillDir/${fileName}")"
             $DRY_RUN_CMD cp "${filePath}" "$skillDir/${fileName}"
