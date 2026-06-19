@@ -20,7 +20,7 @@
 - **ALWAYS ASK FOR HELP WITH AUTHENTICATION ISSUES** - GitHub, GitLab, Bitwarden, SOPS, SSH, etc.
 - **Use mcp-nixos MCP tools** to verify NixOS/Home Manager options BEFORE making changes. Options change between versions, get deprecated/renamed/removed. Making assumptions leads to eval errors.
 - NEVER sudo long-running commands with timeout (causes Claude Code EPERM crashes). Provide the command for user to run manually instead.
-- **ALL github.com/timblaktu repos are USER-OWNED** - work in local worktrees (typically ~/src), not flake input changes
+- **Repos under your own GitHub account are USER-OWNED** - work in local worktrees (typically ~/src), not flake input changes
 - **ALWAYS stage changes before nix commands** - Nix only sees staged/committed changes
 - **LOCAL-FIRST RESEARCH** - look in `~/src/` for existing clones before web searches. Clone repos to `~/src/` if needed. Web search is last resort for non-code info.
 - ALWAYS use relative paths for inter-document markdown links in shared repos
@@ -58,6 +58,8 @@ The user's dev environment is Terminal + Browser. Proactively `xdg-open` content
 **Always open automatically**: PR/MR links after creation, pipeline URLs, diagram files after editing, docs after substantial rewriting, URLs user needs to visit next.
 
 **Do not open automatically**: Files with small edits, build logs, the same URL twice, more than 3 items in quick succession.
+
+**Reviewing rendered images (PNGs etc., not `.drawio`/SVG-XML source)**: NEVER open images one-by-one (each spawns a separate Windows Photos window and clutters the desktop). Put the whole review set in ONE folder, name files so they sort lexicographically in the intended viewing order (numeric/zero-padded prefixes, grouped by series then sequence, e.g. `1-oracle-module-3-Detect.png`), then open the FOLDER in Explorer: `explorer.exe 'C:\path\to\dir'`. Clean up prior review folders first. Note Explorer caches thumbnails - regenerate into a fresh folder name (or have the user refresh) so updated renders aren't masked by stale thumbnails. (Shell is zsh: arrays are 1-indexed - build label lists with `for e in "1:Foo" "2:Bar"; do p=${e%%:*}; n=${e##*:}; done`, not a bash index-0 placeholder.)
 
 ## Terminal-Width-Aware Output Formatting
 

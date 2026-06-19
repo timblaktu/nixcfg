@@ -5,10 +5,19 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.9.0
-**Last Updated**: 2026-06-14
+**Version**: 1.10.0
+**Last Updated**: 2026-06-16
 
 ## Changelog
+
+### v1.10.0 (2026-06-16)
+- Section 5: added the "Arrows in label TEXT" rule - use a real Unicode arrow glyph
+  (`&#8594;` ->) in any label/annotation text, never the ASCII `->`/`=>`, which renders
+  broken in proportional fonts (the fix needs no font change). This is about text content,
+  not `endArrow=` arrowheads.
+- Section 33: added "Reviewing rendered PNGs" - collect exports in ONE folder with
+  lexicographically-sorting names and open the FOLDER in Explorer; never open images
+  one-by-one (spawns many Photos windows).
 
 ### v1.9.0 (2026-06-14)
 - Section 20: hardened the no-background-on-edge-labels rule into a hard prohibition with a
@@ -360,6 +369,16 @@ When decoded, the content attribute contains:
   <mxGeometry relative="1" as="geometry"/>
 </mxCell>
 ```
+
+### Arrows in label TEXT (not arrowheads)
+
+When an arrow appears in **label or annotation text** (e.g. `"reschedule -> Box B"`,
+a `"t -> recover"` clock pill), always use a real Unicode arrow glyph via its HTML
+entity - `&#8594;` (->) - never the ASCII `->` or `=>`. The pill/label fonts are
+proportional, so ASCII `->` renders as a hyphen jammed against a `>` and looks broken;
+the glyph renders cleanly with no font change. (This is independent of the edge's own
+`endArrow=` arrowhead style.) Other useful glyphs: `&#8592;` (<-), `&#8596;` (<->),
+`&#8776;` (approx).
 
 ### Explicit Anchor Points
 
@@ -3161,15 +3180,15 @@ Symptom of getting this wrong: draw.io launches but shows an empty/new canvas wi
 ### Required Command Pattern
 
 ```bash
-powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' -ArgumentList '\\\\wsl.localhost\\nixos\\<absolute-linux-path-with-\\-separators>'"
+powershell.exe -NoProfile -Command "Start-Process 'C:\Users\<your-windows-username>\AppData\Local\Programs\draw.io\draw.io.exe' -ArgumentList '\\\\wsl.localhost\\nixos\\<absolute-linux-path-with-\\-separators>'"
 ```
 
 ### Example
 
-To open `/home/tim/src/project/diagrams/overview.drawio`:
+To open `/home/<your-wsl-username>/src/project/diagrams/overview.drawio`:
 
 ```bash
-powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' -ArgumentList '\\\\wsl.localhost\\nixos\\home\\tim\\src\\project\\diagrams\\overview.drawio'"
+powershell.exe -NoProfile -Command "Start-Process 'C:\Users\<your-windows-username>\AppData\Local\Programs\draw.io\draw.io.exe' -ArgumentList '\\\\wsl.localhost\\nixos\\home\\<your-wsl-username>\\src\\project\\diagrams\\overview.drawio'"
 ```
 
 ### ALWAYS verify the path resolves BEFORE launching
@@ -3177,7 +3196,7 @@ powershell.exe -NoProfile -Command "Start-Process 'C:\Users\blackt1\AppData\Loca
 Run `Test-Path` with the EXACT same escaped string. `True` means draw.io will get a real file; `False` means your escaping (or distro name) is wrong - fix it before launching, do not just retry the open:
 
 ```bash
-powershell.exe -NoProfile -Command "Test-Path '\\\\wsl.localhost\\nixos\\home\\tim\\src\\project\\diagrams\\overview.drawio'"
+powershell.exe -NoProfile -Command "Test-Path '\\\\wsl.localhost\\nixos\\home\\<your-wsl-username>\\src\\project\\diagrams\\overview.drawio'"
 ```
 
 If you ever need to SEE what string PowerShell actually receives, echo it - this is the fastest way to debug lost backslashes:
@@ -3195,14 +3214,14 @@ powershell.exe -NoProfile -Command "Write-Output '\\\\wsl.localhost\\nixos\\home
 - Use `-ArgumentList` so the path is passed as one argument (robust if it ever contains spaces).
 - Single-instance caveat: if draw.io is already running, a second launch may just focus the existing window. If a file seems not to load, check `Get-Process -Name 'draw.io'` and close stale instances, or open via File > Open inside the running app.
 - Do NOT use `xdg-open` for `.drawio` files; do NOT invoke `draw.io.exe` directly without `Start-Process`.
-- Windows username is `blackt1` (not `tim`).
+- Windows username is `<your-windows-username>`.
 - Always validate XML (pre-open checklist below) before opening.
 
 ### General principle: Windows paths in any WSL interop call
 
 This escaping rule is NOT draw.io-specific - it applies to ANY `powershell.exe -Command "..."` or `.exe` call from a bash double-quoted string that carries a backslash path. Two ways to stay safe:
 1. **Double every backslash** for the bash double-quote layer (the table above), and confirm with a `Write-Output`/`Test-Path` echo.
-2. **Avoid backslashes entirely**: drive a `/mnt/c/...` POSIX path for Windows-local files, or copy the file to a Windows-local dir first (e.g. `cp f /mnt/c/Users/blackt1/AppData/Local/Temp/`) and reference the plain `C:\...` path (single backslashes there are inside PowerShell single-quotes, which bash leaves alone when the separators are not doubled - still verify with Test-Path).
+2. **Avoid backslashes entirely**: drive a `/mnt/c/...` POSIX path for Windows-local files, or copy the file to a Windows-local dir first (e.g. `cp f /mnt/c/Users/<your-windows-username>/AppData/Local/Temp/`) and reference the plain `C:\...` path (single backslashes there are inside PowerShell single-quotes, which bash leaves alone when the separators are not doubled - still verify with Test-Path).
 
 ### Headless export to PNG/SVG/PDF (for review images or animated GIFs)
 
@@ -3210,15 +3229,17 @@ The desktop CLI can render pages without a window - useful to self-verify a diag
 
 ```bash
 # Copy to a Windows-local path first (UNC input occasionally flakes), then export page N:
-cp file.drawio /mnt/c/Users/blackt1/AppData/Local/Temp/x.drawio
-powershell.exe -NoProfile -Command "& 'C:\Users\blackt1\AppData\Local\Programs\draw.io\draw.io.exe' -x -f png -p N --scale 2 -o 'C:\Users\blackt1\AppData\Local\Temp\out.png' 'C:\Users\blackt1\AppData\Local\Temp\x.drawio'"
-# Read back from /mnt/c/Users/blackt1/AppData/Local/Temp/out.png
+cp file.drawio /mnt/c/Users/<your-windows-username>/AppData/Local/Temp/x.drawio
+powershell.exe -NoProfile -Command "& 'C:\Users\<your-windows-username>\AppData\Local\Programs\draw.io\draw.io.exe' -x -f png -p N --scale 2 -o 'C:\Users\<your-windows-username>\AppData\Local\Temp\out.png' 'C:\Users\<your-windows-username>\AppData\Local\Temp\x.drawio'"
+# Read back from /mnt/c/Users/<your-windows-username>/AppData/Local/Temp/out.png
 ```
 
 - **`-p` / `--page-index` is 1-BASED** (beat/page 1 = `-p 1`; `-p 0` falls back to page 1). Assuming 0-based makes every page render identically - the most common export mistake.
 - Exported bytes differ run-to-run (embedded timestamps), so an md5 diff is NOT a reliable "did it change" check - read the image.
 - `ERROR ... Gpu Cache Creation failed` / `Unable to create cache` lines are harmless; export still succeeds.
 - Flags: `-x` export, `-f` png|svg|pdf|jpg, `-s/--scale`, `-a` all-pages (PDF only), `-g from..to` page range (PDF only). For per-page PNGs, loop `-p`.
+
+**Delivering review PNGs to the user:** put the whole set in ONE folder, name files so they sort lexicographically in the intended viewing order (numeric/zero-padded prefixes grouped by series then page, e.g. `1-oracle-module-3-Detect.png`), then open the FOLDER in Explorer (`explorer.exe 'C:\...\dir'`). NEVER open the PNGs individually - each spawns a separate Windows Photos window. Clean up prior review folders first. (Shell is zsh = 1-indexed arrays; build label lists with `for e in "1:Normal" "2:Fault"; do p=${e%%:*}; n=${e##*:}; done`, not a bash index-0 placeholder, or every label shifts by one.)
 
 ### Pre-Open Validation
 
