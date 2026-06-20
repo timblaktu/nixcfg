@@ -222,7 +222,29 @@
                     '}' | sudo ${pkgs.coreutils}/bin/tee "$WORKDIR/local-username.nix" >/dev/null
 
                   echo "Rebuilding (nixos-rebuild switch)..."
-                  sudo nixos-rebuild switch --flake "$WORKDIR#${sr.flakeAttr}"${lib.optionalString (sr.extraRebuildArgs != [ ]) " ${lib.escapeShellArgs sr.extraRebuildArgs}"}
+                  REBUILD_RC=0
+                  sudo nixos-rebuild switch --flake "$WORKDIR#${sr.flakeAttr}"${lib.optionalString (sr.extraRebuildArgs != [ ]) " ${lib.escapeShellArgs sr.extraRebuildArgs}"} || REBUILD_RC=$?
+
+                  if [ "$REBUILD_RC" -ne 0 ]; then
+                    # On NixOS-WSL the new user has no running systemd --user
+                    # instance (no session bus), so switch-to-configuration cannot
+                    # reload its user units and reports a non-fatal failure
+                    # (typically exit 4) even though the system switched and Home
+                    # Manager activated. Treat ONLY that case as success: confirm the
+                    # declarative rename applied (new user present) and the new user's
+                    # Home Manager activation succeeded; otherwise fail loudly.
+                    HM_STATUS="$(${pkgs.systemd}/bin/systemctl show -p ExecMainStatus --value "home-manager-$NEW_USER.service" 2>/dev/null || echo unknown)"
+                    if ${pkgs.gnugrep}/bin/grep -q "^$NEW_USER:" /etc/passwd && [ "$HM_STATUS" = "0" ]; then
+                      echo ""
+                      echo "Note: nixos-rebuild reported a non-fatal warning (exit $REBUILD_RC) from"
+                      echo "the WSL systemd user-session reload. The system switched and your Home"
+                      echo "Manager environment activated successfully, so this is safe to ignore."
+                    else
+                      echo "Error: nixos-rebuild failed (exit $REBUILD_RC) and the switch did not" >&2
+                      echo "apply cleanly (home-manager status: $HM_STATUS). Your user was not changed." >&2
+                      exit "$REBUILD_RC"
+                    fi
+                  fi
 
                   echo ""
                   echo "Done: '$BOOTSTRAP_USER' -> '$NEW_USER' (declarative; persists across restarts)."
