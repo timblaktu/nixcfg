@@ -99,7 +99,7 @@ Progress markers: `TASK:PENDING` / `TASK:IN_PROGRESS` / `TASK:COMPLETE`. A test/
 Confirm, on the installed Claude Code version, the exact behavior of: (a) `SessionStart` matchers `startup`/`resume`/`clear`/`compact`; (b) that JSON `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}` on stdout exit-0 is injected into model context; (c) whether plain stdout is also injected or only displayed; (d) whether `initialUserMessage` is supported. Use a throwaway hook that emits a sentinel string and observe whether the model can quote it on turn one.
 **DoD:** a short findings note appended to this plan's "§8 Verified facts" recording exactly which fields/matchers work on the installed version; the design in §3-§4 reconciled with reality (mark any TO-VERIFY items resolved).
 
-### T2 - Per-worktree handoff plumbing (paths + gitignore) `TASK:PENDING`
+### T2 - Per-worktree handoff plumbing (paths + gitignore) `TASK:COMPLETE`
 Decide and document the canonical per-worktree paths (`$CLAUDE_PROJECT_DIR/.claude/active-plan`, `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md`). Provide a reusable `.gitignore` snippet (or a home-manager-managed `.gitignore` fragment) so these are never tracked in any repo where the loop is used.
 **DoD:** documented paths + a copy-pasteable gitignore block; confirmation (`git check-ignore`) that both files are ignored in a sample repo.
 
@@ -194,6 +194,38 @@ hooks — there is NO `SessionStart` hook. The orphan/disk warning text is the *
 `.claude/SessionStart` nix-install script (a different, web-session channel). **T3 therefore ADDS a
 fresh SessionStart hook**, with nothing local to coexist with; the only coexistence concern is the
 web `.claude/SessionStart`, which is a separate file and unaffected.
+
+### T2 findings — canonical paths + gitignore, verified 2026-06-20
+
+**Canonical per-worktree handoff paths** (consumed by T3's hook, written by T5's checkpoint step):
+- `$CLAUDE_PROJECT_DIR/.claude/active-plan` — one-line pointer naming the current plan file path.
+- `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md` — distilled per-worktree handoff (source A).
+
+Both live under the worktree's own `.claude/` (T1 confirmed `CLAUDE_PROJECT_DIR` = worktree root in the hook env), so concurrent sessions in *different* worktrees get distinct files — no shared-slot clobber.
+
+**Ignore status in nixcfg — already satisfied, no repo-level `.gitignore` change.** The existing rule at `.gitignore` (`.claude/*` with `!.claude/settings.json` + `!.claude/user-plans/` re-includes) already ignores both target files while keeping tracked files tracked. Verified:
+```
+$ git check-ignore -v .claude/active-plan .claude/HANDOFF.md
+.gitignore:133:.claude/*   .claude/active-plan
+.gitignore:133:.claude/*   .claude/HANDOFF.md
+$ git check-ignore .claude/settings.json .claude/user-plans/044-*.md   # → exit 1 (NOT ignored, correct)
+```
+
+**Reusable snippet (for any repo where the loop is used).** Some repos track all of `.claude/` (e.g. n3x, where `.claude/user-plans` is a symlink to a shared dir) — a blanket `.claude/*` would wrongly ignore tracked files there. The narrow, anchored form ignores exactly the two handoff files and never touches `settings.json`/`user-plans/`:
+```gitignore
+**/.claude/active-plan
+**/.claude/HANDOFF.md
+```
+Empirically tested in a throwaway repo that tracks all of `.claude/` (worst case), including a nested `sub/.claude/active-plan`:
+
+| pattern | `.claude/settings.json` | `.claude/user-plans/p.md` | `.claude/active-plan` | `.claude/HANDOFF.md` | `sub/.claude/active-plan` |
+|---|---|---|---|---|---|
+| `.claude/active-plan` (bare) | tracked-ok | tracked-ok | IGNORED | IGNORED | tracked-ok (misses nesting) |
+| `**/.claude/active-plan` | tracked-ok | tracked-ok | IGNORED | IGNORED | IGNORED |
+
+The `**/` form is chosen because it also catches nested/worktree paths while remaining safe for tracked files.
+
+**Mechanism — HM-managed global gitignore (decided).** Rather than per-repo `.gitignore` edits, the two `**/.claude/...` patterns are added to the existing HM-managed global ignore at `modules/programs/git/git.nix` (`programs.git.ignores`, deployed to `~/.config/git/ignore` — XDG default, no `core.excludesFile` needed; see `modules/flake-parts/vm-tests.nix` Test 4). This applies to **every** repo/worktree the user opens, matching the multi-worktree practice, and is safe (verified it ignores only the two handoff files, never tracked `.claude/` content). nixcfg's own repo-level `.claude/*` rule remains as a redundant local backstop.
 
 ## 9. References
 - Memory: `…/memory/session-handoff-concurrency-fragility.md` (the finding + how-to-apply).
