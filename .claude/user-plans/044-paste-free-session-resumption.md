@@ -137,7 +137,14 @@ Reproduce the original failure scenario: run sessions in two different worktrees
 
 ## 8. Verified facts (append T1 findings here)
 
-### T1 findings — installed CC `2.1.158`, verified 2026-06-19
+### T1 findings — installed CC `2.1.158`, verified 2026-06-19 (cross-checked vs latest `2.1.183` on 2026-06-20)
+
+> **Cross-version note (2026-06-20):** every finding below was re-verified by building latest
+> `claude-code-2.1.183` (one-off nixpkgs `overrideAttrs` of `version`+`src`, GCS-prefetched hash) and
+> re-running the sentinel probes. Result: **identical behavior on both versions** — `additionalContext`
+> and plain stdout both inject; `initialUserMessage` works in neither. **Upgrading does not change any
+> conclusion in this plan.** The system stays on 2.1.158 (its pinned-nixpkgs `pkgs.claude-code`); no
+> upgrade is required for plan 044's core (T2-T5).
 
 Method: throwaway SessionStart hook layered via `--settings <file>` on the real binary
 (`/nix/store/adxi8k34iwjvy9kdmdpi087cmcpywi30-claude-code-2.1.158/bin/claude`), reusing the
@@ -157,13 +164,16 @@ Method: throwaway SessionStart hook layered via `--settings <file>` on the real 
   payload in the JSON `additionalContext` field (documented + structured), and DO NOT emit stray plain
   text we don't want in context. The existing web-only nix-install SessionStart prints plain text that
   WOULD enter context if it ran in a normal session — keep install noise out of the resume hook.
-- **(d) `initialUserMessage` — NOT SUPPORTED. T6 is blocked via this mechanism.** Two probes failed:
-  empty `claude -p` with the field set still errors `Input must be provided…`; PTY-interactive launch
-  with the field set sat at the prompt and never auto-fired a turn (no `BLORP-99`). The field does not
-  drive a hands-free first turn on 2.1.158. Docs corroborate the field does not exist.
-  → **T6 redesign:** hands-free auto-start cannot come from a hook field. The viable path is launching
-  with an explicit first-turn argument (`claude "resume the active plan's next pending task"`) from a
-  wrapper/alias/opt-in marker. Reframe T6 around that, or drop it in favor of the `/resume` pull-command (T4).
+- **(d) `initialUserMessage` — NOT SUPPORTED on 2.1.158 OR latest 2.1.183. T6 is blocked via this
+  mechanism, and upgrading does NOT unblock it.** Probes failed identically on both versions: empty
+  `claude -p` with the field set still errors `Input must be provided…`; PTY-interactive launch with the
+  field set sat at the prompt and never auto-fired a turn (no `BLORP-99`). The field does not drive a
+  hands-free first turn. (A docs-research agent claimed 2.1.183 made the field work "in -p mode" — that
+  was a hallucination; empirically refuted by building 2.1.183 and re-running both probes, 2026-06-20.)
+  → **T6 redesign:** hands-free auto-start cannot come from a hook field on any current version. The
+  viable path is launching with an explicit first-turn argument (`claude "resume the active plan's next
+  pending task"`) from a wrapper/alias/opt-in marker. Reframe T6 around that, or drop it in favor of the
+  `/resume` pull-command (T4).
 - **stdin contract — CONFIRMED.** The hook receives JSON on stdin:
   `{"session_id","transcript_path","cwd","hook_event_name":"SessionStart","source":"startup"}`.
   `transcript_path` was `…/.claude-max/projects/-home-tim-src-nixcfg/<uuid>.jsonl` — directly validates
