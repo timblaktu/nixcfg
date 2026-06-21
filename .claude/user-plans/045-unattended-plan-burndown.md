@@ -132,7 +132,7 @@ essentially unreachable for a well-formed plan.
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:COMPLETE | 2026-06-21 | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:COMPLETE | 2026-06-21 | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:COMPLETE | 2026-06-21 | |
-| T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:PENDING | | |
+| T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:IN_PROGRESS | 2026-06-21 | |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
 
@@ -342,7 +342,7 @@ session's 044 hook injects (verified in T7).
   T4's Scenario A/B HANDOFF outputs are exactly the markdown the hook surfaces verbatim (Source A),
   pre-validating T7's injection assertion.
 
-### T5 — Re-verify headless first-turn + gate 044 hook `TASK:PENDING`
+### T5 — Re-verify headless first-turn + gate 044 hook `TASK:IN_PROGRESS` (2026-06-21)
 Empirically re-test on the installed claude-code: does `claude -p "<prompt>"` reliably fire the first
 turn unattended (expected yes)? Does `initialUserMessage` fire in `-p` mode (044 §10 #7 — unconfirmed)?
 Record results in this plan. Confirm the 044 SessionStart resume hook is lean/no-op under `-p` (D7): if
