@@ -249,16 +249,28 @@ let
       # (interactive/testing only). It NEVER bypasses the branch guard (main/master refusal).
       FORCE=false
 
+      # 044-substrate integration (plan-045 T4). On any stop AFTER the opt-in gate passes,
+      # an EXIT trap writes $BURNDOWN_PROJECT_DIR/.claude/HANDOFF.md so a fresh session's 044
+      # SessionStart hook (and a human) can rehydrate. HANDOFF_ARMED gates the trap so pre-gate
+      # exits (bad args, plan-not-found, gate refusal, --dry-run) leave no breadcrumb. REASON
+      # and STATUS are captured by print_exit_summary / save_state at each stop.
+      HANDOFF_ARMED=false
+      HANDOFF_REASON=""
+      HANDOFF_STATUS=""
+      BURNDOWN_PROJECT_DIR=""
+
       usage() {
           cat << 'EOF'
       run-tasks-${accountName} - Claude Code unattended task runner
 
       Account: ${displayName} (${claudeWrapper})
 
-      Usage: run-tasks-${accountName} <plan-file> [options]
+      Usage: run-tasks-${accountName} [plan-file] [options]
 
       Arguments:
-        <plan-file>       Path to markdown file with Progress Tracking table
+        [plan-file]       Path to markdown file with Progress Tracking table.
+                          Optional: if omitted, falls back to the per-worktree
+                          .claude/active-plan pointer (plan-045 T4, mirrors /next-task).
 
       Options:
         -n N              Run N tasks (default: 1)
@@ -361,10 +373,34 @@ let
           exit 1
       fi
 
+      # Resolve the worktree root the same way the 044 resume hook does, so the active-plan
+      # pointer and HANDOFF.md we read/write live exactly where a fresh session's SessionStart
+      # hook looks: "''${CLAUDE_PROJECT_DIR:-<git toplevel>}/.claude/". (plan-045 T4)
+      BURNDOWN_PROJECT_DIR="''${CLAUDE_PROJECT_DIR:-$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+
+      # (plan-045 T4a) No explicit <plan-file> arg: fall back to the per-worktree
+      # .claude/active-plan pointer, mirroring nextTaskMd / the resume hook's precedence
+      # (first line; absolute path used as-is, else resolved relative to the worktree root).
+      # This is the "pull" half of 044's dual-channel resume applied to the unattended driver.
+      if [[ -z "$PLAN_FILE" ]]; then
+          active_plan_file="$BURNDOWN_PROJECT_DIR/.claude/active-plan"
+          if [[ -f "$active_plan_file" ]]; then
+              plan_rel="$(head -n1 "$active_plan_file" 2>/dev/null | tr -d '[:space:]')"
+              if [[ -n "$plan_rel" ]]; then
+                  case "$plan_rel" in
+                      /*) PLAN_FILE="$plan_rel" ;;
+                      *)  PLAN_FILE="$BURNDOWN_PROJECT_DIR/$plan_rel" ;;
+                  esac
+                  echo -e "''${BLUE}No plan file given; using .claude/active-plan -> $PLAN_FILE''${NC}"
+              fi
+          fi
+      fi
+
       # Validate plan file
       if [[ -z "$PLAN_FILE" ]]; then
           echo -e "''${RED}Error: Plan file required''${NC}"
           echo "Usage: run-tasks <plan-file> [options]"
+          echo "  (or set .claude/active-plan to a plan path for arg-free runs)"
           echo "Use -h for help"
           exit 1
       fi
@@ -456,6 +492,7 @@ let
       save_state() {
           local tasks_run=$1
           local status=$2
+          HANDOFF_STATUS="$status"  # captured for the T4 EXIT-trap HANDOFF.md write
           local actionable_now=$(actionable_count)
           local ip_now=$(in_progress_count)
           local pending_now=$(pending_count)
@@ -489,6 +526,7 @@ let
       print_exit_summary() {
           local reason=$1
           local tasks_run=$2
+          HANDOFF_REASON="$reason"  # captured for the T4 EXIT-trap HANDOFF.md write
           local runtime=$(($(date +%s) - START_TIME))
           local runtime_fmt=$(format_runtime $runtime)
           local ip=$(in_progress_count)
@@ -503,6 +541,69 @@ let
           echo -e "  Runtime:   ''${runtime_fmt}"
           echo -e "  Logs:      ''${LOG_DIR}/"
           echo -e "''${CYAN}===============================================''${NC}"
+      }
+
+      # --- 044 substrate integration (plan-045 T4) --------------------------------------
+      # Point the per-worktree .claude/active-plan at this run's plan, so a fresh session's
+      # 044 SessionStart hook (Source B) and /next-task resolve the same plan with zero paste.
+      # Idempotent; written once at run start after the opt-in gate passes (so we never point
+      # at a plan we refused to run). Path stored relative to the worktree root when it lives
+      # under it (the hook resolves relative paths against the worktree root), else absolute.
+      write_active_plan() {
+          local proj="$BURNDOWN_PROJECT_DIR"
+          [[ -n "$proj" ]] || return 0
+          ${pkgs.coreutils}/bin/mkdir -p "$proj/.claude" 2>/dev/null || return 0
+          local rel="$PLAN_FILE_ABS"
+          case "$PLAN_FILE_ABS" in
+              "$proj"/*) rel="''${PLAN_FILE_ABS#"$proj"/}" ;;
+          esac
+          printf '%s\n' "$rel" > "$proj/.claude/active-plan" 2>/dev/null || return 0
+      }
+
+      # Write/refresh $BURNDOWN_PROJECT_DIR/.claude/HANDOFF.md on ANY post-gate stop (blocking
+      # failure, safety-limit, all-done, interrupt, normal completion). The 044 resume hook
+      # surfaces this verbatim (Source A) so a fresh session - and a human - rehydrate why the
+      # run stopped and what to do next. Installed as an EXIT trap (armed only after the gate)
+      # so every exit path is covered, including unanticipated `set -e` aborts. Best-effort:
+      # never fails the run if the write is impossible.
+      write_handoff() {
+          [[ "$HANDOFF_ARMED" == true ]] || return 0
+          local proj="$BURNDOWN_PROJECT_DIR"
+          [[ -n "$proj" ]] || return 0
+          ${pkgs.coreutils}/bin/mkdir -p "$proj/.claude" 2>/dev/null || return 0
+
+          local next_task next_status branch now ip
+          next_task="$(get_next_task_name 2>/dev/null || echo unknown)"
+          ip="$(in_progress_count)"
+          if [[ "$ip" != "0" ]]; then next_status="IN_PROGRESS"; else next_status="PENDING"; fi
+          branch="$(get_current_branch)"
+          now="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+
+          ${pkgs.coreutils}/bin/cat > "$proj/.claude/HANDOFF.md" << EOF
+      # Unattended burndown handoff (run-tasks-${accountName})
+
+      _Written $now by the burndown driver on stop. The plan file is the source of truth for
+      task status; this is the rehydration breadcrumb the 044 SessionStart hook surfaces._
+
+      - **Worktree branch:** ''${branch:-<unknown>}
+      - **Plan:** $PLAN_FILE_ABS
+      - **Active task (resume here):** $next_task (TASK:$next_status)
+      - **Why the run stopped:** ''${HANDOFF_REASON:-<unspecified>} (status: ''${HANDOFF_STATUS:-<unspecified>})
+      - **Tasks completed this run:** ''${task_counter:-0}
+      - **Logs:** $LOG_DIR/
+      - **State file:** $STATE_FILE
+
+      ## Next concrete step
+
+      Resume the burndown by re-running the driver (the IN_PROGRESS task, if any, is re-attempted first):
+
+          run-tasks-${accountName} $PLAN_FILE_ABS --all
+
+      If the stop was a BLOCKING-FAILURE, inspect the latest log under $LOG_DIR/ and resolve the
+      hard error before re-running; the failing task was left TASK:IN_PROGRESS on purpose so a
+      resume re-attempts it. If it was ENVIRONMENT_NOT_CAPABLE or USER_INPUT_REQUIRED, handle it
+      interactively with /next-task instead.
+      EOF
       }
 
       # --- Unattended Burndown opt-in gate + branch isolation (plan-045 T3) -------------
@@ -1147,11 +1248,20 @@ let
       enforce_burndown_gate
       echo ""
 
-      # Trap Ctrl+C
+      # 044 substrate integration (plan-045 T4). Now that the gate has passed and we are
+      # committed to a real run: (c) point .claude/active-plan at this plan for the run's
+      # duration, and (b) arm the HANDOFF.md EXIT trap so ANY subsequent stop leaves a
+      # rehydration breadcrumb. Both are deliberately AFTER the gate so a refused/aborted
+      # pre-flight never writes substrate files.
+      write_active_plan
+      HANDOFF_ARMED=true
+      trap 'write_handoff' EXIT
+      task_counter=0  # referenced by write_handoff (and the INT trap) before the main loop sets it
+
+      # Trap Ctrl+C (the EXIT trap above also fires on this path's `exit 130`, writing HANDOFF.md)
       trap 'print_exit_summary "Interrupted by user (Ctrl+C)" "$task_counter"; save_state "$task_counter" "interrupted"; exit 130' INT
 
-      # Main loop
-      task_counter=0
+      # Main loop (task_counter initialized above, before the traps that reference it)
       retries=0
       consecutive_rate_limits=0
       consecutive_blocked=0  # Bounds BLOCKED_BY_DEP advances so a stuck frontier can't spin forever
@@ -1278,7 +1388,8 @@ let
                   else
                       # Default policy: STOP THE WHOLE RUN. Leave the task as the agent left it
                       # (typically TASK:IN_PROGRESS) so a resume re-attempts it; do NOT advance.
-                      # T4 will additionally write .claude/HANDOFF.md here with the failure context.
+                      # The EXIT trap (plan-045 T4) writes .claude/HANDOFF.md with this stop's
+                      # reason/status as the run unwinds, so a fresh session rehydrates the failure.
                       echo -e "''${RED}✗ Blocking failure - stopping run (--on-failure stop). Task left IN_PROGRESS.''${NC}"
                       print_exit_summary "Blocking failure (stopped; task left IN_PROGRESS)" "$task_counter"
                       save_state "$task_counter" "blocking_failure"

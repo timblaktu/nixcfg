@@ -131,7 +131,7 @@ essentially unreachable for a well-formed plan.
 | T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:COMPLETE | 2026-06-21 | |
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:COMPLETE | 2026-06-21 | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:COMPLETE | 2026-06-21 | |
-| T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:IN_PROGRESS | 2026-06-21 | |
+| T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:COMPLETE | 2026-06-21 | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:PENDING | | |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
@@ -286,7 +286,7 @@ exits non-zero with a clear reason and does NO work (verified in T7).
   "refused on main / without marker" assertions formally recorded) is T7. T3's manual scenario runs
   above pre-validate those T7 assertions.
 
-### T4 — Integrate with 044 substrate `TASK:IN_PROGRESS` (2026-06-21)
+### T4 — Integrate with 044 substrate `TASK:COMPLETE` (2026-06-21)
 (a) When no `<plan-file>` arg is given, resolve `.claude/active-plan` first (mirror `nextTaskMd`'s
 precedence) then fall back. (b) On any stop (blocking failure, limits, all-done, interrupt), write/refresh
 `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md` with: branch, last task + status, why it stopped, next concrete
@@ -294,6 +294,53 @@ step, log path — so the SessionStart hook and a human both rehydrate. (c) Keep
 pointed at the burndown plan for the run's duration.
 **DoD:** `nix flake check --no-build` passes; a halted fixture run leaves a HANDOFF.md that a fresh
 session's 044 hook injects (verified in T7).
+
+**Findings / what was done (2026-06-21):** all in `task-automation.nix` `mkRunTasksScript`.
+- **`BURNDOWN_PROJECT_DIR`** resolved once, identically to the 044 resume hook:
+  `"''${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel || pwd)}"` — so the `active-plan`/
+  `HANDOFF.md` we read & write land exactly where a fresh session's SessionStart hook looks
+  (`$proj/.claude/`).
+- **(a) active-plan fallback.** When no positional `[plan-file]` is given, the driver reads
+  `$BURNDOWN_PROJECT_DIR/.claude/active-plan` (first line, whitespace-stripped; absolute path used
+  as-is, else resolved relative to the worktree root) — the same precedence `nextTaskMd` and
+  `resume-hook.sh` use. Prints `No plan file given; using .claude/active-plan -> <path>`. If the
+  pointer is absent/empty the existing "Plan file required" error still fires (now also hinting at
+  the active-plan option). `usage()` updated: `[plan-file]` is now optional.
+- **(b) HANDOFF.md on any post-gate stop.** Implemented as an **EXIT trap** (`trap 'write_handoff'
+  EXIT`) armed (`HANDOFF_ARMED=true`) only *after* `enforce_burndown_gate` passes, so every real
+  stop is covered (blocking-failure, max-iterations/runtime, rate-limit breaker, all-complete,
+  Ctrl+C `exit 130`, normal completion, even an unanticipated `set -e` abort) while pre-gate exits
+  (bad args, plan-not-found, gate refusal, `--dry-run`, the pre-flight `no_actionable`) deliberately
+  leave NO breadcrumb. `print_exit_summary` now captures `HANDOFF_REASON`; `save_state` captures
+  `HANDOFF_STATUS`; `write_handoff` composes a markdown handoff (worktree branch, plan path, active
+  task + `TASK:` status, why-stopped reason+status, tasks-completed count, log dir, state file, and
+  a concrete "re-run `run-tasks-<acct> <plan> --all`" next step). Best-effort: never fails the run.
+- **(c) active-plan pointer.** `write_active_plan` runs once right after the gate passes, writing the
+  plan path to `$proj/.claude/active-plan` (relative to the worktree root when it lives under it,
+  else absolute) so the pointer stays aimed at the burndown plan for the run and a fresh session's
+  044 hook (Source B) + `/next-task` resolve the same plan with zero paste.
+- **Trap ordering note:** the EXIT trap is installed before the INT trap; on Ctrl+C the INT handler
+  runs (summary + `save_state "interrupted"`) then its `exit 130` unwinds through the EXIT trap,
+  which writes the handoff. `task_counter=0` is initialized before both traps (so `set -u` +
+  `write_handoff`/INT references are safe), and the redundant later init was removed.
+- **Validation:** `nix flake check --no-build` → `all checks passed!` (exit 0). Built the actual
+  `run-tasks-max` derivation (store path `…-run-tasks-max`; `writeShellScriptBin`'s build-time
+  `bash -n` passed). Empirically exercised the built script in isolated temp git repos with stub
+  `claudemax`:
+  - **Scenario A (blocking failure, explicit arg):** gate passes → stub exits non-zero → run STOPS
+    (exit 1), driver wrote `.claude/active-plan` (`plan.md`, relative) AND a well-formed
+    `.claude/HANDOFF.md` (branch=`plan-045-unattended-burndown`, active task T1, reason "Blocking
+    failure", status `blocking_failure`, next-step re-run line). Task left actionable.
+  - **Scenario B (arg-free via active-plan, all-complete):** no `[plan-file]` arg → resolved
+    `.claude/active-plan -> plan.md` → stub marks the task COMPLETE → loop sees actionable=0 →
+    `all_complete` exit 0 → `HANDOFF.md` written ("All tasks completed successfully",
+    status `all_complete`).
+  - Confirmed pre-gate refusals (wrong/unborn branch) write NO handoff (Test 1 / first A run). Temp
+    fixtures removed.
+- **NOT in scope (deferred):** verifying the 044 SessionStart hook actually *injects* the written
+  HANDOFF.md end-to-end is T7; headless first-turn re-verification + hook gating under `-p` is T5.
+  T4's Scenario A/B HANDOFF outputs are exactly the markdown the hook surfaces verbatim (Source A),
+  pre-validating T7's injection assertion.
 
 ### T5 — Re-verify headless first-turn + gate 044 hook `TASK:PENDING`
 Empirically re-test on the installed claude-code: does `claude -p "<prompt>"` reliably fire the first
