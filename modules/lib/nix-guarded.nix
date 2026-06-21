@@ -23,11 +23,24 @@
 
 let
   nixReal = "${pkgs.nix}/bin/nix";
-  scriptSrc = builtins.readFile ../../claude-runtime/bin/nix-guarded.sh;
-  script = builtins.replaceStrings [ "@@NIX_REAL@@" ] [ nixReal ] scriptSrc;
 in
-pkgs.writeShellApplication {
-  name = "nix";
-  runtimeInputs = [ pkgs.systemd ]; # provides systemd-run
-  text = script;
-}
+# systemd cgroup guarding is Linux-only (systemd-run / user slices). Off-Linux
+# (e.g. aarch64-darwin) there is no systemd, and pkgs.systemd does not even
+# evaluate, so return a no-op passthrough wrapper that execs the real nix. This
+# keeps the claude-code / opencode wrappers cross-platform; the Linux branch is
+# byte-identical to before (unchanged WSL behavior).
+if !pkgs.stdenv.hostPlatform.isLinux then
+  pkgs.writeShellApplication {
+    name = "nix";
+    text = ''exec ${nixReal} "$@"'';
+  }
+else
+  let
+    scriptSrc = builtins.readFile ../../claude-runtime/bin/nix-guarded.sh;
+    script = builtins.replaceStrings [ "@@NIX_REAL@@" ] [ nixReal ] scriptSrc;
+  in
+  pkgs.writeShellApplication {
+    name = "nix";
+    runtimeInputs = [ pkgs.systemd ]; # provides systemd-run
+    text = script;
+  }
