@@ -407,7 +407,7 @@ isolation method).
   no longer double-drives the burndown loop; Mode-A (attended) rehydration is unaffected because the
   guard keys on a var only the driver sets.
 
-### T6 — Observability + resume; optional convenience `TASK:IN_PROGRESS` (2026-06-21)
+### T6 — Observability + resume; optional convenience `TASK:COMPLETE` (2026-06-21)
 Ensure the per-run log captures every task transition, commit SHA, and outcome bucket. Document how to
 inspect a partial burndown (state file + logs) and resume it (re-run; IN_PROGRESS task resumes first).
 OPTIONAL (only if T2-T5 land cleanly): a `--burndown <plan>` alias (sets `--all --on-failure stop`,
