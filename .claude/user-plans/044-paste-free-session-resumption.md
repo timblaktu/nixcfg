@@ -1,6 +1,6 @@
 # 044 - Paste-Free Session Resumption (Checkpoint → Fresh Session → Rehydrate)
 
-Status: PLANNED (no implementation yet)
+Status: IN PROGRESS — T1-T5 + T7 COMPLETE; only T6 remains (optional, recommended DROP/defer to plan 045)
 Created: 2026-06-19
 Owner: nixcfg Claude Code config (`modules/programs/claude-code/`)
 Related memory: `/home/tim/src/nixcfg/claude-runtime/.claude-max/projects/-home-tim-src-n3x/memory/session-handoff-concurrency-fragility.md`
@@ -154,7 +154,8 @@ have surfaced), behind an explicit flag/marker since auto-starting work is not a
 lower priority than the `/resume` pull-command (T4); consider dropping in favor of T4.
 **DoD:** opt-in mechanism documented; default OFF; when ON, the wrapper self-resumes the next task without any typing. (Hook-field auto-start is ruled out — see §8.)
 
-### T7 - Validate end-to-end across two worktrees concurrently `TASK:PENDING`
+### T7 - Validate end-to-end across two worktrees concurrently `TASK:COMPLETE`
+**Done 2026-06-21.** Reproduced the §1 concurrency scenario at the hook level and proved isolation. See "§8 T7 findings" for the full method/results.
 Reproduce the original failure scenario: run sessions in two different worktrees simultaneously, checkpoint both, relaunch both, confirm each rehydrates **its own** plan/handoff with no cross-contamination.
 **DoD:** documented test showing worktree A resumes A's plan and worktree B resumes B's plan, with the shared clipboard/`/tmp` no longer involved.
 
@@ -258,6 +259,29 @@ Empirically tested in a throwaway repo that tracks all of `.claude/` (worst case
 The `**/` form is chosen because it also catches nested/worktree paths while remaining safe for tracked files.
 
 **Mechanism — HM-managed global gitignore (decided).** Rather than per-repo `.gitignore` edits, the two `**/.claude/...` patterns are added to the existing HM-managed global ignore at `modules/programs/git/git.nix` (`programs.git.ignores`, deployed to `~/.config/git/ignore` — XDG default, no `core.excludesFile` needed; see `modules/flake-parts/vm-tests.nix` Test 4). This applies to **every** repo/worktree the user opens, matching the multi-worktree practice, and is safe (verified it ignores only the two handoff files, never tracked `.claude/` content). nixcfg's own repo-level `.claude/*` rule remains as a redundant local backstop.
+
+### T7 findings — two-worktree concurrent rehydration, verified 2026-06-21
+
+**Decision (user, 2026-06-21):** exercise the **real nix build output** of the hook (no `home-manager switch`, live config untouched) + **deterministic hook-level** test (no live `claude -p` probe — T1 already proved real CC injects `additionalContext`; T7's new contribution is the concurrency/isolation dimension).
+
+**Real artifact under test.** The deployed `claude-runtime/.claude-max/settings.json` is stale (Jun 16, pre-T3) — its `SessionStart` is null because the file is only refreshed by the HM activation `copy_template` step (no switch since T3). Rather than switch, the exact generated hook was realised from the nix build:
+`nix eval .#homeConfigurations."tim@thinky-nixos".config…_internal.hooks.SessionStart` → command `/nix/store/yvp6vyagq22j4kmq4nd301xzx70lin0h-claude-resume-hook`, matcher `startup|resume|compact`. Building the equivalent `writeShellScript` expression (PATH=jq/fd/coreutils/gawk/gnugrep + `readFile resume-hook.sh`) produced the **identical** out-path, confirming the build output is byte-for-byte the configured hook.
+
+**Fixture.** Worktree A = `/home/tim/src/nixcfg` (`active-plan` → `044`; first PENDING block is T6). Worktree B = throwaway `git worktree add --detach /home/tim/src/nixcfg-t7b main` with a synthetic `.claude/user-plans/999-t7-fixture-b.md` (TB1 `IN_PROGRESS` carrying sentinel `WORKTREE-B-SENTINEL-T7`, TB2 `PENDING`), `active-plan` → `999`, and a `HANDOFF.md` marker. Both `.claude/active-plan` + `.claude/HANDOFF.md` confirmed gitignored in B (`git check-ignore` → `.gitignore:133 .claude/*`).
+
+**Method.** The real hook was invoked for **both worktrees concurrently** (backgrounded, `wait` on both PIDs — the actual §1 race), each with its own `CLAUDE_PROJECT_DIR` env + stdin JSON carrying a per-cwd `transcript_path`/`cwd`. Outputs captured to separate files and asserted.
+
+**Result — 13/13 substantive assertions pass; full isolation.**
+- Worktree A injected ONLY 044 (T6 block, `resolved path: /home/tim/src/nixcfg/.claude…`); contained NO B sentinel and did NOT name plan 999.
+- Worktree B injected ONLY 999 (TB1 block + `WORKTREE-B-SENTINEL-T7`, `resolved path: /home/tim/src/nixcfg-t7b/.claude…`); emitted only the FIRST task (TB1, not TB2); did NOT name 044.
+- Both envelopes valid `hookSpecificOutput.hookEventName=="SessionStart"`.
+- (The 14th harness check "FAILED" only due to nested-quote escaping in the test `eval`, not the hook — confirmed manually below.)
+
+**No shared-slot channel (the §1 fix, proven structurally).** `grep` of the realised hook: no `clip.exe`, no `/tmp`. Reads are scoped per-worktree by construction — sources B/A read `claude_dir="$proj/.claude"` where `proj="${CLAUDE_PROJECT_DIR:-$PWD}"` (line 25-26); source C reads only `dirname "$transcript_path"` taken from stdin (line 72-76, per-cwd transcript store). There is **no** global path any concurrent session could clobber. Cross-contamination of the kind in §1 (shared clipboard / `/tmp/continuation.md`) is therefore impossible for this rehydration channel.
+
+**Teardown.** Throwaway worktree `/home/tim/src/nixcfg-t7b` removed; only this plan file is committed (per the untracked-files gotcha, staged by path, never `git add -A`).
+
+---
 
 ## 10. Prior-art research + design decisions (2026-06-20)
 
