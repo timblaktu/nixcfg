@@ -131,7 +131,7 @@ essentially unreachable for a well-formed plan.
 | T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:COMPLETE | 2026-06-21 | |
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:COMPLETE | 2026-06-21 | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:COMPLETE | 2026-06-21 | |
-| T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:PENDING | | |
+| T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:IN_PROGRESS | 2026-06-21 | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:PENDING | | |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
@@ -286,7 +286,7 @@ exits non-zero with a clear reason and does NO work (verified in T7).
   "refused on main / without marker" assertions formally recorded) is T7. T3's manual scenario runs
   above pre-validate those T7 assertions.
 
-### T4 — Integrate with 044 substrate `TASK:PENDING`
+### T4 — Integrate with 044 substrate `TASK:IN_PROGRESS` (2026-06-21)
 (a) When no `<plan-file>` arg is given, resolve `.claude/active-plan` first (mirror `nextTaskMd`'s
 precedence) then fall back. (b) On any stop (blocking failure, limits, all-done, interrupt), write/refresh
 `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md` with: branch, last task + status, why it stopped, next concrete
