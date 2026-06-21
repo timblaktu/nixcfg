@@ -129,7 +129,7 @@ essentially unreachable for a well-formed plan.
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
 | T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:COMPLETE | 2026-06-21 | |
-| T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:PENDING | | |
+| T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:IN_PROGRESS | 2026-06-21 | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:PENDING | | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:PENDING | | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:PENDING | | |
@@ -175,7 +175,7 @@ this plan. NOT in scope: changing the driver (that's T2-T4).
   markers because Mode B is not functional until T2-T6 land; add them once the driver enforces
   them, when 045 itself could be burned down.
 
-### T2 — Reconcile driver failure semantics `TASK:PENDING`
+### T2 — Reconcile driver failure semantics `TASK:IN_PROGRESS` (2026-06-21)
 In `task-automation.nix` `mkRunTasksScript`: replace the generic `*)` "Continuing despite failure..."
 branch with the §4 mapping. Introduce a distinct return code for BLOCKING-FAILURE that triggers
 stop-the-whole-run: print summary, `save_state ... "blocking_failure"`, leave the task `IN_PROGRESS`,
