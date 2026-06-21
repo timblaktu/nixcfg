@@ -57,6 +57,15 @@ let
       ];
     };
 
+  # Plan 044 T3 — SessionStart plan-rehydration hook. The bash body lives in its
+  # own file so its ${...} expansions need no Nix escaping; the Nix wrapper only
+  # prepends the runtime PATH. builtins.readFile inserts the file content
+  # verbatim (it is NOT re-scanned for Nix interpolation).
+  resumeHookScript = pkgs.writeShellScript "claude-resume-hook"
+    (''
+      export PATH=${makeBinPath [ pkgs.jq pkgs.fd pkgs.coreutils pkgs.gawk pkgs.gnugrep ]}:$PATH
+    '' + builtins.readFile ./resume-hook.sh);
+
 in
 {
   options.programs.claude-code.hooks = {
@@ -185,6 +194,21 @@ in
       default = lib.genAttrs hookEvents (_: [ ]);
       description = "Custom hook definitions. Keys are CC hook event names (see hookEvents list).";
     };
+
+    resume = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the SessionStart plan-rehydration hook (plan 044). On
+          startup/resume/compact it surfaces the active plan's next task
+          (.claude/active-plan), else .claude/HANDOFF.md, else the latest prior
+          per-cwd transcript's last assistant message, as factual session-start
+          context. The PUSH half of a dual-channel resume design; the next-task
+          skill and the readable handoff files are the PULL backstop.
+        '';
+      };
+    };
   };
 
   config.programs.claude-code._internal.hooks = mkMerge [
@@ -279,6 +303,21 @@ in
           '';
           continueOnError = true;
           timeout = 5;
+        })
+      ];
+    })
+
+    # Plan 044 T3 — SessionStart plan-rehydration hook (push half of dual-channel
+    # resume). Matches startup/resume/compact so the active plan's next task is
+    # re-surfaced on a fresh session and after a long session scrolls/compacts the
+    # once-injected context away.
+    (mkIf cfg.hooks.resume.enable {
+      SessionStart = [
+        (mkHook {
+          matcher = "startup|resume|compact";
+          command = "${resumeHookScript}";
+          continueOnError = true;
+          timeout = 10;
         })
       ];
     })
