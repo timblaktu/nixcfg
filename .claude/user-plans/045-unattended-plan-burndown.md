@@ -1,6 +1,6 @@
 # 045 - Unattended Long-Running Plan Burndown (Mode B)
 
-Status: IN_PROGRESS (fleshed out from stub 2026-06-21; ready for task execution)
+Status: COMPLETE (all tasks T1-T7 done + e2e-validated 2026-06-21)
 Owner: nixcfg Claude Code config (`modules/programs/claude-code/`)
 Depends on: `044-paste-free-session-resumption.md` (the shared substrate) — **SATISFIED**
 (044 COMPLETE + permanently deployed + hook verified, 2026-06-21).
@@ -134,7 +134,7 @@ essentially unreachable for a well-formed plan.
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:COMPLETE | 2026-06-21 | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
-| T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:IN_PROGRESS | 2026-06-21 | Opus 4.8 |
+| T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
 
 ### T1 — Author the Unattended Burndown Contract `TASK:COMPLETE` (2026-06-21)
 Write §4's taxonomy + authoring rules into the **plan-generating context** so every future plan is
@@ -500,7 +500,7 @@ idempotent/resumable tasks, the re-attempt converges rather than double-applying
 `/next-task` first, then re-launch the burndown. A fresh session also rehydrates automatically: the
 044 SessionStart hook surfaces `.claude/HANDOFF.md` (which names the stop reason + the resume command).
 
-### T7 — End-to-end validation `TASK:IN_PROGRESS` (2026-06-21)
+### T7 — End-to-end validation `TASK:COMPLETE` (2026-06-21)
 Create a throwaway burndown-safe fixture plan (`Burndown: SAFE`, `Working branch: <fixture>`) with 2-3
 trivial idempotent tasks (e.g. touch a file + commit) plus one task engineered to produce a
 BLOCKING-FAILURE. On a dedicated fixture branch/worktree (never main): (1) run unattended → asserts it
@@ -510,6 +510,68 @@ it refused to run on main and without the opt-in marker (T3). Tear down the fixt
 untracked-files discipline; `git add <path>`, never `-A`).
 **DoD:** all three assertions demonstrated with captured output recorded here; `nix flake check
 --no-build` passes; fixture removed; this plan marked COMPLETE.
+
+**Findings / what was done (2026-06-21):**
+
+**Test instrument (and why).** Built the real `run-tasks-max` derivation
+(`/nix/store/zxv9xmjn4df8829v1blpf48r7acyd8y4-run-tasks-max`) and drove it against an **isolated
+throwaway `mktemp -d` git repo** (never nixcfg's tree, so "never main" + "tear down afterward" are
+trivially satisfied — fixture removed at the end, nixcfg working tree byte-identical to session start).
+The agent was a **faithful stub `claudemax`** that obeys the Unattended Burndown Contract: it reads the
+plan path from the driver's prompt, finds the next actionable task (IN_PROGRESS→PENDING priority), and
+either (a) does trivial idempotent work (write a per-task artifact) + `git commit` + flips the row to
+`TASK:COMPLETE` and emits success JSON (exit 0), or (b) for the engineered-failure task `FX`, flips
+`PENDING→IN_PROGRESS` + commits that, then "attempts and fails" with `is_error` JSON (exit 1) WITHOUT
+reaching COMPLETE. This is the same mock-the-external-agent methodology T2–T6 used and is the correct
+instrument: every T7 assertion is a **driver-orchestration** property (gate, advance, stop-on-failure,
+HANDOFF, journal), so a contract-compliant deterministic stub exercises exactly what 045 delivers —
+without a non-deterministic, quota-burning recursive real-`claude` invocation. The driver invoked the
+stub via the real exec path `CLAUDE_BURNDOWN=1 claudemax -p --output-format json --permission-mode
+bypassPermissions <prompt>`; `CLAUDE_PROJECT_DIR` was pointed at the temp repo so the substrate files
+(`.claude/active-plan`, `.claude/HANDOFF.md`) landed there, not in nixcfg.
+
+Fixture plan: 4 tasks `F1 F2 F3` (trivial) + `FX` (engineered failure), header `Burndown: SAFE` /
+`Working branch: fixture-burndown`, on branch `fixture-burndown`.
+
+**Assertion (1)+(2) — one `run-tasks-max plan.md --burndown -d 0` run (= `--all --on-failure stop`):**
+- Gate passed: `✓ Burndown gate: opted in (Burndown: SAFE) on declared working branch: fixture-burndown`.
+- Burned `F1 → F2 → F3` each to `TASK:COMPLETE`, **one commit per task** (git log: `F1: …COMPLETE`,
+  `F2: …COMPLETE`, `F3: …COMPLETE`), `actionable 4→3→2→1`.
+- Hit `FX` → `✗ FX: API error (error_during_execution)` → `✗ Blocking failure - stopping run
+  (--on-failure stop). Task left IN_PROGRESS.` → **exit code 1**.
+- Post-state proves it STOPPED and did NOT advance: plan = `F1/F2/F3 TASK:COMPLETE`, `FX
+  TASK:IN_PROGRESS` (counts: COMPLETE=3, IN_PROGRESS=1, PENDING=0); `FX` left IN_PROGRESS by the stub's
+  `PENDING→IN_PROGRESS` commit, never flipped to COMPLETE, and the driver never reached a 5th task.
+- `.claude/HANDOFF.md` written (branch `fixture-burndown`, **Active task: FX (TASK:IN_PROGRESS)**, **Why
+  stopped: Blocking failure … (status: blocking_failure)**, resume command `run-tasks-max <plan>
+  --all`) — the verbatim breadcrumb the 044 SessionStart hook surfaces (T4 Source A, end-to-end).
+- `.claude/active-plan` = `plan.md`; `.claude-task-state` `STATUS=blocking_failure`.
+- **Event journal** `.claude-task-logs/events.jsonl` (T6) — full audit trail with commit SHAs:
+  `run_start(e1dbc27)`, `F1 complete e1dbc27→ba9b8ec head_moved`, `F2 …→4be65e2`, `F3 …→6fc70db`,
+  `FX api_error_… 6fc70db→6d9c1f8`, `FX blocking_failure`. Every transition + the commit it produced
+  is durably recorded.
+
+**Assertion (3) — gate refusals (fresh clean repo; "did NO work" = commit count unchanged):**
+- 3a) on `main` + marked plan → `✗ Refusing to run on branch: main (main/master is never allowed).`
+  → exit 1.
+- 3b) on `main` + marked + `--force` → **still** `✗ Refusing to run on branch: main … This guard is NOT
+  bypassable by --force.` → exit 1 (branch guard is unconditional).
+- 3c) on declared branch `fixture-burndown`, plan WITHOUT `Burndown: SAFE` → `✗ Refusing to run: plan is
+  not opted in for unattended burndown. … (found: <none>)` → exit 1.
+- No-work proof: target task still `TASK:PENDING`; commit count unchanged; **no** `.claude/active-plan`,
+  **no** `.claude/HANDOFF.md` (pre-gate exits leave no breadcrumb, per T4); the only side effect is an
+  EMPTY `.claude-task-logs/` dir (created by `mkdir -p` before the gate) — no `events.jsonl`, no state
+  file, no logs.
+
+**Validation:** `nix flake check --no-build` → `all checks passed!` (exit 0). Fixture `mktemp -d`
+removed; `/tmp/t7-*` harness files cleaned (the pre-existing `/tmp/t7-setupuser.log` /
+`/tmp/t7-sysrebuild.log` belong to another process — provenance-checked, left untouched). nixcfg working
+tree identical to session start.
+
+**Note (out of scope, deliberately not done):** T1 floated adding the `Burndown: SAFE` /
+`Working branch:` markers to plan 045 *itself* "once the driver enforces them." Not done here: with all
+of T1–T7 now COMPLETE, 045 has zero actionable tasks, so burning it down would be a no-op and the
+markers would only invite confusion. Left off intentionally (no silent scope creep).
 
 ## 6. Open questions (remaining)
 - Marker syntax bikeshed: `Burndown: SAFE` header line vs a fenced metadata block vs a dedicated branch
