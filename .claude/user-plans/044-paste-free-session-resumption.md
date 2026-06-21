@@ -322,6 +322,37 @@ task), source B correctly yielded nothing and the hook **fell through B→A** to
 — demonstrating the precedence chain on the real artifact. The loop fires paste-free for every new
 session in this worktree until a plain nixcfg-work switch reverts it.
 
+### PERMANENT activation — done + verified 2026-06-21
+
+The ephemeral `--override-input` deploy above is now **superseded by a permanent lock-pinned deploy.**
+Executed the documented cross-repo sequence (user-approved; touches `main`):
+
+1. **ff-push** `plan-044` HEAD → `origin/main`: clean fast-forward `f916d7c..840a5fd` (no merge commit;
+   `main` was the exact ancestor). All 9 plan-044 commits verified **free of AI-attribution trailers**,
+   so they add nothing to the deferred 043 scrub's dirty set. Local `main` pointer moved to match
+   without a checkout (working tree + untracked files untouched).
+2. **nixcfg-work lock bump** (branch `feat/darwin-support`): `nix flake update nixcfg` →
+   `f916d7cb` → `840a5fd` (only the nixcfg rev line changed; `follows` inputs unchanged because
+   plan-044 never touched nixcfg's own `flake.lock`). Committed as `8741b71`; nixcfg-work's pre-commit
+   flake check passed.
+3. **Plain `home-manager switch`** `--flake '/home/tim/src/nixcfg-work#tim@pa161878-nixos' -b backup`
+   (NO `--override-input`): exit 0.
+4. **Verification (post-plain-switch):** all three deployed account settings
+   (`.claude-{max,pro,work}/settings.json`) reference `/nix/store/yvp6…-claude-resume-hook` — the
+   **byte-identical store hash** as the ephemeral deploy (same content → same path), proving the lock
+   bump reproduces the exact plan-044 hook. Re-fired the deployed hook with CC-shaped stdin → exit 0,
+   valid `hookSpecificOutput` envelope, B→A fall-through to `HANDOFF.md`. A plain switch no longer
+   reverts the hook — **permanent on this host.**
+
+**043-scrub coupling (bounded, not worsened):** the deferred scrub rewrites from `cc71386`, rehashing
+ALL descendants — it already orphans whatever nixcfg rev nixcfg-work pins (`f916d7cb` before, `840a5fd`
+now), and 043 Step 5 already commits to re-locking nixcfg-work post-scrub. This activation rides that
+same wave and adds nothing to it (clean commits, normal ff-push, no force).
+
+**Optional follow-up (NOT done):** the nixcfg-work lock commit `8741b71` is local-only on
+`feat/darwin-support`. Pushing it to git.panasonic.aero would propagate the hook to colleagues' clones;
+not required for this host and out of scope here.
+
 ---
 
 ## 10. Prior-art research + design decisions (2026-06-20)
