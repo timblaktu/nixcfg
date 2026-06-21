@@ -113,9 +113,38 @@ Add a SessionStart hook implemented as a `pkgs.writeShellScript`, wired into `_i
 **RESOLVED (§10): EXTEND the existing `next-task` skill rather than author a separate `/resume`.** `next-task` (defined in `modules/programs/claude-code/_hm/task-automation.nix`, `nextTaskMd`) already reads a plan, picks `IN_PROGRESS` then first unblocked `PENDING`, flips status, commits, executes, and marks `COMPLETE` — it IS the pull-command. The only gap vs §4-B is the pointer source: it auto-detects from CLAUDE.md/git-mtime, whereas 044 uses an explicit `$CLAUDE_PROJECT_DIR/.claude/active-plan`. T4 = teach `next-task` to honor `.claude/active-plan` FIRST, then fall back to its existing auto-detection. This is also the *pull half* of the dual-channel design (T3 is the *push half*): resumption works even when the hook's injection silently fails (#10373) or the hook is disabled.
 **DoD:** invoking `next-task` (no args) in a worktree with an `active-plan` resumes the plan it names; falls back to auto-detection when absent; behavior documented in the skill text.
 
-### T5 - End-of-session checkpoint behavior (assistant protocol, not a hook) `TASK:PENDING`
-Update the global `.claude-max/CLAUDE.md` "Continuation Prompt Protocol" to: keep the plan doc's task status current as the primary tracker; write the distilled handoff to `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md` and update `.claude/active-plan` **instead of** `clip.exe`; stop using `/tmp/continuation.md`. (Note: a `Stop`/`SessionEnd` hook cannot *compose* a semantic summary, so this remains an assistant-discipline step — the hook only *surfaces* what was written.)
-**DoD:** CLAUDE.md protocol section rewritten; clipboard/`/tmp` path removed or demoted to "last resort, single-session machines only"; cross-reference to this plan + the memory file.
+### T5 - End-of-session checkpoint behavior (assistant protocol, not a hook) `TASK:COMPLETE`
+**Done 2026-06-21.** Rewrote the global assistant protocol so the end-of-session handoff
+writes to the per-worktree FILES instead of `clip.exe`/`/tmp`. CRITICAL pathing finding:
+the deployed `claude-runtime/.claude-max/CLAUDE.md` is **nix-generated** (shows untracked in
+git) from the home-manager template `modules/programs/claude-code/_hm/claude-code-user-memory-template.md`
+via `mkClaudeMdTemplate` in `claude-code.nix:643` (`{{ACCOUNT}}` substituted per account) —
+so the edit went to the NIX SOURCE TEMPLATE (shared across all accounts), never the runtime file.
+Changes to the template:
+- Renamed "Continuation Prompt Protocol (MANDATORY - NEVER SKIP)" → "Session Handoff Protocol".
+  New body: (1) keep the plan doc current as PRIMARY tracker; (2) write the plan path (one line)
+  to `$CLAUDE_PROJECT_DIR/.claude/active-plan`; (3) write distilled nuance to
+  `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md`; (4) one-line confirmation, no inline dump. Added a
+  "Why files, not the clipboard" paragraph preserving the §1/§5 multi-session-concurrency rationale,
+  cross-referencing this plan (044) + the `session-handoff-concurrency-fragility` auto-memory. Added
+  the `Stop`/`SessionEnd`-can't-compose note (hook only *surfaces*; composing stays assistant
+  discipline). `clip.exe`/`/tmp` DEMOTED to a "Last resort only (single-session machine)" clause that
+  explicitly forbids the fallback on multi-session nodes.
+- Updated the two cross-references: "Session Workflow Protocol" step 5 ("Checkpoint the handoff to
+  per-worktree files (see Session Handoff Protocol below)") and "Plan File Conventions" → renamed
+  "Continuation Prompt" bullet to "Handoff" (writes HANDOFF.md + active-plan). Also fixed the stale
+  "stop with continuation prompt" phrasing in the ONE-TASK-PER-SESSION line.
+- Kept the SEPARATE "Content Delivery for Copy-Paste" section (clip.exe for user-facing copy-paste
+  content) untouched — different use case from session handoff.
+Rewrite kept GENERIC (global cross-project/cross-account file, works in any repo/worktree).
+**Validated:** `nix flake check --no-build` → all checks passed; `nix eval` rendering the template
+with `{{ACCOUNT}}=MAX` confirms the generated CLAUDE.md carries the full "Session Handoff Protocol",
+`active-plan`/`HANDOFF.md` paths, "Last resort only" demotion, the can't-compose note, and the 044
+cross-reference. NOTE: the memory file `session-handoff-concurrency-fragility.md` lives in the **n3x**
+project memory dir (slug `-home-tim-src-n3x`, per §6 header), not nixcfg's — referenced by name in
+the template rather than a hardcoded absolute path (correct for a global cross-project file).
+**DoD:** CLAUDE.md protocol section rewritten; clipboard/`/tmp` path removed or demoted to "last
+resort, single-session machines only"; cross-reference to this plan + the memory file.
 
 ### T6 - Optional fully-hands-free start (REDESIGNED per T1) `TASK:PENDING`
 T1 disproved `initialUserMessage` (no hook field auto-fires a turn on 2.1.158). The only hands-free path

@@ -94,7 +94,7 @@ When applying version-incompatibility workarounds:
 
 ## Session Workflow Protocol
 
-**ONE TASK PER SESSION** for multi-phase **user-plans** (`.claude/user-plans/`) - complete one plan task per session then stop with continuation prompt.
+**ONE TASK PER SESSION** for multi-phase **user-plans** (`.claude/user-plans/`) - complete one plan task per session then stop with a handoff checkpoint.
 
 **Scope**: Applies to plan tasks spread across sessions, NOT to executing an approved plan within a single session. When user approves a plan ("implement this plan"), execute all tasks in sequence.
 
@@ -103,7 +103,7 @@ When applying version-incompatibility workarounds:
 2. Update memory (project and user-global if learnings occurred)
 3. Update plan files with task status
 4. Commit changes
-5. Pipe continuation prompt to clipboard via `clip.exe` (see Continuation Prompt Protocol below)
+5. Checkpoint the handoff to per-worktree files (see Session Handoff Protocol below)
 6. STOP - wait for user to start new session
 
 **Exception**: User explicitly grants permission to continue.
@@ -116,18 +116,25 @@ When applying version-incompatibility workarounds:
 
 **CRITICAL: Plan files must be self-contained** - save the FULL plan to disk, not a summary. New sessions cannot access previous session's chat. Every specification needed to execute remaining tasks MUST be in the plan file. Test: Could a new session execute the next task using ONLY the plan file + CLAUDE.md + codebase?
 
-**Continuation Prompt**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the prompt. Deliver via `cat <<'CONT' | clip.exe` (or `/tmp/continuation.md` + `xdg-open` for >4KB). Never reference "previous session context".
+**Handoff**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the handoff. Write it to the per-worktree `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md` and update `$CLAUDE_PROJECT_DIR/.claude/active-plan` (see Session Handoff Protocol below). Never reference "previous session context".
 
-## Continuation Prompt Protocol (MANDATORY - NEVER SKIP)
+## Session Handoff Protocol (MANDATORY - NEVER SKIP)
 
-**EVERY session that works on a plan MUST end with a continuation prompt on the clipboard.** This is non-negotiable - treat it like committing code. A session without a continuation prompt is incomplete work.
+**EVERY session that works on a plan MUST end by checkpointing its handoff to per-worktree files.** This is non-negotiable - treat it like committing code. A session that ends without an updated handoff is incomplete work.
 
-1. Update memory and plan files with task status
-2. Pipe continuation prompt to clipboard: `cat <<'CONT' | clip.exe` (or write `/tmp/continuation.md` + `xdg-open` if >4KB)
-3. Print a short confirmation: "Continuation prompt copied to clipboard (topic: <brief>)"
-4. Do NOT print the continuation prompt inline in chat - it clutters output
+**Why files, not the clipboard:** many Claude Code sessions run concurrently on one node. The Windows clipboard (a shared ~15-entry Win+V ring) and `/tmp/continuation.md` (a single shared file) are global single slots that any concurrent session silently overwrites - a proven cross-contamination hazard (resuming the wrong worktree's work). `$CLAUDE_PROJECT_DIR/.claude/` is a distinct directory per worktree, so the handoff travels a per-worktree channel that concurrent sessions in other worktrees cannot clobber. See plan `.claude/user-plans/044-paste-free-session-resumption.md` and the `session-handoff-concurrency-fragility` auto-memory for the incident that motivated this.
 
-The prompt must be **self-contained** - include: (1) memory file path, (2) plan file path, (3) which task to resume, (4) enough context that the next session starts without questions. Task summaries go INSIDE the prompt, not as a separate chat section. Never reference "previous session context".
+At session end:
+1. **Keep the plan doc current (PRIMARY tracker).** Update the `.claude/user-plans/NNN-*.md` task status (`TASK:PENDING`/`IN_PROGRESS`/`COMPLETE`) and fold what was done / what remains into the task block. The plan file is the durable source of truth - resumption depends on it first; write nuance to `HANDOFF.md` only for what the plan doc cannot capture.
+2. **Point at the active plan.** Write the plan file's path (one line) to `$CLAUDE_PROJECT_DIR/.claude/active-plan`. The SessionStart rehydration hook and `/next-task` both read this pointer first.
+3. **Write distilled nuance to `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md`** - the self-contained handoff: which worktree/branch, what was just done (commits, artifacts, what was NOT done), the next concrete step, pending items (pipeline IDs, blockers). Include enough that a fresh session starts without questions. Never reference "previous session context".
+4. Print a one-line confirmation, e.g. "Handoff written: .claude/active-plan -> NNN-name.md, .claude/HANDOFF.md updated". Do NOT print the handoff inline in chat - it clutters output.
+
+These two files are gitignored (per-worktree, never committed). A fresh `claude` session auto-rehydrates from them with zero paste: the SessionStart rehydration hook surfaces the plan pointer + next task, and `/next-task` acts on it.
+
+**Note:** a `Stop`/`SessionEnd` hook cannot *compose* this semantic summary (only the assistant can distill what mattered), so writing the handoff stays an assistant-discipline step; the rehydration hook only *surfaces* what was written here.
+
+**Last resort only (single-session machine, no `$CLAUDE_PROJECT_DIR`):** if the per-worktree file channel is genuinely unavailable, fall back to `clip.exe` (short) or a temp `.md` + `xdg-open` (long). NEVER use this fallback on a multi-session node - it is the exact mechanism this protocol replaces.
 
 ## Long-Running Task Strategy
 
