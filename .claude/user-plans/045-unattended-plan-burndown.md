@@ -128,7 +128,7 @@ essentially unreachable for a well-formed plan.
 
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
-| T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:PENDING | | |
+| T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:IN_PROGRESS | 2026-06-21 | |
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:PENDING | | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:PENDING | | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:PENDING | | |
@@ -136,7 +136,7 @@ essentially unreachable for a well-formed plan.
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
 
-### T1 — Author the Unattended Burndown Contract `TASK:PENDING`
+### T1 — Author the Unattended Burndown Contract `TASK:IN_PROGRESS`
 Write §4's taxonomy + authoring rules into the **plan-generating context** so every future plan is
 authored burndown-safe. Primary file: `modules/programs/claude-code/_hm/claude-code-user-memory-template.md`
 (the source of CLAUDE.md "Plan File Conventions" / "Session Handoff Protocol"). Add a new
