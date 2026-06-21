@@ -106,6 +106,7 @@ let
           '--delay[Seconds between tasks]:delay seconds:' \
           '--model[Override model]:model:(opus sonnet haiku qwen-a3b)' \
           '--on-failure[Blocking-failure policy]:policy:(stop skip)' \
+          '--force[Bypass the Burndown opt-in gate (never the branch guard)]' \
           '--task[Run specific task by ID]:task ID:->tasks' \
           '--list[Show all tasks with status]' \
           '--dry-run[Show what would execute without running]' \
@@ -181,7 +182,7 @@ let
 
         # Complete options
         if [[ "$cur" == -* ]]; then
-          COMPREPLY=( $(compgen -W "-n -a --all -c --continuous -d --delay --model --on-failure --task --list --dry-run -h --help" -- "$cur") )
+          COMPREPLY=( $(compgen -W "-n -a --all -c --continuous -d --delay --model --on-failure --force --task --list --dry-run -h --help" -- "$cur") )
           return 0
         fi
 
@@ -244,6 +245,9 @@ let
       # Failure policy (plan-045 §4): on a BLOCKING-FAILURE, "stop" (default) halts the whole
       # run leaving the task IN_PROGRESS; "skip" is the legacy advance-despite-failure behavior.
       ON_FAILURE="stop"
+      # Opt-in gate bypass (plan-045 T3): --force skips the `Burndown: SAFE` opt-in gate
+      # (interactive/testing only). It NEVER bypasses the branch guard (main/master refusal).
+      FORCE=false
 
       usage() {
           cat << 'EOF'
@@ -264,6 +268,8 @@ let
         --model MODEL     Override model (alias or full name, e.g., opus, qwen-a3b)
         --on-failure WHAT On a blocking failure: stop (default) halts the whole run leaving the
                           task IN_PROGRESS; skip is the legacy advance-despite-failure behavior
+        --force           Bypass the 'Burndown: SAFE' opt-in gate (interactive/testing only).
+                          Does NOT bypass the branch guard: never runs on main/master.
         --dry-run         Show what would execute without running
         -h, --help        Show this help
 
@@ -284,6 +290,16 @@ let
         Also recognized: TASK:SKIPPED, TASK:BLOCKED, TASK:DEFERRED
         Model column: Optional, specifies model for this task (alias or full name)
         Model priority: --model CLI flag > Model column > account default
+
+      Unattended Burndown Opt-in (plan-045):
+        For an unattended run, the plan header MUST carry these two lines:
+
+          Burndown: SAFE
+          Working branch: <non-main-branch>
+
+        The driver refuses (exit non-zero, no work) unless the plan is opted in AND
+        the current git branch equals the declared Working branch AND that branch is
+        not main/master. --force bypasses the opt-in (testing only), never the branch guard.
 
       Safety Limits (configurable via Nix):
         Max iterations:  ${toString taskCfg.safetyLimits.maxIterations}
@@ -312,6 +328,7 @@ let
               --task) TASK_ID="$2"; shift 2 ;;
               --list) LIST_TASKS=true; shift ;;
               --on-failure) ON_FAILURE="$2"; shift 2 ;;
+              --force) FORCE=true; shift ;;
               --dry-run) DRY_RUN=true; shift ;;
               -h|--help) usage ;;
               -*)
@@ -486,6 +503,90 @@ let
           echo -e "  Runtime:   ''${runtime_fmt}"
           echo -e "  Logs:      ''${LOG_DIR}/"
           echo -e "''${CYAN}===============================================''${NC}"
+      }
+
+      # --- Unattended Burndown opt-in gate + branch isolation (plan-045 T3) -------------
+      # Two independent guards protect autonomous, bypassPermissions burndown runs:
+      #
+      #   1. BRANCH GUARD (ALWAYS enforced, even with --force): the current git branch
+      #      must NOT be main/master. The driver runs `git commit` autonomously under
+      #      --permission-mode bypassPermissions; committing on main/master would violate
+      #      the project's "NEVER work on main" rule. There is no override for this.
+      #
+      #   2. OPT-IN GATE (bypassable with --force, interactive/testing ONLY): a plan is
+      #      burndown-eligible only if its header carries `Burndown: SAFE` AND declares a
+      #      `Working branch: <branch>`, and the current branch matches that declaration.
+      #      This stops the driver from autonomously burning down any plan handed to it.
+      #
+      # On any violation: print a clear reason and exit non-zero, having done NO work.
+
+      # Current git branch in the CWD repo (where the agent's commits will land); empty if
+      # not inside a git work tree.
+      get_current_branch() {
+          ${pkgs.git}/bin/git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""
+      }
+
+      # First `Burndown:` header value (e.g. SAFE), trimmed. Empty if absent.
+      burndown_plan_marker() {
+          ${pkgs.ripgrep}/bin/rg -m1 '^Burndown:' "$PLAN_FILE" 2>/dev/null \
+              | ${pkgs.gnused}/bin/sed -E 's/^Burndown:[[:space:]]*//; s/[[:space:]]+$//' || true
+      }
+
+      # Declared `Working branch:` value, trimmed. Matches the canonical marker line only
+      # (NOT prose like "Working branch for execution:" which has no colon after "branch").
+      burndown_plan_branch() {
+          ${pkgs.ripgrep}/bin/rg -m1 '^Working branch:' "$PLAN_FILE" 2>/dev/null \
+              | ${pkgs.gnused}/bin/sed -E 's/^Working branch:[[:space:]]*//; s/[[:space:]]+$//' || true
+      }
+
+      # Enforce both guards. Exits non-zero (no work done) on any violation.
+      enforce_burndown_gate() {
+          local current_branch
+          current_branch=$(get_current_branch)
+
+          # 1. BRANCH GUARD - never bypassable (not even by --force)
+          if [[ -z "$current_branch" ]]; then
+              echo -e "''${RED}✗ Refusing to run: not inside a git work tree (cannot verify branch).''${NC}"
+              echo -e "  The burndown driver commits autonomously and must confirm it is not on main/master."
+              exit 1
+          fi
+          if [[ "$current_branch" == "main" || "$current_branch" == "master" ]]; then
+              echo -e "''${RED}✗ Refusing to run on branch: $current_branch (main/master is never allowed).''${NC}"
+              echo -e "  The burndown driver commits autonomously under --permission-mode bypassPermissions."
+              echo -e "  Switch to the plan's declared working branch first. This guard is NOT bypassable by --force."
+              exit 1
+          fi
+
+          # 2. OPT-IN GATE - bypassable with --force (interactive/testing only)
+          if [[ "$FORCE" == true ]]; then
+              echo -e "''${YELLOW}⚠ --force: bypassing the Burndown opt-in gate. Branch guard still enforced (on: $current_branch).''${NC}"
+              return 0
+          fi
+
+          local marker declared_branch
+          marker=$(burndown_plan_marker)
+          declared_branch=$(burndown_plan_branch)
+
+          if [[ "$marker" != "SAFE" ]]; then
+              echo -e "''${RED}✗ Refusing to run: plan is not opted in for unattended burndown.''${NC}"
+              echo -e "  Required header line missing or not SAFE: 'Burndown: SAFE' (found: ''${marker:-<none>})."
+              echo -e "  Add 'Burndown: SAFE' and 'Working branch: <branch>' to the plan header, or pass --force (testing only)."
+              exit 1
+          fi
+
+          if [[ -z "$declared_branch" ]]; then
+              echo -e "''${RED}✗ Refusing to run: plan declares no 'Working branch:'.''${NC}"
+              echo -e "  A burndown-safe plan must declare its working branch, e.g. 'Working branch: plan-045-foo'."
+              exit 1
+          fi
+
+          if [[ "$current_branch" != "$declared_branch" ]]; then
+              echo -e "''${RED}✗ Refusing to run: current branch ($current_branch) != plan's declared Working branch ($declared_branch).''${NC}"
+              echo -e "  Switch to $declared_branch (git switch $declared_branch), or correct the plan header."
+              exit 1
+          fi
+
+          echo -e "''${GREEN}✓ Burndown gate: opted in (Burndown: SAFE) on declared working branch: $current_branch''${NC}"
       }
 
       # Parse JSON output from Claude CLI
@@ -1014,6 +1115,17 @@ let
           else
               echo "  On failure:  skip (legacy: advance past a blocking failure)"
           fi
+          # Burndown gate preview (plan-045 T3) - informational; dry-run does no work so it
+          # never exits on a gate violation, but it shows what a real run would enforce.
+          preview_branch=$(get_current_branch)
+          echo "  Branch:      ''${preview_branch:-<not-a-git-repo>}"
+          if [[ "$FORCE" == true ]]; then
+              echo "  Burndown gate: BYPASSED (--force); branch guard (no main/master) still applies"
+          else
+              preview_marker=$(burndown_plan_marker)
+              preview_declared=$(burndown_plan_branch)
+              echo "  Burndown gate: marker=''${preview_marker:-<none>} declared-branch=''${preview_declared:-<none>}"
+          fi
           echo ""
           echo -e "''${CYAN}Would execute:''${NC}"
           if [[ "$preview_effective_model" != "(default)" ]]; then
@@ -1026,6 +1138,14 @@ let
           echo "  ''${PROMPT:0:200}..."
           exit 0
       fi
+
+      # Burndown opt-in gate + branch isolation (plan-045 T3). Enforced HERE - after the
+      # --dry-run early-exit (preview only) and the --list-only early-exit (inspection only),
+      # but before the main loop touches anything. This is the single choke point for every
+      # path that actually executes tasks (normal run, -n/-a/-c, and --list -> fzf -> run).
+      # On a violation it exits non-zero having done NO work (no claude call, no commits).
+      enforce_burndown_gate
+      echo ""
 
       # Trap Ctrl+C
       trap 'print_exit_summary "Interrupted by user (Ctrl+C)" "$task_counter"; save_state "$task_counter" "interrupted"; exit 130' INT

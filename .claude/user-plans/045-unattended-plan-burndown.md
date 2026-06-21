@@ -130,7 +130,7 @@ essentially unreachable for a well-formed plan.
 |------|------|--------|------|-------|
 | T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:COMPLETE | 2026-06-21 | |
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:COMPLETE | 2026-06-21 | |
-| T3 | Add opt-in gate + branch isolation to the driver | TASK:IN_PROGRESS | 2026-06-21 | |
+| T3 | Add opt-in gate + branch isolation to the driver | TASK:COMPLETE | 2026-06-21 | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:PENDING | | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:PENDING | | |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
@@ -234,13 +234,57 @@ non-zero halts the run (verified in T7) instead of continuing. Document the retu
   `Burndown: SAFE` gate + branch isolation is T3; full throwaway-fixture e2e is T7. The driver here
   leaves the plan cursor untouched on stop, which is the correct substrate for T4's HANDOFF write.
 
-### T3 — Opt-in gate + branch isolation `TASK:IN_PROGRESS` (2026-06-21)
+### T3 — Opt-in gate + branch isolation `TASK:COMPLETE` (2026-06-21)
 Driver pre-flight: refuse to run unless the plan header has `Burndown: SAFE` (exit non-zero, clear
 message) AND the current branch is the plan's declared `Working branch:` AND that branch ∉
 {main, master}. Add `--force` to bypass the opt-in gate for interactive/testing use only (never the
 branch guard).
 **DoD:** `nix flake check --no-build` passes; running against a plan without the marker, or on main,
 exits non-zero with a clear reason and does NO work (verified in T7).
+
+**Findings / what was done (2026-06-21):**
+- Implemented the gate in `task-automation.nix` `mkRunTasksScript` as **two independent guards**:
+  - **Branch guard (ALWAYS enforced, never bypassable):** refuses if the CWD git branch is
+    `main`/`master`, or if not inside a git work tree at all. Rationale: the driver runs
+    `git commit` autonomously under `--permission-mode bypassPermissions`; committing on main is
+    forbidden by project rules and no flag may override it.
+  - **Opt-in gate (bypassable with `--force`, interactive/testing only):** requires the plan header
+    to carry `Burndown: SAFE` AND declare `Working branch: <branch>`, AND the current branch must
+    equal that declared branch. `--force` short-circuits this gate *after* the branch guard has
+    already run, so `--force` can never reach main/master.
+- **New helpers** (added near `print_exit_summary`): `get_current_branch` (`git rev-parse
+  --abbrev-ref HEAD`, empty if not a repo), `burndown_plan_marker` (`rg -m1 '^Burndown:'` → trimmed
+  value), `burndown_plan_branch` (`rg -m1 '^Working branch:'` → trimmed value; deliberately does NOT
+  match prose like "Working branch for execution:" which has no colon after "branch"), and
+  `enforce_burndown_gate` (does the refusal logic, exits non-zero with a clear reason on violation).
+- **Enforcement choke point:** `enforce_burndown_gate` is called once, right before the `trap`/main
+  loop — i.e. *after* the `--dry-run` early-exit (preview only, never blocked) and the `--list`-only
+  early-exit (inspection only), but before any task executes. This single point covers every path
+  that does real work: normal run, `-n`/`-a`/`-c`, and `--list` → fzf → run. On violation it exits
+  before any `claude` call or commit, so NO work is done.
+- **`--force` flag** added to defaults (`FORCE=false`), arg parsing (`--force) FORCE=true`), `usage()`
+  text, the new "Unattended Burndown Opt-in" block in `usage()`'s Plan File Format section, and both
+  zsh + bash completions.
+- **`--dry-run` preview** now shows the gate inputs (current `Branch:`, plan `marker=`/
+  `declared-branch=`, or `BYPASSED (--force)`) without exiting — an honest preview of what a real run
+  would enforce.
+- **Validation:** `nix flake check --no-build` → `all checks passed!` (exit 0). Built the actual
+  `run-tasks-max` derivation (store path `…-run-tasks-max`; `writeShellScriptBin`'s `bash -n` passed).
+  Empirically exercised the built script in an isolated temp git repo with a stub `claudemax`
+  (emits `ALL_TASKS_DONE`), covering all gate paths:
+  - on `main` + marked plan → **refused** (branch guard), exit 1, no work.
+  - on `main` + marked + `--force` → **still refused** (branch guard not bypassable), exit 1.
+  - on declared branch + plan WITHOUT marker → **refused** (opt-in gate), exit 1.
+  - on declared branch + no marker + `--force` → gate **bypassed**, proceeds, exit 0.
+  - on a non-declared feature branch + marked plan → **refused** (branch ≠ declared), exit 1.
+  - on the declared branch + marked plan → gate **PASSES** (`✓ Burndown gate: opted in …`), proceeds.
+  - not inside a git repo → **refused** ("not inside a git work tree"), exit 1.
+  - `--dry-run` shows the gate preview and exits 0 (preview only, never blocked).
+  - `--help` shows `--force`. Temp fixtures removed.
+- **NOT in scope (deferred):** `.claude/active-plan` fallback + `HANDOFF.md` on stop is T4; headless
+  first-turn re-verification + 044-hook gating is T5; the full throwaway-fixture e2e (incl. the
+  "refused on main / without marker" assertions formally recorded) is T7. T3's manual scenario runs
+  above pre-validate those T7 assertions.
 
 ### T4 — Integrate with 044 substrate `TASK:PENDING`
 (a) When no `<plan-file>` arg is given, resolve `.claude/active-plan` first (mirror `nextTaskMd`'s
