@@ -276,6 +276,12 @@ let
       EVENT_TASK_NAME="-"
       EVENT_HEAD_BEFORE=""
 
+      # Count of tasks that actually reached COMPLETE (return 0), as distinct from
+      # task_counter (loop iterations attempted). A blocking failure increments the
+      # iteration counter but NOT this, so the exit summary / HANDOFF report "completed"
+      # honestly instead of mislabeling a failed attempt as a completion. (plan-045 polish)
+      COMPLETED_COUNT=0
+
       usage() {
           cat << 'EOF'
       run-tasks-${accountName} - Claude Code unattended task runner
@@ -462,8 +468,8 @@ let
       # Resolve to absolute path
       PLAN_FILE_ABS=$(realpath "$PLAN_FILE")
 
-      # Create log directory
-      mkdir -p "$LOG_DIR"
+      # NOTE: the log directory is created AFTER the opt-in gate passes (see below), so a
+      # gate refusal leaves no empty .claude-task-logs/ litter. (plan-045 polish)
 
       # Build the prompt
       # NOTE: Sentinel tokens (ALL_TASKS_DONE, ENVIRONMENT_NOT_CAPABLE) must appear on their own line
@@ -619,7 +625,7 @@ let
           echo -e "''${CYAN}  Session Summary''${NC}"
           echo -e "''${CYAN}===============================================''${NC}"
           echo -e "  Reason:    ''${reason}"
-          echo -e "  Tasks:     ''${tasks_run} completed, ''${ip} in-progress, ''${p} pending"
+          echo -e "  Tasks:     ''${COMPLETED_COUNT} completed, ''${ip} in-progress, ''${p} pending (''${tasks_run} iterations)"
           echo -e "  Runtime:   ''${runtime_fmt}"
           echo -e "  Logs:      ''${LOG_DIR}/"
           echo -e "  Events:    ''${EVENTS_LOG}"
@@ -672,7 +678,7 @@ let
       - **Plan:** $PLAN_FILE_ABS
       - **Active task (resume here):** $next_task (TASK:$next_status)
       - **Why the run stopped:** ''${HANDOFF_REASON:-<unspecified>} (status: ''${HANDOFF_STATUS:-<unspecified>})
-      - **Tasks completed this run:** ''${task_counter:-0}
+      - **Tasks completed this run:** ''${COMPLETED_COUNT:-0} (of ''${task_counter:-0} iterations attempted)
       - **Logs:** $LOG_DIR/
       - **State file:** $STATE_FILE
 
@@ -1346,6 +1352,10 @@ let
       enforce_burndown_gate
       echo ""
 
+      # Create the log directory only now that the gate has passed and a real run is
+      # committed (a refused/aborted pre-flight leaves no empty dir). (plan-045 polish)
+      mkdir -p "$LOG_DIR"
+
       # 044 substrate integration (plan-045 T4). Now that the gate has passed and we are
       # committed to a real run: (c) point .claude/active-plan at this plan for the run's
       # duration, and (b) arm the HANDOFF.md EXIT trap so ANY subsequent stop leaves a
@@ -1429,6 +1439,7 @@ let
                   retries=0
                   consecutive_rate_limits=0
                   consecutive_blocked=0
+                  COMPLETED_COUNT=$((COMPLETED_COUNT + 1))  # a real COMPLETE (not just an iteration)
                   ;;
               2)  # Rate limited
                   task_counter=$((task_counter - 1))

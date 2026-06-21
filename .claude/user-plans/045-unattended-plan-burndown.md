@@ -544,7 +544,16 @@ Fixture plan: 4 tasks `F1 F2 F3` (trivial) + `FX` (engineered failure), header `
   `PENDING→IN_PROGRESS` commit, never flipped to COMPLETE, and the driver never reached a 5th task.
 - `.claude/HANDOFF.md` written (branch `fixture-burndown`, **Active task: FX (TASK:IN_PROGRESS)**, **Why
   stopped: Blocking failure … (status: blocking_failure)**, resume command `run-tasks-max <plan>
-  --all`) — the verbatim breadcrumb the 044 SessionStart hook surfaces (T4 Source A, end-to-end).
+  --all`) — the verbatim breadcrumb the 044 SessionStart hook surfaces.
+  - **Precision note (audit 2026-06-21, corrects loose wording above/T4):** the 044 hook's precedence is
+    B→A→C. For the FIXTURE — a TABLE-ONLY plan with no `### …TASK:` heading blocks — Source B yields
+    nothing so the hook falls through and injects `.claude/HANDOFF.md` (Source A), which is what this
+    e2e exercised. For a REAL plan (045/044-shaped, with `### TX … TASK:IN_PROGRESS` headings) Source B
+    WINS and the hook injects the **IN_PROGRESS task block**, with HANDOFF.md as the readable file
+    backstop (the "why it stopped" nuance) plus `events.jsonl`. Both paths rehydrate the next session at
+    the correct resume point; the difference is only which surface carries the payload. Verified
+    empirically against the built `resume-hook.sh`: heading plan → Source B task block; table-only plan
+    → Source A HANDOFF.md; `CLAUDE_BURNDOWN=1` → 0 bytes (no double-drive).
 - `.claude/active-plan` = `plan.md`; `.claude-task-state` `STATUS=blocking_failure`.
 - **Event journal** `.claude-task-logs/events.jsonl` (T6) — full audit trail with commit SHAs:
   `run_start(e1dbc27)`, `F1 complete e1dbc27→ba9b8ec head_moved`, `F2 …→4be65e2`, `F3 …→6fc70db`,

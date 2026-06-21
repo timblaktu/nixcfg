@@ -173,6 +173,41 @@ prose-only success criterion and no scenario where the task "tries a workaround"
 
 Why this is safe: the DoD is two exit-zero commands (rule 1); the T2 dependency is declared so a premature run yields BLOCKED-BY-DEP, not a crash (rule 2); the edit is idempotent so a resumed `IN_PROGRESS` attempt converges (rule 6); and the only path to BLOCKING-FAILURE is a genuine hard error (e.g. `nix flake check` regressing), which is exactly when stopping the run is correct.
 
+### Running, inspecting & resuming a burndown
+
+Launch an unattended whole-plan burndown (from the plan's declared `Working branch:`):
+
+```
+run-tasks-<account> <plan.md> --burndown        # = --all --on-failure stop, opt-in asserted
+```
+
+A run leaves four artifacts in the worktree (all gitignored runtime state):
+
+| Artifact | Path | What it holds |
+|---|---|---|
+| Event journal | `.claude-task-logs/events.jsonl` | append-only, one JSONL line per transition (the audit trail) |
+| Per-task logs | `.claude-task-logs/<ts>_<task>.{log,json,stderr}` | full Claude response + stderr per attempt |
+| Run state | `.claude-task-state` | latest-only snapshot (`STATUS=` is the stop bucket) |
+| Handoff | `.claude/HANDOFF.md` | human/hook rehydration breadcrumb written on every post-gate stop |
+
+Inspect a partial / stopped burndown:
+
+```
+cat .claude-task-state                                   # STATUS= tells you the stop bucket
+jq -c . .claude-task-logs/events.jsonl                   # full transition history
+jq -r 'select(.head_moved) | "\(.task) \(.sha_before)->\(.sha_after) \(.status)"' \
+    .claude-task-logs/events.jsonl                       # which tasks committed, to what SHA
+ls -t .claude-task-logs/*.log | head -1 | xargs cat      # the most recent task's output
+```
+
+**Resume** is just re-running the same command - burndown state lives entirely in the plan file's
+`TASK:` cursor, so the driver re-attempts an `IN_PROGRESS` task (the bucket a blocking failure leaves
+behind) first, then proceeds to `PENDING`. Because authoring rule 6 requires idempotent tasks, the
+re-attempt converges. If the stop was `ENVIRONMENT_NOT_CAPABLE` or `USER_INPUT_REQUIRED`, handle that
+one task interactively with `/next-task` first, then re-launch. A fresh session also rehydrates
+automatically: the SessionStart hook surfaces the active plan's next task (or, for a plan without
+`###`-heading task blocks, `.claude/HANDOFF.md`, which names the stop reason and the resume command).
+
 ## Session Handoff Protocol (MANDATORY - NEVER SKIP)
 
 **EVERY session that works on a plan MUST end by checkpointing its handoff to per-worktree files.** This is non-negotiable - treat it like committing code. A session that ends without an updated handoff is incomplete work.
