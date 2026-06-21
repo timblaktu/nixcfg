@@ -133,7 +133,7 @@ essentially unreachable for a well-formed plan.
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:COMPLETE | 2026-06-21 | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:COMPLETE | 2026-06-21 | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
-| T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:IN_PROGRESS | 2026-06-21 | Opus 4.8 |
+| T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
 
 ### T1 — Author the Unattended Burndown Contract `TASK:COMPLETE` (2026-06-21)
@@ -407,7 +407,7 @@ isolation method).
   no longer double-drives the burndown loop; Mode-A (attended) rehydration is unaffected because the
   guard keys on a var only the driver sets.
 
-### T6 — Observability + resume; optional convenience `TASK:PENDING`
+### T6 — Observability + resume; optional convenience `TASK:IN_PROGRESS` (2026-06-21)
 Ensure the per-run log captures every task transition, commit SHA, and outcome bucket. Document how to
 inspect a partial burndown (state file + logs) and resume it (re-run; IN_PROGRESS task resumes first).
 OPTIONAL (only if T2-T5 land cleanly): a `--burndown <plan>` alias (sets `--all --on-failure stop`,
@@ -415,6 +415,90 @@ asserts opt-in) and/or a `systemd --user` oneshot template for detached long run
 the existing cgroup/oomd guards).
 **DoD:** `nix flake check --no-build` passes; a written "inspect & resume" runbook section here; the
 optional pieces are clearly marked done-or-deferred (no silent scope creep).
+
+**Findings / what was done (2026-06-21):** all in `task-automation.nix` `mkRunTasksScript`.
+- **Event journal (required core).** Before T6 the only persisted state was `STATE_FILE`
+  (`.claude-task-state`, a *latest-only* snapshot, overwritten each `save_state`) and the per-task
+  `.claude-task-logs/<ts>_<task>.{log,json,stderr}` files. There was **no record of the commit SHA a
+  task produced** and **no durable transition history**. T6 adds an append-only JSONL journal
+  `''${LOG_DIR}/events.jsonl` (`EVENTS_LOG`). Each line:
+  `{ts, iteration, task, status, sha_before, sha_after, head_moved}`.
+  - `status` is the existing outcome **bucket** string (`complete`, `blocking_failure`,
+    `blocked_by_dep`, `environment_not_capable`, `user_input_required`, `rate_limited`,
+    `all_complete`, `max_iterations`, `interrupted`, `run_start`, …) — the full §4 taxonomy plus
+    run-level stops.
+  - `sha_before`/`sha_after` + `head_moved` capture the **commit SHA** the agent's autonomous commit
+    produced for that task (short HEAD before the `claude` call vs after).
+  - **Single choke point:** the emitter `append_event` is called from `save_state`, which every
+    run_task terminal path and every main-loop stop already calls — so *every* transition is journaled
+    with zero edits to the 12 return sites. `run_task` sets `EVENT_TASK_NAME` + `EVENT_HEAD_BEFORE` at
+    its top; `save_state` computes `sha_after` and appends. Best-effort (`|| true`): a journal-write
+    failure never aborts the run. `jq -cn` builds the line (proper escaping).
+  - **Per-run delimiting:** a `run_start` marker event is emitted right after the opt-in gate passes
+    (records the starting HEAD), so the durable cross-run journal is still cleanly splittable per run.
+  - **Discoverability:** the events path is now printed in the run header (`tail -f` hint), the
+    `--dry-run` preview (`Event log:`), and the exit `Session Summary` (`Events:` line).
+- **`--burndown` convenience alias (optional — DONE; T2-T5 landed cleanly).** New flag = `--all
+  --on-failure stop` with opt-in **asserted**: it refuses to combine with `--force` (an unattended
+  burndown must honor the `Burndown: SAFE` gate) or with `--on-failure skip` (would defeat
+  stop-the-whole-run). Added to arg parsing, `usage()` (option + example + a new "Observability &
+  resume" help block), and both zsh + bash completions.
+- **systemd-user oneshot (optional — DEFERRED, no scope creep).** Rationale recorded in §6: detached
+  long runs are already served by `tmux`/`-c continuous` mode, and the agent wrappers already run nix
+  evals under the `nix-eval.slice` cgroup + systemd-oomd guards (CLAUDE.md "Nix Concurrency Guard"), so
+  the marginal benefit of a unit is journald capture alone — which `events.jsonl` + per-task logs
+  largely duplicate. Deferred until a concrete need (e.g. boot-persistent scheduling) appears; T7 may
+  surface one. Not implemented to avoid silent scope creep.
+- **Validation:** `nix flake check --no-build` → `all checks passed!` (exit 0). Built the real
+  `run-tasks-max` derivation (`writeShellScriptBin`'s build-time `bash -n` passed). Empirically
+  exercised the built script in an isolated temp git repo with a stub `claudemax`:
+  `--burndown --force` → refused (exit 1, clear message); `--burndown --on-failure skip` → refused;
+  a clean `--burndown` run on the declared branch wrote `events.jsonl` with a `run_start` line + a
+  per-task `complete` line carrying `sha_before`/`sha_after`/`head_moved=true` for the agent's commit;
+  `--dry-run`/`--help` show the new flag and event-log path. Temp fixtures removed.
+
+#### Inspect & resume runbook (burndown observability)
+
+A burndown run leaves four artifacts in the worktree (all gitignored runtime state):
+
+| Artifact | Path | What it holds |
+|---|---|---|
+| Event journal | `.claude-task-logs/events.jsonl` | append-only, one line per transition (the audit trail) |
+| Per-task logs | `.claude-task-logs/<ts>_<task>.{log,json,stderr}` | full Claude response + stderr per attempt |
+| Run state | `.claude-task-state` | latest-only snapshot (`STATUS`, `TASKS_RUN`, counts, `PLAN_FILE`) |
+| Handoff | `.claude/HANDOFF.md` | human/hook rehydration breadcrumb written on every post-gate stop |
+
+**Inspect a partial / stopped burndown:**
+```bash
+# Why did the last run stop? (latest snapshot)
+cat .claude-task-state                       # STATUS= tells you the bucket
+
+# Full transition history of the most recent run (since the last run_start marker):
+tail -r .claude-task-logs/events.jsonl | jq -c 'select(.status=="run_start")' | head -1  # find marker ts
+jq -c . .claude-task-logs/events.jsonl       # or just read the whole journal
+
+# Which tasks committed, and to what SHA?
+jq -r 'select(.head_moved) | "\(.iteration)\t\(.task)\t\(.sha_before)->\(.sha_after)\t\(.status)"' \
+    .claude-task-logs/events.jsonl
+
+# Did anything hit a blocking failure?
+jq -c 'select(.status=="blocking_failure" or .status=="startup_error")' .claude-task-logs/events.jsonl
+
+# Read the failing task's actual output:
+ls -t .claude-task-logs/*.log | head -1 | xargs cat
+```
+
+**Resume:** burndown state lives entirely in the plan file's `TASK:` cursor (the source of truth), so
+resuming is just **re-running the same command** — no special flag:
+```bash
+run-tasks-<account> <plan> --burndown        # or: <plan> --all --on-failure stop
+```
+The driver's task-selection priority re-attempts an `IN_PROGRESS` task **first** (the bucket a blocking
+failure leaves behind), then proceeds to `PENDING`. Because the authoring contract (T1) requires
+idempotent/resumable tasks, the re-attempt converges rather than double-applying. If the stop was
+`ENVIRONMENT_NOT_CAPABLE` or `USER_INPUT_REQUIRED`, handle that one task interactively with
+`/next-task` first, then re-launch the burndown. A fresh session also rehydrates automatically: the
+044 SessionStart hook surfaces `.claude/HANDOFF.md` (which names the stop reason + the resume command).
 
 ### T7 — End-to-end validation `TASK:PENDING`
 Create a throwaway burndown-safe fixture plan (`Burndown: SAFE`, `Working branch: <fixture>`) with 2-3
@@ -430,7 +514,11 @@ untracked-files discipline; `git add <path>`, never `-A`).
 ## 6. Open questions (remaining)
 - Marker syntax bikeshed: `Burndown: SAFE` header line vs a fenced metadata block vs a dedicated branch
   naming convention. T1 proposes; revisit if it feels brittle.
-- systemd-user oneshot vs leaving long runs to tmux/`-c` continuous mode — deferred to T6 (optional).
+- systemd-user oneshot vs leaving long runs to tmux/`-c` continuous mode — **resolved in T6:
+  DEFERRED.** tmux/`-c continuous` already cover detached runs and the agent wrappers already run
+  nix evals under `nix-eval.slice` + systemd-oomd guards, so a unit's only marginal benefit is
+  journald capture — largely duplicated by `events.jsonl` + per-task logs. Revisit only if a concrete
+  need (boot-persistent scheduling, multi-user service) appears.
 - Per-task model selection (the existing Model column) interaction with burndown cost caps — out of
   scope unless T7 surfaces a need.
 

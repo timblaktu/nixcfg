@@ -102,6 +102,7 @@ let
           '--all[Run all pending tasks]' \
           '-c[Run continuously]' \
           '--continuous[Run continuously]' \
+          '--burndown[Unattended whole-plan burndown: --all --on-failure stop, opt-in asserted]' \
           '-d[Seconds between tasks]:delay seconds:' \
           '--delay[Seconds between tasks]:delay seconds:' \
           '--model[Override model]:model:(opus sonnet haiku qwen-a3b)' \
@@ -182,7 +183,7 @@ let
 
         # Complete options
         if [[ "$cur" == -* ]]; then
-          COMPREPLY=( $(compgen -W "-n -a --all -c --continuous -d --delay --model --on-failure --force --task --list --dry-run -h --help" -- "$cur") )
+          COMPREPLY=( $(compgen -W "-n -a --all -c --continuous --burndown -d --delay --model --on-failure --force --task --list --dry-run -h --help" -- "$cur") )
           return 0
         fi
 
@@ -226,6 +227,12 @@ let
       # Configurable defaults (from Nix options)
       LOG_DIR="${taskCfg.logDirectory}"
       STATE_FILE="${taskCfg.stateFile}"
+      # Per-run append-only event journal (plan-045 T6): one JSONL line per task
+      # transition, recording the outcome bucket and the commit SHA the task produced
+      # (HEAD before -> after). Durable across runs (delimited by run_start markers) so a
+      # partial burndown can be inspected and resumed. Inspect with:
+      #   jq -c . "''${LOG_DIR}/events.jsonl"   (see the plan's "Inspect & resume" runbook)
+      EVENTS_LOG="''${LOG_DIR}/events.jsonl"
       DELAY_BETWEEN_TASKS=${toString taskCfg.safetyLimits.delayBetweenTasks}
       RATE_LIMIT_WAIT=${toString taskCfg.safetyLimits.rateLimitWaitSeconds}
       MAX_RETRIES=${toString taskCfg.safetyLimits.maxRetries}
@@ -248,6 +255,9 @@ let
       # Opt-in gate bypass (plan-045 T3): --force skips the `Burndown: SAFE` opt-in gate
       # (interactive/testing only). It NEVER bypasses the branch guard (main/master refusal).
       FORCE=false
+      # --burndown convenience alias (plan-045 T6): set when the user asked for an unattended
+      # whole-plan burndown (= --all --on-failure stop, opt-in asserted).
+      BURNDOWN_ALIAS=false
 
       # 044-substrate integration (plan-045 T4). On any stop AFTER the opt-in gate passes,
       # an EXIT trap writes $BURNDOWN_PROJECT_DIR/.claude/HANDOFF.md so a fresh session's 044
@@ -258,6 +268,13 @@ let
       HANDOFF_REASON=""
       HANDOFF_STATUS=""
       BURNDOWN_PROJECT_DIR=""
+
+      # Event-journal context (plan-045 T6): run_task sets these at its top so the event
+      # emitter (in save_state) can record the task name and the commit SHA *before* the
+      # task ran. Comparing EVENT_HEAD_BEFORE to HEAD afterward shows whether (and to which
+      # SHA) the agent's autonomous commit advanced the branch for that task.
+      EVENT_TASK_NAME="-"
+      EVENT_HEAD_BEFORE=""
 
       usage() {
           cat << 'EOF'
@@ -276,6 +293,9 @@ let
         -n N              Run N tasks (default: 1)
         -a, --all         Run all actionable tasks (IN_PROGRESS + PENDING)
         -c, --continuous  Run continuously (survives rate limits)
+        --burndown        Unattended whole-plan burndown: alias for --all --on-failure stop,
+                          with opt-in asserted (incompatible with --force). The convenience
+                          entry point for a detached long run.
         -d, --delay N     Seconds between tasks (default: ${toString taskCfg.safetyLimits.delayBetweenTasks})
         --model MODEL     Override model (alias or full name, e.g., opus, qwen-a3b)
         --on-failure WHAT On a blocking failure: stop (default) halts the whole run leaving the
@@ -318,9 +338,20 @@ let
         Max runtime:     ${toString taskCfg.safetyLimits.maxRuntimeHours} hours
         Rate limit wait: ${toString taskCfg.safetyLimits.rateLimitWaitSeconds} seconds
 
+      Observability & resume (plan-045 T6):
+        Per-task logs:  ${taskCfg.logDirectory}/YYYYMMDD_HHMMSS_<task>.{log,json,stderr}
+        Event journal:  ${taskCfg.logDirectory}/events.jsonl  (append-only; one JSONL line per
+                        transition: ts, iteration, task, status bucket, sha_before/sha_after,
+                        head_moved). Delimited per run by a "run_start" marker. Inspect with jq.
+        Run state:      ${taskCfg.stateFile}  (latest status snapshot, key=value)
+        Handoff:        .claude/HANDOFF.md  (rehydration breadcrumb on every post-gate stop)
+        To resume a partial burndown: just re-run the same command - an IN_PROGRESS task is
+        re-attempted first (the agent's status-transition discipline makes tasks idempotent).
+
       Examples:
         run-tasks-${accountName} docs/plan.md               # Run next pending task
         run-tasks-${accountName} docs/plan.md -n 5          # Run 5 tasks sequentially
+        run-tasks-${accountName} docs/plan.md --burndown    # Unattended whole-plan burndown
         run-tasks-${accountName} docs/plan.md --task F1     # Run task F1 specifically
         run-tasks-${accountName} docs/plan.md --task F1 -n 3 # Run F1, then next 2 pending
         run-tasks-${accountName} docs/plan.md --list        # Show task status, select with fzf
@@ -340,6 +371,11 @@ let
               --task) TASK_ID="$2"; shift 2 ;;
               --list) LIST_TASKS=true; shift ;;
               --on-failure) ON_FAILURE="$2"; shift 2 ;;
+              # Convenience alias for an unattended long run (plan-045 T6): burn the whole
+              # plan down (--all) and STOP on the first blocking failure (the §4 default
+              # policy). Asserts opt-in: incompatible with --force, so an unattended burndown
+              # can never skip the Burndown: SAFE gate. Equivalent to: --all --on-failure stop.
+              --burndown) MODE="all"; ON_FAILURE="stop"; BURNDOWN_ALIAS=true; shift ;;
               --force) FORCE=true; shift ;;
               --dry-run) DRY_RUN=true; shift ;;
               -h|--help) usage ;;
@@ -364,6 +400,19 @@ let
       if [[ "$ON_FAILURE" != "stop" && "$ON_FAILURE" != "skip" ]]; then
           echo -e "''${RED}Error: --on-failure must be 'stop' or 'skip' (got: '$ON_FAILURE')''${NC}"
           exit 1
+      fi
+
+      # --burndown asserts opt-in: it must never combine with the gate-bypassing --force,
+      # nor with the legacy --on-failure skip (which would defeat stop-the-whole-run). (T6)
+      if [[ "$BURNDOWN_ALIAS" == true ]]; then
+          if [[ "$FORCE" == true ]]; then
+              echo -e "''${RED}Error: --burndown cannot combine with --force (unattended runs must honor the Burndown: SAFE gate)''${NC}"
+              exit 1
+          fi
+          if [[ "$ON_FAILURE" != "stop" ]]; then
+              echo -e "''${RED}Error: --burndown implies --on-failure stop; do not also pass --on-failure skip''${NC}"
+              exit 1
+          fi
       fi
 
       # Verify the claude wrapper exists
@@ -489,6 +538,37 @@ let
           fi
       }
 
+      # Short HEAD SHA of the CWD repo (where the agent's autonomous commits land);
+      # empty string if not inside a git work tree. (plan-045 T6 observability)
+      git_head() {
+          ${pkgs.git}/bin/git rev-parse --short HEAD 2>/dev/null || echo ""
+      }
+
+      # Append one JSONL event to the per-run journal (plan-045 T6). Records the outcome
+      # bucket (status), the task, the iteration, and the commit SHA before/after the task
+      # so every transition - and every commit it produced - is durably auditable.
+      #   $1 = status (outcome bucket)   $2 = task name   $3 = iteration
+      # Best-effort: a journal-write failure never aborts the run.
+      append_event() {
+          local ev_status="$1" ev_task="''${2:--}" ev_iter="''${3:-0}"
+          local sha_after; sha_after="$(git_head)"
+          local moved=false
+          if [[ -n "$EVENT_HEAD_BEFORE" && -n "$sha_after" && "$EVENT_HEAD_BEFORE" != "$sha_after" ]]; then
+              moved=true
+          fi
+          ${pkgs.coreutils}/bin/mkdir -p "$LOG_DIR" 2>/dev/null || return 0
+          ${pkgs.jq}/bin/jq -cn \
+              --arg ts "$(date -Iseconds)" \
+              --argjson iter "$ev_iter" \
+              --arg task "$ev_task" \
+              --arg status "$ev_status" \
+              --arg sha_before "$EVENT_HEAD_BEFORE" \
+              --arg sha_after "$sha_after" \
+              --argjson moved "$moved" \
+              '{ts:$ts, iteration:$iter, task:$task, status:$status, sha_before:$sha_before, sha_after:$sha_after, head_moved:$moved}' \
+              >> "$EVENTS_LOG" 2>/dev/null || true
+      }
+
       save_state() {
           local tasks_run=$1
           local status=$2
@@ -507,6 +587,8 @@ let
       RUNTIME_SECONDS=$runtime
       PLAN_FILE=$PLAN_FILE_ABS
       EOF
+          # Mirror this transition into the append-only event journal (plan-045 T6).
+          append_event "$status" "$EVENT_TASK_NAME" "$tasks_run"
       }
 
       format_runtime() {
@@ -540,6 +622,7 @@ let
           echo -e "  Tasks:     ''${tasks_run} completed, ''${ip} in-progress, ''${p} pending"
           echo -e "  Runtime:   ''${runtime_fmt}"
           echo -e "  Logs:      ''${LOG_DIR}/"
+          echo -e "  Events:    ''${EVENTS_LOG}"
           echo -e "''${CYAN}===============================================''${NC}"
       }
 
@@ -911,6 +994,12 @@ let
               task_model=$(get_next_task_model)
           fi
 
+          # Event-journal context (plan-045 T6): record the task and the HEAD SHA *before*
+          # this task runs, so the save_state-driven event emitter can show the commit the
+          # agent produces (HEAD before -> after) and tag it with the right task name.
+          EVENT_TASK_NAME="$task_name"
+          EVENT_HEAD_BEFORE="$(git_head)"
+
           local timestamp=$(date +"%Y%m%d_%H%M%S")
           # Log file naming: LOG_DIR/YYYYMMDD_HHMMSS_TASKNAME.{log,json}
           # User can tail LOG_DIR/*.log for live output
@@ -1152,6 +1241,7 @@ let
       echo "Actionable tasks: $INITIAL_ACTIONABLE (in-progress: $INITIAL_IN_PROGRESS, pending: $INITIAL_PENDING)"
       echo "Delay: ''${DELAY_BETWEEN_TASKS}s"
       echo "Safety limits: ''${MAX_ITERATIONS} iterations, ''${MAX_RUNTIME_HOURS}h runtime"
+      echo "Event log: $EVENTS_LOG (tail -f to watch transitions)"
       echo ""
 
       # Validate --task ID if specified
@@ -1218,6 +1308,7 @@ let
           echo "  Task ID:     $preview_task_id"
           echo "  Model:       $preview_effective_model ($preview_model_source)"
           echo "  Claude cmd:  $CLAUDE_CMD"
+          echo "  Event log:   $EVENTS_LOG"
           if [[ "$ON_FAILURE" == "stop" ]]; then
               echo "  On failure:  stop (a blocking failure halts the whole run, leaves task IN_PROGRESS)"
           else
@@ -1264,6 +1355,12 @@ let
       HANDOFF_ARMED=true
       trap 'write_handoff' EXIT
       task_counter=0  # referenced by write_handoff (and the INT trap) before the main loop sets it
+
+      # Open the event journal for this run (plan-045 T6): a run_start marker delimits this
+      # run from prior ones in the durable, append-only events.jsonl and records the starting
+      # HEAD + plan + branch + failure policy so a partial burndown is fully reconstructable.
+      EVENT_HEAD_BEFORE="$(git_head)"
+      append_event "run_start" "-" "0"
 
       # Trap Ctrl+C (the EXIT trap above also fires on this path's `exit 130`, writing HANDOFF.md)
       trap 'print_exit_summary "Interrupted by user (Ctrl+C)" "$task_counter"; save_state "$task_counter" "interrupted"; exit 130' INT
