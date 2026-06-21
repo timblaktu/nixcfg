@@ -132,7 +132,7 @@ essentially unreachable for a well-formed plan.
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:COMPLETE | 2026-06-21 | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:COMPLETE | 2026-06-21 | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:COMPLETE | 2026-06-21 | |
-| T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:IN_PROGRESS | 2026-06-21 | |
+| T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
 
@@ -342,13 +342,70 @@ session's 044 hook injects (verified in T7).
   T4's Scenario A/B HANDOFF outputs are exactly the markdown the hook surfaces verbatim (Source A),
   pre-validating T7's injection assertion.
 
-### T5 — Re-verify headless first-turn + gate 044 hook `TASK:IN_PROGRESS` (2026-06-21)
+### T5 — Re-verify headless first-turn + gate 044 hook `TASK:COMPLETE` (2026-06-21)
 Empirically re-test on the installed claude-code: does `claude -p "<prompt>"` reliably fire the first
 turn unattended (expected yes)? Does `initialUserMessage` fire in `-p` mode (044 §10 #7 — unconfirmed)?
 Record results in this plan. Confirm the 044 SessionStart resume hook is lean/no-op under `-p` (D7): if
 `-p` invocations present a `source` the hook matches, add a guard so it doesn't double-inject.
 **DoD:** findings recorded here with the exact probe commands + outputs; if a hook guard is needed, it's
 implemented and `nix flake check --no-build` passes; the committed first-turn mechanism is stated.
+
+**Findings / what was done (2026-06-21):** all probes run against the real binary
+`/nix/store/adxi8k34iwjvy9kdmdpi087cmcpywi30-claude-code-2.1.158/bin/claude` (the one the
+`claudemax` wrapper execs), layering a throwaway SessionStart hook via `--settings <file>` and reusing
+`CLAUDE_CONFIG_DIR=…/.claude-max` only for auth (per the `cc-sessionstart-hook-contract` memory's
+isolation method).
+
+- **Probe A — first turn fires under `-p` (expected yes → CONFIRMED).**
+  `… claude --settings probe.json --permission-mode bypassPermissions -p "Reply with exactly this
+  token and nothing else: PROBE_FIRST_TURN_OK"` → stdout `PROBE_FIRST_TURN_OK`, exit 0. The first
+  turn fires unattended from the explicit prompt arg. The same probe's stdin-logging SessionStart hook
+  captured `…,"hook_event_name":"SessionStart","source":"startup"` — **`-p` presents SessionStart
+  source=`startup`**, which the 044 resume hook's matcher `startup|resume|compact` MATCHES (so the hook
+  *does* fire under headless `-p` — this is the D7 double-inject risk, now concretely confirmed).
+
+- **Probe B / Controls 1-3 — `initialUserMessage` in `-p` (044 §10 #7, was unconfirmed → RESOLVED:
+  it DOES fire a first turn in `-p` on 2.1.158).** This CORRECTS the prior
+  `cc-sessionstart-hook-contract` memory, whose "not supported on 2.1.158" was an *interactive* (PTY)
+  result extrapolated to `-p`. Tight controls, all `-p ""` (empty prompt) with stdin closed (`</dev/null`):
+  - **Control 1** (no SessionStart hook): exit 1, `Error: Input must be provided either through stdin
+    or as a prompt argument when using --print`. (empty `-p` errors with no input — matches memory.)
+  - **Control 2** (hook emits ONLY `additionalContext`): exit 1, SAME error → `additionalContext` is
+    context-only; it does NOT satisfy the first-turn/input requirement.
+  - **Control 3** (hook emits `initialUserMessage`: `{"hookSpecificOutput":{"hookEventName":
+    "SessionStart","initialUserMessage":"Reply with exactly the token PROBE_IUM_FIRED2 …"}}`): exit 0,
+    stdout `PROBE_IUM_FIRED2` → **`initialUserMessage` supplied the first turn**. So in headless `-p`
+    a SessionStart hook *can* auto-start a turn; interactively it cannot (memory's PTY-idle result).
+  - **Committed mechanism (D6, unchanged):** the driver uses the explicit `claude -p "<prompt>"` arg.
+    We do NOT depend on `initialUserMessage` (it's simpler/robust to pass the prompt; the §10 #7
+    question is merely resolved, not adopted).
+
+- **Probe E — env propagation to the hook subprocess (CONFIRMED).** `CLAUDE_BURNDOWN=1 … claude … -p
+  "say hi"` with a hook printing `$CLAUDE_BURNDOWN` → hook logged `CLAUDE_BURNDOWN=[1]`. An exported
+  env var reaches the SessionStart hook subprocess through the wrapper — so an env-var guard is viable.
+
+- **D7 guard implemented (the hook is now lean/no-op under headless burndown).**
+  - `resume-hook.sh`: added, right after `stdin_json="$(cat)"`, an early
+    `if [ "${CLAUDE_BURNDOWN:-}" = "1" ]; then exit 0; fi` (with a comment citing T5/D7 + the
+    source=startup finding). Drains stdin, emits nothing, exits 0.
+  - `task-automation.nix` `mkRunTasksScript`: the task-execution call is now
+    `json_output=$(CLAUDE_BURNDOWN=1 $CLAUDE_CMD -p … "$task_prompt" …)` (scoped to exactly the
+    headless task run, self-documenting). The two `--dry-run` "Would execute" preview lines were
+    updated to show the `CLAUDE_BURNDOWN=1` prefix for honesty.
+- **Validation:**
+  - `nix flake check --no-build` → `all checks passed!` (exit 0).
+  - Built the real `run-tasks-max` package
+    (`nix build --impure --expr '… homeConfigurations."tim@thinky-nixos".config … run-tasks-max'` →
+    `/nix/store/jdafcvrpqaicvwvdpigh19s3rimdlsgv-run-tasks-max`); `writeShellScriptBin`'s build-time
+    `bash -n` passed; `rg CLAUDE_BURNDOWN` on the built script confirms the env prefix on the exec
+    line + both dry-run previews.
+  - Functional guard test on `resume-hook.sh` against a fixture `.claude/active-plan` → `plan.md`
+    (T1 `IN_PROGRESS`): with `CLAUDE_BURNDOWN=1` → **no output, exit 0** (no-op); without it →
+    emits the `additionalContext` JSON with the active-task block (normal Mode-A behavior intact).
+  - All temp probe fixtures removed.
+- **NET:** `claude -p "<prompt>"` is the committed, verified first-turn mechanism; the 044 resume hook
+  no longer double-drives the burndown loop; Mode-A (attended) rehydration is unaffected because the
+  guard keys on a var only the driver sets.
 
 ### T6 — Observability + resume; optional convenience `TASK:PENDING`
 Ensure the per-run log captures every task transition, commit SHA, and outcome bucket. Document how to

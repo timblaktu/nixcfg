@@ -20,6 +20,17 @@ set -u
 
 stdin_json="$(cat)"
 
+# Plan 045 T5/D7: no-op under the headless unattended burndown driver.
+# `run-tasks-<account>` drives each task via its own `claude -p "<prompt>"`, and a
+# fresh `-p` session fires SessionStart with source=startup (empirically verified
+# 2026-06-21) — which this hook's matcher (startup|resume|compact) also matches.
+# Without this guard the hook would re-inject the active-plan task block on top of
+# the driver's own task prompt (double-drive). The driver exports CLAUDE_BURNDOWN=1,
+# which propagates to this hook subprocess; honor it by emitting nothing.
+if [ "${CLAUDE_BURNDOWN:-}" = "1" ]; then
+  exit 0
+fi
+
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
 claude_dir="$proj/.claude"
 

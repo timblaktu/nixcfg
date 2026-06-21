@@ -956,8 +956,15 @@ let
 
           # Capture JSON output to stdout, stderr separately for error analysis
           # Using --output-format json for structured response parsing
+          #
+          # CLAUDE_BURNDOWN=1 (plan 045 T5/D7): tells the 044 SessionStart resume hook
+          # to no-op. A fresh `claude -p` fires SessionStart with source=startup
+          # (empirically verified 2026-06-21), which the hook's matcher
+          # (startup|resume|compact) matches; without this signal it would re-inject
+          # the active-plan task block on top of the task prompt below (double-drive).
+          # The env var propagates through the wrapper to the hook subprocess (verified).
           {
-              json_output=$($CLAUDE_CMD -p $model_flag --output-format json --permission-mode bypassPermissions "$task_prompt" 2>"''${log_base}.stderr")
+              json_output=$(CLAUDE_BURNDOWN=1 $CLAUDE_CMD -p $model_flag --output-format json --permission-mode bypassPermissions "$task_prompt" 2>"''${log_base}.stderr")
               exit_code=$?
           } || exit_code=$?
 
@@ -1230,9 +1237,9 @@ let
           echo ""
           echo -e "''${CYAN}Would execute:''${NC}"
           if [[ "$preview_effective_model" != "(default)" ]]; then
-              echo "  $CLAUDE_CMD -p --model $preview_effective_model --output-format json --permission-mode bypassPermissions <prompt>"
+              echo "  CLAUDE_BURNDOWN=1 $CLAUDE_CMD -p --model $preview_effective_model --output-format json --permission-mode bypassPermissions <prompt>"
           else
-              echo "  $CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions <prompt>"
+              echo "  CLAUDE_BURNDOWN=1 $CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions <prompt>"
           fi
           echo ""
           echo -e "''${CYAN}Prompt (truncated):''${NC}"
