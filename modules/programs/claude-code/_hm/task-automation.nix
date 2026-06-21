@@ -8,7 +8,8 @@ let
 
   # Slash command for interactive task execution
   nextTaskMd = ''
-    Read the plan file specified below (or auto-detect from CLAUDE.md if not specified),
+    Read the plan file specified below (or, if not specified, resolve it via the
+    PLAN SELECTION precedence: the .claude/active-plan pointer first, then CLAUDE.md auto-detection),
     find the next actionable task in the Progress Tracking table using the priority below,
     execute it following the task definition in that file,
     document findings in the corresponding section,
@@ -28,7 +29,19 @@ let
     - When completing a task: change "TASK:IN_PROGRESS" to "TASK:COMPLETE" and add today's date
     - If a task is already IN_PROGRESS (from a previous session): resume work, then mark COMPLETE
 
-    PLAN AUTO-DETECTION (when no plan file argument is provided):
+    PLAN SELECTION (when no plan file argument is provided):
+    FIRST, the explicit per-worktree pointer (highest precedence):
+    - If "$CLAUDE_PROJECT_DIR/.claude/active-plan" exists and is non-empty, read the
+      first line: it names the active plan file path. Resolve it the same way the
+      SessionStart resume hook does: if the path is absolute (starts with "/") use it
+      as-is; otherwise resolve it relative to the worktree root "$CLAUDE_PROJECT_DIR".
+      If the resolved file exists, use that plan and SKIP auto-detection below.
+      (This is the "pull" half of plan 044's dual-channel resume: it works even when
+      the SessionStart hook's context injection silently fails. The pointer wins
+      because it was set deliberately for this worktree.)
+
+    OTHERWISE, fall back to CLAUDE.md auto-detection (no pointer, or it resolves to a
+    missing file):
     1. Check the project's CLAUDE.md "Project Status" section for active plans with plan file paths
     2. Prefer the plan with an IN_PROGRESS task (unfinished work from a previous session)
     3. If multiple plans have IN_PROGRESS tasks: prefer the one with the most recent session
