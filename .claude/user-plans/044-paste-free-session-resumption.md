@@ -1,6 +1,6 @@
 # 044 - Paste-Free Session Resumption (Checkpoint → Fresh Session → Rehydrate)
 
-Status: IN PROGRESS — T1-T5 + T7 COMPLETE; only T6 remains (optional, recommended DROP/defer to plan 045)
+Status: COMPLETE — T1-T5 + T7 COMPLETE; T6 closed WONTFIX (auto-start deferred to plan 045). Attended paste-free resume loop delivered (push hook T3 + pull `next-task` T4 + file handoff T5). Activation note: live deploy on the work host goes through the nixcfg-work flake (see §8 "Activation").
 Created: 2026-06-19
 Owner: nixcfg Claude Code config (`modules/programs/claude-code/`)
 Related memory: `/home/tim/src/nixcfg/claude-runtime/.claude-max/projects/-home-tim-src-n3x/memory/session-handoff-concurrency-fragility.md`
@@ -146,13 +146,20 @@ the template rather than a hardcoded absolute path (correct for a global cross-p
 **DoD:** CLAUDE.md protocol section rewritten; clipboard/`/tmp` path removed or demoted to "last
 resort, single-session machines only"; cross-reference to this plan + the memory file.
 
-### T6 - Optional fully-hands-free start (REDESIGNED per T1) `TASK:PENDING`
-T1 disproved `initialUserMessage` (no hook field auto-fires a turn on 2.1.158). The only hands-free path
-is an explicit launch-time prompt argument. If pursued, implement as an opt-in wrapper/alias that runs
-`claude "resume the active plan's next pending task"` (the prompt the SessionStart hook would otherwise
-have surfaced), behind an explicit flag/marker since auto-starting work is not always desired. Likely
-lower priority than the `/resume` pull-command (T4); consider dropping in favor of T4.
-**DoD:** opt-in mechanism documented; default OFF; when ON, the wrapper self-resumes the next task without any typing. (Hook-field auto-start is ruled out — see §8.)
+### T6 - Optional fully-hands-free start (REDESIGNED per T1) `TASK:WONTFIX (deferred to 045)`
+**Disposition 2026-06-21 (user decision):** DROP from plan 044; the hands-free auto-start belongs to
+plan `045-unattended-plan-burndown.md`. Rationale: (1) T1 empirically disproved `initialUserMessage`
+on both 2.1.158 and built 2.1.183 — no hook field auto-fires a first turn, so a hook can never deliver
+hands-free start (§8). (2) The only viable mechanism is an explicit launch-time prompt argument
+(`claude "resume the active plan's next pending task"`), which is the same headless-first-turn problem
+plan 045 must solve for Mode B (unattended burndown) anyway — building it here would duplicate 045's
+core. (3) The *attended* resume path 044 set out to fix is already fully delivered: T3 (hook push) +
+T4 (`next-task` honoring `.claude/active-plan`) + T5 (file-based handoff) give paste-free, one-keystroke
+resumption. A standalone `--resume-plan` wrapper alias would be pure ergonomics over T4 with no new
+capability. The `--resume-plan` opt-in design sketch is preserved in §10 (Mode A bullet) as the seed for
+045's attended-launch ergonomics.
+**DoD:** N/A — task closed as WONTFIX/deferred; auto-start folded into plan 045. The attended-resume goal
+of 044 is satisfied by T3+T4+T5 (no typing of a continuation prompt; `/next-task` resumes the pointed plan).
 
 ### T7 - Validate end-to-end across two worktrees concurrently `TASK:COMPLETE`
 **Done 2026-06-21.** Reproduced the §1 concurrency scenario at the hook level and proved isolation. See "§8 T7 findings" for the full method/results.
@@ -280,6 +287,40 @@ The `**/` form is chosen because it also catches nested/worktree paths while rem
 **No shared-slot channel (the §1 fix, proven structurally).** `grep` of the realised hook: no `clip.exe`, no `/tmp`. Reads are scoped per-worktree by construction — sources B/A read `claude_dir="$proj/.claude"` where `proj="${CLAUDE_PROJECT_DIR:-$PWD}"` (line 25-26); source C reads only `dirname "$transcript_path"` taken from stdin (line 72-76, per-cwd transcript store). There is **no** global path any concurrent session could clobber. Cross-contamination of the kind in §1 (shared clipboard / `/tmp/continuation.md`) is therefore impossible for this rehydration channel.
 
 **Teardown.** Throwaway worktree `/home/tim/src/nixcfg-t7b` removed; only this plan file is committed (per the untracked-files gotcha, staged by path, never `git add -A`).
+
+### Activation — loop deployed live, verified 2026-06-21
+
+**Work-host indirection (non-obvious).** This machine is `pa161878-nixos`, a **work** box whose live
+home config is `tim@pa161878-nixos` from the **nixcfg-work** flake (which also owns the
+`pa161878-nixos`/`corp-wsl-dev-team` NixOS configs). nixcfg-work consumes nixcfg as a flake input
+(`nixcfg.url = "github:timblaktu/nixcfg"`, other inputs `follows nixcfg/*`), pinned in its `flake.lock`
+to github rev `f916d7cb` on main. The claude-code module/templates therefore reach this machine
+**through nixcfg-work's pin of nixcfg**, not from this repo directly. Consequence: a plain
+`home-manager switch` from nixcfg-work deploys the *pinned* nixcfg (no plan-044 hook); the plan-044
+branch is an unpushed local descendant of the pin.
+
+**Activation performed (real but EPHEMERAL).** Verified the branch is a clean linear descendant of the
+pin (`git merge-base --is-ancestor f916d7cb HEAD` → yes) and the entire `f916d7cb..HEAD` diff is exactly
+the plan-044 work (no unrelated drift), then switched with the local override:
+```
+home-manager switch --flake '/home/tim/src/nixcfg-work#tim@pa161878-nixos' \
+  --override-input nixcfg 'git+file:///home/tim/src/nixcfg?ref=plan-044-paste-free-resume' -b backup
+```
+Exit 0; generation 212. Override resolved `nixcfg` → local rev `3f12389`. **This deploy is ephemeral:**
+nixcfg-work's lock still pins `f916d7cb`, so the *next plain* switch reverts the hook. For PERMANENT
+activation: merge plan-044 → nixcfg main → push → bump nixcfg-work's `flake.lock` nixcfg rev → switch
+(cross-repo, touches main — deliberately NOT done unsolicited).
+
+**Live verification (post-switch).** Deployed `claude-runtime/.claude-max/settings.json` now carries the
+`SessionStart` hook (matcher `startup|resume|compact` → `/nix/store/yvp6vyagq22j4kmq4nd301xzx70lin0h-claude-resume-hook`,
+the byte-for-byte store path T7 validated; file exists). `.claude-max/CLAUDE.md` regenerated with the T5
+"Session Handoff Protocol". Global ignore `~/.config/git/ignore` carries `**/.claude/active-plan` +
+`**/.claude/HANDOFF.md` (T2). Fired the **deployed** hook with a real CC-shaped stdin
+(`session_id`/`transcript_path`/`cwd`/`source:startup`) + `CLAUDE_PROJECT_DIR=/home/tim/src/nixcfg`:
+exit 0, valid `hookSpecificOutput` envelope. Because T6 is now WONTFIX (044 has no PENDING/IN_PROGRESS
+task), source B correctly yielded nothing and the hook **fell through B→A** to inject `.claude/HANDOFF.md`
+— demonstrating the precedence chain on the real artifact. The loop fires paste-free for every new
+session in this worktree until a plain nixcfg-work switch reverts it.
 
 ---
 
