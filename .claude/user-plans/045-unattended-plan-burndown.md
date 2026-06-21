@@ -130,7 +130,7 @@ essentially unreachable for a well-formed plan.
 |------|------|--------|------|-------|
 | T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:COMPLETE | 2026-06-21 | |
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:COMPLETE | 2026-06-21 | |
-| T3 | Add opt-in gate + branch isolation to the driver | TASK:PENDING | | |
+| T3 | Add opt-in gate + branch isolation to the driver | TASK:IN_PROGRESS | 2026-06-21 | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:PENDING | | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:PENDING | | |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
@@ -234,7 +234,7 @@ non-zero halts the run (verified in T7) instead of continuing. Document the retu
   `Burndown: SAFE` gate + branch isolation is T3; full throwaway-fixture e2e is T7. The driver here
   leaves the plan cursor untouched on stop, which is the correct substrate for T4's HANDOFF write.
 
-### T3 — Opt-in gate + branch isolation `TASK:PENDING`
+### T3 — Opt-in gate + branch isolation `TASK:IN_PROGRESS` (2026-06-21)
 Driver pre-flight: refuse to run unless the plan header has `Burndown: SAFE` (exit non-zero, clear
 message) AND the current branch is the plan's declared `Working branch:` AND that branch ∉
 {main, master}. Add `--force` to bypass the opt-in gate for interactive/testing use only (never the
