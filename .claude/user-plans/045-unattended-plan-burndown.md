@@ -134,7 +134,7 @@ essentially unreachable for a well-formed plan.
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:COMPLETE | 2026-06-21 | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
-| T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
+| T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:IN_PROGRESS | 2026-06-21 | Opus 4.8 |
 
 ### T1 — Author the Unattended Burndown Contract `TASK:COMPLETE` (2026-06-21)
 Write §4's taxonomy + authoring rules into the **plan-generating context** so every future plan is
@@ -500,7 +500,7 @@ idempotent/resumable tasks, the re-attempt converges rather than double-applying
 `/next-task` first, then re-launch the burndown. A fresh session also rehydrates automatically: the
 044 SessionStart hook surfaces `.claude/HANDOFF.md` (which names the stop reason + the resume command).
 
-### T7 — End-to-end validation `TASK:PENDING`
+### T7 — End-to-end validation `TASK:IN_PROGRESS` (2026-06-21)
 Create a throwaway burndown-safe fixture plan (`Burndown: SAFE`, `Working branch: <fixture>`) with 2-3
 trivial idempotent tasks (e.g. touch a file + commit) plus one task engineered to produce a
 BLOCKING-FAILURE. On a dedicated fixture branch/worktree (never main): (1) run unattended → asserts it
