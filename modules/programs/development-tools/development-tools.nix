@@ -208,7 +208,8 @@
               doxygen
               entr # Run commands when files change
               nix-prefetch-github
-              psmisc # killall, fuser, etc.
+            ] ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              psmisc # killall, fuser, etc. (linux-only; macOS has killall builtin)
             ];
           })
 
