@@ -19,15 +19,19 @@
     # === Home Manager Module ===
     homeManager.system-tools = { config, lib, pkgs, ... }:
       {
-        # System tools are always enabled when this module is imported
+        # System tools are always enabled when this module is imported.
+        # The cross-platform bootstrap tool is available everywhere; the
+        # remaining utilities depend on Linux-only packages (util-linux,
+        # usbutils) whose derivations do not instantiate on aarch64-darwin, so
+        # they are gated to Linux to keep the shared bundle Darwin-evaluable.
         home.packages = with pkgs; [
-          # SOPS secret bootstrap from Bitwarden
+          # SOPS secret bootstrap from Bitwarden (cross-platform)
           (pkgs.writeShellApplication {
             name = "bootstrap-secrets";
             text = builtins.readFile ./files/bootstrap-secrets.sh;
             runtimeInputs = with pkgs; [ rbw nix coreutils age ];
           })
-
+        ] ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
           # SSH key bootstrap from Bitwarden
           (pkgs.writeShellApplication {
             name = "bootstrap-ssh-keys";

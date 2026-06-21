@@ -927,7 +927,11 @@
             # ManagedOOMMemoryPressureDurationSec (60s): How long sustained pressure
             #   must exceed the threshold before oomd acts. Raised from default 30s
             #   to tolerate brief swap spikes during legitimate large evaluations.
-            systemd.user.slices.nix-eval = {
+            # Linux-only: systemd user slices + systemd-oomd have no Darwin
+            # equivalent (pkgs.systemd is linux-only, so referencing it below would
+            # break aarch64-darwin evaluation). mkIf defers the content so it is
+            # never forced off-Linux.
+            systemd.user.slices.nix-eval = mkIf (!pkgs.stdenv.isDarwin) {
               Unit.Description = "Memory-limited slice for nix evaluations";
               Slice = {
                 MemoryHigh = "80%";
@@ -944,9 +948,10 @@
             # ephemeral and not restartable — the failure was already logged to the
             # journal (journalctl --user -u nix-eval.slice). Clearing them before
             # reloadSystemd suppresses the false alarm.
-            home.activation.clearFailedNixScopes = lib.hm.dag.entryBefore [ "reloadSystemd" ] ''
-              ${pkgs.systemd}/bin/systemctl --user reset-failed 'run-*.scope' 2>/dev/null || true
-            '';
+            home.activation.clearFailedNixScopes = mkIf (!pkgs.stdenv.isDarwin)
+              (lib.hm.dag.entryBefore [ "reloadSystemd" ] ''
+                ${pkgs.systemd}/bin/systemctl --user reset-failed 'run-*.scope' 2>/dev/null || true
+              '');
 
             home.activation.claudeConfigTemplates = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
               if [[ ! -d "${nixcfgPath}" ]]; then

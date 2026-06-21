@@ -33,7 +33,7 @@
 #     inputs.self.modules.nixos.system-cli  # or wsl-enterprise, etc.
 #     inputs.self.modules.nixos.dev-team
 #   ];
-_:
+{ config, lib, inputs, ... }:
 {
   flake.modules.nixos.dev-team = { config, lib, pkgs, inputs, ... }: {
 
@@ -97,5 +97,130 @@ _:
       services.udev.packages = [ pkgs.dediprog-sf100 pkgs.openocd ];
       users.groups.plugdev = { };
     };
+  };
+
+  # ===========================================================================
+  # Home Manager Module: home-dev-team (COMMON, platform-neutral)
+  # ===========================================================================
+  # The HM half of the dev-team tier, mirroring nixos.dev-team. Imports the
+  # COMMON home-enterprise base (cross-platform) and adds the cross-platform dev
+  # toolchain. Contains NO WSL-specific modules: windows-terminal moved to
+  # home-wsl (wsl-enterprise.nix). WSL hosts import this + home-wsl; Darwin hosts
+  # import this + home-darwin.
+  #
+  # Layers are convenience bundles, not gatekeepers: another team can
+  # independently import claude-code, opencode, etc.; any host can cherry-pick.
+  flake.modules.homeManager.home-dev-team = { config, lib, pkgs, ... }: {
+    imports = [
+      # COMMON enterprise HM bundle (home-default, shell, git, tmux, neovim,
+      # terminal, shell-utils, system-tools, yazi, files, git-auth-helpers)
+      inputs.self.modules.homeManager.home-enterprise
+      # AI development tools
+      inputs.self.modules.homeManager.claude-code
+      inputs.self.modules.homeManager.opencode
+      # Authentication
+      inputs.self.modules.homeManager.gitlab-auth
+      # Containers
+      inputs.self.modules.homeManager.podman
+      # Development toolchain
+      inputs.self.modules.homeManager.development-tools
+      # AWS CLI with Azure AD SSO
+      inputs.self.modules.homeManager.awscli
+      # JFrog CLI with Artifactory credential injection
+      inputs.self.modules.homeManager.jfrog-cli
+    ];
+
+    # === Development Tools ===
+    # Enable the development toolchain bundle (Python, Rust, Node, Go, etc.)
+    # Imported above but mkEnableOption defaults to false.
+    developmentTools.enable = lib.mkDefault true;
+
+    # === Claude Code Configuration ===
+    # Team-shared structural config: work account template + enterprise defaults.
+    # Hosts ADD personal accounts (max, pro) via module system merging --
+    # accounts is attrsOf submodule, so dev-team's work + host's max/pro coexist.
+    #
+    # Deployment-specific values (baseUrl, bitwarden items, modelMappings) must be
+    # set by the host config or a private flake input overlay.
+    programs.claude-code = inputs.self.lib.claudeCode.baseConfig // {
+      defaultAccount = "work";
+      accounts = inputs.self.lib.claudeCode.workAccount;
+      statusline = inputs.self.lib.claudeCode.defaultStatusline;
+      mcpServers = inputs.self.lib.claudeCode.defaultMcpServers;
+      subAgents.custom = inputs.self.lib.claudeCode.defaultSubAgents;
+    };
+
+    # === OpenCode Configuration ===
+    # Team-shared structural config: work account template + base settings.
+    # Same merging pattern as claude-code for host personal accounts.
+    #
+    # Deployment-specific values (baseURL, bitwarden items, models) must be
+    # set by the host config or a private flake input overlay.
+    programs.opencode = inputs.self.lib.openCode.baseConfig // {
+      defaultAccount = "work";
+      accounts = inputs.self.lib.openCode.workAccount;
+      provider = inputs.self.lib.openCode.baseConfig.provider
+        // inputs.self.lib.openCode.workProvider;
+      mcpServers = inputs.self.lib.openCode.defaultMcpServers;
+      commands = inputs.self.lib.openCode.defaultCommands;
+      agentFiles.custom = inputs.self.lib.openCode.defaultAgentFiles;
+      skills = inputs.self.lib.openCode.defaultSkills;
+      fileCommands.custom = inputs.self.lib.openCode.defaultFileCommands;
+    };
+
+    # === GitLab Authentication ===
+    # Team GitLab config structure. Host must set gitAuth.gitlab.host to
+    # their GitLab instance. Personal credential details (bitwarden item/field,
+    # mode, apiUser) are also left to hosts.
+    gitAuth.gitlab = {
+      enable = lib.mkDefault true;
+      cli.enable = lib.mkDefault true;
+      # Don't pre-fill username in git credential config.
+      # glab auth git-credential rejects username mismatches (compares against
+      # glab's internal user from whoami). Without pre-filled username, glab
+      # provides credentials directly. See CLAUDE.md glab credential helper fix.
+      git.userName = lib.mkDefault null;
+    };
+
+    # === Podman Tools ===
+    # Aliases default to docker→podman on Linux (platform-aware module).
+    programs.podman-tools = {
+      enable = lib.mkDefault true;
+      enableCompose = lib.mkDefault true;
+    };
+
+    # === Tmux ===
+    # Auto-reload tmux config when home-manager generation changes.
+    programs.tmux.autoReload.enable = lib.mkDefault true;
+
+    # === AWS CLI ===
+    # Team-standard AWS CLI v2. Only the base CLI is enabled here;
+    # azureAuth requires secretsManagement (Bitwarden) which is personal.
+    # Hosts with secretsManagement enable azureAuth themselves.
+    awscli.enable = lib.mkDefault true;
+
+    # === JFrog CLI ===
+    # Team-standard JFrog CLI. Host must set jfrogCli.host and
+    # bitwarden item/field for their Artifactory instance.
+    jfrogCli.enable = lib.mkDefault true;
+
+    # === Team CLI Tools ===
+    # Standalone CLI tools that don't warrant their own module.
+    home.packages = with pkgs; [
+      confluence-markdown-exporter # Confluence → Markdown bulk exporter
+    ];
+
+    # Does NOT configure (left to host):
+    # - homeMinimal.username / homeMinimal.homeDirectory
+    # - secretsManagement.* (personal bitwarden email)
+    # - gitAuth.github.* (personal GitHub PATs)
+    # - gitAuth.gitlab.bitwarden.* (personal credential details)
+    # - gitAuth.gitlab.mode (bitwarden vs token -- personal choice)
+    # - gitAuth.gitlab.cli.apiUser (personal GitLab username)
+    # - awscli.azureAuth.* (requires secretsManagement for Bitwarden)
+    # - jfrogCli.host (team Artifactory hostname)
+    # - jfrogCli.bitwarden.* (personal credential details)
+    #
+    # WSL-only configuration (windowsTerminal appearance) moved to home-wsl.
   };
 }

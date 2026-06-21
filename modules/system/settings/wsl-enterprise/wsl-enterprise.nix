@@ -3,13 +3,16 @@
 #
 # Provides:
 #   flake.modules.nixos.wsl-enterprise - Company-wide NixOS-WSL system base
-#   flake.modules.homeManager.home-enterprise - Company-wide HM feature bundle
+#   flake.modules.homeManager.home-wsl - WSL-only HM layer (wsl-home, onedrive,
+#     windows-terminal). The common HM tiers (home-enterprise, home-dev-team)
+#     are platform-neutral and live in enterprise.nix / dev-team.nix.
 #
 # This is the foundational layer for all enterprise WSL images.
 # Team modules (wsl-dev-team, etc.) import this to get the shared base.
 #
 # NixOS side: Imports system-cli + wsl, sets conservative enterprise defaults.
-# HM side: Bundles standard employee tools (shell, git, tmux, neovim, etc.).
+# HM side: home-wsl bundles the WSL-specific user tools; composed by WSL hosts
+#          alongside the common home-dev-team tier.
 #
 # All defaults use mkDefault so team modules and hosts can override.
 #
@@ -17,8 +20,11 @@
 #   # In a team module:
 #   imports = [ inputs.self.modules.nixos.wsl-enterprise ];
 #
-#   # In a host HM config:
-#   imports = [ inputs.self.modules.homeManager.home-enterprise ];
+#   # In a WSL host HM config (common tier + WSL layer):
+#   imports = [
+#     inputs.self.modules.homeManager.home-dev-team
+#     inputs.self.modules.homeManager.home-wsl
+#   ];
 { config, lib, inputs, ... }:
 {
   flake.modules = {
@@ -288,42 +294,53 @@
       };
 
     # =========================================================================
-    # Home Manager Module: home-enterprise
+    # Home Manager Module: home-wsl (WSL-only HM layer)
     # =========================================================================
-    # Convenience bundle of HM feature modules any enterprise employee would use.
-    # This is NOT baked into .wsl tarballs -- it's for users who use this flake
-    # for their Home Manager configuration.
+    # The WSL-specific Home Manager modules, factored out of the (now
+    # platform-neutral) home-enterprise / home-dev-team tiers so those evaluate
+    # on aarch64-darwin. WSL hosts import home-dev-team + home-wsl to get the
+    # full WSL experience unchanged; Darwin hosts import home-dev-team +
+    # home-darwin instead.
     #
-    # Layers are convenience bundles, not gatekeepers:
-    # - Importing home-enterprise does NOT prevent other teams from independently
-    #   importing the same feature modules.
-    # - Any host can cherry-pick individual modules instead of using this bundle.
-    homeManager.home-enterprise = { config, lib, pkgs, ... }: {
+    # This mirrors the NixOS side: the WSL-coupled bits live in the wsl-* tier
+    # while the common tier (home-enterprise in enterprise.nix, home-dev-team in
+    # dev-team.nix) stays platform-neutral.
+    #
+    # Contains: wsl-home (WSL user tweaks, Windows aliases), onedrive (sync
+    # utilities), windows-terminal (Terminal settings), plus their settings that
+    # previously lived inline in home-enterprise/home-dev-team.
+    homeManager.home-wsl = { config, lib, pkgs, ... }: {
       imports = [
-        # Base HM layer (includes home-minimal)
-        inputs.self.modules.homeManager.home-default
-        # Core CLI tools
-        inputs.self.modules.homeManager.shell
-        inputs.self.modules.homeManager.git
-        inputs.self.modules.homeManager.tmux
-        inputs.self.modules.homeManager.neovim
-        # WSL/terminal baseline
+        # WSL user-level configuration (targets.wsl, Windows interop aliases)
         inputs.self.modules.homeManager.wsl-home
-        inputs.self.modules.homeManager.terminal
-        inputs.self.modules.homeManager.shell-utils
-        inputs.self.modules.homeManager.system-tools
-        # Standard utilities
-        inputs.self.modules.homeManager.yazi
-        inputs.self.modules.homeManager.files
-        inputs.self.modules.homeManager.git-auth-helpers
-        # Corporate tools
+        # OneDrive sync utilities (Windows host integration)
         inputs.self.modules.homeManager.onedrive
+        # Windows Terminal settings management
+        inputs.self.modules.homeManager.windows-terminal
       ];
 
-      # Enterprise defaults (overridable by team/host)
-      homeFiles.enable = lib.mkDefault true;
+      # WSL defaults (overridable by team/host). Moved here from the old
+      # WSL-coupled home-enterprise.
       oneDriveUtils.enable = lib.mkDefault true;
       wsl-home-settings.distroName = lib.mkDefault "nixos";
+
+      # === Windows Terminal ===
+      # Team-standard font, size, and keybindings for consistent appearance.
+      # Moved here from the old home-dev-team (windows-terminal is WSL-only).
+      windowsTerminal = {
+        enable = lib.mkDefault true;
+        font = {
+          face = lib.mkDefault "CaskaydiaMono NFM, Noto Color Emoji";
+          size = lib.mkDefault 12;
+        };
+        keybindings = lib.mkDefault [
+          { id = "Terminal.CopyToClipboard"; keys = "ctrl+shift+c"; }
+          { id = "Terminal.PasteFromClipboard"; keys = "ctrl+shift+v"; }
+          { id = "Terminal.DuplicatePaneAuto"; keys = "alt+shift+d"; }
+          { id = "Terminal.NextTab"; keys = "alt+ctrl+l"; }
+          { id = "Terminal.PrevTab"; keys = "alt+ctrl+h"; }
+        ];
+      };
     };
 
   };

@@ -112,11 +112,20 @@
       # Options: wsl-home-settings.{distroName, enableWindowsAliases, ...}
       wsl-home-base = self.modules.homeManager.wsl-home;
 
-      # Enterprise HM bundle (shell, git, tmux, neovim, yazi, files, onedrive, ...)
+      # Enterprise HM bundle (COMMON, platform-neutral: shell, git, tmux, neovim,
+      # terminal, shell-utils, system-tools, yazi, files, git-auth-helpers)
       inherit (self.modules.homeManager) home-enterprise;
 
-      # Dev team HM bundle (enterprise + claude-code, opencode, gitlab-auth, podman, ...)
+      # Dev team HM bundle (COMMON: enterprise + claude-code, opencode,
+      # gitlab-auth, podman, development-tools, awscli, jfrog-cli)
       inherit (self.modules.homeManager) home-dev-team;
+
+      # WSL-only HM layer (wsl-home + onedrive + windows-terminal). WSL hosts
+      # compose home-dev-team + home-wsl.
+      inherit (self.modules.homeManager) home-wsl;
+
+      # Darwin-only HM layer (thin). Darwin hosts compose home-dev-team + home-darwin.
+      inherit (self.modules.homeManager) home-darwin;
 
       # --- Feature Modules (Home Manager) ---
       inherit (self.modules.homeManager)
