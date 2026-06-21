@@ -52,6 +52,10 @@ let
        (rg "^\\| " file | ... or git log -1 --format=%ct -- <file>)
     6. If still ambiguous: ask the user which plan to work on
 
+    IMPORTANT: If the only actionable task(s) are blocked because a declared dependency
+    is not yet TASK:COMPLETE, do NOT attempt them. Output on its own line: BLOCKED_BY_DEP
+    Then name the incomplete dependency. This is NOT a failure - leave the status unchanged.
+
     IMPORTANT: If you determine the task cannot be executed on the current host
     (e.g., requires Nix but running on Termux, or requires specific tools not available),
     output on its own line: ENVIRONMENT_NOT_CAPABLE
@@ -101,6 +105,7 @@ let
           '-d[Seconds between tasks]:delay seconds:' \
           '--delay[Seconds between tasks]:delay seconds:' \
           '--model[Override model]:model:(opus sonnet haiku qwen-a3b)' \
+          '--on-failure[Blocking-failure policy]:policy:(stop skip)' \
           '--task[Run specific task by ID]:task ID:->tasks' \
           '--list[Show all tasks with status]' \
           '--dry-run[Show what would execute without running]' \
@@ -150,6 +155,10 @@ let
             COMPREPLY=( $(compgen -W "opus sonnet haiku qwen-a3b" -- "$cur") )
             return 0
             ;;
+          --on-failure)
+            COMPREPLY=( $(compgen -W "stop skip" -- "$cur") )
+            return 0
+            ;;
           --task)
             # Try to extract task IDs from plan file
             local plan_file=""
@@ -172,7 +181,7 @@ let
 
         # Complete options
         if [[ "$cur" == -* ]]; then
-          COMPREPLY=( $(compgen -W "-n -a --all -c --continuous -d --delay --model --task --list --dry-run -h --help" -- "$cur") )
+          COMPREPLY=( $(compgen -W "-n -a --all -c --continuous -d --delay --model --on-failure --task --list --dry-run -h --help" -- "$cur") )
           return 0
         fi
 
@@ -232,6 +241,9 @@ let
       MODEL_OVERRIDE=""
       TASK_ID=""
       LIST_TASKS=false
+      # Failure policy (plan-045 §4): on a BLOCKING-FAILURE, "stop" (default) halts the whole
+      # run leaving the task IN_PROGRESS; "skip" is the legacy advance-despite-failure behavior.
+      ON_FAILURE="stop"
 
       usage() {
           cat << 'EOF'
@@ -250,6 +262,8 @@ let
         -c, --continuous  Run continuously (survives rate limits)
         -d, --delay N     Seconds between tasks (default: ${toString taskCfg.safetyLimits.delayBetweenTasks})
         --model MODEL     Override model (alias or full name, e.g., opus, qwen-a3b)
+        --on-failure WHAT On a blocking failure: stop (default) halts the whole run leaving the
+                          task IN_PROGRESS; skip is the legacy advance-despite-failure behavior
         --dry-run         Show what would execute without running
         -h, --help        Show this help
 
@@ -297,6 +311,7 @@ let
               --model) MODEL_OVERRIDE="$2"; shift 2 ;;
               --task) TASK_ID="$2"; shift 2 ;;
               --list) LIST_TASKS=true; shift ;;
+              --on-failure) ON_FAILURE="$2"; shift 2 ;;
               --dry-run) DRY_RUN=true; shift ;;
               -h|--help) usage ;;
               -*)
@@ -315,6 +330,12 @@ let
                   ;;
           esac
       done
+
+      # Validate --on-failure policy
+      if [[ "$ON_FAILURE" != "stop" && "$ON_FAILURE" != "skip" ]]; then
+          echo -e "''${RED}Error: --on-failure must be 'stop' or 'skip' (got: '$ON_FAILURE')''${NC}"
+          exit 1
+      fi
 
       # Verify the claude wrapper exists
       if ! command -v "$CLAUDE_CMD" &>/dev/null; then
@@ -345,7 +366,7 @@ let
       # Build the prompt
       # NOTE: Sentinel tokens (ALL_TASKS_DONE, ENVIRONMENT_NOT_CAPABLE) must appear on their own line
       # for reliable detection - the script uses ^TOKEN anchored patterns to avoid false positives
-      PROMPT="Read ''${PLAN_FILE_ABS}, find the next actionable task in the Progress Tracking table. Priority: FIRST any task with status \"TASK:IN_PROGRESS\" (unfinished work, resume immediately), SECOND the first \"TASK:PENDING\" task not blocked by incomplete dependencies. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:IN_PROGRESS or TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
+      PROMPT="Read ''${PLAN_FILE_ABS}, find the next actionable task in the Progress Tracking table. Priority: FIRST any task with status \"TASK:IN_PROGRESS\" (unfinished work, resume immediately), SECOND the first \"TASK:PENDING\" task not blocked by incomplete dependencies. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:IN_PROGRESS or TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If the only actionable task(s) are blocked because a declared dependency is not yet TASK:COMPLETE, do NOT attempt them; output on its own line: BLOCKED_BY_DEP followed by which dependency is incomplete. This is NOT a failure. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
 
       # Functions
       pending_count() {
@@ -649,6 +670,29 @@ let
           fi
       }
 
+      # run_task: execute ONE task via the Claude CLI and map its outcome to a return code.
+      #
+      # Return-code table (consumed by the main-loop `case` below). These map 1:1 onto the
+      # Unattended Burndown Contract outcome taxonomy (CLAUDE.md "Unattended Burndown Contract"):
+      #
+      #   0  COMPLETE              DoD met, changes committed            -> advance to next task
+      #   2  RATE_LIMITED          transient API throttle                -> back off, retry (circuit-breaker bounded)
+      #   3  ALL_TASKS_DONE        agent confirms nothing actionable     -> clean exit 0
+      #   5  ENVIRONMENT_NOT_CAPABLE wrong host / missing toolchain      -> clean exit 0, leave task PENDING
+      #   6  USER_INPUT_REQUIRED   needs a human decision                -> clean exit 0, leave task PENDING
+      #   7  TASK_ALREADY_COMPLETE (--task) target already done          -> clean exit 0
+      #   8  TASK_NOT_FOUND        (--task) target id absent             -> exit 1
+      #   9  BLOCKING_FAILURE      task attempted, DoD unmet by a hard   -> default (--on-failure stop): STOP the
+      #                            error: startup failure, non-rate-limit   whole run, leave task IN_PROGRESS, exit
+      #                            API error, or non-zero CLI exit          non-zero. Legacy (--on-failure skip): log
+      #                                                                     and advance.
+      #   10 BLOCKED_BY_DEP        a declared dependency is not yet      -> NOT a failure; advance (bounded by a
+      #                            COMPLETE; agent declined to attempt      consecutive-blocked guard in the loop)
+      #
+      # Historical note: prior to plan-045 T2 every `return N` here was collapsed onto its
+      # `save_state` line (`save_state ... "status"   return N`), so `return`/`sleep` were passed
+      # as positional args to save_state and never executed -- the entire dispatch silently fell
+      # through to return 0 ("success"). T2 split the lines so the codes above actually fire.
       run_task() {
           local iteration=$1
           local rate_limit_count=''${2:-0}
@@ -699,7 +743,7 @@ let
           # Build prompt - either for specific task or next actionable (IN_PROGRESS > PENDING)
           local task_prompt
           if [[ -n "$target_task_id" ]]; then
-              task_prompt="Read ''${PLAN_FILE_ABS}, find the task with ID \"$target_task_id\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If the task is already TASK:COMPLETE, output on its own line: TASK_ALREADY_COMPLETE. If no such task ID found, output on its own line: TASK_NOT_FOUND. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met, that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
+              task_prompt="Read ''${PLAN_FILE_ABS}, find the task with ID \"$target_task_id\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If the task is already TASK:COMPLETE, output on its own line: TASK_ALREADY_COMPLETE. If no such task ID found, output on its own line: TASK_NOT_FOUND. IMPORTANT: If the task is blocked because a declared dependency is not yet TASK:COMPLETE, do NOT attempt it; output on its own line: BLOCKED_BY_DEP followed by which dependency is incomplete. This is NOT a failure. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met, that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
           else
               task_prompt="$PROMPT"
           fi
@@ -751,11 +795,13 @@ let
               if is_rate_limited "$json_output" "$raw_stderr"; then
                   local next_attempt=$((rate_limit_count + 1))
                   echo -e "  ''${YELLOW}⏳ Rate limited (''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}), waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
-                  save_state "$iteration" "rate_limited"                  sleep $RATE_LIMIT_WAIT
+                  save_state "$iteration" "rate_limited"
+                  sleep $RATE_LIMIT_WAIT
                   return 2
               fi
 
-              save_state "$iteration" "startup_error"              return 1
+              save_state "$iteration" "startup_error"
+              return 9
           fi
 
           # PRIORITY 2: Check JSON is_error field (most reliable for API errors)
@@ -766,27 +812,41 @@ let
               if is_rate_limited "$json_output" "$raw_stderr"; then
                   local next_attempt=$((rate_limit_count + 1))
                   echo -e "  ''${YELLOW}⏳ Rate limited (''${next_attempt}/''${MAX_CONSECUTIVE_RATE_LIMITS}), waiting ''${RATE_LIMIT_WAIT}s...''${NC}"
-                  save_state "$iteration" "rate_limited"                  sleep $RATE_LIMIT_WAIT
+                  save_state "$iteration" "rate_limited"
+                  sleep $RATE_LIMIT_WAIT
                   return 2
               fi
 
-              save_state "$iteration" "api_error_$json_subtype"              return 1
+              save_state "$iteration" "api_error_$json_subtype"
+              return 9
           fi
 
           # PRIORITY 3: Check protocol sentinels in result text (defined in our prompt)
           # IMPORTANT: Match only at line start to avoid false positives from code blocks,
           # ready-to-paste prompts, or quoted instructions that mention these tokens
 
+          # Blocked by an incomplete declared dependency - NOT a failure. The agent declined to
+          # attempt the task because a task it depends on is not yet COMPLETE. Advance to the next
+          # actionable task; the main loop bounds repeated blocks so a wholly-blocked frontier
+          # cannot spin forever.
+          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^BLOCKED_BY_DEP'; then
+              echo -e "  ''${YELLOW}⏸ ''${task_name}: blocked by an incomplete dependency''${NC}"
+              save_state "$iteration" "blocked_by_dep"
+              return 10
+          fi
+
           # Environment not capable - skip this task, leave PENDING for another host
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^ENVIRONMENT_NOT_CAPABLE'; then
               echo -e "  ''${YELLOW}⊘ ''${task_name}: requires different host''${NC}"
-              save_state "$iteration" "environment_not_capable"              return 5
+              save_state "$iteration" "environment_not_capable"
+              return 5
           fi
 
           # User input required - interactive task, needs manual completion via /next-task
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^USER_INPUT_REQUIRED'; then
               echo -e "  ''${YELLOW}⌨ ''${task_name}: requires user input (use /next-task interactively)''${NC}"
-              save_state "$iteration" "user_input_required"              return 6
+              save_state "$iteration" "user_input_required"
+              return 6
           fi
 
           # All tasks done
@@ -794,39 +854,45 @@ let
               local actionable_after=$(actionable_count)
               if [[ "$actionable_after" == "0" ]]; then
                   echo -e "  ''${GREEN}✓ All tasks complete''${NC}"
-                  save_state "$iteration" "all_complete"                  return 3
+                  save_state "$iteration" "all_complete"
+                  return 3
               fi
           fi
 
           # Task already complete (--task specific)
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^TASK_ALREADY_COMPLETE'; then
               echo -e "  ''${YELLOW}⊘ ''${task_name}: already complete''${NC}"
-              save_state "$iteration" "task_already_complete"              return 7
+              save_state "$iteration" "task_already_complete"
+              return 7
           fi
 
           # Task not found (--task specific)
           if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^TASK_NOT_FOUND'; then
               echo -e "  ''${RED}✗ ''${task_name}: not found in plan file''${NC}"
-              save_state "$iteration" "task_not_found"              return 8
+              save_state "$iteration" "task_not_found"
+              return 8
           fi
 
           # PRIORITY 4: Success path - exit code 0 and type is "result" with subtype "success"
           if [[ $exit_code -eq 0 && "$json_type" == "result" && "$json_subtype" == "success" ]]; then
               local actionable_after=$(actionable_count)
               echo -e "  ''${GREEN}✓ ''${task_name} complete''${NC} (''${actionable_before} → ''${actionable_after} actionable)"
-              save_state "$iteration" "complete"              return 0
+              save_state "$iteration" "complete"
+              return 0
           fi
 
           # PRIORITY 5: Non-zero exit code with valid JSON (task execution failed)
           if [[ $exit_code -ne 0 ]]; then
               echo -e "  ''${RED}✗ ''${task_name} failed''${NC} (exit: $exit_code)"
-              save_state "$iteration" "failed"              return 1
+              save_state "$iteration" "failed"
+              return 9
           fi
 
           # FALLBACK: Unexpected state - treat as success if we got here with exit 0
           local actionable_after=$(actionable_count)
           echo -e "  ''${YELLOW}? ''${task_name} completed (unexpected format)''${NC}"
-          save_state "$iteration" "complete_unexpected"          return 0
+          save_state "$iteration" "complete_unexpected"
+          return 0
       }
 
       # Handle --list mode: show task status and optionally select with fzf
@@ -943,6 +1009,11 @@ let
           echo "  Task ID:     $preview_task_id"
           echo "  Model:       $preview_effective_model ($preview_model_source)"
           echo "  Claude cmd:  $CLAUDE_CMD"
+          if [[ "$ON_FAILURE" == "stop" ]]; then
+              echo "  On failure:  stop (a blocking failure halts the whole run, leaves task IN_PROGRESS)"
+          else
+              echo "  On failure:  skip (legacy: advance past a blocking failure)"
+          fi
           echo ""
           echo -e "''${CYAN}Would execute:''${NC}"
           if [[ "$preview_effective_model" != "(default)" ]]; then
@@ -963,6 +1034,7 @@ let
       task_counter=0
       retries=0
       consecutive_rate_limits=0
+      consecutive_blocked=0  # Bounds BLOCKED_BY_DEP advances so a stuck frontier can't spin forever
       specific_task_done=false  # Track if we've run the --task specified task
 
       while true; do
@@ -1011,13 +1083,18 @@ let
               specific_task_done=true
           fi
 
-          run_task $task_counter $consecutive_rate_limits "$current_task_id"
-          result=$?
+          # NOTE: run_task must not abort the script via `set -e` when it returns a non-zero
+          # code (3/5/6/8/9/...). Capture the code with `|| result=$?` so the case below can
+          # dispatch it. (Before plan-045 T2 the collapsed `return` bug made run_task always
+          # return 0, which is why this guard was not previously needed.)
+          result=0
+          run_task $task_counter $consecutive_rate_limits "$current_task_id" || result=$?
 
           case $result in
               0)  # Success
                   retries=0
                   consecutive_rate_limits=0
+                  consecutive_blocked=0
                   ;;
               2)  # Rate limited
                   task_counter=$((task_counter - 1))
@@ -1072,10 +1149,38 @@ let
                   save_state "$task_counter" "task_not_found"
                   exit 1  # Exit with error - task ID was invalid
                   ;;
-              *)  # Failure
-                  retries=0
+              9)  # BLOCKING-FAILURE - task attempted, DoD unmet by a hard error (§4 taxonomy)
+                  if [[ "$ON_FAILURE" == "skip" ]]; then
+                      # Legacy opt-in: advance despite the failure (Mode-A-style best-effort)
+                      retries=0
+                      consecutive_rate_limits=0
+                      echo -e "''${YELLOW}⚠ ''${task_name:-task} failed; continuing (--on-failure skip)''${NC}"
+                  else
+                      # Default policy: STOP THE WHOLE RUN. Leave the task as the agent left it
+                      # (typically TASK:IN_PROGRESS) so a resume re-attempts it; do NOT advance.
+                      # T4 will additionally write .claude/HANDOFF.md here with the failure context.
+                      echo -e "''${RED}✗ Blocking failure - stopping run (--on-failure stop). Task left IN_PROGRESS.''${NC}"
+                      print_exit_summary "Blocking failure (stopped; task left IN_PROGRESS)" "$task_counter"
+                      save_state "$task_counter" "blocking_failure"
+                      exit 1
+                  fi
+                  ;;
+              10) # BLOCKED-BY-DEP - a declared dependency is not yet COMPLETE; NOT a failure.
+                  # Advance to the next actionable task. A wholly-blocked frontier (the agent keeps
+                  # reporting BLOCKED_BY_DEP with no progress) is bounded here so it can't spin forever.
                   consecutive_rate_limits=0
-                  echo -e "''${YELLOW}Continuing despite failure...''${NC}"
+                  consecutive_blocked=$((consecutive_blocked + 1))
+                  if [[ $consecutive_blocked -ge $MAX_RETRIES ]]; then
+                      print_exit_summary "Remaining tasks blocked by incomplete dependencies" "$task_counter"
+                      save_state "$task_counter" "blocked_by_dep"
+                      exit 0  # Clean exit - not a failure; resolve the deps then re-run
+                  fi
+                  ;;
+              *)  # Unknown/unexpected return code - treat as a blocking failure (fail safe = stop)
+                  echo -e "''${RED}✗ Unexpected run_task result ($result) - treating as blocking failure''${NC}"
+                  print_exit_summary "Unexpected failure (run_task returned $result)" "$task_counter"
+                  save_state "$task_counter" "unexpected_$result"
+                  exit 1
                   ;;
           esac
 

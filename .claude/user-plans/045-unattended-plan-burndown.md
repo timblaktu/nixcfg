@@ -129,7 +129,7 @@ essentially unreachable for a well-formed plan.
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
 | T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:COMPLETE | 2026-06-21 | |
-| T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:IN_PROGRESS | 2026-06-21 | |
+| T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:COMPLETE | 2026-06-21 | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:PENDING | | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:PENDING | | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:PENDING | | |
@@ -175,7 +175,7 @@ this plan. NOT in scope: changing the driver (that's T2-T4).
   markers because Mode B is not functional until T2-T6 land; add them once the driver enforces
   them, when 045 itself could be burned down.
 
-### T2 — Reconcile driver failure semantics `TASK:IN_PROGRESS` (2026-06-21)
+### T2 — Reconcile driver failure semantics `TASK:COMPLETE` (2026-06-21)
 In `task-automation.nix` `mkRunTasksScript`: replace the generic `*)` "Continuing despite failure..."
 branch with the §4 mapping. Introduce a distinct return code for BLOCKING-FAILURE that triggers
 stop-the-whole-run: print summary, `save_state ... "blocking_failure"`, leave the task `IN_PROGRESS`,
@@ -185,6 +185,54 @@ Unify the inline `PROMPT`/`task_prompt` sentinel vocabulary with `nextTaskMd` (g
 contract ↔ driver agree on tokens.
 **DoD:** `nix flake check --no-build` passes; dry-run shows the new flag; a fixture task that exits
 non-zero halts the run (verified in T7) instead of continuing. Document the return-code table inline.
+
+**Findings / what was done (2026-06-21):**
+- **CRITICAL latent bug discovered and fixed (the real blocker for this whole feature).** Every
+  `return N` inside `run_task` was collapsed onto its `save_state` line
+  (`save_state "$iteration" "status"              return N`), so bash parsed `return`/`sleep`/`N`
+  as *positional arguments to `save_state`* — they never executed. The entire return-code dispatch
+  silently fell through to `return 0` ("success"), meaning `ENVIRONMENT_NOT_CAPABLE`,
+  `USER_INPUT_REQUIRED`, `failed`, `all_complete`, `task_not_found`, etc. ALL returned 0 and were
+  treated as completed tasks. 12 collapsed lines (754/758/769/773/783/789/797/804/810/817/823/829)
+  split into proper two-line form via a `perl -0777` transform (indent preserved). The two
+  rate-limit paths also had `sleep $RATE_LIMIT_WAIT` swallowed as args (no backoff ever happened) —
+  also fixed. Without this repair, T2's required BLOCKING-FAILURE return code could not fire, so the
+  fix is the literal mechanism T2 delivers, not scope creep.
+- **`set -e` call-site guard.** Because returns now actually fire, a standalone `run_task` call
+  returning non-zero would abort the script under `set -euo pipefail` *before* `result=$?`. Changed
+  the call site to `result=0; run_task ... || result=$?` so the `case` dispatch sees the code. (This
+  bug was previously masked precisely because run_task always returned 0.)
+- **Return-code taxonomy (documented inline above `run_task`):** 0=COMPLETE, 2=RATE_LIMITED,
+  3=ALL_TASKS_DONE, 5=ENVIRONMENT_NOT_CAPABLE, 6=USER_INPUT_REQUIRED, 7=TASK_ALREADY_COMPLETE,
+  8=TASK_NOT_FOUND, **9=BLOCKING_FAILURE** (new), **10=BLOCKED_BY_DEP** (new). The startup-error,
+  non-rate-limit API-error, and non-zero-exit "failed" paths now `return 9`.
+- **Stop-the-whole-run policy.** Main-loop `case 9`: under `--on-failure stop` (default) prints the
+  summary, `save_state "blocking_failure"`, exits 1, and does NOT advance — the task is left as the
+  agent left it (typically `IN_PROGRESS`) so a resume re-attempts it. The driver does NOT mutate the
+  plan cursor itself (the agent owns it; HANDOFF.md write is T4). `--on-failure skip` restores the
+  legacy advance-despite-failure behavior. The old catch-all `*)` now fail-safes to STOP (an
+  unexpected code is treated as a blocking failure).
+- **BLOCKED-BY-DEP (advance).** New `^BLOCKED_BY_DEP` sentinel in `run_task` (return 10). Main-loop
+  `case 10` advances (not a failure) but increments a `consecutive_blocked` counter; after
+  `MAX_RETRIES` consecutive blocks with no progress it clean-exits 0 ("remaining tasks blocked by
+  incomplete dependencies") so a wholly-blocked frontier cannot spin forever.
+- **Flag + UX.** `--on-failure {stop|skip}` added to arg parsing (with `stop`/`skip` validation,
+  exit 1 on bad value), to `usage()`, to the `--dry-run` preview ("On failure: …"), and to both zsh
+  and bash completions.
+- **Sentinel-vocabulary unification (gap §2.6).** Added the `BLOCKED_BY_DEP` instruction to all three
+  prompt sources — `nextTaskMd` (the `/next-task` command), the inline `PROMPT` (next-actionable
+  driver prompt), and `task_prompt` (the `--task` driver prompt) — so the authoring contract (T1),
+  the attended command, and the unattended driver agree on the emittable tokens.
+- **Validation:** `nix flake check --no-build` → `all checks passed!` (exit 0). Built the actual
+  `run-tasks-max` derivation (store path `…-run-tasks-max`) — `writeShellScriptBin`'s built-in
+  `bash -n` syntax check passed. Empirically exercised the built script: `--help` shows the new flag;
+  invalid `--on-failure bogus` → exit 1 with clear error; `--dry-run` prints "On failure: stop/skip";
+  a stub `claudemax` exiting non-zero → run STOPS with exit 1, `STATUS=blocking_failure`, plan file
+  unchanged (task still actionable); same stub under `--on-failure skip` advances past the failure
+  instead of stopping. Temp fixtures removed.
+- **NOT in scope (deferred):** writing `.claude/HANDOFF.md` on a blocking-failure stop is T4; the opt-in
+  `Burndown: SAFE` gate + branch isolation is T3; full throwaway-fixture e2e is T7. The driver here
+  leaves the plan cursor untouched on stop, which is the correct substrate for T4's HANDOFF write.
 
 ### T3 — Opt-in gate + branch isolation `TASK:PENDING`
 Driver pre-flight: refuse to run unless the plan header has `Burndown: SAFE` (exit non-zero, clear
