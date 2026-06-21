@@ -133,7 +133,7 @@ essentially unreachable for a well-formed plan.
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:COMPLETE | 2026-06-21 | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:COMPLETE | 2026-06-21 | |
 | T5 | Re-verify headless first-turn mechanism; gate 044 hook under `-p` | TASK:COMPLETE | 2026-06-21 | Opus 4.8 |
-| T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
+| T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:IN_PROGRESS | 2026-06-21 | Opus 4.8 |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
 
 ### T1 — Author the Unattended Burndown Contract `TASK:COMPLETE` (2026-06-21)
