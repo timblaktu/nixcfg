@@ -118,6 +118,61 @@ When applying version-incompatibility workarounds:
 
 **Handoff**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the handoff. Write it to the per-worktree `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md` and update `$CLAUDE_PROJECT_DIR/.claude/active-plan` (see Session Handoff Protocol below). Never reference "previous session context".
 
+## Unattended Burndown Contract (authoring plans for autonomous task-by-task execution)
+
+An **unattended burndown** is a driver (the `run-tasks-<account>` script) autonomously executing a plan task-by-task - each task in a fresh clean context - until the plan is COMPLETE or a stop condition trips. No human is in the loop. This is "Mode B"; the human-attended `/next-task` loop is "Mode A". The driver reuses the same substrate as Mode A: the plan file is the source of truth (`TASK:PENDING/IN_PROGRESS/COMPLETE` cursor), `.claude/active-plan` points at the plan, `.claude/HANDOFF.md` records why a run stopped.
+
+**Why this matters when you AUTHOR a plan:** the failure policy is *stop-the-whole-run* - a single blocking failure halts the entire unattended burndown. That is only safe if "failure" is well-defined and the plan is authored so that **only a TRULY-BLOCKING condition counts as a failure.** A well-authored plan almost never hits a blocking failure; ordinary "can't proceed right now" situations are expressed as explicit dependencies, non-blocking sentinels, or `Interactive` markers - NOT as crashes. Authoring a plan burndown-safe is the author's job, not the driver's.
+
+### Outcome taxonomy
+
+Every per-task outcome resolves to exactly one of these. The driver maps each to an action. Author tasks so the **BLOCKING-FAILURE** bucket is essentially unreachable for a well-formed plan.
+
+| Outcome | Meaning | Driver action | How you avoid misuse |
+|---|---|---|---|
+| **COMPLETE** | DoD met, changes committed | mark `TASK:COMPLETE` + date, advance to next | give every task a checkable DoD |
+| **BLOCKED-BY-DEP** | a declared dependency is not yet COMPLETE | skip to next actionable task; NOT a failure | express ordering as explicit deps, not assumptions |
+| **ENVIRONMENT_NOT_CAPABLE** | wrong host / missing toolchain | exit run cleanly, leave task PENDING | tag host-specific tasks; never invent a workaround |
+| **USER_INPUT_REQUIRED** | needs a human decision/approval | exit run cleanly, leave task PENDING | mark decision tasks `Interactive` |
+| **BLOCKING-FAILURE** | task attempted, DoD unmet due to a hard error (build regression, crash, prerequisite that is NOT a declared dep) | **STOP the whole run**, leave task `IN_PROGRESS`, write HANDOFF, exit non-zero | author so this is unreachable: checkable DoD + deps + no-workaround rule |
+
+### Authoring rules (make blocking failures unreachable)
+
+1. **Checkable DoD per task.** "Done" must be objectively verifiable - a command that exits zero, a file that exists with known content, a test that passes. No prose-only "should work".
+2. **Order via dependencies, not luck.** If task B needs task A's output, declare A as B's dependency so the driver yields BLOCKED-BY-DEP instead of letting B attempt-and-fail.
+3. **No-workaround rule (inherited from `/next-task`).** If prerequisites aren't met, emit the proper non-blocking sentinel (`ENVIRONMENT_NOT_CAPABLE` / `USER_INPUT_REQUIRED` / BLOCKED-BY-DEP); never invent an alternative approach. An unmet prerequisite that *should* have been a declared dependency is an AUTHORING bug - it surfaces as a blocking failure precisely so you fix the plan, not so the driver guesses.
+4. **Mark human-decision tasks `Interactive`.** Anything needing a choice, approval, or judgment call ⇒ `USER_INPUT_REQUIRED`, never an autonomous guess.
+5. **Opt-in + working branch (REQUIRED for the driver to touch the plan).** The plan header MUST carry both of these lines, or the driver refuses to run it:
+   - `Burndown: SAFE` - explicit machine-readable opt-in. Absence means "human-attended only".
+   - `Working branch: <non-main-branch>` - names the branch the run must be on. The driver refuses if the current branch is `main`/`master` or does not match this line.
+6. **Idempotent / resumable tasks.** A task re-run after an interrupted attempt (status still `IN_PROGRESS`) must converge, not double-apply. Write tasks so re-execution is safe (check-before-create, append-if-absent, `mkdir -p`, etc.).
+
+### Header markers
+
+A burndown-eligible plan declares, near the top of the file (the Status/Owner header block):
+
+```
+Burndown: SAFE
+Working branch: plan-NNN-some-feature
+```
+
+Both are mandatory for an unattended run. A plan without `Burndown: SAFE` is treated as Mode-A-only (human-attended `/next-task`) and the driver will refuse it.
+
+### Worked example - a blocking-failure-proof task
+
+```
+### T3 — Add the foo widget to the bar module `TASK:PENDING`
+Depends on: T2 (the bar module must exist and export `widgets`).
+Edit `modules/bar.nix` to register a `foo` widget under `widgets`. The edit is idempotent:
+if a `foo` entry already exists, leave it unchanged.
+**DoD:** `nix flake check --no-build` passes AND `nix eval '.#bar.widgets.foo' --raw` prints
+a non-empty string. If T2 is not COMPLETE, this task yields BLOCKED-BY-DEP (it does not attempt
+the edit). If the toolchain is missing `nix`, it yields ENVIRONMENT_NOT_CAPABLE. There is no
+prose-only success criterion and no scenario where the task "tries a workaround".
+```
+
+Why this is safe: the DoD is two exit-zero commands (rule 1); the T2 dependency is declared so a premature run yields BLOCKED-BY-DEP, not a crash (rule 2); the edit is idempotent so a resumed `IN_PROGRESS` attempt converges (rule 6); and the only path to BLOCKING-FAILURE is a genuine hard error (e.g. `nix flake check` regressing), which is exactly when stopping the run is correct.
+
 ## Session Handoff Protocol (MANDATORY - NEVER SKIP)
 
 **EVERY session that works on a plan MUST end by checkpointing its handoff to per-worktree files.** This is non-negotiable - treat it like committing code. A session that ends without an updated handoff is incomplete work.

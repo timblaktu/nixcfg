@@ -11,6 +11,10 @@ Generate a high-level summary of all plans in this repository.
    - Brief description (from title or first paragraph)
    - **Remaining tasks**: For each non-COMPLETE task, extract the task number, name, and status
      (`PENDING`, `IN_PROGRESS`, `BLOCKED`, `DEFERRED`) from the progress table
+   - **Burndown eligibility**: Check whether the plan header carries a `Burndown: SAFE` line
+     (`rg -m1 '^Burndown:' <file>`). A plan with `Burndown: SAFE` is eligible for unattended
+     task-by-task burndown by the `run-tasks-<account>` driver; absence means human-attended
+     (`/next-task`) only. Also capture the `Working branch:` line if present.
 
 3. **Detect terminal width**: Run `echo "$CLAUDE_TERMINAL_WIDTH"` to get the width.
    This env var is set by the wrapper script from the real TTY before Claude launches.
@@ -31,6 +35,11 @@ Generate a high-level summary of all plans in this repository.
    - All tasks complete → `Done`
    - Partial → `15/23` (complete/total)
    - `Planning`/`Design` → `Plan`
+
+   Append a burndown marker to the plan row so eligibility is visible at a glance:
+   - `Burndown: SAFE` present → suffix the plan name with ` ⏩` (or a `[BD]` tag if the
+     terminal lacks glyph support)
+   - absent → no marker (human-attended only)
 
 7. After active plans, show a single line: `Archived: {count} plans in archive/`
 

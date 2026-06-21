@@ -128,7 +128,7 @@ essentially unreachable for a well-formed plan.
 
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
-| T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:IN_PROGRESS | 2026-06-21 | |
+| T1 | Author the Unattended Burndown Contract in the plan-generating context | TASK:COMPLETE | 2026-06-21 | |
 | T2 | Reconcile driver failure semantics with stop-the-whole-run + taxonomy | TASK:PENDING | | |
 | T3 | Add opt-in gate + branch isolation to the driver | TASK:PENDING | | |
 | T4 | Integrate driver with 044 substrate (active-plan fallback + HANDOFF on stop) | TASK:PENDING | | |
@@ -136,7 +136,7 @@ essentially unreachable for a well-formed plan.
 | T6 | Observability + resume; optional `--burndown` alias / systemd-user oneshot | TASK:PENDING | | |
 | T7 | End-to-end validation on a throwaway burndown-safe fixture plan | TASK:PENDING | | |
 
-### T1 — Author the Unattended Burndown Contract `TASK:IN_PROGRESS`
+### T1 — Author the Unattended Burndown Contract `TASK:COMPLETE` (2026-06-21)
 Write §4's taxonomy + authoring rules into the **plan-generating context** so every future plan is
 authored burndown-safe. Primary file: `modules/programs/claude-code/_hm/claude-code-user-memory-template.md`
 (the source of CLAUDE.md "Plan File Conventions" / "Session Handoff Protocol"). Add a new
@@ -147,6 +147,33 @@ summary command to surface each plan's `Burndown:` eligibility.
 **DoD:** template renders (regenerated CLAUDE.md contains the new section verbatim); `nix flake
 check --no-build` passes; a human can read the section and author a burndown-safe task without seeing
 this plan. NOT in scope: changing the driver (that's T2-T4).
+
+**Findings / what was done (2026-06-21):**
+- Added the **"Unattended Burndown Contract"** subsection to
+  `modules/programs/claude-code/_hm/claude-code-user-memory-template.md`, placed between
+  "Plan File Conventions" and "Session Handoff Protocol". Contents: Mode-A/Mode-B framing, the
+  stop-the-whole-run rationale, the 5-row outcome taxonomy table (COMPLETE / BLOCKED-BY-DEP /
+  ENVIRONMENT_NOT_CAPABLE / USER_INPUT_REQUIRED / BLOCKING-FAILURE), the 6 authoring rules
+  (checkable DoD, deps-not-luck, no-workaround [cross-refs `/next-task`], `Interactive` markers,
+  opt-in+working-branch, idempotent/resumable), the `Burndown: SAFE` + `Working branch:` header
+  marker spec, and a worked blocking-failure-proof task example with an explanation of why it's safe.
+- Extended `modules/programs/claude-code/_hm/commands/planning/plans.md`: the summary command now
+  reads each plan's `Burndown:` line (`rg -m1 '^Burndown:'`) + `Working branch:`, and annotates the
+  plan row with a `⏩`/`[BD]` marker so eligibility is visible at a glance.
+- **DoD verification:** rendered the template through the exact activation transform
+  (`builtins.replaceStrings ["{{ACCOUNT}}"] ["MAX"] (readFile template)`) → built store path
+  `…-claude-memory-max.md`; confirmed 9 matching lines for the new section and 0 residual
+  `{{ACCOUNT}}` tokens (verbatim render). `nix flake check --no-build` → `all checks passed!`
+  (exit 0). The section is self-contained and authorable without reading this plan.
+- NOTE: the live runtime files (`claude-runtime/.claude-*/CLAUDE.md`) are gitignored generated
+  artifacts produced on the next `home-manager switch`; this host's home config lives in the work
+  flake, so they were not regenerated in-place here. The committed template is the source of truth
+  and the faithful render was verified above.
+- **Marker convention decided** (resolves part of §6 bikeshed): plain header lines
+  `Burndown: SAFE` and `Working branch: <branch>` in the Status/Owner block. Simple, greppable,
+  no fenced metadata block. T2-T3 consume these. Note: THIS plan (045) does not yet carry the
+  markers because Mode B is not functional until T2-T6 land; add them once the driver enforces
+  them, when 045 itself could be burned down.
 
 ### T2 — Reconcile driver failure semantics `TASK:PENDING`
 In `task-automation.nix` `mkRunTasksScript`: replace the generic `*)` "Continuing despite failure..."
