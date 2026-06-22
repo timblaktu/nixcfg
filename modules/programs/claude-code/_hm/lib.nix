@@ -151,6 +151,26 @@ in
         ${envSetupBlock}
       }
 
+      # --next-task: seed an interactive session with the /next-task slash
+      # command so an attended run executes the plan cursor with one command
+      # (claudemax --next-task). Strip the flag and append /next-task as the
+      # positional prompt; set -- so every downstream exec path forwards it
+      # unchanged. Interactive only - claude treats a positional as the first
+      # prompt. No short alias on purpose: claude already uses -n/--name.
+      claude_args=()
+      seed_next_task=""
+      for arg in "$@"; do
+        if [[ "$arg" == "--next-task" ]]; then
+          seed_next_task="/next-task"
+        else
+          claude_args+=("$arg")
+        fi
+      done
+      if [[ -n "$seed_next_task" ]]; then
+        claude_args+=("$seed_next_task")
+      fi
+      set -- "''${claude_args[@]}"
+
       # Check for headless mode - bypass PID check for stateless operations
       if [[ "$*" =~ (^|[[:space:]])-p([[:space:]]|$) || "$*" =~ (^|[[:space:]])--print([[:space:]]|$) ]]; then
         coalesce_config

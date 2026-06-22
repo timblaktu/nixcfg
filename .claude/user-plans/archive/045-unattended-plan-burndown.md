@@ -1,6 +1,6 @@
 # 045 - Unattended Long-Running Plan Burndown (Mode B)
 
-Status: COMPLETE (all tasks T1-T7 done + e2e-validated 2026-06-21)
+Status: COMPLETE (all tasks T1-T7 done + e2e-validated + audited + DEPLOYED LIVE 2026-06-21)
 Owner: nixcfg Claude Code config (`modules/programs/claude-code/`)
 Depends on: `044-paste-free-session-resumption.md` (the shared substrate) — **SATISFIED**
 (044 COMPLETE + permanently deployed + hook verified, 2026-06-21).
@@ -592,6 +592,60 @@ markers would only invite confusion. Left off intentionally (no silent scope cre
   need (boot-persistent scheduling, multi-user service) appears.
 - Per-task model selection (the existing Model column) interaction with burndown cost caps — out of
   scope unless T7 surfaces a need.
+
+## 6b. Post-completion audit + deployment (2026-06-21)
+
+After T7 the user required proof that 044+045 are complete, mutually integrated, free of open items,
+and fully documented in-tree **before** archiving. The audit verified all four against the actual tree
+(not the plan text) and found one major open item (the feature was not deployed) plus four minor polish
+items, all now closed.
+
+**Integration verified empirically (044 ↔ 045):**
+- No double-drive: driver execs `CLAUDE_BURNDOWN=1 claudemax -p …` (`task-automation.nix`); the resume
+  hook honors it (`resume-hook.sh:30`) — ran the hook with `CLAUDE_BURNDOWN=1` → 0 bytes emitted.
+- Shared substrate: both resolve `${CLAUDE_PROJECT_DIR}/.claude/{active-plan,HANDOFF.md}`; driver writes
+  them, hook reads them.
+- Unified sentinel vocabulary: `BLOCKED_BY_DEP` + the full taxonomy present in `nextTaskMd`, the driver
+  `PROMPT`, and `task_prompt`.
+- Rehydration precedence B→A→C characterized: real plan (`### …TASK:` headings) → hook surfaces the task
+  block (Source B); table-only plan → falls through to HANDOFF.md (Source A). Both rehydrate correctly.
+
+**Polish fixes (commit `f922289`):**
+1. Driver now tracks `COMPLETED_COUNT` (real COMPLETEs) distinct from `task_counter` (iterations); the
+   exit summary + HANDOFF report "N completed … (M iterations)" — a blocking-failure iteration is no
+   longer mislabeled as a completion (was "4 completed" for 3 actual COMPLETEs in T7).
+2. `.claude-task-logs/` is created only AFTER the opt-in gate passes — a gate refusal leaves no empty dir.
+3. Added a durable "Running, inspecting & resuming a burndown" runbook to the memory template (renders to
+   CLAUDE.md) so the operational guide survives this plan's archival.
+4. Corrected the loose "hook injects HANDOFF.md" wording in T7 with the precise B→A behavior.
+All re-validated: driver rebuilt (`bash -n`), behaviors re-tested in isolated repos, `nix flake check
+--no-build` → all checks passed.
+
+**Deployment — done + verified (the major open item, now closed).** Followed 044 §8's permanent-activation
+sequence (this host's live config flows through nixcfg-work's `flake.lock` pin of nixcfg, not nixcfg
+directly):
+1. Pre-flight: all 16 commits `origin/main..HEAD` authored+committed by `Tim Black <timblaktu@gmail.com>`,
+   **zero AI-attribution** markers/trailers; HEAD a clean fast-forward of `origin/main`.
+2. ff-push `f5245f1..f922289` → `origin/main` (no merge commit); local `main` moved to match.
+3. nixcfg-work (`feat/darwin-support`) `nix flake update nixcfg`: `840a5fd → f922289` (only the nixcfg
+   input node changed), committed `bdc9fc7` (nixcfg-work pre-commit flake check passed).
+4. Plain `home-manager switch --flake '/home/tim/src/nixcfg-work#tim@pa161878-nixos' -b backup` (NO
+   `--override-input`): exit 0.
+5. **Verified live:** installed `~/.nix-profile/bin/run-tasks-max` →
+   `/nix/store/3r92dqcz70hxazf0r37lw9mwq55m7hr5-run-tasks-max` (byte-identical to the T7/polish-validated
+   build) and contains `--burndown`/`enforce_burndown_gate`/`events.jsonl`/`CLAUDE_BURNDOWN=1`/
+   `--on-failure`/`COMPLETED_COUNT`; deployed resume-hook
+   (`…kd60icljd87…-claude-resume-hook`) carries the `CLAUDE_BURNDOWN` guard; live
+   `.claude-max/CLAUDE.md` carries the Unattended Burndown Contract + the runbook. Live smoke test: the
+   installed driver refused on `main` (branch guard). Permanent on this host (a plain switch no longer
+   reverts it).
+
+**Remaining (bounded, intentional):**
+- nixcfg-work lock commit `bdc9fc7` is local-only on `feat/darwin-support` (not pushed to
+  git.panasonic.aero) — deploys to THIS host, not colleagues' clones. Same scope boundary 044 chose; push
+  it upstream only if team-wide rollout is wanted.
+- systemd-user oneshot: DEFERRED with rationale (§6); 045's optional convenience is the `--burndown` alias.
+- 045 does not carry its own `Burndown: SAFE` markers: intentional (no actionable tasks remain).
 
 ## 7. References
 - Parent substrate + prior-art research: `044-paste-free-session-resumption.md` (esp. §10).

@@ -120,6 +120,9 @@ in
             "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/planning/plans.md" = {
               text = builtins.readFile (commandsBasePath + "/planning/plans.md");
             };
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/planning/burndownify.md" = {
+              text = builtins.readFile (commandsBasePath + "/planning/burndownify.md");
+            };
           }
 
           # ===== SECURITY TEST EXAMPLES =====
