@@ -131,7 +131,23 @@
           print(f"Patched {f}: password handler clears field + waits for navigation")
         '';
 
-        aws-azure-login-patched = pkgs.aws-azure-login.overrideAttrs (old: {
+        # On darwin, nixpkgs' aws-azure-login hard-sets PUPPETEER_EXECUTABLE_PATH
+        # to nixpkgs `chromium`, which is not built for aarch64-darwin (it aborts
+        # eval). aws-azure-login drives the browser via Puppeteer (Chrome DevTools
+        # Protocol), so it needs a CHROMIUM-FAMILY browser - Firefox/Gecko is not
+        # supported. Swap the `chromium` dependency for a thin shim that execs the
+        # Homebrew-installed Chromium app, so no nix chromium is pulled and
+        # Puppeteer drives the real browser. The host must install the `chromium`
+        # Homebrew cask (see hosts/...#pa163076mac). Linux is unchanged.
+        chromiumDarwinShim = pkgs.writeShellScriptBin "chromium" ''
+          exec /Applications/Chromium.app/Contents/MacOS/Chromium "$@"
+        '';
+        awsAzureLoginBase =
+          if pkgs.stdenv.isDarwin
+          then pkgs.aws-azure-login.override { chromium = chromiumDarwinShim; }
+          else pkgs.aws-azure-login;
+
+        aws-azure-login-patched = awsAzureLoginBase.overrideAttrs (old: {
           postInstall = (old.postInstall or "") + ''
             ${pkgs.python3}/bin/python3 ${patchPasswordHandler} \
               "$out/lib/node_modules/aws-azure-login/lib/login.js"
