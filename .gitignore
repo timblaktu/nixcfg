@@ -138,6 +138,10 @@ opencode-runtime/**/package-lock.json
 .claude-task-logs/
 .claude-task-state
 
+# Per-Mac username override (Plan 001 T5 PowerBook host); written from `whoami`
+# on first run, never committed (the host evals with a "user" placeholder).
+modules/hosts/powerbook [D]/local-username.nix
+
 # Personal migration instructions (contains sensitive information)
 SECRETS-USER-INSTRUCTIONS.md
 

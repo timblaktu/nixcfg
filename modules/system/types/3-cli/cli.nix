@@ -554,11 +554,15 @@
               lbzip2
               poppler
               resvg
+            ] ++ lib.optionals pkgs.stdenv.isLinux [
+              inotify-tools
+              # Linux-only (no aarch64-darwin support): speedtest is
+              # meta.platforms=linux; stress-ng and ueberzugpp are likewise
+              # linux-only (kernel stressors / X11-wayland image preview).
+              # Gated here so the home-cli tier evaluates on Darwin (Plan 001 T5).
               speedtest
               stress-ng
               ueberzugpp
-            ] ++ lib.optionals pkgs.stdenv.isLinux [
-              inotify-tools
             ];
             description = "CLI packages to install";
           };
