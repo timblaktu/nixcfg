@@ -79,6 +79,13 @@
       # Enable Podman container runtime
       systemCli.enablePodman = lib.mkDefault true;
 
+      # Enable the libvirt/KVM stack for local VMs. The team image already ships the
+      # firmware-flashing tooling (dediprog-sf100, flashrom, Dediprog udev rules); this
+      # adds the missing piece: the build VM host for producing AMIROM.fd via
+      # `nix run '.#build-ami-firmware'`. Group membership is added in wsl-dev-team
+      # (WSL overrides extraGroups), so libvirtd/kvm are listed there too.
+      systemCli.enableLibvirt = lib.mkDefault true;
+
       # Enable Claude Code enterprise managed settings at /etc/claude-code/
       systemCli.enableClaudeCodeEnterprise = lib.mkDefault true;
 

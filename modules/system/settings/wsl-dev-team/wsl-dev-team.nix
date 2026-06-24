@@ -103,8 +103,12 @@
           # Team hostname (enterprise default: "nixos-wsl")
           wsl-settings.hostname = "nixos-wsl-dev-team";
 
-          # Add plugdev for hardware programmer access (Dediprog udev rule)
-          wsl-settings.userGroups = [ "wheel" "plugdev" ];
+          # Add plugdev for hardware programmer access (Dediprog udev rule), and
+          # libvirtd/kvm for non-root VM management (systemCli.enableLibvirt). These
+          # must be set here, not via users.users.*.extraGroups: wsl.nix replaces
+          # extraGroups at mkOverride 90, so the dev-team/system-cli additions would
+          # otherwise be dropped on WSL.
+          wsl-settings.userGroups = [ "wheel" "plugdev" "libvirtd" "kvm" ];
 
           # USB devices to auto-attach by hardware ID (VID:PID) via usbipd-win v5.x
           wsl-settings.usbip.autoAttachByHardwareId = [

@@ -94,6 +94,19 @@
             description = "Enable Podman container runtime";
           };
 
+          enableLibvirt = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Enable the libvirt/KVM virtualization stack: the libvirtd daemon,
+              QEMU, and the "default" NAT network (virbr0, 192.168.122.0/24). Used
+              to host local VMs such as the AMI firmware build VM (whose provisioner
+              hard-codes <source network='default'/>). Adds the primary user to the
+              libvirtd and kvm groups. On WSL these groups must also be listed in
+              wsl-settings.userGroups (wsl.nix overrides extraGroups at priority 90).
+            '';
+          };
+
           # Network tools
           enableNetworkTools = lib.mkOption {
             type = lib.types.bool;
@@ -276,6 +289,69 @@
 
             # Enable cgroup delegation for rootless containers (required by kind/k3d)
             systemd.services."user@".serviceConfig.Delegate = "yes";
+          })
+
+          # Libvirt / KVM virtualization (firmware build VM, local VMs)
+          (lib.mkIf cfg.enableLibvirt {
+            virtualisation.libvirtd = {
+              enable = true;
+              # Do NOT auto-start guests on host boot; a dev box should bring the
+              # (heavy) firmware VM up explicitly, not on every login.
+              onBoot = "ignore";
+              onShutdown = "shutdown";
+            };
+
+            # virsh / qemu-img available for interactive use outside the Nix app too.
+            environment.systemPackages = [ pkgs.libvirt pkgs.qemu-utils ];
+
+            # Primary user manages VMs without sudo. NOTE: on WSL this is overridden
+            # by wsl.nix (mkOverride 90 on extraGroups), so wsl-dev-team also lists
+            # "libvirtd"/"kvm" in wsl-settings.userGroups.
+            users.users.${defaultCfg.userName}.extraGroups = [ "libvirtd" "kvm" ];
+
+            # Let guests on virbr0 reach the host's dnsmasq (DHCP/DNS) and routing.
+            networking.firewall.trustedInterfaces = [ "virbr0" ];
+
+            # Enabling libvirtd does NOT create libvirt's "default" NAT network, yet
+            # tools that hard-code <source network='default'/> (the AMI firmware build
+            # VM provisioner polls `virsh net-dhcp-leases default`) require it defined,
+            # autostarted, and serving DHCP. Define + start it once libvirtd is up.
+            systemd.services.libvirt-default-network = {
+              description = "Define and start the libvirt default NAT network";
+              after = [ "libvirtd.service" ];
+              requires = [ "libvirtd.service" ];
+              wantedBy = [ "multi-user.target" ];
+              path = [ pkgs.libvirt pkgs.gawk ];
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+              };
+              script =
+                let
+                  netXml = pkgs.writeText "libvirt-default-net.xml" ''
+                    <network>
+                      <name>default</name>
+                      <forward mode='nat'/>
+                      <bridge name='virbr0' stp='on' delay='0'/>
+                      <ip address='192.168.122.1' netmask='255.255.255.0'>
+                        <dhcp>
+                          <range start='192.168.122.2' end='192.168.122.254'/>
+                        </dhcp>
+                      </ip>
+                    </network>
+                  '';
+                in
+                ''
+                  uri=qemu:///system
+                  if ! virsh -c "$uri" net-info default >/dev/null 2>&1; then
+                    virsh -c "$uri" net-define ${netXml}
+                  fi
+                  virsh -c "$uri" net-autostart default || true
+                  if [ "$(virsh -c "$uri" net-info default 2>/dev/null | awk '/^Active:/ {print $2}')" != "yes" ]; then
+                    virsh -c "$uri" net-start default || true
+                  fi
+                '';
+            };
           })
 
           # Claude Code Enterprise Settings
