@@ -304,6 +304,17 @@
             # virsh / qemu-img available for interactive use outside the Nix app too.
             environment.systemPackages = [ pkgs.libvirt pkgs.qemu-utils ];
 
+            # Debian/Ubuntu-oriented libvirt tooling (e.g. the AMI firmware build VM
+            # provisioner) hard-codes the FHS path <emulator>/usr/bin/qemu-system-x86_64
+            # in its domain XML. NixOS keeps qemu in the store, so libvirt rejects the
+            # domain ("Cannot check QEMU binary /usr/bin/qemu-system-x86_64"). Provide a
+            # compat symlink to libvirt's own wrapped emulator. It is dangling until
+            # libvirtd first starts (creates /run/libvirt/nix-emulators), which is fine:
+            # guests only run post-boot, long after libvirtd is up.
+            systemd.tmpfiles.rules = [
+              "L+ /usr/bin/qemu-system-x86_64 - - - - /run/libvirt/nix-emulators/qemu-system-x86_64"
+            ];
+
             # Primary user manages VMs without sudo. NOTE: on WSL this is overridden
             # by wsl.nix (mkOverride 90 on extraGroups), so wsl-dev-team also lists
             # "libvirtd"/"kvm" in wsl-settings.userGroups.
