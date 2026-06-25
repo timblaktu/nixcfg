@@ -88,7 +88,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T10 — OC: full TUI (keybinds/themes/scroll/attention) + plugins | opencode | TASK:DEFERRED (OC dormant) |
 | T11 — RTK-Tokensave: Nix-managed hook (CC) | cross-cutting | TASK:COMPLETE |
 | T12 — Shared skills/commands/context-file machinery | cross-cutting | TASK:DEFERRED (needs OC) |
-| T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:IN_PROGRESS |
+| T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:COMPLETE |
 | T14 — Docs refresh (comparison + verdict addendum) | docs | TASK:PENDING |
 | T15 — CCv2 Anthropic-format probe (non-Claude models) | investigation | TASK:BLOCKED — USER_INPUT_REQUIRED (regen CCv2 token, then run probe) |
 
@@ -626,7 +626,45 @@ source. Existing per-tool custom skills/commands still work (back-compat).
 
 ---
 
-## T13 — Claude Code gateway model discovery in the wrapper `TASK:IN_PROGRESS` (2026-06-24)
+## T13 — Claude Code gateway model discovery in the wrapper `TASK:COMPLETE` (2026-06-24)
+
+**Done (2026-06-24):** env-var name + semantics verified against
+`code.claude.com/docs/en/model-config` (line 441) and `…/llm-gateway` (model-selection section,
+live 2026-06-24) before modeling: the exact toggle is
+`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` (NOT a settings.json key), needs CC ≥ 2.1.129,
+queries the gateway's `/v1/models` at startup ONLY when `ANTHROPIC_BASE_URL` points at an
+Anthropic-Messages gateway (not Bedrock/Vertex pass-through, not `api.anthropic.com`), caches to
+`~/.claude/cache/gateway-models.json` (refreshed each startup), authenticates the same way as
+inference (`ANTHROPIC_AUTH_TOKEN` bearer / `ANTHROPIC_API_KEY` x-api-key + `ANTHROPIC_CUSTOM_HEADERS`),
+and adds **only** model IDs beginning `claude`/`anthropic` to the picker. Changes (`claude-code.nix`):
+- **Per-account `accounts.<name>.discovery.enable`** submodule (bool, default **false**), added
+  after the T4 `provider` block. Documented that it surfaces only the Claude subset; non-Claude IDs
+  must still be added manually via `models.customOption`/`models.available`.
+- **`discoveryEnv` helper** (next to `providerEnv`): emits `{ CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY
+  = "1"; }` ONLY when the account opts in — so it is truly per-account (unlike the global
+  `modelGlobalEnv`/`reliabilityEnv`).
+- Folded `// discoveryEnv account.discovery` into all **three** emission sites that already carry
+  `providerEnv`: the per-account wrapper (`wrapperScripts`), the bare-`claude` default wrapper
+  (`defaultWrapper`), and the per-account settings.json `env` block (`mkSettingsTemplate`'s
+  `accountApi.extraEnvVars`). The wrapper env flows through `_hm/lib.nix`'s existing
+  `extraEnvVars`→`extraEnvExports` path — no lib.nix change needed (same as T4/T7).
+
+The `availableModels`-from-cache seeding noted parenthetically in the original task is intentionally
+NOT implemented: CC's native discovery already populates the `/model` picker from the cache at
+startup, so a Nix-side re-seed would be redundant and would fight the runtime cache. The toggle is
+the complete, correct mechanism.
+
+**Verified (eval, real host `tim@pa161878-nixos` via nixcfg-work `--override-input nixcfg
+/home/tim/src/nixcfg` + `extendModules` setting `accounts.work.discovery.enable=true`):** the
+`work` account is the live CCv2-gateway case (`ANTHROPIC_BASE_URL=https://codecompanionv2.d-dp.
+nextcloud.aero`). Built the wrapper drvs: `claudework` exports
+`export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY="1"`; `claudemax` (discovery off) does NOT —
+per-account isolation confirmed. Built the three per-account `claude-settings.json` drvs from the
+activation string's `getContext`: only the `work` settings (the one with the CCv2 baseUrl) carries
+`GATEWAY_MODEL_DISCOVERY` in its `env` block (1 hit); `max`/`pro` carry 0. `nix flake check
+--no-build` → all checks passed. Idempotent (append-only option; default false ⇒ no-op).
+
+This leaves **T14** (docs refresh) as the last active CC-centric task.
 
 Depends on: T1, T4. CC now supports native gateway discovery
 (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`, ≥2.1.129; queries `/v1/models`, caches to

@@ -1117,6 +1117,39 @@
                     '';
                   };
                 };
+
+                # ─────────────────────────────────────────────────────────────
+                # Plan 046 T13 — per-account gateway model discovery. When the
+                # account is routed through an Anthropic-Messages LLM gateway
+                # (provider.* or api.baseUrl pointing at the gateway), Claude
+                # Code can query the gateway's /v1/models endpoint at startup and
+                # add the returned models to the `/model` picker, gated by
+                # CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1. Verified against
+                # code.claude.com/docs/en/{model-config,llm-gateway} on
+                # 2026-06-24: needs CC >= 2.1.129; caches to
+                # ~/.claude/cache/gateway-models.json (refreshed each startup);
+                # ONLY model IDs beginning with `claude`/`anthropic` are added
+                # (so this surfaces just the Claude subset of a CCv2/Bedrock
+                # catalog — non-Claude IDs must be added manually via
+                # models.customOption / models.available). Off by default; the
+                # env var is emitted ONLY for accounts that opt in, into both the
+                # account wrapper and its settings.json `env` block.
+                # ─────────────────────────────────────────────────────────────
+                discovery = {
+                  enable = mkOption {
+                    type = types.bool;
+                    default = false;
+                    description = ''
+                      Enable gateway model discovery for this account →
+                      env `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`. Only
+                      effective when this account talks to an Anthropic-Messages
+                      LLM gateway (it does not run for Bedrock/Vertex pass-through
+                      endpoints, nor when the base URL is unset / api.anthropic.com).
+                      Surfaces only the `claude`/`anthropic` subset of the
+                      gateway's catalogue. Requires Claude Code >= 2.1.129.
+                    '';
+                  };
+                };
               };
             });
             default = { };
@@ -1180,6 +1213,13 @@
               // (optionalAttrs (p.foundry.baseUrl != null) { ANTHROPIC_FOUNDRY_BASE_URL = p.foundry.baseUrl; })
               // (optionalAttrs (p.customHeaders != null) { ANTHROPIC_CUSTOM_HEADERS = p.customHeaders; })
               // p.extraEnv;
+
+            # Plan 046 T13 — per-account gateway model discovery env. Opt-in;
+            # emits the single discovery toggle only for accounts that enable it,
+            # merged into BOTH the wrapper and the settings.json `env` block
+            # (same dual path as providerEnv).
+            discoveryEnv = d:
+              optionalAttrs d.enable { CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1"; };
 
             # Plan 046 T4 — global model-presentation env (Fable family + custom
             # picker option). Applies to all accounts; merged into the settings
@@ -1471,7 +1511,9 @@
                       DISABLE_ERROR_REPORTING = "1";
                     } // modelGlobalEnv // reliabilityEnv // (account.extraEnvVars or { })
                     # Plan 046 T4 — per-account provider/auth env (authoritative path)
-                    // providerEnv account.provider;
+                    // providerEnv account.provider
+                    # Plan 046 T13 — per-account gateway model discovery toggle
+                    // discoveryEnv account.discovery;
                   }
                 )
               )
@@ -1498,7 +1540,9 @@
                     DISABLE_ERROR_REPORTING = "1";
                   } // modelGlobalEnv // reliabilityEnv // (defaultAcct.extraEnvVars or { })
                   # Plan 046 T4 — per-account provider/auth env (authoritative path)
-                  // providerEnv defaultAcct.provider;
+                  // providerEnv defaultAcct.provider
+                  # Plan 046 T13 — per-account gateway model discovery toggle
+                  // discoveryEnv defaultAcct.discovery;
                 }
               )
             );
@@ -1648,7 +1692,9 @@
                       inherit (account.api) modelMappings;
                       # Plan 046 T4 — provider/auth env folds in with extraEnvVars
                       # so the settings.json `env` block carries it too.
-                      extraEnvVars = account.extraEnvVars // providerEnv account.provider;
+                      # Plan 046 T13 — gateway discovery toggle folds in alongside.
+                      extraEnvVars = account.extraEnvVars // providerEnv account.provider
+                        // discoveryEnv account.discovery;
                     };
                   }}" "$accountDir/settings.json"
                   echo "Updated settings to v2.0 schema: $accountDir/settings.json"
