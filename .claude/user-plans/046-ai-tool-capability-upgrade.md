@@ -807,9 +807,19 @@ fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
   return completions through CC's `/v1/messages` (CCv2 translates them). **Only `Auto-MoM` fails**
   (the MoM router returns the client-gate 403 even though every concrete model passes — likely the
   router re-dispatches internally and loses the client identity). ⇒ **CC reaches the entire CCv2
-  catalog except the auto-router; OpenCode is fully redundant.** Wired `accounts.work.api.availableModels`
-  (new per-account option, nixcfg `2d2aa25`) = the 11 working IDs so `claudework`'s `/model` picker
-  lists them (Auto-MoM excluded). nixcfg-work lock bumped + deployed. **fallbackModel DECISION
+  catalog except the auto-router; OpenCode is fully redundant.**
+  **Picker correction (2026-06-25):** an initial attempt to seed `claudework`'s `/model` picker via
+  per-account `api.availableModels` was WRONG and reverted (nixcfg-work `b27ffb3`). CC's picker only
+  ADDS `availableModels` entries whose id begins with the literal `"anthropic."` and otherwise
+  FILTERS the built-in list; gateway discovery filters `/v1/models` to `claude|anthropic`-prefixed
+  ids. Every CCv2 id begins with `us.`/`qwen`/`glm`/etc. ⇒ neither mechanism can list them (verified
+  against the live catalog: ALL ids "filtered", incl. `us.anthropic.claude-sonnet-4-6`). The per-account
+  `api.availableModels` module option (nixcfg `2d2aa25`) is retained as a valid `anthropic.`-prefixed
+  allowlist capability but is NOT used for the work account. **How to switch models in CC:** type
+  `/model <full-id>` in-session (saves as default) or launch `claudework --model <id>` (session-only);
+  all 11 concrete models work, only `Auto-MoM` is client-gated. A single favorite can be pinned to the
+  picker via `ANTHROPIC_CUSTOM_MODEL_OPTION` (one entry). nixcfg-work lock bumped + deployed.
+  **fallbackModel DECISION
   (2026-06-25): removed entirely** for the work account (nixcfg-work `ee28dab`) — user prefers an
   overloaded model to surface the error and switch manually via `/model` rather than be silently
   auto-routed to a less-trusted fallback.
