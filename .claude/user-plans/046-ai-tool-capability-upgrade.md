@@ -556,11 +556,27 @@ off/null; RTK.md + `@RTK.md` deployed only when enabled).
 **OC half — DEFERRED (dormant):** the `tool.execute.before` plugin is not implemented; OC is parked
 per the CC-centric decision. Add only if OC is revived.
 
-**Repo-verification — USER_INPUT_REQUIRED:** confirming RTK's exact CLI/contract against the real
-`git.panasonic.aero/pac/pac-ai-rtk-tokensave` repo (and producing a Nix derivation for
-`hooks.rtk.package`) requires GitLab auth on `git.panasonic.aero`. Implemented against the
-documented contract instead; final binary packaging awaits the user providing repo access +
-distribution method (Rust source → `buildRustPackage`, or a prebuilt binary release).
+**Repo-verification — RESOLVED (2026-06-25):** the user had already cloned the repo to
+`~/src/pac-ai-rtk-tokensave`. Confirmed: it is the public Apache-2.0 `rtk-ai/rtk` (Rust;
+`Cargo.toml`/`Cargo.lock`/`build.rs`), the PAC mirror VENDORS prebuilt binaries in `binaries/`
+(linux musl-static x86_64/aarch64, darwin, windows) and `install.sh` just extracts them. The
+`rtk hook claude` subcommand exists exactly as the verdict doc described
+("Process Claude Code PreToolUse hook (reads JSON from stdin)").
+
+**Binary nix-managed in nixcfg-work (PRIVATE) — done 2026-06-25, commit `1a7b604`:** nixcfg is
+PUBLIC, so the corporate binary must NOT live here. Per user decision, added `pkgs/rtk` to
+**nixcfg-work** (branch `feat/darwin-support`) wrapping the vendored prebuilt
+`rtk-x86_64-unknown-linux-musl.tar.gz` (rtk **0.42.3**, `static-pie` → no patchelf) and set
+`programs.claude-code.hooks.rtk = { enable = true; package = pkgs.callPackage ../../pkgs/rtk {}; }`
+in `tim-corp-personal.nix`, gated `lib.mkIf (system == "x86_64-linux")` (WSL daily driver; Darwin
+is a clean no-op until a darwin tarball is added). Verified: pkgs/rtk builds + `rtk --version`
+(installCheck) passes; work host renders the Bash hook as `exec <store>/bin/rtk hook claude`
+(packaged path, no PATH guard); Darwin host evals with `rtk.enable=false`/`package==null` (linux-only
+pkg never forced); nixcfg-work `nix flake check` passed.
+
+**Deploy gate:** nixcfg-work's `nixcfg` input is locked to a revision WITHOUT T11. Before a real
+`home-manager switch`, land T11 into the nixcfg branch the work lock follows (or bump the lock to
+this `plan-046` branch). Until then, eval with `--override-input nixcfg /home/tim/src/nixcfg`.
 
 Depends on: T1 (CC side), T2 (OC side) for the respective halves; otherwise independent.
 Integrate PAC `rtk` declaratively — never run `rtk init -g` imperatively (it clobbers
