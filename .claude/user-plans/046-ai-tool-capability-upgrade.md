@@ -86,7 +86,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T8 — OC: new/changed top-level config keys | opencode | TASK:DEFERRED (OC dormant) |
 | T9 — OC: file-based agents/commands/skills + permissions | opencode | TASK:DEFERRED (OC dormant) |
 | T10 — OC: full TUI (keybinds/themes/scroll/attention) + plugins | opencode | TASK:DEFERRED (OC dormant) |
-| T11 — RTK-Tokensave: Nix-managed hook (CC) | cross-cutting | TASK:PENDING |
+| T11 — RTK-Tokensave: Nix-managed hook (CC) | cross-cutting | TASK:IN_PROGRESS |
 | T12 — Shared skills/commands/context-file machinery | cross-cutting | TASK:DEFERRED (needs OC) |
 | T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:PENDING |
 | T14 — Docs refresh (comparison + verdict addendum) | docs | TASK:PENDING |
@@ -517,7 +517,7 @@ BLOCKED-BY-DEP if T2 unmet.
 
 ---
 
-## T11 — RTK-Tokensave: Nix-managed hook (CC) + plugin (OC) `TASK:PENDING`
+## T11 — RTK-Tokensave: Nix-managed hook (CC) + plugin (OC) `TASK:IN_PROGRESS`
 
 Depends on: T1 (CC side), T2 (OC side) for the respective halves; otherwise independent.
 Integrate PAC `rtk` declaratively — never run `rtk init -g` imperatively (it clobbers
