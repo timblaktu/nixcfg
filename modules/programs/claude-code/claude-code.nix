@@ -1727,6 +1727,8 @@
                     accountApi = {
                       inherit (account.api) baseUrl;
                       inherit (account.api) modelMappings;
+                      # Plan 046 — per-account fallbackModel override (null = use global)
+                      inherit (account.api) fallbackModel;
                       # Plan 046 T4 — provider/auth env folds in with extraEnvVars
                       # so the settings.json `env` block carries it too.
                       # Plan 046 T13 — gateway discovery toggle folds in alongside.
