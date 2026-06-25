@@ -298,6 +298,37 @@
           };
 
           # ─────────────────────────────────────────────────────────────────────
+          # Plan 046 T5 — top-level hook gating settings. Serialize FLAT at the
+          # top level of settings.json (the nix-side `hookSettings` grouping is
+          # ergonomic only). Verified against code.claude.com/docs/en/hooks
+          # (2026-06-24): the real top-level keys are `disableAllHooks` and
+          # `allowedHttpHookUrls`; `allowManagedHooksOnly` already lives under
+          # `governance`. The plan's `httpHookAllowedEnvVars` is NOT a top-level
+          # key — the per-entry `allowedEnvVars` field on http hooks (supported
+          # via mkHook / freeform `hooks.custom`) is the documented mechanism.
+          # ─────────────────────────────────────────────────────────────────────
+          hookSettings = {
+            disableAllHooks = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Temporarily disable all hooks without removing them. Respects the
+                managed-settings hierarchy (managed hooks set by policy still
+                run). Null = upstream default (hooks enabled).
+              '';
+            };
+            allowedHttpHookUrls = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              description = ''
+                Allowlist of URLs permitted for `http`-type hooks (a managed-
+                settings security control). Null = upstream default (no
+                allowlist restriction).
+              '';
+            };
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
           # Plan 032 T3 — CC sandbox.* subtree (CC-G1).
           # Keys verified against ~/src/claude-code/examples/settings/
           # settings-bash-sandbox.json and CHANGELOG entries referenced in
@@ -1041,6 +1072,13 @@
                 }
                 // optionalAttrs (cfg.models.enforceAvailable != null) {
                   enforceAvailableModels = cfg.models.enforceAvailable;
+                }
+                # Plan 046 T5 — hook gating settings (flat top-level)
+                // optionalAttrs (cfg.hookSettings.disableAllHooks != null) {
+                  inherit (cfg.hookSettings) disableAllHooks;
+                }
+                // optionalAttrs (cfg.hookSettings.allowedHttpHookUrls != null) {
+                  inherit (cfg.hookSettings) allowedHttpHookUrls;
                 }
               )
               # Plan 046 T3 — settingsExtra escape hatch (deep-merged last; wins on conflict)

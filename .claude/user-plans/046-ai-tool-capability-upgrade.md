@@ -80,7 +80,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T2 — Bump OpenCode to latest | versions | TASK:DEFERRED (OC dormant) |
 | T3 — Raw settings escape-hatch (CC done; OC optional/dormant) | foundation | TASK:COMPLETE |
 | T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:COMPLETE |
-| T5 — CC: hooks entry-types + remaining events | claude-code | TASK:PENDING |
+| T5 — CC: hooks entry-types + remaining events | claude-code | TASK:COMPLETE |
 | T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:PENDING |
 | T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:PENDING |
 | T8 — OC: new/changed top-level config keys | opencode | TASK:DEFERRED (OC dormant) |
@@ -268,7 +268,44 @@ BLOCKED-BY-DEP.
 
 ---
 
-## T5 — Claude Code: hooks entry-types + remaining events `TASK:PENDING`
+## T5 — Claude Code: hooks entry-types + remaining events `TASK:COMPLETE` (2026-06-24)
+
+**Done (2026-06-24):** event/entry/field names verified against `code.claude.com/docs/en/hooks`
+(live, 2026-06-24) + `~/src/claude-code/CHANGELOG.md` before modeling. Changes:
+- **Events** (`_hm/hooks.nix` `hookEvents`): added the 5 missing events
+  `PostToolUseFailure`, `PostToolBatch`, `PermissionRequest`, `UserPromptExpansion`,
+  `MessageDisplay`. (Full upstream list is 29; the rest were already present, incl. `SessionEnd`
+  which the docs page omits but is real.)
+- **Entry types + per-entry fields** (`mkHook`): rewrote the helper to emit any entry `type`
+  (`command`/`http`/`mcp_tool`/`prompt`/`agent`) and the common per-entry fields. New params:
+  `args`, `shell` (command); `url`/`headers`/`allowedEnvVars` (http); `server`/`tool`/`input`
+  (mcp_tool); `prompt`/`model` (prompt+agent); `ifFilter`→`"if"`, `async`, `asyncRewake`, `once`,
+  `statusMessage`. Each emitted only when set (optionalAttrs). `ifFilter` is renamed because `if`
+  is a Nix keyword; it serializes to the JSON key `"if"`.
+- **`hooks.custom` wired through** — it was defined but **never serialized** (dead option). Now
+  concatenated into `_internal.hooks`. Being freeform `types.attrs`, a user can write any entry
+  type/field directly (example added to the option).
+- **Latent merge bug fixed (discovered during T5):** `_internal.hooks` is `types.attrs`, whose
+  native merge is a right-biased `//` — so the old `mkMerge [...]` kept only the LAST contributor's
+  list per event. Security's `PreToolUse` was silently clobbering development's; logging's
+  `PostToolUse` clobbered the flake-check/auto-stage hooks. Replaced `mkMerge` with explicit
+  `lib.zipAttrsWith (_: lib.concatLists)` over the category attrsets (+ `cfg.hooks.custom` last),
+  converting list-embedded `mkIf` to `lib.optional`. Now every enabled category AND custom hooks
+  coexist on the same event.
+- **Gating settings** (`claude-code.nix` new `hookSettings` group, serialized flat top-level):
+  `disableAllHooks` (nullOr bool) and `allowedHttpHookUrls` (nullOr listOf str). The plan's
+  `httpHookAllowedEnvVars` is **NOT** a real top-level key — current docs show the per-entry
+  `allowedEnvVars` field on http hooks (now supported via `mkHook`) is the documented mechanism;
+  `allowManagedHooksOnly` already lives under `governance`. Noted, not invented.
+
+**Verified (eval, tim@thinky-ubuntu via `extendModules`):** baseline `_internal.hooks` now has
+`PreToolUse`=2 (development+security), `PostToolUse`=3 (flakeCheck+autoStage+logging),
+`SessionStart`=1 (resume) — confirming the clobber fix. With a custom config defining an `http`
+hook (`url`/`headers`/`allowedEnvVars`/`if`/`statusMessage`/`timeout`) and an `mcp_tool` hook
+(`server`/`tool`/`input`/`if`) under one matcher, `PreToolUse` rendered 3 groups (2 categorized +
+1 custom), entry types `[["command"],["command"],["http","mcp_tool"]]`, and `disableAllHooks`/
+`allowedHttpHookUrls` serialized. `nix flake check --no-build` → all checks passed. Idempotent
+(append-if-absent semantics; default `custom` = all-empty no-op).
 
 Depends on: T1. `_hm/hooks.nix` already covers most EVENTS. Close the remaining gaps:
 - Missing events: `PostToolUseFailure`, `PostToolBatch`, `PermissionRequest`, `MessageDisplay`,
