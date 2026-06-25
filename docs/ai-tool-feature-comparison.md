@@ -607,3 +607,71 @@ expose. Gaps marked **(P31-MISS)** were also missing from Plan 031's comparison 
 | 2026-04-06 | Plan 031 T1 — recall-based comparison written; missed vim mode, tui.json, ~30 other features |
 | 2026-04-06 | Plan 032 audit — this document rewritten by enumeration; canary (vim mode) verified |
 | 2026-04-09 | Plan 032 T14 — all 43 gaps closed (CC-G1..G18, OC-G1..G25). §6 cross-ref updated, §7 gap tables marked CLOSED. Upstream HEADs refreshed: OC `b060066`, CC `3c72545`. New upstream fields noted: OC `oauth.redirectUri`, `variant_list` keybind, `mouse` in tui-schema; CC v2.1.94-2.1.97 (`sandbox.network.allowMachLookup`, statusline `refreshInterval`). All forward-compatible with existing freeform types — no new gaps. |
+| 2026-06-24 | Plan 046 T14 — CC-centric capability upgrade. See §13. CC pinned 2.1.191 (vendored); OC stayed dormant at 1.14.48 (T2 deferred). New CC Nix options exposed across T3-T7/T11/T13. |
+
+## 13. Plan 046 addendum — CC-centric capability upgrade (2026-06-24)
+
+**Last refreshed: 2026-06-24.** Plan `.claude/user-plans/046-ai-tool-capability-upgrade.md`.
+
+**Direction:** the project went **Claude-Code-centric** (decided 2026-06-24). OpenCode is kept
+**dormant** in-repo — its module and pin are untouched — and is revisited only if a non-Claude CCv2
+model path forces it (see the verdict doc + plan T15). The §1-§12 enumeration above predates this
+plan; the rows below are the deltas, not a re-enumeration.
+
+### 13.1 Tool versions after Plan 046
+
+| Tool | Pin before 046 | Pin after 046 | Mechanism |
+|---|---|---|---|
+| Claude Code | nixpkgs-unstable 2.1.92 (overlay 2.1.97, removed) | **2.1.191** | vendored `pkgs/claude-code-pinned/` + `overlays/default.nix`; bump via `manifest.json` / `update.sh` (T1) |
+| OpenCode | `pkgs/opencode-pinned/` **1.14.48** | **1.14.48 (unchanged — dormant)** | T2 DEFERRED; OC not bumped this plan. Do NOT read "OC 1.17.9" as shipped. |
+
+Target-feature version floors (all satisfied by 2.1.191): gateway discovery ≥2.1.129,
+`fallbackModel` ≥2.1.166, `--safe-mode` ≥2.1.169, Fable ≥2.1.170, `enforceAvailableModels` ≥2.1.175,
+`MAX_RETRIES`/`RETRY_WATCHDOG` ≥2.1.186, MCP idle timeout / `sandbox.credentials` ≥2.1.187.
+
+### 13.2 New CC Nix options exposed (Plan 046)
+
+Every option below is net-new in this plan; all default null/empty/off (no behavior change unless
+set). File paths are under `modules/programs/claude-code/`.
+
+| Capability | CC key / env | CC Nix option | Task |
+|---|---|---|---|
+| **Raw settings escape-hatch** | (any settings.json key) | `programs.claude-code.settingsExtra` (deep-merged LAST, wins on leaf conflicts) | T3 |
+| Fallback models (rate-limit failover) | `fallbackModel` (≤3) | `programs.claude-code.models.fallback` | T4 |
+| Model allowlist | `availableModels` / `enforceAvailableModels` | `models.available` / `models.enforceAvailable` | T4 |
+| Fable model family | `ANTHROPIC_DEFAULT_FABLE_MODEL[_NAME\|_DESCRIPTION\|_SUPPORTS]` | `models.fable.{model,name,description,supports}` | T4 |
+| Custom picker entry | `ANTHROPIC_CUSTOM_MODEL_OPTION` | `models.customOption` | T4 |
+| Per-account provider/auth | Bedrock/Vertex/Mantle/Foundry env + `ANTHROPIC_CUSTOM_HEADERS` | `accounts.<name>.provider.{bedrock,vertex,mantle,foundry,customHeaders,extraEnv}` | T4 |
+| Hook entry types | `http`/`mcp_tool`/`prompt`/`agent` + per-entry `if`/`async`/`once`/`statusMessage` | `_hm/hooks.nix` `mkHook` (extended) | T5 |
+| New hook events | `PostToolUseFailure`, `PostToolBatch`, `PermissionRequest`, `UserPromptExpansion`, `MessageDisplay` | `_hm/hooks.nix` `hookEvents` | T5 |
+| Hook gating | `disableAllHooks` / `allowedHttpHookUrls` | `hookSettings.{disableAllHooks,allowedHttpHookUrls}` | T5 |
+| Freeform custom hooks (now serialized) | (any entry) | `hooks.custom` (was dead; now wired) | T5 |
+| Skill/command frontmatter | `argument-hint`, `allowed-tools`, `context: fork`, `effort`, `shell`, `paths`, `hooks`, `when_to_use`, ... | `_hm/skills.nix` custom-skill submodule | T6 |
+| Subagent frontmatter | `permissionMode`, `isolation: worktree`, `memory`, `maxTurns`, `skills`, `mcpServers`, `effort`, `background`, `color`, ... | `_hm/sub-agents.nix` `mkSubAgent` | T6 |
+| Plugin/skill settings | `extraKnownMarketplaces`, `disableBundledSkills`, `maxSkillDescriptionChars`, `skillListingBudgetFraction` | `plugins.*` / `skillSettings.*` | T6 |
+| Reliability / unattended | `CLAUDE_CODE_MAX_RETRIES` (≤15), `CLAUDE_CODE_RETRY_WATCHDOG`, `CLAUDE_CODE_SAFE_MODE`, `autoUpdatesChannel`, `minimumVersion`, `required{Minimum,Maximum}Version` | `reliability.*` | T7 |
+| MCP runtime timeouts | `MCP_TIMEOUT`, `MCP_TOOL_TIMEOUT`, `MAX_MCP_OUTPUT_TOKENS`, `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` | `mcpRuntime.*` | T7 |
+| UX | `outputStyle`, `effortLevel`, `editorMode` (persistent again) | `ux.*` | T7 |
+| Sandbox additions | `sandbox.allowAppleEvents`, `sandbox.credentials` (object) | `sandbox.{allowAppleEvents,credentials}` | T7 |
+| Statusline | `refreshInterval`, `padding` | `_hm/statusline.nix` `{refreshInterval,padding}` | T7 |
+| keybindings.json deployment | `keybindings.json` (per config dir) | `keybindings` (freeform) | T7 |
+| Attribution (NO-AI guarantee) | `includeCoAuthoredBy` (defaults **false**) | `attribution` / `includeCoAuthoredBy` | T7 |
+| **RTK-Tokensave hook** | `PreToolUse` `Bash` → `rtk hook claude` (graceful no-op when `rtk` absent) | `hooks.rtk.{enable,package,contextFile}` | T11 |
+| **Gateway model discovery** | `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` (Claude/anthropic subset only) | `accounts.<name>.discovery.enable` | T13 |
+
+### 13.3 Updated CC-only asymmetries (supersedes §6.7/§6.10 rows for these)
+
+- **Editor mode (vim):** §6.7 / CC-G18 recorded this as "runtime-only, not persistable." Upstream
+  re-added a persistent `editorMode` setting (re-verified 2026-06-24); now exposed as `ux.editorMode`
+  (T7). The §5 canary note about `/vim` removal still holds historically.
+- **Reliability/unattended env** (`MAX_RETRIES`/`RETRY_WATCHDOG`/`SAFE_MODE`): CC-only, no OC
+  equivalent — high value for the burndown driver.
+- **RTK-Tokensave** and **gateway model discovery**: CC-only in this plan (OC halves deferred while
+  dormant).
+
+### 13.4 Deferred / dormant
+
+- **OpenCode (T2/T8-T10/T12):** no investment this plan; module + pin (1.14.48) untouched. The §3/§4
+  OC enumeration and §7.2 gap closures remain accurate as of Plan 032; re-audit only on OC revival.
+- **T15 (CCv2 Anthropic-format probe):** BLOCKED — credential-gated. Decides whether the non-Claude
+  CCv2 catalog (Auto-MoM/Qwen/Llama/GLM) is reachable from CC. See verdict doc §5.

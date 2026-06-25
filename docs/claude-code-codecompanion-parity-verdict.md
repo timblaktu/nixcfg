@@ -170,6 +170,42 @@ work host via a nixcfg-work flake.lock bump.
 
 ---
 
+## 6. Status: implemented (2026-06-24, Plan 046)
+
+The CC-centric direction decided above is now **built in nixcfg** (branch
+`plan-046-ai-tool-capability-upgrade`). What shipped:
+
+- **CC pinned to 2.1.191** (vendored `pkgs/claude-code-pinned/`, T1) — clears every feature floor
+  cited in §3 (`fallbackModel` 2.1.166, gateway discovery 2.1.129, org restrictions 2.1.187).
+- **Full CC capability surface exposed in the Nix module** (T3-T7): a `settingsExtra` raw
+  escape-hatch; the model/provider/auth surface (`fallbackModel`, `availableModels` +
+  `enforceAvailableModels`, Fable, per-account Bedrock/Vertex/Mantle/Foundry env); extended hooks
+  (new events + `http`/`mcp_tool`/`prompt`/`agent` entry types + gating); skill/subagent/plugin
+  frontmatter; reliability/MCP-timeout/UX/sandbox/statusline/keybindings settings; and the
+  NO-AI-attribution guarantee (`includeCoAuthoredBy` defaults `false`).
+- **RTK-Tokensave as a Nix-managed `PreToolUse` Bash hook** (T11) — `hooks.rtk.{enable,package}`,
+  never `rtk init -g`; graceful pass-through no-op when `rtk` is absent. The corporate binary is
+  packaged privately in **nixcfg-work** (`pkgs/rtk`, rtk 0.42.3), wired on the `work` account.
+- **Gateway model discovery** (T13) — opt-in per-account `discovery.enable` exporting
+  `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`; surfaces only the Claude/anthropic subset (by
+  design, per §4).
+
+**Final model (corrects the §5 "hybrid" framing into what was actually built):** it is
+**CC-centric, OpenCode dormant** — not a CC-primary/OC-secondary hybrid. CC handles
+Claude-on-Bedrock + the richer harness + RTK + Claude-subset gateway discovery. OpenCode was **not**
+bumped or extended (its pin stays at 1.14.48; plan tasks T2/T8-T10/T12 are DEFERRED) and is revived
+only if the parked non-Claude path forces it.
+
+**Pin strategy:** CC tracks latest stable via the vendored pin (bump `manifest.json` or run
+`update.sh [version]`, re-stage, rebuild), decoupled from nixpkgs-unstable's lag. OC keeps its
+existing `pkgs/opencode-pinned/` pin, untouched.
+
+**Still parked:** the non-Claude CCv2 question (Auto-MoM/Qwen/Llama/GLM) remains credential-gated
+(plan T15) — the §4/§5 analysis is unchanged. **Deploy gate:** RTK + discovery reach the work host
+only after a nixcfg-work flake.lock bump to a nixcfg revision carrying T11/T13.
+
+Detail: `docs/ai-tool-feature-comparison.md` §13, plan `.claude/user-plans/046-ai-tool-capability-upgrade.md`.
+
 ## Sources
 
 - `anthropics/claude-code` `CHANGELOG.md` (latest 2.1.187).

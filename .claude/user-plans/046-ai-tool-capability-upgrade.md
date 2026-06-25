@@ -89,7 +89,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T11 — RTK-Tokensave: Nix-managed hook (CC) | cross-cutting | TASK:COMPLETE |
 | T12 — Shared skills/commands/context-file machinery | cross-cutting | TASK:DEFERRED (needs OC) |
 | T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:COMPLETE |
-| T14 — Docs refresh (comparison + verdict addendum) | docs | TASK:PENDING |
+| T14 — Docs refresh (comparison + verdict addendum) | docs | TASK:COMPLETE |
 | T15 — CCv2 Anthropic-format probe (non-Claude models) | investigation | TASK:BLOCKED — USER_INPUT_REQUIRED (regen CCv2 token, then run probe) |
 
 **Active (CC-centric) work:** T1, T3, T4, T5, T6, T7, T11, T13, T14. **Dormant (OC):** T2, T8,
@@ -682,7 +682,32 @@ flag off the wrapper is unchanged for that account. BLOCKED-BY-DEP if T1/T4 unme
 
 ---
 
-## T14 — Docs refresh `TASK:PENDING`
+## T14 — Docs refresh `TASK:COMPLETE` (2026-06-24)
+
+**Done (2026-06-24):**
+- `docs/ai-tool-feature-comparison.md`: added **§13 "Plan 046 addendum — CC-centric capability
+  upgrade"** (last-refreshed 2026-06-24) + an audit-history row. §13.1 records the version deltas
+  (CC nixpkgs-unstable 2.1.92 → vendored pin **2.1.191**; OC **stayed dormant at 1.14.48** — T2
+  deferred, explicitly NOT claiming 1.17.9 shipped) with the satisfied feature floors. §13.2 is a
+  delta table of every net-new CC Nix option from T3-T7/T11/T13 (settingsExtra, models/provider
+  surface, hook entry-types+events+gating, skill/subagent/plugin frontmatter, reliability/MCP/UX/
+  sandbox/statusline/keybindings/attribution, RTK hook, gateway discovery). §13.3 supersedes the
+  stale §6.7 editor-mode row (CC re-added persistent `editorMode` → `ux.editorMode`). §13.4 records
+  OC dormant + T15 parked. The §1-§12 enumeration left intact (predates this plan; still accurate).
+- `docs/claude-code-codecompanion-parity-verdict.md`: added dated **"## 6. Status: implemented
+  (2026-06-24, Plan 046)"** addendum. Captures what shipped (CC 2.1.191 pin, full capability surface
+  T3-T7, RTK Nix-managed hook T11 + private nixcfg-work `pkgs/rtk` binary, gateway discovery T13) and
+  **corrects the §5 "hybrid" framing into the actual built model: CC-centric, OpenCode dormant** (not
+  CC-primary/OC-secondary). Records the pin strategy (vendored `manifest.json`/`update.sh` bump,
+  decoupled from nixpkgs lag; OC pin untouched) and the deploy gate (nixcfg-work lock bump for
+  RTK+discovery).
+
+**Verified:** `rg` confirms `2.1.191` + the new-option names (`settingsExtra`, `hooks.rtk`,
+`discovery.enable`, `fallback`, ...) in the comparison doc and `Status: implemented` + `2.1.191` +
+`CC-centric, OpenCode dormant` in the verdict doc. `nix flake check --no-build` → **all checks
+passed** (docs-only edits; no eval regression). Note: the original DoD's literal "OC 1.17.9" was
+intentionally NOT asserted per the post-T0 direction change (OC dormant, T2 deferred) — the docs say
+OC stayed at 1.14.48.
 
 Depends on: whatever shipped (T1-T13). Update `docs/ai-tool-feature-comparison.md` to reflect the
 new tool versions and the now-exposed Nix options (flip the relevant rows; note last-refreshed
