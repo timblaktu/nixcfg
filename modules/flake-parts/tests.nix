@@ -46,6 +46,49 @@ in
           touch $out
         '';
 
+      # Helper function to create a Home Manager ACTIVATION test.
+      #
+      # Unlike mkHmEvalTest (which only references string attrs and so forces
+      # config *evaluation*), this forces the activationPackage — including the
+      # generated activation-script.drv — to actually BUILD. That is the only
+      # thing that exercises activation-string generators such as the
+      # claude-code .claude.json `jq_args` block, where a shell-quoting bug
+      # (an apostrophe in a hook body breaking a single-quoted JSON literal)
+      # produced a bash syntax error that `nix flake check --no-build` and the
+      # eval tests both passed straight over (Plan 046, 2026-06-25).
+      #
+      # CAVEAT: this check only provides protection when it is BUILT. The fast
+      # commit gate runs `nix flake check --no-build`, which skips building
+      # checks, so it will NOT catch activation-string regressions. Exercise it
+      # via full `nix flake check` (final PR validation / CI) or directly:
+      #   nix build '.#checks.x86_64-linux.activate-hm-thinky-nixos'
+      mkHmActivationTest = name: configName:
+        let
+          activationPackage = self.homeConfigurations.${configName}.activationPackage;
+        in
+        pkgs.runCommand "activate-hm-${name}"
+          {
+            meta = {
+              description = "Activation-script BUILD test for ${configName} HM configuration";
+              maintainers = [ ];
+              timeout = 300;
+            };
+            # Referencing the activationPackage as a build input forces it (and
+            # the activation-script.drv it depends on) to build.
+            inherit activationPackage;
+          } ''
+          echo "Building activation script for ${configName}..."
+          test -x "$activationPackage/activate" \
+            || (echo "❌ activation script missing or not executable" && exit 1)
+          # Belt-and-suspenders: the activate script is bash; syntax-check it so
+          # a future generator bug surfaces here as a clear failure, not a
+          # mid-switch crash on the user's host.
+          ${pkgs.bash}/bin/bash -n "$activationPackage/activate" \
+            || (echo "❌ activation script has a shell syntax error" && exit 1)
+          echo "✅ ${configName} activation script built and is syntactically valid"
+          touch $out
+        '';
+
       # Helper function to create module integration tests
       mkModuleTest = { name, description, hostName, attributes, checks }:
         pkgs.runCommand name
@@ -240,6 +283,14 @@ in
         eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "${username}@thinky-ubuntu";
         eval-hm-mbp = mkHmEvalTest "mbp" "${username}@mbp";
         eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "${username}@nixvim-minimal";
+
+        # Home Manager ACTIVATION-script build test (x86_64-linux). thinky-nixos
+        # enables programs.claude-code with accounts + the categorized hooks, so
+        # building its activationPackage exercises the .claude.json activation
+        # generator and guards the shell-quoting bug class (Plan 046). Only meaningful
+        # when BUILT — `nix flake check --no-build` skips it; run full `nix flake check`
+        # or `nix build '.#checks.x86_64-linux.activate-hm-thinky-nixos'`.
+        activate-hm-thinky-nixos = mkHmActivationTest "thinky-nixos" "${username}@thinky-nixos";
 
         # === MODULE INTEGRATION TESTS ===
         module-base-integration = mkModuleTest {
