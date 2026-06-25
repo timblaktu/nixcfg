@@ -809,8 +809,10 @@ fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
   router re-dispatches internally and loses the client identity). ⇒ **CC reaches the entire CCv2
   catalog except the auto-router; OpenCode is fully redundant.** Wired `accounts.work.api.availableModels`
   (new per-account option, nixcfg `2d2aa25`) = the 11 working IDs so `claudework`'s `/model` picker
-  lists them (Auto-MoM excluded). nixcfg-work lock bumped + deployed. Open (minor): whether to widen
-  the work `fallbackModel` from Claude-only to include qwen/glm failover — pending user decision.
+  lists them (Auto-MoM excluded). nixcfg-work lock bumped + deployed. **fallbackModel DECISION
+  (2026-06-25): removed entirely** for the work account (nixcfg-work `ee28dab`) — user prefers an
+  overloaded model to surface the error and switch manually via `/model` rather than be silently
+  auto-routed to a less-trusted fallback.
 
 ## Notes for the executor
 
