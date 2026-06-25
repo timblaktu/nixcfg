@@ -206,6 +206,29 @@ only after a nixcfg-work flake.lock bump to a nixcfg revision carrying T11/T13.
 
 Detail: `docs/ai-tool-feature-comparison.md` §13, plan `.claude/user-plans/046-ai-tool-capability-upgrade.md`.
 
+## 7. T15 resolved (2026-06-25) — CCv2 *does* speak Anthropic, and CC uses it directly
+
+The credential-gated probe in §4/§5 is now run (unified token regenerated at
+`codecompanion.d-dp.nextcloud.aero`). Findings correct the earlier "non-Claude only on the OpenAI
+side / CC can't reach it" framing for **Claude**:
+
+- **CCv2 is a dual-protocol proxy.** `https://codecompanionv2.d-dp.nextcloud.aero/v1` serves BOTH
+  `POST /v1/messages` (Anthropic) and `POST /v1/chat/completions` (OpenAI) behind one Bearer JWT.
+  `GET /v1/models` (200, ungated) lists vLLM-hosted open models + **Bedrock-passthrough Claude**
+  (`us.anthropic.claude-sonnet-4-6`, `us.anthropic.claude-haiku-4-5-20251001-v1:0` — no opus) +
+  `Auto-MoM`.
+- **Both inference endpoints are gated to an allowlisted client** (`Kilo Code, Claude Code,
+  OpenCode`). curl can't forge it; the real Claude Code client passes it — **verified end-to-end:
+  `claudework -p` returned a completion from `claude-sonnet-4-6` over CCv2's `/v1/messages`.**
+- **So CC drives CCv2's Claude models directly** — the unified Code Companion token is all that's
+  needed; the separate Bedrock proxy is redundant for Claude (and was 503/down during probing).
+- **Implemented:** work account defaults to direct Sonnet, haiku→claude-haiku-4-5, Claude-only
+  fallback; one consolidated rbw token (`PAC Code Companion v2 → API Key`). nixcfg-work `3300a3d`.
+- **Still open (not blocking):** whether CC's `/v1/messages` will accept **non-Claude** IDs
+  (`Auto-MoM`/qwen/glm) translated to Anthropic shape — to be evaluated from real `claudework`
+  model-switching. If yes, the full CCv2 catalog is reachable from CC and OpenCode stays dormant for
+  good; if no, non-Claude still needs a translating gateway or an OC revival.
+
 ## Sources
 
 - `anthropics/claude-code` `CHANGELOG.md` (latest 2.1.187).

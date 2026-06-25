@@ -90,7 +90,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T12 — Shared skills/commands/context-file machinery | cross-cutting | TASK:DEFERRED (needs OC) |
 | T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:COMPLETE |
 | T14 — Docs refresh (comparison + verdict addendum) | docs | TASK:COMPLETE |
-| T15 — CCv2 Anthropic-format probe (non-Claude models) | investigation | TASK:BLOCKED — USER_INPUT_REQUIRED (regen CCv2 token, then run probe) |
+| T15 — CCv2 Anthropic-format probe (non-Claude models) | investigation | TASK:COMPLETE (2026-06-25 — CCv2 speaks Anthropic; direct Sonnet live; non-Claude-via-CC deferred) |
 
 **Active (CC-centric) work:** T1, T3, T4, T5, T6, T7, T11, T13, T14. **Dormant (OC):** T2, T8,
 T9, T10, T12 — revive only if T15 forces a non-Claude path. **Blocked:** T15 (credential-gated).
@@ -781,7 +781,30 @@ then probe `GET /v1/models`, `POST /v1/messages` (with `anthropic-version: 2023-
 This task NEVER blocks the CC-centric build (T1/T3-T7/T11/T13). It only decides the non-Claude
 branch. Until the token is regenerated, leave BLOCKED.
 
-**Findings (fill in when unblocked):** _TBD_
+**Findings (2026-06-25 — RESOLVED, positive):** Unblocked once a *freshly-minted* unified token
+(JWT `iat 2026-06-25`) from `codecompanion.d-dp.nextcloud.aero` landed in rbw `PAC Code Companion v2`
+→ `API Key` field (an hour was lost to stale/cached tokens + case-duplicate rbw items —
+`API KEY` vs `API Key` — all resolved by consolidating to one item with `API Key` + `API Base`
+fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
+- `GET /v1/models` → **200**, OpenAI-shaped catalog (vLLM-hosted open models + Bedrock-passthrough
+  Claude + `Auto-MoM`). Claude present as `us.anthropic.claude-sonnet-4-6` and
+  `us.anthropic.claude-haiku-4-5-20251001-v1:0` (**no opus** on CCv2).
+- `POST /v1/messages` (Anthropic) AND `POST /v1/chat/completions` (OpenAI) → **both exist and
+  authenticate**; both gated by a client allowlist (`403 "supported plugins/extensions: Kilo Code,
+  Claude Code, OpenCode"`). `/v1/models` is ungated (token only). curl could not forge the client
+  signature (tried `User-Agent: claude-cli/…` + `x-app: cli`), but the **real Claude Code client
+  passes it** — verified end-to-end: `claudework -p` returned a completion from `claude-sonnet-4-6`
+  over CCv2.
+- **Auth:** unified Bearer JWT (`ANTHROPIC_AUTH_TOKEN`, the `authMethod="bedrock"` path), ~6-month
+  validity, stale tokens → `403 "refresh your token"`.
+- **Decision (implemented):** work account now defaults to **direct Sonnet** (`claude-sonnet-4-6`),
+  haiku→`claude-haiku-4-5`, Claude-only fallback; credential consolidated to the `API Key` field
+  (nixcfg-work `3300a3d`). The separate Bedrock proxy (`ai-platform-bedrockapis…`) is redundant for
+  Claude now and was 503/down during probing.
+- **Still open (follow-up, NOT blocking):** whether CC's `/v1/messages` accepts **non-Claude** IDs
+  (`Auto-MoM`/qwen/glm) translated to Anthropic shape — deferred per user ("evaluate model switching
+  to non-Anthropic next"). Couldn't test via curl (client gate); will evaluate from real `claudework`
+  `/model` switching.
 
 ## Notes for the executor
 
