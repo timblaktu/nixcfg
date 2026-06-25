@@ -1192,6 +1192,14 @@
             inherit (cfg) nixcfgPath;
             runtimePath = "${nixcfgPath}/claude-runtime";
 
+            # JSON serialized for safe embedding inside a SINGLE-QUOTED shell
+            # string. builtins.toJSON can emit a literal apostrophe (e.g. a hook
+            # command body containing "Don't"), which would otherwise terminate
+            # the surrounding '...' early and break the activation script. Each
+            # ' is rewritten to the canonical '\'' (close-quote, escaped-quote,
+            # reopen-quote) sequence. Used by the .claude.json enforcement block.
+            shJson = v: replaceStrings [ "'" ] [ "'\\''" ] (builtins.toJSON v);
+
             # Plan 046 T4 — translate one account's provider/auth options into the
             # documented Claude Code env vars. Only emits keys for enabled
             # providers / set values; merged into BOTH the wrapper script and the
@@ -1719,16 +1727,16 @@
                   if [[ -f "$accountDir/.claude.json" ]]; then
                     echo "Enforcing Nix-managed settings in .claude.json..."
 
-                    jq_args=(--argjson permissions '${builtins.toJSON {
+                    jq_args=(--argjson permissions '${shJson {
                       inherit (cfg.permissions) allow;
                       inherit (cfg.permissions) deny;
                       inherit (cfg.permissions) ask;
                       inherit (cfg.permissions) defaultMode;
                       inherit (cfg.permissions) additionalDirectories;
                     }}')
-                    ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${builtins.toJSON cfg.environmentVariables}')''}
-                    ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${builtins.toJSON cfg._internal.statuslineSettings.statusLine}')''}
-                    ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${builtins.toJSON (filterAttrs (_n: v: v != null) cfg._internal.hooks)}')''}
+                    ${optionalString (cfg.environmentVariables != {}) ''jq_args+=(--argjson env '${shJson cfg.environmentVariables}')''}
+                    ${optionalString (cfg._internal.statuslineSettings != {}) ''jq_args+=(--argjson statusLine '${shJson cfg._internal.statuslineSettings.statusLine}')''}
+                    ${optionalString (cfg._internal.hooks != {}) ''jq_args+=(--argjson hooks '${shJson (filterAttrs (_n: v: v != null) cfg._internal.hooks)}')''}
 
                     $DRY_RUN_CMD ${pkgs.jq}/bin/jq "''${jq_args[@]}" \
                       '. |
