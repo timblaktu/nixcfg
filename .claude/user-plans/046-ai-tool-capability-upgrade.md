@@ -801,10 +801,16 @@ fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
   haiku→`claude-haiku-4-5`, Claude-only fallback; credential consolidated to the `API Key` field
   (nixcfg-work `3300a3d`). The separate Bedrock proxy (`ai-platform-bedrockapis…`) is redundant for
   Claude now and was 503/down during probing.
-- **Still open (follow-up, NOT blocking):** whether CC's `/v1/messages` accepts **non-Claude** IDs
-  (`Auto-MoM`/qwen/glm) translated to Anthropic shape — deferred per user ("evaluate model switching
-  to non-Anthropic next"). Couldn't test via curl (client gate); will evaluate from real `claudework`
-  `/model` switching.
+- **Non-Claude switching RESOLVED (2026-06-25):** ran `claudework -p --model <id>` across the whole
+  CCv2 catalog. **11/12 work** — both Claude IDs + `qwen3-coder-next`/`qwen-a3b`/`qwen36-a3b`/
+  `devstral`/`mistral.devstral-2-123b`/`glm-5`/`glm-47`/`minimax-m27`/`minimax.minimax-m2.5` all
+  return completions through CC's `/v1/messages` (CCv2 translates them). **Only `Auto-MoM` fails**
+  (the MoM router returns the client-gate 403 even though every concrete model passes — likely the
+  router re-dispatches internally and loses the client identity). ⇒ **CC reaches the entire CCv2
+  catalog except the auto-router; OpenCode is fully redundant.** Wired `accounts.work.api.availableModels`
+  (new per-account option, nixcfg `2d2aa25`) = the 11 working IDs so `claudework`'s `/model` picker
+  lists them (Auto-MoM excluded). nixcfg-work lock bumped + deployed. Open (minor): whether to widen
+  the work `fallbackModel` from Claude-only to include qwen/glm failover — pending user decision.
 
 ## Notes for the executor
 
