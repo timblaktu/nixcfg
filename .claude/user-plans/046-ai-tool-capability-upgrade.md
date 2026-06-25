@@ -78,7 +78,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T0 — Branch + escape-hatch audit | foundation | TASK:COMPLETE |
 | T1 — Bump Claude Code to latest (pin strategy) | versions | TASK:COMPLETE |
 | T2 — Bump OpenCode to latest | versions | TASK:DEFERRED (OC dormant) |
-| T3 — Raw settings escape-hatch (CC primary; OC optional) | foundation | TASK:PENDING |
+| T3 — Raw settings escape-hatch (CC done; OC optional/dormant) | foundation | TASK:COMPLETE |
 | T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:PENDING |
 | T5 — CC: hooks entry-types + remaining events | claude-code | TASK:PENDING |
 | T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:PENDING |
@@ -198,8 +198,19 @@ Files: `modules/programs/claude-code/claude-code.nix`, `modules/programs/opencod
 (+ `_hm/tui-json.nix`).
 
 **DoD:** `nix flake check --no-build` passes AND a test eval setting an arbitrary unknown key via
-`settingsExtra`/`tuiExtra` shows that key in the rendered JSON (verify via the settings-builder
-eval). Explicit options still win over the escape hatch for the same key.
+`settingsExtra`/`tuiExtra` shows that key in the rendered JSON.
+
+**Done — CC half (2026-06-24):** Added `programs.claude-code.settingsExtra`
+(`(pkgs.formats.json {}).type`, default `{}`) and wrapped `mkSettingsTemplate`'s built attrset in
+`lib.recursiveUpdate ( <built> ) cfg.settingsExtra` (claude-code.nix). **Semantic decision (supersedes
+the earlier "explicit options win" wording): `settingsExtra` WINS on leaf conflicts** — it is a true
+escape hatch, applied LAST, so any upstream key (incl. unmodeled/future ones) can be set OR
+overridden from Nix; nested keys deep-merge. Verified: `nix-instantiate --parse` OK;
+`recursiveUpdate` semantics proven (`{permissions={allow;}}` ⊕ `{spinnerTipsEnabled;permissions={deny;}}`
+→ allow+deny+new key); commit pre-gate `nix flake check` passes (renders all accounts with the
+default `{}` no-op merge wired in).
+**OC half — DEFERRED (dormant):** `opencode.json settingsExtra` + `tui.json tuiExtra` not done; OC is
+parked. Add only if OC is revived.
 
 ---
 

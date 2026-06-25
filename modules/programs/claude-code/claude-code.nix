@@ -475,6 +475,19 @@
             description = "Experimental features";
           };
 
+          settingsExtra = mkOption {
+            type = (pkgs.formats.json { }).type;
+            default = { };
+            example = { spinnerTipsEnabled = false; };
+            description = ''
+              Plan 046 escape hatch. Arbitrary settings.json keys deep-merged
+              LAST into the generated per-account settings.json, so you can set
+              or override ANY upstream Claude Code setting - including keys this
+              module does not model yet - without a module change. On a leaf
+              conflict, settingsExtra wins over the module-built value.
+            '';
+          };
+
           enterpriseSettings = {
             enable = mkOption {
               type = types.bool;
@@ -681,123 +694,126 @@
             claudeDesktopMcpServers = lib.mapAttrs mkClaudeDesktopServer cfg._internal.mcpServers;
             claudeCodeMcpServers = removeAttrs cfg._internal.mcpServers [ "mcp-filesystem" "cli-mcp-server" ];
 
-            mkSettingsTemplate = { model, accountApi ? null }: pkgs.writeText "claude-settings.json" (builtins.toJSON (
-              let
-                # Filter out null and empty-list event slots so only populated
-                # hooks are serialized.  Fixes prior bug: gate checked only 4
-                # events (with a typo — "Start" instead of "SessionStart").
-                cleanHooks = filterAttrs (_n: v: v != null && v != [ ]) cfg._internal.hooks;
-                hasHooks = cleanHooks != { };
-                hasStatusline = cfg._internal.statuslineSettings != { };
+            mkSettingsTemplate = { model, accountApi ? null }: pkgs.writeText "claude-settings.json" (builtins.toJSON (lib.recursiveUpdate
+              (
+                let
+                  # Filter out null and empty-list event slots so only populated
+                  # hooks are serialized.  Fixes prior bug: gate checked only 4
+                  # events (with a typo — "Start" instead of "SessionStart").
+                  cleanHooks = filterAttrs (_n: v: v != null && v != [ ]) cfg._internal.hooks;
+                  hasHooks = cleanHooks != { };
+                  hasStatusline = cfg._internal.statuslineSettings != { };
 
-                permissionsV2 = {
-                  inherit (cfg.permissions) allow;
-                  inherit (cfg.permissions) deny;
-                  inherit (cfg.permissions) ask;
-                  inherit (cfg.permissions) defaultMode;
-                  inherit (cfg.permissions) additionalDirectories;
-                } // optionalAttrs (cfg.permissions.disableBypassPermissionsMode != null) {
-                  inherit (cfg.permissions) disableBypassPermissionsMode;
-                };
+                  permissionsV2 = {
+                    inherit (cfg.permissions) allow;
+                    inherit (cfg.permissions) deny;
+                    inherit (cfg.permissions) ask;
+                    inherit (cfg.permissions) defaultMode;
+                    inherit (cfg.permissions) additionalDirectories;
+                  } // optionalAttrs (cfg.permissions.disableBypassPermissionsMode != null) {
+                    inherit (cfg.permissions) disableBypassPermissionsMode;
+                  };
 
-                # Plan 032 T4 — governance keys serialize flat at top level.
-                governanceJson = filterAttrs (_n: v: v != null) {
-                  inherit (cfg.governance)
-                    allowManagedPermissionRulesOnly
-                    allowManagedHooksOnly
-                    allowedMcpServers
-                    deniedMcpServers
-                    strictKnownMarketplaces
-                    allowedChannelPlugins
-                    enabledPlugins
-                    pluginTrustMessage
-                    forceRemoteSettingsRefresh;
-                };
+                  # Plan 032 T4 — governance keys serialize flat at top level.
+                  governanceJson = filterAttrs (_n: v: v != null) {
+                    inherit (cfg.governance)
+                      allowManagedPermissionRulesOnly
+                      allowManagedHooksOnly
+                      allowedMcpServers
+                      deniedMcpServers
+                      strictKnownMarketplaces
+                      allowedChannelPlugins
+                      enabledPlugins
+                      pluginTrustMessage
+                      forceRemoteSettingsRefresh;
+                  };
 
-                accountEnvVars =
-                  if accountApi == null then { }
-                  else
-                    (optionalAttrs (accountApi.baseUrl or null != null) {
-                      ANTHROPIC_BASE_URL = accountApi.baseUrl;
-                    })
-                    // (lib.mapAttrs'
-                      (model: mapping: lib.nameValuePair "ANTHROPIC_DEFAULT_${lib.toUpper model}_MODEL" mapping)
-                      (accountApi.modelMappings or { }))
-                    // (accountApi.extraEnvVars or { });
+                  accountEnvVars =
+                    if accountApi == null then { }
+                    else
+                      (optionalAttrs (accountApi.baseUrl or null != null) {
+                        ANTHROPIC_BASE_URL = accountApi.baseUrl;
+                      })
+                      // (lib.mapAttrs'
+                        (model: mapping: lib.nameValuePair "ANTHROPIC_DEFAULT_${lib.toUpper model}_MODEL" mapping)
+                        (accountApi.modelMappings or { }))
+                      // (accountApi.extraEnvVars or { });
 
-                mergedEnvVars = cfg.environmentVariables // accountEnvVars;
+                  mergedEnvVars = cfg.environmentVariables // accountEnvVars;
 
-                # Plan 032 T3 — serialize sandbox.* subtree, stripping nulls.
-                stripNulls = attrs: filterAttrs (_n: v: v != null) attrs;
-                sandboxNetwork = stripNulls {
-                  inherit (cfg.sandbox.network)
-                    allowUnixSockets allowAllUnixSockets allowLocalBinding
-                    allowedDomains httpProxyPort socksProxyPort;
-                };
-                sandboxFilesystem = stripNulls {
-                  inherit (cfg.sandbox.filesystem) allowWrite denyRead allowRead;
-                };
-                sandboxBase = stripNulls {
-                  inherit (cfg.sandbox)
-                    enabled failIfUnavailable autoAllowBashIfSandboxed
-                    allowUnsandboxedCommands excludedCommands
-                    enableWeakerNestedSandbox enableWeakerNetworkIsolation;
-                };
-                sandboxJson = sandboxBase
-                  // optionalAttrs (sandboxNetwork != { }) { network = sandboxNetwork; }
-                  // optionalAttrs (sandboxFilesystem != { }) { filesystem = sandboxFilesystem; };
-              in
-              {
-                inherit model;
-                permissions = permissionsV2;
-              }
-              // optionalAttrs (mergedEnvVars != { }) { env = mergedEnvVars; }
-              // optionalAttrs hasHooks { hooks = cleanHooks; }
-              // optionalAttrs (cfg.experimental != { }) { inherit (cfg) experimental; }
-              // optionalAttrs hasStatusline cfg._internal.statuslineSettings
-              // optionalAttrs cfg.enableProjectOverrides {
-                projectOverrides = {
-                  enabled = true;
-                  searchPaths = cfg.projectOverridePaths;
-                };
-              }
-              # Plan 032 T5 — security/UX scalar settings (only emit when set)
-              // optionalAttrs (cfg.voice.enable != null) {
-                voiceEnabled = cfg.voice.enable;
-              }
-              // optionalAttrs (cfg.voice.language != null) {
-                inherit (cfg.voice) language;
-              }
-              // optionalAttrs (cfg.display.showThinkingSummaries != null) {
-                inherit (cfg.display) showThinkingSummaries;
-              }
-              // optionalAttrs (cfg.cleanupPeriodDays != null) {
-                inherit (cfg) cleanupPeriodDays;
-              }
-              // optionalAttrs (cfg.security.disableSkillShellExecution != null) {
-                inherit (cfg.security) disableSkillShellExecution;
-              }
-              // optionalAttrs (cfg.security.disableDeepLinkRegistration != null) {
-                inherit (cfg.security) disableDeepLinkRegistration;
-              }
-              // optionalAttrs (cfg.prompt.includeGitInstructions != null) {
-                inherit (cfg.prompt) includeGitInstructions;
-              }
-              # Plan 032 T6 — apiKeyHelper, worktree.sparsePaths, modelOverrides
-              // optionalAttrs (cfg.apiKeyHelper != null) {
-                inherit (cfg) apiKeyHelper;
-              }
-              // optionalAttrs (cfg.worktree.sparsePaths != null) {
-                worktree = { inherit (cfg.worktree) sparsePaths; };
-              }
-              // optionalAttrs (cfg.modelOverrides != null) {
-                inherit (cfg) modelOverrides;
-              }
-              # Plan 032 T3 — sandbox.* subtree
-              // optionalAttrs (sandboxJson != { }) { sandbox = sandboxJson; }
-              # Plan 032 T4 — governance keys (flat top-level)
-              // governanceJson
-            ));
+                  # Plan 032 T3 — serialize sandbox.* subtree, stripping nulls.
+                  stripNulls = attrs: filterAttrs (_n: v: v != null) attrs;
+                  sandboxNetwork = stripNulls {
+                    inherit (cfg.sandbox.network)
+                      allowUnixSockets allowAllUnixSockets allowLocalBinding
+                      allowedDomains httpProxyPort socksProxyPort;
+                  };
+                  sandboxFilesystem = stripNulls {
+                    inherit (cfg.sandbox.filesystem) allowWrite denyRead allowRead;
+                  };
+                  sandboxBase = stripNulls {
+                    inherit (cfg.sandbox)
+                      enabled failIfUnavailable autoAllowBashIfSandboxed
+                      allowUnsandboxedCommands excludedCommands
+                      enableWeakerNestedSandbox enableWeakerNetworkIsolation;
+                  };
+                  sandboxJson = sandboxBase
+                    // optionalAttrs (sandboxNetwork != { }) { network = sandboxNetwork; }
+                    // optionalAttrs (sandboxFilesystem != { }) { filesystem = sandboxFilesystem; };
+                in
+                {
+                  inherit model;
+                  permissions = permissionsV2;
+                }
+                // optionalAttrs (mergedEnvVars != { }) { env = mergedEnvVars; }
+                // optionalAttrs hasHooks { hooks = cleanHooks; }
+                // optionalAttrs (cfg.experimental != { }) { inherit (cfg) experimental; }
+                // optionalAttrs hasStatusline cfg._internal.statuslineSettings
+                // optionalAttrs cfg.enableProjectOverrides {
+                  projectOverrides = {
+                    enabled = true;
+                    searchPaths = cfg.projectOverridePaths;
+                  };
+                }
+                # Plan 032 T5 — security/UX scalar settings (only emit when set)
+                // optionalAttrs (cfg.voice.enable != null) {
+                  voiceEnabled = cfg.voice.enable;
+                }
+                // optionalAttrs (cfg.voice.language != null) {
+                  inherit (cfg.voice) language;
+                }
+                // optionalAttrs (cfg.display.showThinkingSummaries != null) {
+                  inherit (cfg.display) showThinkingSummaries;
+                }
+                // optionalAttrs (cfg.cleanupPeriodDays != null) {
+                  inherit (cfg) cleanupPeriodDays;
+                }
+                // optionalAttrs (cfg.security.disableSkillShellExecution != null) {
+                  inherit (cfg.security) disableSkillShellExecution;
+                }
+                // optionalAttrs (cfg.security.disableDeepLinkRegistration != null) {
+                  inherit (cfg.security) disableDeepLinkRegistration;
+                }
+                // optionalAttrs (cfg.prompt.includeGitInstructions != null) {
+                  inherit (cfg.prompt) includeGitInstructions;
+                }
+                # Plan 032 T6 — apiKeyHelper, worktree.sparsePaths, modelOverrides
+                // optionalAttrs (cfg.apiKeyHelper != null) {
+                  inherit (cfg) apiKeyHelper;
+                }
+                // optionalAttrs (cfg.worktree.sparsePaths != null) {
+                  worktree = { inherit (cfg.worktree) sparsePaths; };
+                }
+                // optionalAttrs (cfg.modelOverrides != null) {
+                  inherit (cfg) modelOverrides;
+                }
+                # Plan 032 T3 — sandbox.* subtree
+                // optionalAttrs (sandboxJson != { }) { sandbox = sandboxJson; }
+                # Plan 032 T4 — governance keys (flat top-level)
+                // governanceJson
+              )
+              # Plan 046 T3 — settingsExtra escape hatch (deep-merged last; wins on conflict)
+              cfg.settingsExtra));
 
             mcpTemplate = pkgs.writeText "claude-mcp.json" (builtins.toJSON {
               mcpServers = claudeCodeMcpServers;
