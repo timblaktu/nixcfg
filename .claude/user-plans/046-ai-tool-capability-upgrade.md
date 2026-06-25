@@ -830,6 +830,13 @@ fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
   duplicate-Sonnet to GLM-5 (most capable open model). **Any catalog model is runtime-switchable with
   NO config change** via `/model <id>` (session) or `--model <id>`; only the menu shortcuts + the
   persistent default are config-controlled (the Nix-managed default re-asserts on launch).
+  **Two MORE picker entries added (nixcfg-work `a41374d`):** via per-account `provider.extraEnv`
+  (work-only; global customOption/fable would leak into max/pro) — `ANTHROPIC_CUSTOM_MODEL_OPTION=
+  minimax-m27` (MiniMax M2.7, source-confirmed to render) + `ANTHROPIC_DEFAULT_FABLE_MODEL=
+  mistral.devstral-2-123b` (Devstral 2 123B; Fable-slot picker rendering UNVERIFIED in 2.1.191).
+  Haiku slot deliberately kept as Claude Haiku 4.5 (CC's background model — a big model there is
+  slow + burns the per-model hourly quota). Final menu (best case): Default(Sonnet) / GLM-5 / Sonnet /
+  Haiku / MiniMax-M2.7 / Devstral-123B.
 
 ## Notes for the executor
 
