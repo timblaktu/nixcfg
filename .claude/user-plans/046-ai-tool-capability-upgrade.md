@@ -88,7 +88,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T10 — OC: full TUI (keybinds/themes/scroll/attention) + plugins | opencode | TASK:DEFERRED (OC dormant) |
 | T11 — RTK-Tokensave: Nix-managed hook (CC) | cross-cutting | TASK:COMPLETE |
 | T12 — Shared skills/commands/context-file machinery | cross-cutting | TASK:DEFERRED (needs OC) |
-| T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:PENDING |
+| T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:IN_PROGRESS |
 | T14 — Docs refresh (comparison + verdict addendum) | docs | TASK:PENDING |
 | T15 — CCv2 Anthropic-format probe (non-Claude models) | investigation | TASK:BLOCKED — USER_INPUT_REQUIRED (regen CCv2 token, then run probe) |
 
@@ -626,7 +626,7 @@ source. Existing per-tool custom skills/commands still work (back-compat).
 
 ---
 
-## T13 — Claude Code gateway model discovery in the wrapper `TASK:PENDING`
+## T13 — Claude Code gateway model discovery in the wrapper `TASK:IN_PROGRESS` (2026-06-24)
 
 Depends on: T1, T4. CC now supports native gateway discovery
 (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`, ≥2.1.129; queries `/v1/models`, caches to
