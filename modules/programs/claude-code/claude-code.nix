@@ -995,6 +995,22 @@
                     '';
                     example = [ "qwen3-coder-next" "glm-5" ];
                   };
+
+                  # Plan 046 — per-account availableModels override. Seeds THIS
+                  # account's settings.json `availableModels` (the /model picker
+                  # allowlist) with endpoint-specific IDs, without leaking them
+                  # into other accounts (the global `models.available` would).
+                  # IDs must be valid on this account's own endpoint/auth.
+                  availableModels = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = ''
+                      Per-account model list (settings.json `availableModels`),
+                      shown in the `/model` picker. Overrides the global
+                      `models.available` for this account only.
+                    '';
+                    example = [ "us.anthropic.claude-sonnet-4-6" "qwen3-coder-next" "glm-5" ];
+                  };
                 };
 
                 secrets = {
@@ -1473,9 +1489,17 @@
                     fallbackModel = effectiveFallback;
                   }
                 )
-                // optionalAttrs (cfg.models.available != null) {
-                  availableModels = cfg.models.available;
-                }
+                // (
+                  let
+                    effectiveAvailable =
+                      if (accountApi.availableModels or null) != null
+                      then accountApi.availableModels
+                      else cfg.models.available;
+                  in
+                  optionalAttrs (effectiveAvailable != null) {
+                    availableModels = effectiveAvailable;
+                  }
+                )
                 // optionalAttrs (cfg.models.enforceAvailable != null) {
                   enforceAvailableModels = cfg.models.enforceAvailable;
                 }
@@ -1727,8 +1751,9 @@
                     accountApi = {
                       inherit (account.api) baseUrl;
                       inherit (account.api) modelMappings;
-                      # Plan 046 — per-account fallbackModel override (null = use global)
+                      # Plan 046 — per-account fallbackModel + availableModels (null = use global)
                       inherit (account.api) fallbackModel;
+                      inherit (account.api) availableModels;
                       # Plan 046 T4 — provider/auth env folds in with extraEnvVars
                       # so the settings.json `env` block carries it too.
                       # Plan 046 T13 — gateway discovery toggle folds in alongside.
