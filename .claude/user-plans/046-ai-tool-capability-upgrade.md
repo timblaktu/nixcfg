@@ -81,7 +81,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T3 — Raw settings escape-hatch (CC done; OC optional/dormant) | foundation | TASK:COMPLETE |
 | T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:COMPLETE |
 | T5 — CC: hooks entry-types + remaining events | claude-code | TASK:COMPLETE |
-| T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:PENDING |
+| T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:IN_PROGRESS |
 | T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:PENDING |
 | T8 — OC: new/changed top-level config keys | opencode | TASK:DEFERRED (OC dormant) |
 | T9 — OC: file-based agents/commands/skills + permissions | opencode | TASK:DEFERRED (OC dormant) |
