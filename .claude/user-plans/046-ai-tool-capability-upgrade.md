@@ -79,7 +79,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T1 — Bump Claude Code to latest (pin strategy) | versions | TASK:COMPLETE |
 | T2 — Bump OpenCode to latest | versions | TASK:DEFERRED (OC dormant) |
 | T3 — Raw settings escape-hatch (CC done; OC optional/dormant) | foundation | TASK:COMPLETE |
-| T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:PENDING |
+| T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:IN_PROGRESS |
 | T5 — CC: hooks entry-types + remaining events | claude-code | TASK:PENDING |
 | T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:PENDING |
 | T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:PENDING |
