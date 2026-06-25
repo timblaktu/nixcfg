@@ -734,6 +734,30 @@ pin strategy. No new top-level doc unless necessary; ask where ambiguous.
 
 ---
 
+## Post-deploy improvements (2026-06-25, after T14 deploy) — DONE + LIVE
+
+Two follow-ups surfaced during/after the work-host deployment, both shipped and verified:
+
+1. **Per-account `api.fallbackModel` override** (`claude-code.nix`). The T4 global `models.fallback`
+   serialized identically into EVERY account's settings.json — wrong for heterogeneous endpoints
+   (personal accounts on api.anthropic.com cannot use a work gateway's non-Anthropic IDs). Added
+   `accounts.<name>.api.fallbackModel` (nullOr listOf str, ≤3 asserted); when set it overrides the
+   global in THAT account only. Wired through the constructed `accountApi` into `mkSettingsTemplate`
+   (a23f15e fixed the constructed-attrset dropping the field). nixcfg-work sets the work account to
+   `[ "qwen3-coder-next" "glm-5" ]` (CCv2 catalog IDs) so CC auto-fails-over when Auto-MoM hits its
+   per-model hourly cap. **Verified on disk:** work settings.json carries it; max/pro do not.
+   Commits: nixcfg `140475e`/`a23f15e`; deployed via `feat/libvirt-firmware-vm` + nixcfg-work lock bump.
+
+2. **HM activation-script BUILD check** (`modules/flake-parts/tests.nix`). `mkHmActivationTest` +
+   `activate-hm-thinky-nixos` force the activationPackage (incl. activation-script.drv) to build and
+   `bash -n`-validate the activate script — the only thing that exercises activation-string
+   generators like the `.claude.json` `jq_args` block. Guards the shell-quoting bug class that
+   `nix flake check --no-build` and the eval tests passed over. **CAVEAT:** effective only when BUILT
+   (`nix build '.#checks.x86_64-linux.activate-hm-thinky-nixos'` or full `nix flake check`); the
+   commit gate runs `--no-build` and skips it. Commit nixcfg `55dac02`.
+
+---
+
 ## T15 — CCv2 Anthropic-format probe (non-Claude models) `TASK:BLOCKED — USER_INPUT_REQUIRED`
 
 Determines whether CC can use the non-Claude CCv2 catalog (`Auto-MoM`, Qwen, Llama 4, GLM 5).
