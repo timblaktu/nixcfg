@@ -975,6 +975,26 @@
                       haiku = "qwen-a3b";
                     };
                   };
+
+                  # Plan 046 — per-account fallbackModel override. The global
+                  # `programs.claude-code.models.fallback` is identical across
+                  # all accounts, which is wrong when accounts target different
+                  # endpoints (e.g. personal accounts on api.anthropic.com vs a
+                  # work account on a gateway whose model IDs are non-Anthropic).
+                  # When set, this overrides the global value in THIS account's
+                  # settings.json `fallbackModel`. IDs must be valid on this
+                  # account's own endpoint/auth. Max 3 (asserted globally).
+                  fallbackModel = mkOption {
+                    type = types.nullOr (types.listOf types.str);
+                    default = null;
+                    description = ''
+                      Per-account ordered fallback model list (settings.json
+                      `fallbackModel`), tried in order when the primary model is
+                      rate-limited/unavailable. Overrides the global
+                      `models.fallback` for this account only.
+                    '';
+                    example = [ "qwen3-coder-next" "glm-5" ];
+                  };
                 };
 
                 secrets = {
@@ -1440,10 +1460,19 @@
                 // optionalAttrs (sandboxJson != { }) { sandbox = sandboxJson; }
                 # Plan 032 T4 — governance keys (flat top-level)
                 // governanceJson
-                # Plan 046 T4 — model selection settings (flat top-level)
-                // optionalAttrs (cfg.models.fallback != null) {
-                  fallbackModel = cfg.models.fallback;
-                }
+                # Plan 046 T4 — model selection settings (flat top-level).
+                # Per-account api.fallbackModel overrides the global value.
+                // (
+                  let
+                    effectiveFallback =
+                      if (accountApi.fallbackModel or null) != null
+                      then accountApi.fallbackModel
+                      else cfg.models.fallback;
+                  in
+                  optionalAttrs (effectiveFallback != null) {
+                    fallbackModel = effectiveFallback;
+                  }
+                )
                 // optionalAttrs (cfg.models.available != null) {
                   availableModels = cfg.models.available;
                 }
@@ -1902,6 +1931,13 @@
                 # Plan 046 T4 — upstream fallbackModel accepts at most 3 entries.
                 assertion = cfg.models.fallback == null || builtins.length cfg.models.fallback <= 3;
                 message = "programs.claude-code.models.fallback accepts at most 3 entries";
+              }
+              {
+                # Plan 046 — same cap applies to per-account overrides.
+                assertion = lib.all
+                  (a: (a.api.fallbackModel or null) == null || builtins.length a.api.fallbackModel <= 3)
+                  (lib.attrValues cfg.accounts);
+                message = "accounts.<name>.api.fallbackModel accepts at most 3 entries";
               }
               {
                 assertion = lib.hasPrefix "/" cfg.nixcfgPath;
