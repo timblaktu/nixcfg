@@ -574,9 +574,21 @@ is a clean no-op until a darwin tarball is added). Verified: pkgs/rtk builds + `
 (packaged path, no PATH guard); Darwin host evals with `rtk.enable=false`/`package==null` (linux-only
 pkg never forced); nixcfg-work `nix flake check` passed.
 
-**Deploy gate:** nixcfg-work's `nixcfg` input is locked to a revision WITHOUT T11. Before a real
-`home-manager switch`, land T11 into the nixcfg branch the work lock follows (or bump the lock to
-this `plan-046` branch). Until then, eval with `--override-input nixcfg /home/tim/src/nixcfg`.
+**Deploy gate — CLEARED + DEPLOYED 2026-06-25.** `plan-046` (HEAD `884f2cb`) was fast-forwarded onto
+the public branch the work lock follows (`github:timblaktu/nixcfg/feat/libvirt-firmware-vm`),
+nixcfg-work `flake.lock` bumped to `884f2cb` + committed (`15ccdd3` on `feat/darwin-support`), and
+`home-manager switch` run for `tim@pa161878-nixos`. **Verified live:** work `settings.json`
+`PreToolUse` `Bash` hook execs `<store>/bin/rtk hook claude` (packaged path; rtk 0.42.3 on PATH),
+CC = 2.1.191. RTK applies to ALL accounts (CC hooks are module-global).
+
+**Activation shell-quoting bug fixed during deploy (`884f2cb`):** the HM activation script embeds
+the hooks JSON inside single-quoted shell strings; the flake-check hook body's "Don't fail the hook"
+apostrophe broke the quote → bash syntax error building `activation-script.drv`. T5's hook-merge fix
+exposed it (the hook was previously clobbered, never reaching the JSON). Fix: `shJson` helper in
+`claude-code.nix` rewrites `'`→`'\''` for all four embedded JSON values. NOTE: `nix flake check
+--no-build` does NOT catch this — it never builds the activation script; only a real build/switch
+does. Lesson: DoD "nix flake check passes" is necessary but not sufficient for activation-string
+generators.
 
 Depends on: T1 (CC side), T2 (OC side) for the respective halves; otherwise independent.
 Integrate PAC `rtk` declaratively — never run `rtk init -g` imperatively (it clobbers
