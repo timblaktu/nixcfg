@@ -76,7 +76,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | Task | Area | Status |
 |---|---|---|
 | T0 — Branch + escape-hatch audit | foundation | TASK:COMPLETE |
-| T1 — Bump Claude Code to latest (pin strategy) | versions | TASK:PENDING |
+| T1 — Bump Claude Code to latest (pin strategy) | versions | TASK:COMPLETE |
 | T2 — Bump OpenCode to latest | versions | TASK:DEFERRED (OC dormant) |
 | T3 — Raw settings escape-hatch (CC primary; OC optional) | foundation | TASK:PENDING |
 | T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:PENDING |
@@ -138,7 +138,17 @@ updated with: (a) CC's current escape-hatch mechanism + file:line, (b) OC's, (c)
 
 ---
 
-## T1 — Bump Claude Code to latest with a sustainable pin `TASK:PENDING`
+## T1 — Bump Claude Code to latest with a sustainable pin `TASK:COMPLETE` (2026-06-24)
+
+**Done (2026-06-24):** flake nixpkgs is locked at `331800de`, which ships claude-code **2.1.158**
+(NOT the live-channel 2.1.92). Vendored `pkgs/claude-code-pinned/` (byte-identical copy of the
+nixpkgs derivation + `update.sh`; only `manifest.json` moves the version), pinned to **2.1.191**
+(bucket `latest` on 2026-06-24). Wired via `overlays/default.nix` `claude-code = prev.callPackage
+../pkgs/claude-code-pinned/package.nix { }`. **Verified:** `nix flake check --no-build` → all
+checks passed; `nix build` of the pinned package → `claude-code-2.1.191` with `versionCheckHook`
+green (runs `claude --version`). Bump path: edit `manifest.json` (or run `update.sh [version]`),
+re-stage, rebuild. This unblocks T4-T7 (fallbackModel/Fable/availableModels/reliability all
+postdate 2.1.158).
 
 nixpkgs-unstable lags badly (2.1.92 vs 2.1.190), and target features need ≥2.1.129 (gateway
 discovery), 2.1.166 (`fallbackModel`), 2.1.170 (Fable), 2.1.175 (`enforceAvailableModels`),

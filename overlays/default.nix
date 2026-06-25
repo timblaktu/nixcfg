@@ -21,9 +21,13 @@ in
   # ISOLATED: docling from custom nixpkgs (temporary until PR #184 merges)
   inherit (pkgsDocling) docling;
 
-  # claude-code: using upstream nixpkgs (2.1.158 binary distribution)
-  # Previous pin to 2.1.97 npm build removed — upstream switched to binary packaging.
-  # FORCE_AUTOUPDATE_PLUGINS was the only extra flag; re-add here if needed.
+  # claude-code 2.1.191 - pinned ahead of nixpkgs input (which has 2.1.158).
+  # Plan 046: features needed for the CC-centric CCv2 workflow postdate 2.1.158 -
+  # fallbackModel (2.1.166), Fable (2.1.170), availableModels/enforceAvailableModels
+  # (2.1.172-175), reliability env (2.1.186). Vendored copy is byte-identical to the
+  # nixpkgs derivation; only pkgs/claude-code-pinned/manifest.json moves the version.
+  # Refresh: pkgs/claude-code-pinned/update.sh
+  claude-code = prev.callPackage ../pkgs/claude-code-pinned/package.nix { };
 
   # opencode 1.14.48 - pinned ahead of nixpkgs input (which has 1.2.5)
   opencode = prev.callPackage ../pkgs/opencode-pinned/package.nix { };
