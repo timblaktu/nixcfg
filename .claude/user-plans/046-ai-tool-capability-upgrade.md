@@ -835,8 +835,13 @@ fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
   minimax-m27` (MiniMax M2.7, source-confirmed to render) + `ANTHROPIC_DEFAULT_FABLE_MODEL=
   mistral.devstral-2-123b` (Devstral 2 123B; Fable-slot picker rendering UNVERIFIED in 2.1.191).
   Haiku slot deliberately kept as Claude Haiku 4.5 (CC's background model — a big model there is
-  slow + burns the per-model hourly quota). Final menu (best case): Default(Sonnet) / GLM-5 / Sonnet /
-  Haiku / MiniMax-M2.7 / Devstral-123B.
+  slow + burns the per-model hourly quota). Final menu CONFIRMED (all 6 render incl. the Fable row):
+  Default / GLM-5 / Sonnet / Haiku / MiniMax-M2.7 / Devstral-123B.
+  **Default-model pin (nixcfg-work `95d8cc6`):** once opus→glm-5, CC resolved the `model="sonnet"` alias
+  to the opus tier (opened on glm-5). The account `model` is an ENUM (sonnet/opus/haiku — can't take a
+  full id; the attempt errored at ACTIVATION BUILD though `flake check --no-build` passed it). Fix:
+  `provider.extraEnv.ANTHROPIC_MODEL=us.anthropic.claude-sonnet-4-6` (work-only, top precedence) → opens
+  on Sonnet; `/model`/`--model` still switch per-session.
 
 ## Notes for the executor
 
