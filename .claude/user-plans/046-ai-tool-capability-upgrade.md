@@ -823,6 +823,13 @@ fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
   (2026-06-25): removed entirely** for the work account (nixcfg-work `ee28dab`) — user prefers an
   overloaded model to surface the error and switch manually via `/model` rather than be silently
   auto-routed to a less-trusted fallback.
+  **Picker slots final (nixcfg-work `c7bb290`):** CC's `/model` menu for a custom gateway = Default +
+  the 3 `modelMappings` slots only (no full-catalog selector — a genuine CC-vs-OpenCode gap; max ~4-6
+  curated entries via slots + 1 `ANTHROPIC_CUSTOM_MODEL_OPTION` + possible Fable slot). Work slots:
+  Default(Sonnet)/opus→`glm-5`/sonnet→`claude-sonnet-4-6`/haiku→`claude-haiku-4-5`. Opus repurposed off
+  duplicate-Sonnet to GLM-5 (most capable open model). **Any catalog model is runtime-switchable with
+  NO config change** via `/model <id>` (session) or `--model <id>`; only the menu shortcuts + the
+  persistent default are config-controlled (the Nix-managed default re-asserts on launch).
 
 ## Notes for the executor
 
