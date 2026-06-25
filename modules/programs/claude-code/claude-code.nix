@@ -1206,11 +1206,18 @@
 
             userGlobalMemoryTemplate = builtins.readFile ./_hm/claude-code-user-memory-template.md;
 
-            # Per-account CLAUDE.md: substitute {{ACCOUNT}} with the account name
+            # Per-account CLAUDE.md: substitute {{ACCOUNT}} with the account name.
+            # Plan 046 T11 — when RTK is enabled, append an `@RTK.md` reference so
+            # Claude Code auto-loads the co-deployed RTK.md context file (mirrors
+            # what `rtk init -g` adds to ~/.claude/CLAUDE.md).
             mkClaudeMdTemplate = name:
               let
                 accountLabel = lib.toUpper name;
-                content = builtins.replaceStrings [ "{{ACCOUNT}}" ] [ accountLabel ] userGlobalMemoryTemplate;
+                base = builtins.replaceStrings [ "{{ACCOUNT}}" ] [ accountLabel ] userGlobalMemoryTemplate;
+                rtkRef = lib.optionalString
+                  (cfg.hooks.rtk.enable && cfg.hooks.rtk.contextFile != null)
+                  "\n\n@RTK.md\n";
+                content = base + rtkRef;
               in
               pkgs.writeText "claude-memory-${name}.md" content;
 
@@ -1431,6 +1438,10 @@
             keybindingsTemplate = pkgs.writeText "claude-keybindings.json"
               (builtins.toJSON cfg.keybindings);
 
+            # Plan 046 T11 — RTK.md context file (deployed per-account into the
+            # config dir when RTK is enabled and a contextFile is set; lazy).
+            rtkMdTemplate = pkgs.writeText "RTK.md" cfg.hooks.rtk.contextFile;
+
             claudeMdTemplates = mapAttrs (name: _: mkClaudeMdTemplate name)
               (filterAttrs (_n: a: a.enable) cfg.accounts);
 
@@ -1519,7 +1530,11 @@
               shellcheck
             ] ++ optionals (cfg.hooks.notifications.enable && !stdenv.isDarwin) [
               libnotify
-            ] ++ wrapperScripts
+            ]
+              # Plan 046 T11 — put the RTK binary on PATH when packaged (else the
+              # hook resolves `rtk` from the ambient PATH and no-ops if absent).
+              ++ optional (cfg.hooks.rtk.package != null) cfg.hooks.rtk.package
+              ++ wrapperScripts
               ++ defaultWrapper;
 
             home.file = mkMerge [
@@ -1648,6 +1663,11 @@
                   ${optionalString (cfg.keybindings != null) ''
                   copy_template "${keybindingsTemplate}" "$accountDir/keybindings.json"
                   echo "Deployed keybindings.json: $accountDir/keybindings.json"
+                  ''}
+
+                  ${optionalString (cfg.hooks.rtk.enable && cfg.hooks.rtk.contextFile != null) ''
+                  copy_template "${rtkMdTemplate}" "$accountDir/RTK.md"
+                  echo "Deployed RTK.md: $accountDir/RTK.md"
                   ''}
 
                   if [[ -f "$accountDir/.claude.json" ]]; then

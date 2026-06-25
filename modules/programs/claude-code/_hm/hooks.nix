@@ -110,6 +110,35 @@ let
       export PATH=${makeBinPath [ pkgs.jq pkgs.fd pkgs.coreutils pkgs.gawk pkgs.gnugrep ]}:$PATH
     '' + builtins.readFile ./resume-hook.sh);
 
+  # Plan 046 T11 — RTK-Tokensave PreToolUse Bash hook (graceful pass-through).
+  # RTK (`rtk hook claude`) reads the Bash tool-call JSON on stdin and emits a
+  # filtered/rewritten version on stdout, cutting tokens before output reaches
+  # the model (per docs/claude-code-codecompanion-parity-verdict.md §2b). We do
+  # NOT run `rtk init -g` (it clobbers ~/.claude/{settings.json,CLAUDE.md} and
+  # assumes ~/.claude, conflicting with CLAUDE_CONFIG_DIR) — the hook is wired
+  # declaratively here instead.
+  #
+  # The hook MUST NEVER block a Bash call. When `rtk` is unavailable the script
+  # is a no-op: it emits nothing and exits 0, so Claude Code runs the original
+  # command unchanged. When `hooks.rtk.package` is set the binary is always
+  # present, so we delegate unconditionally; otherwise we resolve `rtk` from
+  # PATH at hook time and degrade gracefully if absent.
+  rtkBin =
+    if cfg.hooks.rtk.package != null
+    then "${cfg.hooks.rtk.package}/bin/rtk"
+    else "rtk";
+  rtkHookScript = pkgs.writeShellScript "claude-rtk-hook" (
+    if cfg.hooks.rtk.package != null then ''
+      exec ${rtkBin} hook claude
+    '' else ''
+      if command -v rtk >/dev/null 2>&1; then
+        exec rtk hook claude
+      fi
+      # rtk absent — pass-through no-op (never block the Bash call).
+      exit 0
+    ''
+  );
+
 in
 {
   options.programs.claude-code.hooks = {
@@ -272,6 +301,62 @@ in
         '';
       };
     };
+
+    # Plan 046 T11 — RTK-Tokensave (PAC AI Rust Token Killer) integration.
+    rtk = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Enable the RTK-Tokensave `PreToolUse` `Bash` hook (`rtk hook claude`),
+          which filters/rewrites shell-command output to cut tokens before it
+          reaches the model. Wired declaratively (NOT via `rtk init -g`, which
+          clobbers ~/.claude and conflicts with CLAUDE_CONFIG_DIR).
+
+          NOTE: hooks are module-global (the same settings.json hooks block is
+          deployed to every account), so enabling this applies the hook to ALL
+          enabled accounts on the host. Intended to be turned on for the work
+          host. The hook degrades to a pass-through no-op when `rtk` is absent
+          (see `package`), so it is harmless on hosts without RTK installed.
+        '';
+      };
+
+      package = mkOption {
+        type = types.nullOr types.package;
+        default = null;
+        description = ''
+          RTK binary package. When set, its `bin/rtk` is added to the Claude
+          Code PATH and the hook delegates to it unconditionally. When null
+          (default), `rtk` is resolved from PATH at hook time and the hook is a
+          graceful pass-through no-op if it is not found (so a Bash call is
+          never blocked). RTK lives in a credential-gated GitLab repo
+          (`git.panasonic.aero/pac/pac-ai-rtk-tokensave`); the work layer
+          supplies the binary on PATH, hence the default leaves it unpackaged.
+        '';
+      };
+
+      contextFile = mkOption {
+        type = types.nullOr types.lines;
+        default = ''
+          # RTK-Tokensave
+
+          This session uses PAC AI RTK-Tokensave: a `PreToolUse` Bash hook
+          (`rtk hook claude`) rewrites/filters the output of shell commands
+          (git, cargo, pytest, docker, grep, and 100+ others) before it reaches
+          the model, reducing token usage substantially. Command behavior is
+          unchanged; only the captured output the model sees is condensed.
+
+          See `docs/claude-code-codecompanion-parity-verdict.md` section 2b.
+        '';
+        description = ''
+          Contents of `RTK.md`, deployed into each enabled account's config dir
+          and referenced via `@RTK.md` from the generated `CLAUDE.md` (mirroring
+          what `rtk init -g` would add) when `rtk.enable` is true. Set to null
+          to deploy no context file. The default is a documented stub; the work
+          layer can override it with RTK's canonical content.
+        '';
+      };
+    };
   };
 
   # Plan 046 T5 — assemble hooks by CONCATENATING per-event lists across all
@@ -387,6 +472,20 @@ in
           })
         ];
       };
+
+      # Plan 046 T11 — RTK-Tokensave PreToolUse Bash hook. continueOnError keeps
+      # a non-zero RTK exit from blocking the tool call; the script itself is a
+      # no-op when `rtk` is absent (see rtkHookScript above).
+      rtkHooks = lib.optionalAttrs cfg.hooks.rtk.enable {
+        PreToolUse = [
+          (mkHook {
+            matcher = "Bash";
+            command = "${rtkHookScript}";
+            continueOnError = true;
+            timeout = 30;
+          })
+        ];
+      };
     in
     mergeHookSets [
       # Base scaffold — every known event present so cleanHooks/hasHooks can
@@ -396,6 +495,7 @@ in
       securityHooks
       loggingHooks
       resumeHooks
+      rtkHooks
       # Plan 046 T5 — user-defined custom hooks. Freeform attrs keyed by event
       # name; concatenated alongside the categorized hooks so users can express
       # arbitrary entry types (http, mcp_tool, prompt, agent) and per-entry

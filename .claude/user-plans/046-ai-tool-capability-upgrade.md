@@ -86,7 +86,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T8 — OC: new/changed top-level config keys | opencode | TASK:DEFERRED (OC dormant) |
 | T9 — OC: file-based agents/commands/skills + permissions | opencode | TASK:DEFERRED (OC dormant) |
 | T10 — OC: full TUI (keybinds/themes/scroll/attention) + plugins | opencode | TASK:DEFERRED (OC dormant) |
-| T11 — RTK-Tokensave: Nix-managed hook (CC) | cross-cutting | TASK:IN_PROGRESS |
+| T11 — RTK-Tokensave: Nix-managed hook (CC) | cross-cutting | TASK:COMPLETE |
 | T12 — Shared skills/commands/context-file machinery | cross-cutting | TASK:DEFERRED (needs OC) |
 | T13 — CC gateway model discovery in wrapper (Claude subset) | cross-cutting | TASK:PENDING |
 | T14 — Docs refresh (comparison + verdict addendum) | docs | TASK:PENDING |
@@ -517,7 +517,50 @@ BLOCKED-BY-DEP if T2 unmet.
 
 ---
 
-## T11 — RTK-Tokensave: Nix-managed hook (CC) + plugin (OC) `TASK:IN_PROGRESS`
+## T11 — RTK-Tokensave: Nix-managed hook (CC) + plugin (OC) `TASK:COMPLETE` (2026-06-25)
+
+**Done — CC half (2026-06-25):** RTK contract taken from
+`docs/claude-code-codecompanion-parity-verdict.md` §2b (the real
+`git.panasonic.aero/pac/pac-ai-rtk-tokensave` repo is credential-gated → not cloned; see
+repo-verification note below). Changes:
+- **`_hm/hooks.nix`** — new `programs.claude-code.hooks.rtk` option group: `enable` (bool, default
+  **false**), `package` (nullOr package, default null), `contextFile` (nullOr lines, default a
+  documented stub). New `rtkHookScript` (writeShellScript) + `rtkHooks` set wired into
+  `mergeHookSets`. When `rtk.enable`, a `PreToolUse` matcher `"Bash"` `command`-type hook
+  (`continueOnError=true`, `timeout=30`) is concatenated alongside the categorized hooks. The hook
+  command is the guard script, NOT a raw `rtk hook claude`, so it **never blocks a Bash call**:
+  - `package == null` (default): `if command -v rtk …; then exec rtk hook claude; fi; exit 0`
+    — graceful pass-through no-op when `rtk` is absent (`rtk` resolved from the ambient PATH).
+  - `package != null`: `exec ${package}/bin/rtk hook claude` (binary always present).
+- **`claude-code.nix`** — RTK.md deployed per-account into the config dir (= `CLAUDE_CONFIG_DIR`)
+  via `copy_template` when `rtk.enable && contextFile != null` (mirrors keybindings.json); the
+  per-account `CLAUDE.md` template gets an appended `@RTK.md` reference under the same condition
+  (mirrors what `rtk init -g` adds, but declaratively — we NEVER run `rtk init -g`, it clobbers
+  ~/.claude and conflicts with CLAUDE_CONFIG_DIR). When `rtk.package != null` its `bin/` is added
+  to `home.packages` (PATH wiring).
+- **Nix-management path is wired but the derivation is deferred:** `hooks.rtk.package` is the seam
+  to manage the binary from Nix exactly like `claude-code` — set it to an rtk derivation and the
+  binary lands on PATH and the hook delegates to it. Building that derivation needs the
+  credential-gated GitLab source ⇒ left null; the work layer supplies `rtk` on PATH for now and
+  the guard no-ops elsewhere.
+
+**Verified (eval, real host `tim@pa161878-nixos` via nixcfg-work `--override-input`):** with
+`hooks.rtk.enable=true`, `_internal.hooks.PreToolUse` renders 3 groups, the third being
+`{matcher="Bash"; hooks=[{type="command"; command=<…claude-rtk-hook>; continueOnError=true;
+timeout=30}]}`. Built that script from its string-context drv — content is the graceful guard
+(`command -v rtk … exec rtk hook claude … exit 0`). With the default (disabled), NO `Bash`
+`PreToolUse` group exists (`builtins.any (g: g.matcher=="Bash") … == false`). `nix flake check
+--no-build` → all checks passed. Idempotent (append-if-absent option additions; all leaves default
+off/null; RTK.md + `@RTK.md` deployed only when enabled).
+
+**OC half — DEFERRED (dormant):** the `tool.execute.before` plugin is not implemented; OC is parked
+per the CC-centric decision. Add only if OC is revived.
+
+**Repo-verification — USER_INPUT_REQUIRED:** confirming RTK's exact CLI/contract against the real
+`git.panasonic.aero/pac/pac-ai-rtk-tokensave` repo (and producing a Nix derivation for
+`hooks.rtk.package`) requires GitLab auth on `git.panasonic.aero`. Implemented against the
+documented contract instead; final binary packaging awaits the user providing repo access +
+distribution method (Rust source → `buildRustPackage`, or a prebuilt binary release).
 
 Depends on: T1 (CC side), T2 (OC side) for the respective halves; otherwise independent.
 Integrate PAC `rtk` declaratively — never run `rtk init -g` imperatively (it clobbers
