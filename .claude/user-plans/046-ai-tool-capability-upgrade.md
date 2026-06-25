@@ -81,7 +81,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T3 — Raw settings escape-hatch (CC done; OC optional/dormant) | foundation | TASK:COMPLETE |
 | T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:COMPLETE |
 | T5 — CC: hooks entry-types + remaining events | claude-code | TASK:COMPLETE |
-| T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:IN_PROGRESS |
+| T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:COMPLETE |
 | T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:PENDING |
 | T8 — OC: new/changed top-level config keys | opencode | TASK:DEFERRED (OC dormant) |
 | T9 — OC: file-based agents/commands/skills + permissions | opencode | TASK:DEFERRED (OC dormant) |
@@ -324,7 +324,48 @@ BLOCKED-BY-DEP if T1 unmet.
 
 ---
 
-## T6 — Claude Code: skills/commands/subagents/plugins frontmatter `TASK:PENDING`
+## T6 — Claude Code: skills/commands/subagents/plugins frontmatter `TASK:COMPLETE` (2026-06-24)
+
+**Done (2026-06-24):** field names + casing verified against `code.claude.com/docs/en/skills`,
+`/sub-agents`, `/settings`, `/plugin-marketplaces` (live, 2026-06-24) and `~/src/claude-code/`
+CHANGELOG + plugin-dev reference skills before modeling. Changes:
+- **Skill frontmatter** (`_hm/skills.nix`): extended the custom-skill submodule with the full
+  documented SKILL.md frontmatter set — `whenToUse`→`when_to_use`, `argumentHint`→`argument-hint`,
+  `arguments`, `allowedTools`→`allowed-tools`, `disallowedTools`→`disallowed-tools`, `model`,
+  `disableModelInvocation`→`disable-model-invocation`, `userInvocable`→`user-invocable`, `effort`
+  (enum low/medium/high/xhigh/max), `context` (enum `fork`), `agent`, `paths`, `shell` (enum
+  bash/powershell), `hooks` (freeform attrs). Rewrote `mkSkillFile` with a generic YAML
+  frontmatter builder (`mkFmValue`/`mkFrontmatter`): scalars inline, lists/attrs as JSON flow
+  (valid YAML), nulls/`{}`/`[]` dropped so only set fields emit. Upstream merged custom slash
+  commands INTO skills, so this single path covers command-style frontmatter too — the dead
+  `_internal.slashCommandDefs` (never deployed, like pre-T5 `hooks.custom`) was left untouched
+  rather than wired to a deprecated abstraction.
+- **Subagent frontmatter** (`_hm/sub-agents.nix`): rewrote `mkSubAgent` to emit the full
+  documented field set (from the JSON `--agents` form): `tools`/`disallowedTools` (comma-sep),
+  `model`, `color` (enum), `permissionMode` (enum default/acceptEdits/auto/dontAsk/
+  bypassPermissions/plan), `maxTurns`, `skills` + `mcpServers` + `hooks` (JSON flow), `memory`
+  (enum user/project/local), `background`, `effort`, `isolation` (enum `worktree`),
+  `initialPrompt`. Added matching options to the custom-subagent submodule. All new params default
+  null/`{}`/`[]`; builtin agents (codeSearcher/memoryBank/architect) rely on defaults and emit
+  unchanged frontmatter.
+- **Plugin/skill settings** (`claude-code.nix`, new `plugins`/`skillSettings` groups, serialized
+  FLAT top-level): `plugins.extraKnownMarketplaces` (freeform JSON, attrs keyed by marketplace
+  name w/ a `source` object) → `extraKnownMarketplaces`; `skillSettings.disableBundled` →
+  `disableBundledSkills`; `skillSettings.maxDescriptionChars` → `maxSkillDescriptionChars`;
+  `skillSettings.listingBudgetFraction` → `skillListingBudgetFraction`. Managed `enabledPlugins`/
+  `strictKnownMarketplaces` already live under `governance` (T-032) — NOT duplicated here. All
+  default null → nothing emitted unless set.
+
+**Verified (eval, tim@thinky-ubuntu via `extendModules` + building the writeText drvs out of the
+activation string context):** a custom skill rendered `argument-hint`/`allowed-tools`/
+`disallowed-tools`/`disable-model-invocation`/`user-invocable`/`context: fork`/`agent`/`paths`/
+`shell`/`hooks`/`when_to_use` in SKILL.md; a custom subagent rendered `permissionMode: plan` +
+`isolation: worktree` (plus memory/effort/background/maxTurns/skills/mcpServers); both accounts'
+settings.json carried `extraKnownMarketplaces` + `disableBundledSkills`/`maxSkillDescriptionChars`/
+`skillListingBudgetFraction`. `nix flake check --no-build` → all checks passed. Idempotent
+(append-if-absent option additions; default no-op merges). Note: bare `argument-hint: [issue-number]`
+is YAML-sequence syntax but CC coerces it to a string (CHANGELOG fix) and the upstream docs use the
+same bare form, so it is the intended representation.
 
 Depends on: T1. Upstream merged commands into skills and enriched frontmatter. Expose:
 - Skill/command frontmatter: `argument-hint`, `arguments`, `allowed-tools`/`disallowed-tools`,

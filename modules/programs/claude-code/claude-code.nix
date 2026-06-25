@@ -329,6 +329,64 @@
           };
 
           # ─────────────────────────────────────────────────────────────────────
+          # Plan 046 T6 — plugin marketplace + skill-listing settings. Serialize
+          # FLAT at the top level of settings.json (the nix-side grouping is
+          # ergonomic only). Keys verified against code.claude.com/docs/en/settings
+          # + plugin-marketplaces (2026-06-24). Note: managed `enabledPlugins` /
+          # `strictKnownMarketplaces` already live under `governance`; this block
+          # adds the NON-managed `extraKnownMarketplaces` plus the skill-listing
+          # budget knobs. All default null/{} so nothing is emitted unless set.
+          # ─────────────────────────────────────────────────────────────────────
+          plugins = {
+            extraKnownMarketplaces = mkOption {
+              type = types.nullOr (pkgs.formats.json { }).type;
+              default = null;
+              example = literalExpression ''
+                {
+                  company-tools.source = { source = "github"; repo = "your-org/claude-plugins"; };
+                }
+              '';
+              description = ''
+                Marketplaces registered automatically without the user running
+                `/plugin marketplace add`. An attrset keyed by marketplace name,
+                each with a `source` object (e.g. `{ source = "github"; repo =
+                "org/repo"; }`). Freeform JSON for forward-compat. Null = omit.
+              '';
+            };
+          };
+
+          skillSettings = {
+            disableBundled = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Disable bundled skills/workflows (`disableBundledSkills`).
+                Built-in slash commands stay typable but hidden from the model;
+                plugin and `.claude/skills/` skills are unaffected. Null = omit.
+              '';
+            };
+            maxDescriptionChars = mkOption {
+              type = types.nullOr types.ints.positive;
+              default = null;
+              example = 2048;
+              description = ''
+                Per-skill cap on combined `description` + `when_to_use` text the
+                model sees each turn (`maxSkillDescriptionChars`). Upstream
+                default 1536. Null = omit.
+              '';
+            };
+            listingBudgetFraction = mkOption {
+              type = types.nullOr (types.either types.float types.int);
+              default = null;
+              example = 0.5;
+              description = ''
+                Fraction of the context budget allotted to the skill listing
+                (`skillListingBudgetFraction`). Null = omit (upstream default).
+              '';
+            };
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
           # Plan 032 T3 — CC sandbox.* subtree (CC-G1).
           # Keys verified against ~/src/claude-code/examples/settings/
           # settings-bash-sandbox.json and CHANGELOG entries referenced in
@@ -1079,6 +1137,19 @@
                 }
                 // optionalAttrs (cfg.hookSettings.allowedHttpHookUrls != null) {
                   inherit (cfg.hookSettings) allowedHttpHookUrls;
+                }
+                # Plan 046 T6 — plugin marketplace + skill-listing settings (flat top-level)
+                // optionalAttrs (cfg.plugins.extraKnownMarketplaces != null) {
+                  inherit (cfg.plugins) extraKnownMarketplaces;
+                }
+                // optionalAttrs (cfg.skillSettings.disableBundled != null) {
+                  disableBundledSkills = cfg.skillSettings.disableBundled;
+                }
+                // optionalAttrs (cfg.skillSettings.maxDescriptionChars != null) {
+                  maxSkillDescriptionChars = cfg.skillSettings.maxDescriptionChars;
+                }
+                // optionalAttrs (cfg.skillSettings.listingBudgetFraction != null) {
+                  skillListingBudgetFraction = cfg.skillSettings.listingBudgetFraction;
                 }
               )
               # Plan 046 T3 — settingsExtra escape hatch (deep-merged last; wins on conflict)

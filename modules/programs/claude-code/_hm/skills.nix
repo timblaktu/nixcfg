@@ -102,6 +102,142 @@ let
         '';
       };
 
+      # ─────────────────────────────────────────────────────────────────────
+      # Plan 046 T6 — enriched SKILL.md frontmatter. Field names verified
+      # against code.claude.com/docs/en/skills (2026-06-24). All optional and
+      # emitted only when set, so the generated frontmatter stays minimal.
+      # Upstream merged custom slash commands INTO skills, so these fields also
+      # cover command-style frontmatter (argument-hint/arguments/model/...).
+      # ─────────────────────────────────────────────────────────────────────
+      whenToUse = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Extra context for when Claude should invoke the skill (trigger
+          phrases / example requests). Serializes as the `when_to_use`
+          frontmatter key; appended to `description` in the skill listing
+          (counts toward the 1,536-char cap). Null = omit.
+        '';
+      };
+
+      argumentHint = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "[issue-number] [format]";
+        description = "Autocomplete hint for expected arguments (`argument-hint`).";
+      };
+
+      arguments = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "issue branch";
+        description = ''
+          Named positional arguments for `$name` substitution in the skill
+          body (`arguments` frontmatter key). Space-separated string; names map
+          to argument positions in order.
+        '';
+      };
+
+      allowedTools = mkOption {
+        type = types.nullOr (types.listOf types.str);
+        default = null;
+        example = [ "Read" "Grep" "Bash(git status *)" ];
+        description = ''
+          Tools Claude may use without prompting while this skill is active
+          (`allowed-tools`). Rendered as a YAML list. Null = omit.
+        '';
+      };
+
+      disallowedTools = mkOption {
+        type = types.nullOr (types.listOf types.str);
+        default = null;
+        example = [ "AskUserQuestion" ];
+        description = ''
+          Tools removed from Claude's pool while this skill is active
+          (`disallowed-tools`). Rendered as a YAML list. Null = omit.
+        '';
+      };
+
+      model = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "haiku";
+        description = ''
+          Model to use while this skill is active (`model`). Same values as
+          `/model`, or `inherit`. Null = omit (inherit session model).
+        '';
+      };
+
+      disableModelInvocation = mkOption {
+        type = types.nullOr types.bool;
+        default = null;
+        description = ''
+          Set true to prevent Claude from auto-loading this skill
+          (`disable-model-invocation`); only `/name` invocation works.
+          Null = omit (upstream default false).
+        '';
+      };
+
+      userInvocable = mkOption {
+        type = types.nullOr types.bool;
+        default = null;
+        description = ''
+          Set false to hide the skill from the `/` menu (`user-invocable`);
+          use for background knowledge. Null = omit (upstream default true).
+        '';
+      };
+
+      effort = mkOption {
+        type = types.nullOr (types.enum [ "low" "medium" "high" "xhigh" "max" ]);
+        default = null;
+        description = "Effort level while this skill is active (`effort`).";
+      };
+
+      context = mkOption {
+        type = types.nullOr (types.enum [ "fork" ]);
+        default = null;
+        description = ''
+          Set to `fork` to run the skill in a forked subagent context
+          (`context`). The skill body becomes the subagent's prompt.
+        '';
+      };
+
+      agent = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "Explore";
+        description = "Subagent type to use when `context: fork` is set (`agent`).";
+      };
+
+      paths = mkOption {
+        type = types.nullOr (types.listOf types.str);
+        default = null;
+        example = [ "src/**/*.ts" ];
+        description = ''
+          Glob patterns limiting when the skill auto-activates (`paths`).
+          Rendered as a YAML list. Null = omit.
+        '';
+      };
+
+      shell = mkOption {
+        type = types.nullOr (types.enum [ "bash" "powershell" ]);
+        default = null;
+        description = ''
+          Shell for inline `` !`command` `` blocks in this skill (`shell`).
+          `powershell` requires CLAUDE_CODE_USE_POWERSHELL_TOOL=1.
+        '';
+      };
+
+      hooks = mkOption {
+        type = types.attrs;
+        default = { };
+        description = ''
+          Hooks scoped to this skill's lifecycle (`hooks` frontmatter key).
+          Freeform attrs serialized as inline JSON (valid YAML flow). Empty
+          attrset = omit. See the hooks reference for the entry format.
+        '';
+      };
+
       extraFiles = mkOption {
         type = types.attrsOf types.str;
         default = { };
@@ -117,11 +253,45 @@ let
     };
   };
 
-  # Generate SKILL.md with frontmatter from custom skill options
+  # Render one frontmatter value as YAML. Scalars inline; lists/attrs as JSON
+  # flow style (valid YAML), so structured fields (allowed-tools, paths, hooks)
+  # serialize without a hand-rolled YAML emitter.
+  mkFmValue = v:
+    if isBool v then (if v then "true" else "false")
+    else if isList v then builtins.toJSON v
+    else if isAttrs v then builtins.toJSON v
+    else if isInt v || isFloat v then toString v
+    else toString v;
+
+  # Build a frontmatter block from ordered { name; value; } pairs, dropping
+  # null values and empty attrsets/lists so only set fields are emitted.
+  mkFrontmatter = pairs:
+    concatStringsSep "\n"
+      (map (p: "${p.name}: ${mkFmValue p.value}")
+        (filter (p: p.value != null && p.value != { } && p.value != [ ]) pairs));
+
+  # Generate SKILL.md with enriched frontmatter from custom skill options
+  # (Plan 046 T6). Order mirrors the upstream docs frontmatter reference.
   mkSkillFile = name: skill: ''
     ---
-    name: ${name}
-    description: ${skill.description}
+    ${mkFrontmatter [
+      { name = "name"; value = name; }
+      { name = "description"; value = skill.description; }
+      { name = "when_to_use"; value = skill.whenToUse; }
+      { name = "argument-hint"; value = skill.argumentHint; }
+      { name = "arguments"; value = skill.arguments; }
+      { name = "allowed-tools"; value = skill.allowedTools; }
+      { name = "disallowed-tools"; value = skill.disallowedTools; }
+      { name = "model"; value = skill.model; }
+      { name = "disable-model-invocation"; value = skill.disableModelInvocation; }
+      { name = "user-invocable"; value = skill.userInvocable; }
+      { name = "effort"; value = skill.effort; }
+      { name = "context"; value = skill.context; }
+      { name = "agent"; value = skill.agent; }
+      { name = "paths"; value = skill.paths; }
+      { name = "shell"; value = skill.shell; }
+      { name = "hooks"; value = skill.hooks; }
+    ]}
     ---
 
     ${skill.skillContent}
