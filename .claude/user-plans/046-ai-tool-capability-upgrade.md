@@ -82,7 +82,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:COMPLETE |
 | T5 — CC: hooks entry-types + remaining events | claude-code | TASK:COMPLETE |
 | T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:COMPLETE |
-| T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:PENDING |
+| T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:IN_PROGRESS |
 | T8 — OC: new/changed top-level config keys | opencode | TASK:DEFERRED (OC dormant) |
 | T9 — OC: file-based agents/commands/skills + permissions | opencode | TASK:DEFERRED (OC dormant) |
 | T10 — OC: full TUI (keybinds/themes/scroll/attention) + plugins | opencode | TASK:DEFERRED (OC dormant) |
@@ -388,7 +388,7 @@ in settings.json. BLOCKED-BY-DEP if T1 unmet.
 
 ---
 
-## T7 — Claude Code: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) `TASK:PENDING`
+## T7 — Claude Code: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) `TASK:IN_PROGRESS`
 
 Depends on: T1. Expose the remaining net-new knobs:
 - Reliability/unattended (high value for burndown): `CLAUDE_CODE_MAX_RETRIES` (≤15),
