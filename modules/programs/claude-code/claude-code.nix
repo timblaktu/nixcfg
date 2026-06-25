@@ -430,6 +430,38 @@
               default = null;
               description = "TLS bypass / weaker network isolation (macOS, CHANGELOG v2.1.70).";
             };
+            # Plan 046 T7 — verified against code.claude.com/docs/en/sandboxing
+            # (2026-06-24). allowAppleEvents (bool, v2.1.181; macOS, user/managed/
+            # CLI scope only — project settings ignored). credentials (object, not a
+            # bool, v2.1.187): { files = [ { path; mode = "deny"; } ]; envVars =
+            # [ { name; mode = "deny"; } ]; } — "deny" is currently the only mode.
+            allowAppleEvents = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Allow sandboxed commands to send Apple Events on macOS
+                (`sandbox.allowAppleEvents`, v2.1.181) so tools like `open` and
+                `osascript` work. Weakens isolation — see the docs. Honored only
+                from user/managed/CLI settings. Null = upstream default (blocked).
+              '';
+            };
+            credentials = mkOption {
+              type = types.nullOr (pkgs.formats.json { }).type;
+              default = null;
+              example = literalExpression ''
+                {
+                  files = [ { path = "~/.aws/credentials"; mode = "deny"; } { path = "~/.ssh"; mode = "deny"; } ];
+                  envVars = [ { name = "GITHUB_TOKEN"; mode = "deny"; } ];
+                }
+              '';
+              description = ''
+                Credential files / env vars sandboxed commands must not access
+                (`sandbox.credentials`, v2.1.187). An object with `files`
+                (`[{ path; mode = "deny"; }]`) and `envVars`
+                (`[{ name; mode = "deny"; }]`); "deny" is the only supported mode.
+                Freeform JSON for forward-compat. Null = omit.
+              '';
+            };
             network = mkOption {
               default = { };
               description = "Sandbox network controls. Freeform attrset for forward-compat.";
@@ -633,6 +665,208 @@
                 Use to surface a non-Claude / custom model ID in the picker.
               '';
             };
+          };
+
+          # ─────────────────────────────────────────────────────────────────────
+          # Plan 046 T7 — reliability / unattended-run knobs. The version-floor
+          # keys (autoUpdatesChannel/minimumVersion/required{Min,Max}imumVersion)
+          # serialize FLAT at the top level of settings.json. The retry / safe-mode
+          # knobs are environment variables folded into the settings `env` block
+          # AND every wrapper (global, all accounts). Names verified against
+          # code.claude.com/docs/en/settings + the raw upstream CHANGELOG
+          # (2026-06-24): CLAUDE_CODE_MAX_RETRIES (cap 15, v2.1.186),
+          # CLAUDE_CODE_RETRY_WATCHDOG (v2.1.186), CLAUDE_CODE_SAFE_MODE /
+          # --safe-mode (v2.1.169); autoUpdatesChannel (stable|latest),
+          # minimumVersion, requiredMinimumVersion / requiredMaximumVersion
+          # (managed-only). All leaves null so we emit only what the user sets.
+          # ─────────────────────────────────────────────────────────────────────
+          reliability = {
+            maxRetries = mkOption {
+              type = types.nullOr (types.ints.between 0 15);
+              default = null;
+              description = ''
+                Max API-error retry attempts → env CLAUDE_CODE_MAX_RETRIES.
+                Upstream caps this at 15 (v2.1.186). For unattended runs prefer
+                `retryWatchdog` over a high value — a long retry budget can mask a
+                hung stream. Null = upstream default.
+              '';
+            };
+            retryWatchdog = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Enable the streaming retry watchdog → env
+                CLAUDE_CODE_RETRY_WATCHDOG=1 (when true). The recommended
+                reliability control for unattended/automated sessions (v2.1.186).
+                Null = upstream default (unset).
+              '';
+            };
+            safeMode = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Start Claude Code with all customizations disabled → env
+                CLAUDE_CODE_SAFE_MODE=1 (when true), equivalent to the
+                `--safe-mode` flag (v2.1.169). Null = upstream default (off).
+              '';
+            };
+            autoUpdatesChannel = mkOption {
+              type = types.nullOr (types.enum [ "stable" "latest" ]);
+              default = null;
+              description = ''
+                Release channel for auto-updates → settings.json
+                `autoUpdatesChannel`. "stable" trails ~1 week and skips known
+                major regressions; "latest" (upstream default) is the newest
+                release. Null = upstream default.
+              '';
+            };
+            minimumVersion = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              example = "2.1.190";
+              description = ''
+                Floor that blocks background auto-updates and `claude update`
+                from installing below this version → settings.json
+                `minimumVersion`. Does NOT block startup. Null = omit.
+              '';
+            };
+            requiredMinimumVersion = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Managed-settings-only floor that blocks STARTUP below this version
+                (older versions exit at launch) → settings.json
+                `requiredMinimumVersion`. Null = omit.
+              '';
+            };
+            requiredMaximumVersion = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Managed-settings-only ceiling that blocks STARTUP above this
+                version → settings.json `requiredMaximumVersion`. Null = omit.
+              '';
+            };
+          };
+
+          # Plan 046 T7 — MCP timeout / output env. Folded into the settings `env`
+          # block + wrappers (global). MCP_TIMEOUT (server startup, ms),
+          # MCP_TOOL_TIMEOUT (per tool call, ms), MAX_MCP_OUTPUT_TOKENS (token cap),
+          # CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT (remote tool idle abort, ms; v2.1.187).
+          # Names verified against the CHANGELOG + the env-var reference (2026-06-24).
+          mcpRuntime = {
+            timeout = mkOption {
+              type = types.nullOr types.ints.positive;
+              default = null;
+              description = "MCP server startup timeout in ms → env MCP_TIMEOUT.";
+            };
+            toolTimeout = mkOption {
+              type = types.nullOr types.ints.positive;
+              default = null;
+              description = "MCP tool-call timeout in ms → env MCP_TOOL_TIMEOUT.";
+            };
+            maxOutputTokens = mkOption {
+              type = types.nullOr types.ints.positive;
+              default = null;
+              description = "Max tokens for a single MCP tool result → env MAX_MCP_OUTPUT_TOKENS.";
+            };
+            toolIdleTimeout = mkOption {
+              type = types.nullOr types.ints.positive;
+              default = null;
+              description = ''
+                Abort a remote MCP tool call after this many ms of no response →
+                env CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT (v2.1.187). Null = upstream
+                default (5 min).
+              '';
+            };
+          };
+
+          # Plan 046 T7 — interaction/UX settings (flat top-level settings.json).
+          # Verified against code.claude.com/docs/en/settings (2026-06-24).
+          ux = {
+            outputStyle = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              example = "Explanatory";
+              description = ''
+                Output style adjusting the system prompt → settings.json
+                `outputStyle`. Built-ins include "Explanatory"/"Learning"; custom
+                styles live under an `output-styles/` dir. Null = upstream default.
+              '';
+            };
+            effortLevel = mkOption {
+              type = types.nullOr (types.enum [ "low" "medium" "high" "xhigh" ]);
+              default = null;
+              description = ''
+                Persisted reasoning effort level → settings.json `effortLevel`
+                (also set by `/effort`). Null = upstream default.
+              '';
+            };
+            editorMode = mkOption {
+              type = types.nullOr (types.enum [ "normal" "vim" ]);
+              default = null;
+              description = ''
+                Prompt key-binding mode → settings.json `editorMode`. NOTE: Plan
+                032 recorded this as a runtime-only `/config` toggle (removed in
+                v2.1.91); upstream has since re-added the persistent setting —
+                verified present on the current docs (2026-06-24). Null = upstream
+                default ("normal").
+              '';
+            };
+          };
+
+          # Plan 046 T7 — commit/PR attribution. CRITICAL: this repo forbids ALL
+          # AI attribution (CLAUDE.md). `includeCoAuthoredBy` therefore DEFAULTS TO
+          # false (not null) — the one intentional non-null default in this module —
+          # so the generated settings.json ALWAYS suppresses the "Co-Authored-By:
+          # Claude" byline upstream would otherwise add. `attribution` is a freeform
+          # escape hatch for custom HUMAN-ONLY bylines (sub-keys commit/pr/
+          # sessionUrl); never put an AI-identity marker in it.
+          attribution = mkOption {
+            type = types.nullOr (pkgs.formats.json { }).type;
+            default = null;
+            example = { commit = ""; pr = ""; };
+            description = ''
+              settings.json `attribution` object customizing commit/PR bylines
+              (sub-keys `commit`, `pr`, `sessionUrl`). Freeform for forward-compat.
+              Keep human-only — NEVER include an AI-identity marker. Null = omit
+              (the `includeCoAuthoredBy = false` default already suppresses the
+              Claude trailer).
+            '';
+          };
+          includeCoAuthoredBy = mkOption {
+            type = types.nullOr types.bool;
+            default = false;
+            description = ''
+              Whether Claude Code appends "Co-Authored-By: Claude" to commits/PRs
+              it creates → settings.json `includeCoAuthoredBy` (deprecated alias of
+              `attribution`, still honored). DEFAULTS TO false to enforce this
+              repo's absolute no-AI-attribution rule; the value is always emitted
+              so the guarantee is explicit and auditable. Set null to omit entirely
+              (upstream default is true — NOT recommended in this repo).
+            '';
+          };
+
+          # Plan 046 T7 — keybindings.json deployment. Freeform JSON written to
+          # each enabled account's `$CLAUDE_CONFIG_DIR/keybindings.json`. Structure
+          # (verified, code.claude.com/docs/en/keybindings): an object with a
+          # `bindings` array of { context; bindings = { "<keys>" = "<action>"|null; } }.
+          keybindings = mkOption {
+            type = types.nullOr (pkgs.formats.json { }).type;
+            default = null;
+            example = literalExpression ''
+              {
+                bindings = [
+                  { context = "Chat"; bindings = { "ctrl+s" = null; "ctrl+e" = "chat:externalEditor"; }; }
+                ];
+              }
+            '';
+            description = ''
+              Contents of `keybindings.json`, deployed into every enabled account's
+              config dir (which the wrapper sets as CLAUDE_CONFIG_DIR). Null = no
+              file deployed (upstream defaults). See
+              code.claude.com/docs/en/keybindings for the action/context catalog.
+            '';
           };
 
           environmentVariables = mkOption {
@@ -957,6 +1191,19 @@
               // (optionalAttrs (cfg.models.fable.supports != null) { ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTS = cfg.models.fable.supports; })
               // (optionalAttrs (cfg.models.customOption != null) { ANTHROPIC_CUSTOM_MODEL_OPTION = cfg.models.customOption; });
 
+            # Plan 046 T7 — global reliability / MCP-runtime env. Applies to all
+            # accounts; folded into the settings `env` block and every wrapper,
+            # exactly like modelGlobalEnv. Bool flags emit "1" when true (the
+            # module-wide convention, matching providerEnv).
+            reliabilityEnv =
+              (optionalAttrs (cfg.reliability.maxRetries != null) { CLAUDE_CODE_MAX_RETRIES = toString cfg.reliability.maxRetries; })
+              // (optionalAttrs (cfg.reliability.retryWatchdog == true) { CLAUDE_CODE_RETRY_WATCHDOG = "1"; })
+              // (optionalAttrs (cfg.reliability.safeMode == true) { CLAUDE_CODE_SAFE_MODE = "1"; })
+              // (optionalAttrs (cfg.mcpRuntime.timeout != null) { MCP_TIMEOUT = toString cfg.mcpRuntime.timeout; })
+              // (optionalAttrs (cfg.mcpRuntime.toolTimeout != null) { MCP_TOOL_TIMEOUT = toString cfg.mcpRuntime.toolTimeout; })
+              // (optionalAttrs (cfg.mcpRuntime.maxOutputTokens != null) { MAX_MCP_OUTPUT_TOKENS = toString cfg.mcpRuntime.maxOutputTokens; })
+              // (optionalAttrs (cfg.mcpRuntime.toolIdleTimeout != null) { CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT = toString cfg.mcpRuntime.toolIdleTimeout; });
+
             userGlobalMemoryTemplate = builtins.readFile ./_hm/claude-code-user-memory-template.md;
 
             # Per-account CLAUDE.md: substitute {{ACCOUNT}} with the account name
@@ -1046,10 +1293,11 @@
                         (accountApi.modelMappings or { }))
                       // (accountApi.extraEnvVars or { });
 
-                  # Plan 046 T4 — fold global model env (Fable/custom option)
-                  # in below account-specific env. accountEnvVars already carries
-                  # the per-account provider env (via accountApi.extraEnvVars).
-                  mergedEnvVars = cfg.environmentVariables // modelGlobalEnv // accountEnvVars;
+                  # Plan 046 T4/T7 — fold global model env (Fable/custom option)
+                  # and reliability/MCP env in below account-specific env.
+                  # accountEnvVars already carries the per-account provider env
+                  # (via accountApi.extraEnvVars).
+                  mergedEnvVars = cfg.environmentVariables // modelGlobalEnv // reliabilityEnv // accountEnvVars;
 
                   # Plan 032 T3 — serialize sandbox.* subtree, stripping nulls.
                   stripNulls = attrs: filterAttrs (_n: v: v != null) attrs;
@@ -1065,11 +1313,27 @@
                     inherit (cfg.sandbox)
                       enabled failIfUnavailable autoAllowBashIfSandboxed
                       allowUnsandboxedCommands excludedCommands
-                      enableWeakerNestedSandbox enableWeakerNetworkIsolation;
+                      enableWeakerNestedSandbox enableWeakerNetworkIsolation
+                      # Plan 046 T7 — sandbox.allowAppleEvents (scalar)
+                      allowAppleEvents;
                   };
                   sandboxJson = sandboxBase
                     // optionalAttrs (sandboxNetwork != { }) { network = sandboxNetwork; }
-                    // optionalAttrs (sandboxFilesystem != { }) { filesystem = sandboxFilesystem; };
+                    // optionalAttrs (sandboxFilesystem != { }) { filesystem = sandboxFilesystem; }
+                    # Plan 046 T7 — sandbox.credentials (object)
+                    // optionalAttrs (cfg.sandbox.credentials != null) { inherit (cfg.sandbox) credentials; };
+
+                  # Plan 046 T7 — reliability version-floor + UX + attribution
+                  # settings (flat top-level). includeCoAuthoredBy defaults to
+                  # false (never null) so it is ALWAYS emitted, guaranteeing no
+                  # AI-attribution trailer (CLAUDE.md absolute rule).
+                  t7Json = filterAttrs (_n: v: v != null) {
+                    inherit (cfg.reliability)
+                      autoUpdatesChannel minimumVersion
+                      requiredMinimumVersion requiredMaximumVersion;
+                    inherit (cfg.ux) outputStyle effortLevel editorMode;
+                    inherit (cfg) attribution includeCoAuthoredBy;
+                  };
                 in
                 {
                   inherit model;
@@ -1151,6 +1415,8 @@
                 // optionalAttrs (cfg.skillSettings.listingBudgetFraction != null) {
                   skillListingBudgetFraction = cfg.skillSettings.listingBudgetFraction;
                 }
+                # Plan 046 T7 — reliability / UX / attribution settings (flat top-level)
+                // t7Json
               )
               # Plan 046 T3 — settingsExtra escape hatch (deep-merged last; wins on conflict)
               cfg.settingsExtra));
@@ -1158,6 +1424,12 @@
             mcpTemplate = pkgs.writeText "claude-mcp.json" (builtins.toJSON {
               mcpServers = claudeCodeMcpServers;
             });
+
+            # Plan 046 T7 — keybindings.json (deployed per-account into the config
+            # dir = CLAUDE_CONFIG_DIR). Only referenced when cfg.keybindings != null,
+            # so the writeText is never built otherwise (lazy).
+            keybindingsTemplate = pkgs.writeText "claude-keybindings.json"
+              (builtins.toJSON cfg.keybindings);
 
             claudeMdTemplates = mapAttrs (name: _: mkClaudeMdTemplate name)
               (filterAttrs (_n: a: a.enable) cfg.accounts);
@@ -1186,7 +1458,7 @@
                       DISABLE_TELEMETRY = "1";
                       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
                       DISABLE_ERROR_REPORTING = "1";
-                    } // modelGlobalEnv // (account.extraEnvVars or { })
+                    } // modelGlobalEnv // reliabilityEnv // (account.extraEnvVars or { })
                     # Plan 046 T4 — per-account provider/auth env (authoritative path)
                     // providerEnv account.provider;
                   }
@@ -1213,7 +1485,7 @@
                     DISABLE_TELEMETRY = "1";
                     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
                     DISABLE_ERROR_REPORTING = "1";
-                  } // modelGlobalEnv // (defaultAcct.extraEnvVars or { })
+                  } // modelGlobalEnv // reliabilityEnv // (defaultAcct.extraEnvVars or { })
                   # Plan 046 T4 — per-account provider/auth env (authoritative path)
                   // providerEnv defaultAcct.provider;
                 }
@@ -1372,6 +1644,11 @@
                   copy_template "${
                     claudeMdTemplates.${name} or (mkClaudeMdTemplate name)
                   }" "$accountDir/CLAUDE.md"
+
+                  ${optionalString (cfg.keybindings != null) ''
+                  copy_template "${keybindingsTemplate}" "$accountDir/keybindings.json"
+                  echo "Deployed keybindings.json: $accountDir/keybindings.json"
+                  ''}
 
                   if [[ -f "$accountDir/.claude.json" ]]; then
                     echo "Enforcing Nix-managed settings in .claude.json..."

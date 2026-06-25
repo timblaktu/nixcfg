@@ -602,6 +602,27 @@ in
       default = false;
       description = "Enable test mode with mock JSON data generation";
     };
+
+    # Plan 046 T7 — statusLine.refreshInterval / padding. Verified against
+    # code.claude.com/docs/en/statusline + CHANGELOG v2.1.97 (refreshInterval
+    # re-runs the status line command every N seconds).
+    refreshInterval = mkOption {
+      type = types.nullOr types.ints.positive;
+      default = null;
+      example = 5;
+      description = ''
+        Re-run the status line command every N seconds
+        (`statusLine.refreshInterval`, CC >= 2.1.97). Null = upstream default
+        (refresh on session events only).
+      '';
+    };
+
+    padding = mkOption {
+      type = types.int;
+      default = 0;
+      example = 1;
+      description = "Horizontal padding around the status line (`statusLine.padding`).";
+    };
   };
 
   # Add statusline configuration to the internal settings system
@@ -618,7 +639,9 @@ in
       statusLine = {
         type = "command";
         command = "claude-statusline-${cfg.style}";
-        padding = 0;
+        padding = cfg.padding;
+      } // optionalAttrs (cfg.refreshInterval != null) {
+        inherit (cfg) refreshInterval;
       };
     };
 

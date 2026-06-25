@@ -82,7 +82,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:COMPLETE |
 | T5 — CC: hooks entry-types + remaining events | claude-code | TASK:COMPLETE |
 | T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:COMPLETE |
-| T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:IN_PROGRESS |
+| T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:COMPLETE |
 | T8 — OC: new/changed top-level config keys | opencode | TASK:DEFERRED (OC dormant) |
 | T9 — OC: file-based agents/commands/skills + permissions | opencode | TASK:DEFERRED (OC dormant) |
 | T10 — OC: full TUI (keybinds/themes/scroll/attention) + plugins | opencode | TASK:DEFERRED (OC dormant) |
@@ -388,7 +388,61 @@ in settings.json. BLOCKED-BY-DEP if T1 unmet.
 
 ---
 
-## T7 — Claude Code: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) `TASK:IN_PROGRESS`
+## T7 — Claude Code: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) `TASK:COMPLETE` (2026-06-24)
+
+**Done (2026-06-24):** every key/env-var name verified against `code.claude.com/docs/en/`
+{settings,sandboxing,statusline,keybindings} (live) + the raw upstream `CHANGELOG.md`
+(github main) before modeling. Changes:
+- **Reliability env + version floors** (`claude-code.nix` new `reliability` group): env →
+  `CLAUDE_CODE_MAX_RETRIES` (typed `ints.between 0 15`, cap verified v2.1.186),
+  `CLAUDE_CODE_RETRY_WATCHDOG`=1 (bool, v2.1.186), `CLAUDE_CODE_SAFE_MODE`=1 (bool, `--safe-mode`
+  v2.1.169); settings.json flat keys → `autoUpdatesChannel` (enum stable/latest), `minimumVersion`,
+  `requiredMinimumVersion`/`requiredMaximumVersion` (managed-only). The env vars are folded into a
+  new global `reliabilityEnv` helper (mirrors `modelGlobalEnv`) → emitted into BOTH the settings
+  `env` block AND every wrapper.
+- **MCP runtime env** (new `mcpRuntime` group, also via `reliabilityEnv`): `MCP_TIMEOUT`,
+  `MCP_TOOL_TIMEOUT`, `MAX_MCP_OUTPUT_TOKENS` (all ms/token ints), `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT`
+  (ms, v2.1.187).
+- **UX settings** (new `ux` group, flat top-level): `outputStyle` (str), `effortLevel`
+  (enum low/medium/high/xhigh), `editorMode` (enum normal/vim — note Plan 032 recorded this as
+  runtime-only on v2.1.91; upstream re-added the persistent setting, re-verified present 2026-06-24).
+- **Sandbox additions** (extend existing `sandbox` block): `allowAppleEvents` (bool scalar, v2.1.181,
+  macOS user/managed/CLI-only) into `sandboxBase`; `credentials` (freeform OBJECT, NOT a bool —
+  `{ files=[{path;mode="deny";}]; envVars=[{name;mode="deny";}]; }`, v2.1.187) merged into
+  `sandboxJson` when non-null.
+- **Statusline** (`_hm/statusline.nix`): new `refreshInterval` (nullOr positive int, seconds,
+  v2.1.97) + `padding` (int, default 0) options; `statusLine` now emits `padding = cfg.padding`
+  and `refreshInterval` when set (was hardcoded `padding = 0`).
+- **keybindings.json deployment**: new freeform `keybindings` option (shape
+  `{ bindings = [ { context; bindings = { "<keys>" = "<action>"|null; } } ]; }`), rendered to a
+  `claude-keybindings.json` writeText and `copy_template`d into each enabled account's config dir
+  (= `CLAUDE_CONFIG_DIR`, where CC reads it) when non-null.
+- **Attribution — NO-AI guarantee enforced**: new freeform `attribution` option (human-only bylines,
+  default null/omitted) + `includeCoAuthoredBy` which **DEFAULTS TO `false` (the one intentional
+  non-null default in the module)** so the generated settings.json **always** emits
+  `includeCoAuthoredBy: false`, suppressing the "Co-Authored-By: Claude" trailer upstream adds by
+  default. Verified the trailer is never emitted by default (see below).
+- **OTEL/telemetry passthrough:** intentionally NOT re-modeled — `OTEL_*` /
+  `CLAUDE_CODE_ENABLE_TELEMETRY` are already fully settable via the existing global
+  `environmentVariables`, per-account `extraEnvVars`/`provider.extraEnv`, and the T3 `settingsExtra`
+  escape hatch. Adding typed duplicates would be redundant.
+
+**Verified (eval, real host `tim@pa161878-nixos` via nixcfg-work `--override-input` +
+`extendModules`; settings/keybindings drvs pulled from the activation string context, then built):**
+a T7 test config rendered into settings.json: all 7 reliability/MCP env vars in the `env` block,
+`autoUpdatesChannel`/`minimumVersion`/`requiredMinimumVersion`/`requiredMaximumVersion`,
+`outputStyle`/`effortLevel`/`editorMode`, `sandbox.allowAppleEvents=true` +
+`sandbox.credentials.files`, `statusLine.refreshInterval=5`/`padding=1`, and `includeCoAuthoredBy:
+false` with NO `attribution` key. keybindings.json rendered the `bindings` array verbatim. The
+`claudemax` wrapper exported all 7 env vars. **Baseline (no T7 config) still emits
+`includeCoAuthoredBy: false` and NO `attribution` key** — the no-AI-attribution guarantee holds by
+default. `nix flake check --no-build` → all checks passed. Idempotent (append-only option additions;
+all leaves default null except `includeCoAuthoredBy`=false; keybindings deploys only when set).
+
+Files touched: `modules/programs/claude-code/claude-code.nix`,
+`modules/programs/claude-code/_hm/statusline.nix`. (`_hm/lib.nix` needed no change — the merged env
+flows through its existing `extraEnvVars`→`extraEnvExports` path.) This leaves T11, T13, T14 as the
+remaining active CC-centric tasks.
 
 Depends on: T1. Expose the remaining net-new knobs:
 - Reliability/unattended (high value for burndown): `CLAUDE_CODE_MAX_RETRIES` (≤15),
