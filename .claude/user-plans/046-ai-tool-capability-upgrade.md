@@ -79,7 +79,7 @@ path behind a global auth wall (`server: uvicorn`). The decisive test (`POST /v1
 | T1 — Bump Claude Code to latest (pin strategy) | versions | TASK:COMPLETE |
 | T2 — Bump OpenCode to latest | versions | TASK:DEFERRED (OC dormant) |
 | T3 — Raw settings escape-hatch (CC done; OC optional/dormant) | foundation | TASK:COMPLETE |
-| T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:IN_PROGRESS |
+| T4 — CC: model/provider/gateway/auth surface | claude-code | TASK:COMPLETE |
 | T5 — CC: hooks entry-types + remaining events | claude-code | TASK:PENDING |
 | T6 — CC: skills/commands/subagents/plugins frontmatter | claude-code | TASK:PENDING |
 | T7 — CC: remaining settings + env (reliability, UX, statusline, keybindings, sandbox) | claude-code | TASK:PENDING |
@@ -214,7 +214,39 @@ parked. Add only if OC is revived.
 
 ---
 
-## T4 — Claude Code: model / provider / gateway / auth surface `TASK:PENDING`
+## T4 — Claude Code: model / provider / gateway / auth surface `TASK:COMPLETE` (2026-06-24)
+
+**Done (2026-06-24):** env-var names verified against `code.claude.com/docs/en/model-config`
++ `microsoft-foundry` + `~/src/claude-code/CHANGELOG.md` before modeling. Added to
+`modules/programs/claude-code/claude-code.nix`:
+- **Global `programs.claude-code.models`** group: `fallback` (nullOr listOf str, ≤3, asserted)
+  → settings.json `fallbackModel`; `available` (nullOr listOf str) → `availableModels`;
+  `enforceAvailable` (nullOr bool) → `enforceAvailableModels`; `fable.{model,name,description,
+  supports}` → env `ANTHROPIC_DEFAULT_FABLE_MODEL[_NAME|_DESCRIPTION|_SUPPORTS]` (note: the
+  capability env var is `_SUPPORTS`, not `_CAPABILITIES`); `customOption` → env
+  `ANTHROPIC_CUSTOM_MODEL_OPTION`. The model settings keys serialize flat at the top level of
+  settings.json (added after `governanceJson`); the Fable/custom env (`modelGlobalEnv`) is folded
+  into the settings `env` block AND every wrapper.
+- **Per-account `accounts.<name>.provider`** submodule → documented env, emitted into BOTH the
+  account's settings.json `env` block and its wrapper script (`providerEnv` helper):
+  Bedrock (`CLAUDE_CODE_USE_BEDROCK`, `ANTHROPIC_BEDROCK_BASE_URL`, `CLAUDE_CODE_SKIP_BEDROCK_AUTH`,
+  `ANTHROPIC_BEDROCK_SERVICE_TIER`), Vertex (`CLAUDE_CODE_USE_VERTEX`, `ANTHROPIC_VERTEX_BASE_URL`,
+  `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`), Mantle (`CLAUDE_CODE_USE_MANTLE`,
+  `ANTHROPIC_BEDROCK_MANTLE_BASE_URL`), Foundry (`CLAUDE_CODE_USE_FOUNDRY`,
+  `ANTHROPIC_FOUNDRY_RESOURCE`, `ANTHROPIC_FOUNDRY_BASE_URL`), `customHeaders` →
+  `ANTHROPIC_CUSTOM_HEADERS`, plus a freeform `extraEnv` escape hatch for un-modeled provider env
+  (Anthropic-on-AWS, `ANTHROPIC_FOUNDRY_API_KEY`, etc.). All defaults off/null — nothing emitted
+  unless set. `_hm/lib.nix` needed no change: the merged env flows through its existing
+  `extraEnvVars`→`extraEnvExports` path.
+- **Assertion:** `models.fallback` length ≤ 3.
+
+**Verified (eval, thinky-ubuntu via `extendModules`):** a config setting `models.fallback`
+(list), `models.available`, `enforceAvailable`, Fable + customOption, and `accounts.max.provider`
+{bedrock+vertex+customHeaders} rendered `fallbackModel`/`availableModels`/`enforceAvailableModels`
+into BOTH accounts' settings.json; the Bedrock+Vertex+headers env appeared ONLY in `max`'s
+settings `env` block and `max`'s `claudemax` wrapper script (the `pro` account carried none —
+per-account isolation confirmed). `nix flake check --no-build` → all checks passed. This unblocks
+T13 (gateway discovery builds on the model/provider surface).
 
 Depends on: T1. Add the model/provider knobs the module lacks (audit gaps): `fallbackModel`
 (ordered list, ≤3), `availableModels` + `enforceAvailableModels`, Fable family

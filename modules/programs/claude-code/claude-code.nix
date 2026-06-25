@@ -463,6 +463,89 @@
             '';
           };
 
+          # ─────────────────────────────────────────────────────────────────────
+          # Plan 046 T4 — model selection surface (fallback chain / allowlist /
+          # Fable family / custom picker entry). The three settings keys
+          # (`fallbackModel`, `availableModels`, `enforceAvailableModels`)
+          # serialize flat at the top level of settings.json. The Fable + custom
+          # option keys are environment variables injected into the settings.json
+          # `env` block (global, applied to every account) and the wrappers.
+          # Names verified against code.claude.com/docs/en/model-config and
+          # ~/src/claude-code/CHANGELOG.md (2026-06-24). All leaves default
+          # null/empty so we only emit what the user sets.
+          # ─────────────────────────────────────────────────────────────────────
+          models = {
+            fallback = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              example = [ "claude-sonnet-4-6" "claude-haiku-4-5" ];
+              description = ''
+                Ordered availability-fallback chain → settings.json
+                `fallbackModel`. Each entry is a model name or alias; "default"
+                expands to the account-type default. Max 3 entries (asserted).
+                Null = upstream default (no chain). Needs CC ≥ 2.1.166.
+              '';
+            };
+            available = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              example = [ "sonnet" "haiku" ];
+              description = ''
+                Allowlist of selectable models → settings.json `availableModels`.
+                Entries match a family ("sonnet"), a version prefix
+                ("claude-sonnet-4-5"), or a full model ID. Null = unrestricted.
+              '';
+            };
+            enforceAvailable = mkOption {
+              type = types.nullOr types.bool;
+              default = null;
+              description = ''
+                Extend the `models.available` allowlist to the Default picker
+                option → settings.json `enforceAvailableModels`. Requires a
+                non-empty `models.available`; CC ≥ 2.1.175. Null = upstream
+                default.
+              '';
+            };
+            fable = {
+              model = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = ''
+                  Fable alias / Default-fallback target → env
+                  `ANTHROPIC_DEFAULT_FABLE_MODEL` (CC ≥ 2.1.170). Set to your
+                  provider-specific Fable 5 model ID on Bedrock/Vertex/Foundry
+                  so automatic content-fallback can identify it.
+                '';
+              };
+              name = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = "Fable picker label → env `ANTHROPIC_DEFAULT_FABLE_MODEL_NAME`.";
+              };
+              description = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = "Fable picker description → env `ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION`.";
+              };
+              supports = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = ''
+                  Override effort/thinking capability detection for the pinned
+                  Fable model → env `ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTS`.
+                '';
+              };
+            };
+            customOption = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Extra `/model` picker entry → env `ANTHROPIC_CUSTOM_MODEL_OPTION`.
+                Use to surface a non-Claude / custom model ID in the picker.
+              '';
+            };
+          };
+
           environmentVariables = mkOption {
             type = types.attrsOf types.str;
             default = { };
@@ -608,6 +691,109 @@
                     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
                   };
                 };
+
+                # ─────────────────────────────────────────────────────────────
+                # Plan 046 T4 — per-account provider / auth backend. Each enabled
+                # provider emits its documented Claude Code env vars into BOTH the
+                # account wrapper script and the settings.json `env` block. Env
+                # var names verified against code.claude.com/docs (amazon-bedrock,
+                # google-vertex-ai, microsoft-foundry, model-config) on
+                # 2026-06-24. Defaults off/null so nothing is emitted unless set.
+                # Note: CC speaks only the Anthropic Messages API, so these select
+                # the transport for Claude/Anthropic models (direct, Bedrock,
+                # Vertex, Mantle, Foundry); non-Claude models are out of scope.
+                # ─────────────────────────────────────────────────────────────
+                provider = {
+                  bedrock = {
+                    enable = mkOption {
+                      type = types.bool;
+                      default = false;
+                      description = "Route this account through Amazon Bedrock → CLAUDE_CODE_USE_BEDROCK=1.";
+                    };
+                    baseUrl = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Custom Bedrock endpoint → ANTHROPIC_BEDROCK_BASE_URL.";
+                    };
+                    skipAuth = mkOption {
+                      type = types.bool;
+                      default = false;
+                      description = "Skip Bedrock SigV4 auth (gateway supplies credentials) → CLAUDE_CODE_SKIP_BEDROCK_AUTH=1.";
+                    };
+                    serviceTier = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Bedrock service tier → ANTHROPIC_BEDROCK_SERVICE_TIER.";
+                    };
+                  };
+                  vertex = {
+                    enable = mkOption {
+                      type = types.bool;
+                      default = false;
+                      description = "Route through Google Vertex AI → CLAUDE_CODE_USE_VERTEX=1.";
+                    };
+                    baseUrl = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Custom Vertex endpoint → ANTHROPIC_VERTEX_BASE_URL.";
+                    };
+                    projectId = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "GCP project ID → ANTHROPIC_VERTEX_PROJECT_ID.";
+                    };
+                    region = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Vertex region → CLOUD_ML_REGION.";
+                    };
+                  };
+                  mantle = {
+                    enable = mkOption {
+                      type = types.bool;
+                      default = false;
+                      description = "Bedrock-via-Mantle endpoint → CLAUDE_CODE_USE_MANTLE=1.";
+                    };
+                    baseUrl = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Mantle endpoint → ANTHROPIC_BEDROCK_MANTLE_BASE_URL.";
+                    };
+                  };
+                  foundry = {
+                    enable = mkOption {
+                      type = types.bool;
+                      default = false;
+                      description = "Route through Microsoft Foundry → CLAUDE_CODE_USE_FOUNDRY=1.";
+                    };
+                    resource = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Azure resource name → ANTHROPIC_FOUNDRY_RESOURCE.";
+                    };
+                    baseUrl = mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Full Foundry base URL (alternative to resource) → ANTHROPIC_FOUNDRY_BASE_URL.";
+                    };
+                  };
+                  customHeaders = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    example = "X-Org: acme, X-Env: prod";
+                    description = "Extra HTTP headers on every API request → ANTHROPIC_CUSTOM_HEADERS.";
+                  };
+                  extraEnv = mkOption {
+                    type = types.attrsOf types.str;
+                    default = { };
+                    description = ''
+                      Escape hatch for any additional provider/auth env not
+                      modeled above (e.g. Claude-Platform-on-AWS / Anthropic-AWS,
+                      ANTHROPIC_FOUNDRY_API_KEY). Emitted verbatim into the
+                      wrapper + settings env.
+                    '';
+                  };
+                };
               };
             });
             default = { };
@@ -649,6 +835,38 @@
             cfg = config.programs.claude-code;
             inherit (cfg) nixcfgPath;
             runtimePath = "${nixcfgPath}/claude-runtime";
+
+            # Plan 046 T4 — translate one account's provider/auth options into the
+            # documented Claude Code env vars. Only emits keys for enabled
+            # providers / set values; merged into BOTH the wrapper script and the
+            # settings.json `env` block so the chosen transport is applied
+            # whichever path Claude Code reads.
+            providerEnv = p:
+              (optionalAttrs p.bedrock.enable { CLAUDE_CODE_USE_BEDROCK = "1"; })
+              // (optionalAttrs (p.bedrock.baseUrl != null) { ANTHROPIC_BEDROCK_BASE_URL = p.bedrock.baseUrl; })
+              // (optionalAttrs p.bedrock.skipAuth { CLAUDE_CODE_SKIP_BEDROCK_AUTH = "1"; })
+              // (optionalAttrs (p.bedrock.serviceTier != null) { ANTHROPIC_BEDROCK_SERVICE_TIER = p.bedrock.serviceTier; })
+              // (optionalAttrs p.vertex.enable { CLAUDE_CODE_USE_VERTEX = "1"; })
+              // (optionalAttrs (p.vertex.baseUrl != null) { ANTHROPIC_VERTEX_BASE_URL = p.vertex.baseUrl; })
+              // (optionalAttrs (p.vertex.projectId != null) { ANTHROPIC_VERTEX_PROJECT_ID = p.vertex.projectId; })
+              // (optionalAttrs (p.vertex.region != null) { CLOUD_ML_REGION = p.vertex.region; })
+              // (optionalAttrs p.mantle.enable { CLAUDE_CODE_USE_MANTLE = "1"; })
+              // (optionalAttrs (p.mantle.baseUrl != null) { ANTHROPIC_BEDROCK_MANTLE_BASE_URL = p.mantle.baseUrl; })
+              // (optionalAttrs p.foundry.enable { CLAUDE_CODE_USE_FOUNDRY = "1"; })
+              // (optionalAttrs (p.foundry.resource != null) { ANTHROPIC_FOUNDRY_RESOURCE = p.foundry.resource; })
+              // (optionalAttrs (p.foundry.baseUrl != null) { ANTHROPIC_FOUNDRY_BASE_URL = p.foundry.baseUrl; })
+              // (optionalAttrs (p.customHeaders != null) { ANTHROPIC_CUSTOM_HEADERS = p.customHeaders; })
+              // p.extraEnv;
+
+            # Plan 046 T4 — global model-presentation env (Fable family + custom
+            # picker option). Applies to all accounts; merged into the settings
+            # `env` block and the wrappers.
+            modelGlobalEnv =
+              (optionalAttrs (cfg.models.fable.model != null) { ANTHROPIC_DEFAULT_FABLE_MODEL = cfg.models.fable.model; })
+              // (optionalAttrs (cfg.models.fable.name != null) { ANTHROPIC_DEFAULT_FABLE_MODEL_NAME = cfg.models.fable.name; })
+              // (optionalAttrs (cfg.models.fable.description != null) { ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION = cfg.models.fable.description; })
+              // (optionalAttrs (cfg.models.fable.supports != null) { ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTS = cfg.models.fable.supports; })
+              // (optionalAttrs (cfg.models.customOption != null) { ANTHROPIC_CUSTOM_MODEL_OPTION = cfg.models.customOption; });
 
             userGlobalMemoryTemplate = builtins.readFile ./_hm/claude-code-user-memory-template.md;
 
@@ -739,7 +957,10 @@
                         (accountApi.modelMappings or { }))
                       // (accountApi.extraEnvVars or { });
 
-                  mergedEnvVars = cfg.environmentVariables // accountEnvVars;
+                  # Plan 046 T4 — fold global model env (Fable/custom option)
+                  # in below account-specific env. accountEnvVars already carries
+                  # the per-account provider env (via accountApi.extraEnvVars).
+                  mergedEnvVars = cfg.environmentVariables // modelGlobalEnv // accountEnvVars;
 
                   # Plan 032 T3 — serialize sandbox.* subtree, stripping nulls.
                   stripNulls = attrs: filterAttrs (_n: v: v != null) attrs;
@@ -811,6 +1032,16 @@
                 // optionalAttrs (sandboxJson != { }) { sandbox = sandboxJson; }
                 # Plan 032 T4 — governance keys (flat top-level)
                 // governanceJson
+                # Plan 046 T4 — model selection settings (flat top-level)
+                // optionalAttrs (cfg.models.fallback != null) {
+                  fallbackModel = cfg.models.fallback;
+                }
+                // optionalAttrs (cfg.models.available != null) {
+                  availableModels = cfg.models.available;
+                }
+                // optionalAttrs (cfg.models.enforceAvailable != null) {
+                  enforceAvailableModels = cfg.models.enforceAvailable;
+                }
               )
               # Plan 046 T3 — settingsExtra escape hatch (deep-merged last; wins on conflict)
               cfg.settingsExtra));
@@ -846,7 +1077,9 @@
                       DISABLE_TELEMETRY = "1";
                       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
                       DISABLE_ERROR_REPORTING = "1";
-                    } // (account.extraEnvVars or { });
+                    } // modelGlobalEnv // (account.extraEnvVars or { })
+                    # Plan 046 T4 — per-account provider/auth env (authoritative path)
+                    // providerEnv account.provider;
                   }
                 )
               )
@@ -871,7 +1104,9 @@
                     DISABLE_TELEMETRY = "1";
                     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
                     DISABLE_ERROR_REPORTING = "1";
-                  } // (defaultAcct.extraEnvVars or { });
+                  } // modelGlobalEnv // (defaultAcct.extraEnvVars or { })
+                  # Plan 046 T4 — per-account provider/auth env (authoritative path)
+                  // providerEnv defaultAcct.provider;
                 }
               )
             );
@@ -1015,7 +1250,9 @@
                     accountApi = {
                       inherit (account.api) baseUrl;
                       inherit (account.api) modelMappings;
-                      inherit (account) extraEnvVars;
+                      # Plan 046 T4 — provider/auth env folds in with extraEnvVars
+                      # so the settings.json `env` block carries it too.
+                      extraEnvVars = account.extraEnvVars // providerEnv account.provider;
                     };
                   }}" "$accountDir/settings.json"
                   echo "Updated settings to v2.0 schema: $accountDir/settings.json"
@@ -1200,6 +1437,11 @@
               {
                 assertion = cfg.defaultAccount != null -> cfg.accounts.${cfg.defaultAccount}.enable;
                 message = "Default account '${cfg.defaultAccount}' must be enabled";
+              }
+              {
+                # Plan 046 T4 — upstream fallbackModel accepts at most 3 entries.
+                assertion = cfg.models.fallback == null || builtins.length cfg.models.fallback <= 3;
+                message = "programs.claude-code.models.fallback accepts at most 3 entries";
               }
               {
                 assertion = lib.hasPrefix "/" cfg.nixcfgPath;
