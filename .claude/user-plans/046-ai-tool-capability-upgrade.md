@@ -857,3 +857,10 @@ fields). Live probe of `https://codecompanionv2.d-dp.nextcloud.aero/v1`:
 - **Deployment:** this plan changes nixcfg only. The work host (and CCv2/Bedrock values) pick it
   up via a **nixcfg-work** flake.lock bump + `home-manager switch` — same path as prior features.
 - **OC stays primary** throughout; nothing here moves the daily driver off OpenCode.
+
+## Integration to main (2026-06-25)
+Plan 046 + the underlying HM-tier/libvirt work landed on **nixcfg main** (FF, `6906001`) and
+**nixcfg-work main** (FF, pushed to corp GitLab). nixcfg-work `nixcfg.url` repointed feature-branch →
+`github:timblaktu/nixcfg` (main), re-locked to `6906001`, committed `a700eac`, and `home-manager switch`
+applied (active gen rebuilt from main; Sonnet pin / RTK / picker slots verified). Local nixcfg branches
+`plan-046-ai-tool-capability-upgrade` and `feat/libvirt-firmware-vm` are now redundant with `main`.
