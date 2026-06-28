@@ -109,6 +109,13 @@
                 "Write"
                 "Edit"
                 "WebFetch"
+                # Path-scoped rules so writes/edits to project .claude/ content
+                # (user-plans, HANDOFF.md, active-plan, ...) never prompt. The
+                # bare Write/Edit rules above do not reliably suppress the prompt
+                # for files under .claude/; explicit gitignore-style subtree
+                # rules (project-root-relative, "**" recursive) do.
+                "Write(/.claude/**)"
+                "Edit(/.claude/**)"
               ];
               description = "List of tools/patterns to allow";
             };
