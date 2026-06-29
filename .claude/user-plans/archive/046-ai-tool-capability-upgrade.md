@@ -166,7 +166,7 @@ hashes can't be resolved without network ⇒ ENVIRONMENT_NOT_CAPABLE (note it; d
 
 ---
 
-## T2 — Bump OpenCode pin to latest `TASK:PENDING`
+## T2 — Bump OpenCode pin to latest `TASK:DEFERRED` (OC dormant)
 
 Update `pkgs/opencode-pinned/package.nix`: `version` 1.14.48 → **1.17.9** (or newest), refresh
 `src` `sha256` and the node-modules hash. Check the OC releases for config-schema breaking
@@ -181,7 +181,7 @@ if unavailable, ENVIRONMENT_NOT_CAPABLE.
 
 ---
 
-## T3 — Raw settings/config escape-hatch in both modules `TASK:PENDING`
+## T3 — Raw settings/config escape-hatch in both modules `TASK:COMPLETE` (CC done; OC optional/dormant)
 
 Independent of T1/T2. Guarantee "fully support everything" even for keys the module doesn't model
 explicitly: add a freeform deep-merge escape hatch to each module so any current/future upstream
@@ -466,7 +466,7 @@ trailer is ever emitted by default. BLOCKED-BY-DEP if T1 unmet.
 
 ---
 
-## T8 — OpenCode: new/changed top-level config keys `TASK:PENDING`
+## T8 — OpenCode: new/changed top-level config keys `TASK:DEFERRED` (OC dormant)
 
 Depends on: T2. Add/verify the top-level keys not yet modeled (audit + 1.17 schema):
 `small_model` (verify), `tool_output` (`max_lines`/`max_bytes`), `attachment.image.*`,
@@ -484,7 +484,7 @@ Files: `modules/programs/opencode/opencode.nix`.
 
 ---
 
-## T9 — OpenCode: file-based agents/commands/skills + permissions `TASK:PENDING`
+## T9 — OpenCode: file-based agents/commands/skills + permissions `TASK:DEFERRED` (OC dormant)
 
 Depends on: T2. Ensure both inline-JSON AND file-based authoring are supported and write to the
 **plural** dirs (`.opencode/agents/`, `.opencode/commands/`, `.opencode/skills/`). Add: agent
@@ -501,7 +501,7 @@ BLOCKED-BY-DEP if T2 unmet.
 
 ---
 
-## T10 — OpenCode: full TUI + plugins `TASK:PENDING`
+## T10 — OpenCode: full TUI + plugins `TASK:DEFERRED` (OC dormant)
 
 Depends on: T2. Extend `_hm/tui-json.nix` to the full `tui.json` surface: `theme` (incl. custom
 theme JSON files under `themes/`), `keybinds` (all categories; leader/chord/object forms,
@@ -614,7 +614,7 @@ USER_INPUT_REQUIRED (never guess credentials).
 
 ---
 
-## T12 — Shared skills/commands/context-file machinery `TASK:PENDING`
+## T12 — Shared skills/commands/context-file machinery `TASK:DEFERRED` (needs OC)
 
 Depends on: T6 (CC skills/commands shape) and T9 (OC shape). Today skills, commands, and context
 files are generated separately per tool. Build/extend shared lib (alongside
@@ -758,7 +758,7 @@ Two follow-ups surfaced during/after the work-host deployment, both shipped and 
 
 ---
 
-## T15 — CCv2 Anthropic-format probe (non-Claude models) `TASK:BLOCKED — USER_INPUT_REQUIRED`
+## T15 — CCv2 Anthropic-format probe (non-Claude models) `TASK:COMPLETE` (2026-06-25 — CCv2 speaks Anthropic; direct Sonnet live; non-Claude-via-CC deferred)
 
 Determines whether CC can use the non-Claude CCv2 catalog (`Auto-MoM`, Qwen, Llama 4, GLM 5).
 **Blocked on credentials:** the CCv2 V2 auth change invalidated old tokens; user must regenerate a
