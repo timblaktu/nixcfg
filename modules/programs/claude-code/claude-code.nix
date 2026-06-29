@@ -123,8 +123,6 @@
             deny = mkOption {
               type = types.listOf types.str;
               default = [
-                "Search"
-                "Find"
                 "Bash(rm -rf /*)"
               ];
               description = "List of tools/patterns to deny";
