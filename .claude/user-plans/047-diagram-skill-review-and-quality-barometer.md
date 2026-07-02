@@ -51,7 +51,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 
 | Task | Status | Definition of Done (checkable) |
 |------|--------|--------------------------------|
-| T1 Full review + findings | TASK:IN_PROGRESS | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
+| T1 Full review + findings | TASK:COMPLETE (2026-07-01) | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
 | T2 Apply agreed improvements + commit | TASK:PENDING | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
 | T3 Deploy (home-manager switch) | TASK:PENDING | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
 | T4 Finalize quality-barometer suite | TASK:PENDING | Test suite + scoring rubric below reviewed/refined; expected outcomes concrete; recorded in this plan; ready for the user to run. |
@@ -106,14 +106,42 @@ should wrap this (e.g. a note that the agent must prefix the nix shell) to avoid
 orphaned/view-only) — `validate.py` flags it. Out of scope to fix here, but
 record whether to re-export it editable as a follow-up.
 
-### Findings (fill during T1)
+### Findings (filled during T1 — 2026-07-01)
+
+**Resolved: the vision loop is REAL.** A portable, drawio-native PNG rasterizer
+is confirmed working in this WSL env. The command Section 15 documents today
+(`drawio -x -f png ...` with a bare `drawio`) does NOT run — nothing puts
+`drawio` on PATH here (everything shells out via `nix run/nix shell`). The
+working command mirrors drawio-svg-sync's own render mechanism:
+
+```bash
+# CONFIRMED working (produces a faithful, readable PNG):
+nix shell nixpkgs#drawio nixpkgs#xvfb-run -c \
+  xvfb-run --auto-servernum drawio -x -f png --width 2000 -p 1 \
+  -o /tmp/diagram-check.png diagram.drawio.svg
+```
+Both `--width 2000` and `--scale 2` work (tested). The GLX/EGL/ANGLE stderr
+lines are harmless; export still returns exit 0 and a good PNG. Do NOT add
+`--no-sandbox`/`--disable-gpu` — they break drawio's CLI arg parser
+("input file/directory not found"). Non-drawio rasterizers are NOT viable:
+`resvg` renders draw.io's `light-dark()` fills as solid black (illegible);
+`convert`/`magick` cannot render label text (draw.io emits text via
+`<foreignObject>` + a base64 `<image>` fallback → the literal "Text is not
+SVG - cannot display" appears). Only draw.io's own renderer is faithful.
+
 | # | Severity | Finding | Evidence | Recommendation | Agreed fix in T2? |
 |---|----------|---------|----------|----------------|-------------------|
-| A | HIGH | (resolve) | | | |
-| B | MED | (resolve) | | | |
-| C | MED | (resolve) | | | |
-| D | LOW | (resolve) | | | |
-| E | LOW | (resolve) | | | |
+| A | HIGH | CONFIRMED. Section 15 (+ Section 8 raster note) prescribe `drawio -x -f png --width 2000` with a bare `drawio`, which is not on PATH here → the flagship vision loop would fail on first use. But a working portable command exists (above). | `command -v drawio` empty; the boxed nix-shell command produced a faithful readable PNG (`/tmp/diagram-barometer/mini.png`, mini-w2000.png 94KB); `resvg`→black fills, `convert`→"Text is not SVG"; drawio-svg-sync internally uses the identical `xvfb-run … drawio -x -f svg` mechanism. | T2: replace the Section 15 code block AND the Section 8 raster note with the nix-shell `drawio -x -f png` command above. Keep Section 33's Windows-`draw.io.exe` path as an alternative (works only if Windows draw.io is installed). The loop is real — do NOT downgrade it. | **YES** |
+| B | MED | REFUTED (PNG step stays). The Read tool does NOT render `.drawio.svg` as an image — it returns the SVG XML as text. So the PNG rasterization step is REQUIRED, not skippable. | `Read /tmp/diagram-barometer/mini.svg` returned numbered XML source, not an image (Read's image support is PNG/JPG/PDF, not SVG). | T2 (optional, small): add one line to Section 15 stating Read cannot render `.drawio.svg` directly, so the PNG step is mandatory (prevents a future "just Read the svg" shortcut). | optional |
+| C | MED | CONFIRMED. SKILL.md is 3226 lines, loaded in full every invocation. A `REFERENCE.md` (on-demand) already exists (~22KB), so the move target is established. Reference-heavy example sections dominate. | Section line counts: §6 Complete Creation Examples 177, §17 Grouping Pattern 233, §18 Rounded Container Label Positioning 105, §32 Custom Shape Containers/Stencils 73 (=588, ~18%); +§14 Multi-Page 164 → ~752 (~23%). | T2 (author's call on scope): move §6/§17/§18/§32 (and optionally §14) to REFERENCE.md, leaving a one-line pointer in SKILL.md. Do NOT move in T1. | **YES (scope TBD)** |
+| D | LOW | REFUTED (docs adequate). Section 34's one-liner runs verbatim; `dot`-not-on-PATH is already handled by the documented `nix shell nixpkgs#graphviz -c` prefix. | `nix shell nixpkgs#graphviz -c bash -c 'python3 autolayout.py graph.json -o model.drawio'` → "wrote … (3 nodes, 2 edges)" exit 0; `py_compile` OK on all 5 scripts; `wrap`/`verify` subcommands and `--render`/`--output` flags exist and match docs. | No fix required. (Note only: `wrap --render` nests a separate `nix run …drawio-svg-sync` — serial, fine.) | no |
+| E | LOW | CONFIRMED. `docs/diagrams/nixcfg-structure.drawio.svg` has no `content=` attr → `validate.py` flags it AND drawio PNG export yields no file (orphaned view-only export). | `grep -c content= …nixcfg-structure.drawio.svg` = 0; `drawio -x -f png` on it produced no output file. | Follow-up, OUT OF SCOPE for this plan: re-export it editable (round-trip through draw.io to embed `content=`, or regenerate via the skill). | no (follow-up) |
+| F | LOW | NEW. `validate.py` and `autolayout.py` carry no per-file provenance/attribution; `shapesearch.py` (jgraph/drawio-mcp, Apache-2.0) and `aiicons.py` (lobe-icons, MIT) do. SKILL.md changelog credits Agents365-ai/drawio-skill (MIT) at skill level; upstream uses a single repo-level LICENSE. | `head` of each script; upstream `/home/tim/src/drawio-skill/LICENSE` (MIT, repo-level). | T2 (optional hygiene): add a one-line "Adapted from Agents365-ai/drawio-skill (MIT)" comment to `validate.py`/`autolayout.py` headers to match the other two. | optional |
+
+**Other spot-checks:** no dangling `Section NN` references beyond 35; changelog
+v1.11.0 matches what shipped (validate/autolayout/vision-loop/shape+icon search);
+`verify`/`wrap`/`--render` docs match `drawio_gen.py` behavior. All 5 `.py`
+compile.
 
 Also spot-check: cross-references (Section N pointers) resolve; changelog v1.11.0
 matches what shipped; `verify`/`wrap`/`--render` docs match `drawio_gen.py`
@@ -151,6 +179,11 @@ dir (e.g. `/tmp/diagram-barometer/`), NOT committed.
 Barometer score = sum across B1–B10 (max 50). Track over time; a regression in
 any test after a skill change is a red flag. Record which tests need the
 graphviz nix-shell prefix or a working PNG rasterizer (depends on T1/A).
+
+**Confirmed prefixes (from T1):**
+- Graphviz (B4): `nix shell nixpkgs#graphviz -c bash -c '...'` (Section 34).
+- PNG rasterizer for the vision loop (B8): `nix shell nixpkgs#drawio nixpkgs#xvfb-run -c xvfb-run --auto-servernum drawio -x -f png --width 2000 -p 1 -o /tmp/x.png f.drawio.svg`.
+- The Read tool cannot render `.drawio.svg` as an image (returns XML text), so B8 MUST rasterize to PNG first.
 
 ---
 
