@@ -53,7 +53,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 |------|--------|--------------------------------|
 | T1 Full review + findings | TASK:COMPLETE (2026-07-01) | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
 | T2 Apply agreed improvements + commit | TASK:COMPLETE (2026-07-01) | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
-| T3 Deploy (home-manager switch) | TASK:PENDING | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
+| T3 Deploy (home-manager switch) | TASK:IN_PROGRESS (2026-07-02) | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
 | T4 Finalize quality-barometer suite | TASK:PENDING | Test suite + scoring rubric below reviewed/refined; expected outcomes concrete; recorded in this plan; ready for the user to run. |
 | T5 Run the barometer (INTERACTIVE) | TASK:PENDING | USER runs the suite in a later session, scores each test against the rubric, records results in the Results section. `Interactive` — needs user judgment/vision. |
 
