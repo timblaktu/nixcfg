@@ -51,7 +51,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 
 | Task | Status | Definition of Done (checkable) |
 |------|--------|--------------------------------|
-| T1 Full review + findings | TASK:PENDING | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
+| T1 Full review + findings | TASK:IN_PROGRESS | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
 | T2 Apply agreed improvements + commit | TASK:PENDING | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
 | T3 Deploy (home-manager switch) | TASK:PENDING | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
 | T4 Finalize quality-barometer suite | TASK:PENDING | Test suite + scoring rubric below reviewed/refined; expected outcomes concrete; recorded in this plan; ready for the user to run. |
