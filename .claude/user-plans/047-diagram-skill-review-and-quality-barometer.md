@@ -53,7 +53,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 |------|--------|--------------------------------|
 | T1 Full review + findings | TASK:COMPLETE (2026-07-01) | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
 | T2 Apply agreed improvements + commit | TASK:COMPLETE (2026-07-01) | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
-| T3 Deploy (home-manager switch) | TASK:IN_PROGRESS (2026-07-02) | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
+| T3 Deploy (home-manager switch) | TASK:COMPLETE (2026-07-02) | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
 | T4 Finalize quality-barometer suite | TASK:PENDING | Test suite + scoring rubric below reviewed/refined; expected outcomes concrete; recorded in this plan; ready for the user to run. |
 | T5 Run the barometer (INTERACTIVE) | TASK:PENDING | USER runs the suite in a later session, scores each test against the rubric, records results in the Results section. `Interactive` — needs user judgment/vision. |
 
@@ -179,6 +179,41 @@ compile.
 Also spot-check: cross-references (Section N pointers) resolve; changelog v1.11.0
 matches what shipped; `verify`/`wrap`/`--render` docs match `drawio_gen.py`
 behavior; provenance headers present in all four vendored scripts.
+
+---
+
+## T3 — Deploy (home-manager switch)  [DONE 2026-07-02]
+
+Host verified: `tim@pa161878-nixos` (WSL_DISTRO=nixos), `nixcfg-work` present.
+All 10 skill source files (incl. the four new scripts + `data/*`) are enumerated
+in `skills.nix` (lines 54-67) and committed on the branch. Ran:
+
+```bash
+cd /home/tim/src/nixcfg-work
+home-manager switch --flake '.#tim@pa161878-nixos' \
+  --override-input nixcfg /home/tim/src/nixcfg
+```
+
+- **Switch succeeded.** Override-input pinned nixcfg → this branch
+  (`git+file://…/nixcfg?ref=refs/heads/diagram-skill-integrations&rev=287e2f1`,
+  2026-07-02), superseding the flake.lock pin (327be40, 2026-06-30). Activation
+  ran to completion (`claudeSkillsDeployment` + all later gens).
+- **Deployed dir DoD met** (`/home/tim/.claude-max/skills/diagram/`, all files
+  dated Jul 2 09:27): `validate.py autolayout.py shapesearch.py aiicons.py`
+  present; `data/{shape-index.json.gz,lobe-icons.json,SHAPE-INDEX-NOTICE.md}`
+  present; `SKILL.md` = 2675 lines (the T2 trimmed version, was 3251 pre-switch);
+  `REFERENCE.md` = 44KB (grew per T2 move).
+- **`verify` runs from the deployed copy:** generated a minimal valid diagram via
+  the deployed `drawio_gen.py generate`, then `drawio_gen.py verify` → exit 0,
+  "OK: no structural errors" (delegates to the deployed `validate.py`, confirming
+  the new script loads/runs). (Skipped `--render` — it shells out to
+  `nix run …drawio-svg-sync`, not needed for the DoD.)
+
+**Note (out of scope, cosmetic):** stale orphans `drawio_analyze.py` and
+`drawio_edit.py` (Mar 1, no longer enumerated) remain in the deployed dir. The
+activation script prunes stale *skill directories*, not stale *files within* a
+declared skill, so per-file cp leaves them. Harmless (nothing references them);
+a future cleanup could switch the per-skill deploy to a mirror/rsync-delete.
 
 ---
 
