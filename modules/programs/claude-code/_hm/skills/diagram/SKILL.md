@@ -484,178 +484,8 @@ center     └────────────┘   center
 
 ## Section 6: Complete Creation Examples
 
-### Example 1: 3-Tier Architecture
-
-**Request**: "Create a 3-tier architecture diagram with Web, API, and Database layers"
-
-**Result** (decoded mxGraphModel, shapes only):
-
-```xml
-<!-- Web Tier -->
-<mxCell id="web" value="Web Tier"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;"
-        vertex="1" parent="1">
-  <mxGeometry x="100" y="50" width="120" height="60" as="geometry"/>
-</mxCell>
-
-<!-- API Tier -->
-<mxCell id="api" value="API Tier"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;"
-        vertex="1" parent="1">
-  <mxGeometry x="100" y="150" width="120" height="60" as="geometry"/>
-</mxCell>
-
-<!-- Database Tier -->
-<mxCell id="db" value="Database"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;"
-        vertex="1" parent="1">
-  <mxGeometry x="100" y="250" width="120" height="60" as="geometry"/>
-</mxCell>
-
-<!-- Web → API Connector -->
-<mxCell id="conn-web-api"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;endArrow=classic;html=1;"
-        edge="1" parent="1" source="web" target="api">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-
-<!-- API → Database Connector -->
-<mxCell id="conn-api-db"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;endArrow=classic;html=1;"
-        edge="1" parent="1" source="api" target="db">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-```
-
-### Example 2: Pipeline Workflow (Left-to-Right)
-
-**Request**: "Create a CI/CD pipeline: Fetch → Build → Test → Deploy"
-
-**Result**:
-
-```xml
-<!-- Phase boxes - horizontal arrangement -->
-<mxCell id="fetch" value="Fetch"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="100" width="100" height="60" as="geometry"/>
-</mxCell>
-
-<mxCell id="build" value="Build"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;"
-        vertex="1" parent="1">
-  <mxGeometry x="200" y="100" width="100" height="60" as="geometry"/>
-</mxCell>
-
-<mxCell id="test" value="Test"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;"
-        vertex="1" parent="1">
-  <mxGeometry x="350" y="100" width="100" height="60" as="geometry"/>
-</mxCell>
-
-<mxCell id="deploy" value="Deploy"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;"
-        vertex="1" parent="1">
-  <mxGeometry x="500" y="100" width="100" height="60" as="geometry"/>
-</mxCell>
-
-<!-- Connectors: exit RIGHT (1, 0.5), enter LEFT (0, 0.5) -->
-<mxCell id="conn-1"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;"
-        edge="1" parent="1" source="fetch" target="build">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-
-<mxCell id="conn-2"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;"
-        edge="1" parent="1" source="build" target="test">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-
-<mxCell id="conn-3"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;"
-        edge="1" parent="1" source="test" target="deploy">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-```
-
-### Example 3: Side-by-Side Comparison
-
-**Request**: "Create a comparison: Before (3 items) vs After (3 items)"
-
-**Result**:
-
-```xml
-<!-- Headers -->
-<mxCell id="before-header" value="&lt;b&gt;BEFORE&lt;/b&gt;"
-        style="text;html=1;align=center;verticalAlign=middle;fontSize=16;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="30" width="150" height="40" as="geometry"/>
-</mxCell>
-
-<mxCell id="after-header" value="&lt;b&gt;AFTER&lt;/b&gt;"
-        style="text;html=1;align=center;verticalAlign=middle;fontSize=16;"
-        vertex="1" parent="1">
-  <mxGeometry x="350" y="30" width="150" height="40" as="geometry"/>
-</mxCell>
-
-<!-- Before column -->
-<mxCell id="before-1" value="Manual process"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="100" width="150" height="50" as="geometry"/>
-</mxCell>
-
-<mxCell id="before-2" value="Slow deployment"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="170" width="150" height="50" as="geometry"/>
-</mxCell>
-
-<mxCell id="before-3" value="Error-prone"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="240" width="150" height="50" as="geometry"/>
-</mxCell>
-
-<!-- After column -->
-<mxCell id="after-1" value="Automated CI/CD"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;"
-        vertex="1" parent="1">
-  <mxGeometry x="350" y="100" width="150" height="50" as="geometry"/>
-</mxCell>
-
-<mxCell id="after-2" value="Fast deployment"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;"
-        vertex="1" parent="1">
-  <mxGeometry x="350" y="170" width="150" height="50" as="geometry"/>
-</mxCell>
-
-<mxCell id="after-3" value="Reliable"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;"
-        vertex="1" parent="1">
-  <mxGeometry x="350" y="240" width="150" height="50" as="geometry"/>
-</mxCell>
-
-<!-- Transformation arrows -->
-<mxCell id="transform-1"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;dashed=1;"
-        edge="1" parent="1" source="before-1" target="after-1">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-
-<mxCell id="transform-2"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;dashed=1;"
-        edge="1" parent="1" source="before-2" target="after-2">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-
-<mxCell id="transform-3"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;dashed=1;"
-        edge="1" parent="1" source="before-3" target="after-3">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-```
+Moved to REFERENCE.md (loaded on demand) to keep SKILL.md's always-loaded
+context small. See REFERENCE.md -> "Section 6: Complete Creation Examples".
 
 ---
 
@@ -1691,13 +1521,24 @@ a visual pass you perform yourself by reading the rendered raster.
    `validate.py`. If it reported sibling overlaps or edge crossings as WARNINGs,
    treat them as real defects to fix here - the linter sees geometry you might miss.
 3. **Visual pass (you read the raster):** the `.drawio.svg` body is vector, so
-   rasterize to a PNG and read it with your own vision to actually "see" layout:
+   rasterize to a PNG and read it with your own vision to actually "see" layout.
+   The Read tool does NOT render `.drawio.svg` as an image (it returns the SVG
+   XML as text), so rasterizing to PNG first is mandatory - do not try to Read
+   the `.drawio.svg` directly. Use draw.io's own renderer via a nix shell (a bare
+   `drawio` is not on PATH here; only draw.io's renderer is faithful - `resvg`
+   turns `light-dark()` fills black and ImageMagick cannot render the
+   `<foreignObject>` label text):
    ```bash
    # 1-based page index; cap width so the PNG stays under the vision 2576x2576 ceiling
-   drawio -x -f png --width 2000 -p 1 -o /tmp/diagram-check.png diagram.drawio.svg
+   nix shell nixpkgs#drawio nixpkgs#xvfb-run -c \
+     xvfb-run --auto-servernum drawio -x -f png --width 2000 -p 1 \
+     -o /tmp/diagram-check.png diagram.drawio.svg
    ```
-   (Headless export recipe and WSL specifics: Section 33.) Then read
-   `/tmp/diagram-check.png` and scan for the issues in the checklist below.
+   The GLX/EGL/ANGLE stderr lines are harmless (export still returns exit 0 with a
+   good PNG). Do NOT add `--no-sandbox`/`--disable-gpu` - they break drawio's CLI
+   arg parser. If Windows draw.io is installed, the `draw.io.exe` path in
+   Section 33 is an alternative. Then read `/tmp/diagram-check.png` and scan for
+   the issues in the checklist below.
 4. **Auto-fix, at most 2 rounds:** apply concrete XML fixes for what you find,
    re-render, re-read. After 2 rounds, stop and present what you have with a note
    on any residual issue - do not loop indefinitely.
@@ -1706,8 +1547,8 @@ a visual pass you perform yourself by reading the rendered raster.
 
 Skip the visual pass only for trivial diagrams (<5 elements) or when the user
 said "quick draft" - the structural pass always runs. If you cannot rasterize
-(no `drawio` CLI available in context), fall back to asking the user for a
-screenshot and analyze that.
+(the nix shell above fails and no Windows draw.io is available), fall back to
+asking the user for a screenshot and analyze that.
 
 ### Visual Quality Checklist
 
@@ -1825,339 +1666,15 @@ When writing updates to large files:
 
 ## Section 17: Grouping Pattern for Similar Elements
 
-When a diagram has N similar elements (e.g., multiple servers, dev boards, or workstations), connecting to each individually creates visual clutter. Use the grouping pattern instead.
-
-### Problem: N-to-1 Connection Clutter
-
-**Bad Example**: 8 dev boards each with individual connection to switch
-
-```
-┌─────────┐     ┌─────────┐
-│ Board 1 │─────│         │
-├─────────┤     │         │
-│ Board 2 │─────│         │
-├─────────┤     │         │
-│ Board 3 │─────│  Switch │  ← 8 overlapping arrows!
-├─────────┤     │         │
-│ Board 4 │─────│         │
-├─────────┤     │         │
-│  ...    │─────│         │
-└─────────┘     └─────────┘
-```
-
-**Issues**:
-- 8 connector lines overlap, creating visual noise
-- Labels on each line (e.g., "1x Eth") are redundant
-- Hard to trace individual connections
-- Diagram scales poorly (what if 20 boards?)
-
-### Solution: Container + Single Connection
-
-**Good Example**: Dashed container around group with single labeled connection
-
-```
-┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
-│  Dev Boards (8x)       │     ┌─────────┐
-│  ┌───┐ ┌───┐ ┌───┐    │────►│         │
-│  │ 1 │ │ 2 │ │...│    │     │  Switch │
-│  └───┘ └───┘ └───┘    │     │         │
-│       ┌───┐            │     └─────────┘
-│       │ N │            │
-│       └───┘            │        8x Gigabit Ethernet
-└ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
-```
-
-**Benefits**:
-- Single clean connection
-- Label describes the group ("8x Gigabit Ethernet")
-- Scales to any N
-- Clear visual hierarchy
-
-### Implementation Pattern
-
-#### Step 1: Create the Dashed Container
-
-```xml
-<mxCell id="group-devboards" value="Dev Boards (8x)"
-        style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#00CC66;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="200" width="300" height="150" as="geometry"/>
-</mxCell>
-```
-
-**Key style attributes**:
-- `dashed=1;dashPattern=8 8;` - Creates dashed border
-- `fillColor=none;` - Transparent background
-- `strokeWidth=2;` - Visible but not heavy
-- `verticalAlign=top;align=left;` - Label in top-left corner
-
-#### Step 2: Add Representative Elements Inside
-
-Show 2-3 actual instances plus ellipsis to indicate more:
-
-```xml
-<!-- Board 1 -->
-<mxCell id="board-1" value="Board 1"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;"
-        vertex="1" parent="1">
-  <mxGeometry x="70" y="250" width="60" height="40" as="geometry"/>
-</mxCell>
-
-<!-- Board 2 -->
-<mxCell id="board-2" value="Board 2"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;"
-        vertex="1" parent="1">
-  <mxGeometry x="140" y="250" width="60" height="40" as="geometry"/>
-</mxCell>
-
-<!-- Ellipsis indicator -->
-<mxCell id="board-ellipsis" value="..."
-        style="text;html=1;align=center;verticalAlign=middle;fontSize=14;fontStyle=1;"
-        vertex="1" parent="1">
-  <mxGeometry x="210" y="250" width="30" height="40" as="geometry"/>
-</mxCell>
-
-<!-- Board N -->
-<mxCell id="board-n" value="Board N"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;"
-        vertex="1" parent="1">
-  <mxGeometry x="250" y="250" width="60" height="40" as="geometry"/>
-</mxCell>
-```
-
-#### Step 3: Single Connector to Container
-
-Connect to the container, not individual elements:
-
-```xml
-<mxCell id="conn-group-switch" value="8x Gigabit Ethernet"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;strokeWidth=2;"
-        edge="1" parent="1" source="group-devboards" target="switch">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-```
-
-**Key points**:
-- `source="group-devboards"` - Connects FROM the container
-- `strokeWidth=2;` - Thicker line for group connection
-- Label describes the aggregate ("8x Gigabit Ethernet")
-
-### When to Use Grouping
-
-| Scenario | Use Grouping? | Notes |
-|----------|---------------|-------|
-| 3+ identical elements to same target | YES | Always group when N ≥ 3 |
-| 2 elements | MAYBE | Judgment call based on complexity |
-| Elements with different connection types | NO | Can't aggregate different things |
-| Need to show routing details | NO | Individual connections may be needed |
-| Conceptual/logical diagrams | YES | Focus on relationships, not wiring |
-| Physical topology diagrams | MAYBE | May need to show actual ports |
-
-### Group Label Conventions
-
-| Pattern | Example |
-|---------|---------|
-| Count + Type | "8x Gigabit Ethernet" |
-| Name + Count | "Dev Boards (8)" |
-| Range | "Servers 1-10" |
-| Category | "Test Equipment" |
-
-### Nested Grouping
-
-For complex hierarchies, groups can nest:
-
-```xml
-<!-- Outer group: All test equipment -->
-<mxCell id="group-test-equipment" value="Test Equipment"
-        style="rounded=1;dashed=1;dashPattern=12 12;fillColor=none;strokeColor=#666666;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="100" width="400" height="300" as="geometry"/>
-</mxCell>
-
-<!-- Inner group: Dev boards -->
-<mxCell id="group-devboards" value="Dev Boards (8)"
-        style="rounded=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#00CC66;"
-        vertex="1" parent="1">
-  <mxGeometry x="70" y="140" width="150" height="100" as="geometry"/>
-</mxCell>
-
-<!-- Inner group: Analyzers -->
-<mxCell id="group-analyzers" value="Analyzers (3)"
-        style="rounded=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#FF9900;"
-        vertex="1" parent="1">
-  <mxGeometry x="250" y="140" width="150" height="100" as="geometry"/>
-</mxCell>
-```
-
-**Visual hierarchy**:
-- Outer container: Larger dash pattern, neutral color
-- Inner containers: Smaller dash pattern, distinct colors
-- Connections to outer container represent combined traffic
-
-### Complete Grouping Example
-
-**Request**: "Show 6 workstations connected to a switch"
-
-**Result**:
-
-```xml
-<!-- Container for workstations -->
-<mxCell id="group-ws" value="Workstations (6)"
-        style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#9673a6;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;fontSize=12;"
-        vertex="1" parent="1">
-  <mxGeometry x="50" y="100" width="250" height="120" as="geometry"/>
-</mxCell>
-
-<!-- Representative workstations -->
-<mxCell id="ws-1" value="WS-1"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
-        vertex="1" parent="1">
-  <mxGeometry x="70" y="140" width="50" height="35" as="geometry"/>
-</mxCell>
-
-<mxCell id="ws-2" value="WS-2"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
-        vertex="1" parent="1">
-  <mxGeometry x="130" y="140" width="50" height="35" as="geometry"/>
-</mxCell>
-
-<mxCell id="ws-dots" value="..."
-        style="text;html=1;align=center;verticalAlign=middle;fontSize=14;fontStyle=1;"
-        vertex="1" parent="1">
-  <mxGeometry x="190" y="140" width="30" height="35" as="geometry"/>
-</mxCell>
-
-<mxCell id="ws-6" value="WS-6"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;"
-        vertex="1" parent="1">
-  <mxGeometry x="230" y="140" width="50" height="35" as="geometry"/>
-</mxCell>
-
-<!-- Switch -->
-<mxCell id="switch" value="Core Switch"
-        style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;"
-        vertex="1" parent="1">
-  <mxGeometry x="400" y="130" width="100" height="60" as="geometry"/>
-</mxCell>
-
-<!-- Single grouped connection -->
-<mxCell id="conn-ws-switch" value="6x 1Gbps"
-        style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;endArrow=classic;html=1;strokeWidth=2;fontSize=11;"
-        edge="1" parent="1" source="group-ws" target="switch">
-  <mxGeometry relative="1" as="geometry"/>
-</mxCell>
-```
-
-This produces a clean diagram with:
-- Dashed container labeled "Workstations (6)"
-- 3 representative boxes (WS-1, WS-2, ..., WS-6)
-- Single connection labeled "6x 1Gbps"
-- No visual clutter from 6 individual arrows
+Moved to REFERENCE.md (loaded on demand) to keep SKILL.md's always-loaded
+context small. See REFERENCE.md -> "Section 17: Grouping Pattern for Similar Elements".
 
 ---
 
 ## Section 18: Rounded Container Label Positioning
 
-When placing corner labels inside rounded containers (e.g., "Lab Bench", "Network Zone"), the label must be offset from the container corner to avoid overlapping the curved edge.
-
-### The arcSize Formula
-
-DrawIO's `rounded=1` style uses a formula to calculate corner radius:
-
-```
-corner_radius = 0.15 × min(container_width, container_height)
-```
-
-This is the **default arcSize** (15%). The corner radius adapts to container size.
-
-### Visual Offset Formula (Validated)
-
-To position a label inside a rounded corner without overlapping the curve:
-
-```
-offset = max(corner_radius × 0.35, 15)
-```
-
-Where:
-- `corner_radius` = calculated from arcSize formula above
-- Minimum offset is 15px to ensure labels don't touch small corners
-- The 0.35 factor provides comfortable visual padding from the curve
-
-### Calculation Examples
-
-| Container Size | min(w,h) | corner_radius | offset |
-|----------------|----------|---------------|--------|
-| 800×680 | 680 | 102px | 35px |
-| 900×420 | 420 | 63px | 22px (or 35px visual override) |
-| 400×130 | 130 | 19.5px | 15px (minimum) |
-| 260×180 | 180 | 27px | 15px (minimum) |
-
-**Note**: For larger containers (corner_radius > 60px), a visual override of 35px often looks better than the calculated value.
-
-### Implementation Pattern
-
-#### Step 1: Calculate the offset
-
-```python
-# Example calculation
-container_width = 800
-container_height = 680
-corner_radius = 0.15 * min(container_width, container_height)  # = 102
-offset = max(corner_radius * 0.35, 15)  # = 35.7 → 35px
-```
-
-#### Step 2: Position the label
-
-```xml
-<!-- Container at x=280, y=50 -->
-<mxCell id="container" value=""
-        style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=none;strokeColor=#999999;strokeWidth=2;"
-        vertex="1" parent="1">
-  <mxGeometry x="280" y="50" width="800" height="680" as="geometry"/>
-</mxCell>
-
-<!-- Label offset by 35px from container origin -->
-<mxCell id="container-label" value="&lt;b&gt;Container Label&lt;/b&gt;"
-        style="text;html=1;align=left;verticalAlign=top;fontSize=14;fontColor=#666666;"
-        vertex="1" parent="1">
-  <mxGeometry x="315" y="85" width="100" height="25" as="geometry"/>
-</mxCell>
-```
-
-The label position is:
-- `label_x = container_x + offset` (280 + 35 = 315)
-- `label_y = container_y + offset` (50 + 35 = 85)
-
-### Label Style for Corner Positioning
-
-```
-style="text;html=1;align=left;verticalAlign=top;fontSize=14;fontColor=#666666;"
-```
-
-Key attributes:
-- `align=left` - Text starts from the label's x position
-- `verticalAlign=top` - Text starts from the label's y position
-- No background color - label floats over container
-
-### Y-Offset Adjustment
-
-In practice, y-offset is often 5px larger than x-offset for visual balance:
-
-| Container Size | x-offset | y-offset |
-|----------------|----------|----------|
-| Large (800×680) | 35px | 35px |
-| Medium (400×130) | 15px | 20px |
-| Small (260×180) | 15px | 20px |
-
-This accounts for visual perception and potential stroke width.
-
-### Quick Reference
-
-| Container Size Category | Recommended Offset |
-|-------------------------|-------------------|
-| Large (min dim > 400px) | 35px |
-| Medium (min dim 150-400px) | 20px |
-| Small (min dim < 150px) | 15px |
+Moved to REFERENCE.md (loaded on demand) to keep SKILL.md's always-loaded
+context small. See REFERENCE.md -> "Section 18: Rounded Container Label Positioning".
 
 ---
 
@@ -2959,76 +2476,8 @@ Run `python3 drawio_gen.py presets` for colors and details.
 
 ## Section 32: Custom Shape Containers (Stencils)
 
-When you need non-rectangular background shapes — L-shapes wrapping asymmetric box groups, T-shapes for top bars with stems, U-shapes for side-by-side arms — use DrawIO's inline `shape=stencil(DATA)` syntax with compressed stencil XML.
-
-### When to Use Custom Stencils vs Alternatives
-
-| Approach | Use When |
-|----------|----------|
-| **Custom stencil** | Need a single unified polygon fill (L, T, U shapes) with no visible seams |
-| **Grouped rectangles** | Acceptable seams, or shapes that decompose into non-overlapping rectangles |
-| **Dashed container** | Logical grouping only, no filled background needed |
-
-### Compression Requirement
-
-DrawIO requires stencil data to be compressed: `encodeURIComponent(xml) → zlib deflateRaw → base64`. Raw base64 **silently fails** — DrawIO's `Graph.decompress()` falls back to rendering a full-size rectangle over the bounding box with no error message.
-
-The `drawio_gen.py` tool handles compression automatically via the `"type": "stencil"` cell type. Never manually construct `shape=stencil()` strings.
-
-### Label Strategy
-
-**Always use a separate text cell for labels on stencil shapes.** The stencil cell's `value` attribute must be `""` (empty string). DrawIO's built-in label positioning centers text in the bounding box, which lands in the empty space of non-rectangular shapes.
-
-```json
-{"id": "tier-band", "type": "stencil", "stencil": "L", "orientation": "br",
- "arm_w": 0.5, "arm_h": 0.4, "x": 40, "y": 80, "w": 400, "h": 300,
- "style": "fillColor=#f8cecc;strokeColor=#b85450;opacity=40;"},
-{"id": "tier-label", "type": "text", "label": "<b>Tier 1</b>",
- "x": 45, "y": 85, "w": 80, "h": 20,
- "style": {"fontSize": "11", "fontColor": "#b85450"}}
-```
-
-### Z-Order Rule
-
-Declare the stencil cell **before** any children it should contain. XML declaration order = rendering order: earlier elements render behind later ones (Section 26).
-
-### Connection Limitation
-
-Arrows route to the **bounding box** edge, not the visible shape outline. Custom `<connections>` defined in the stencil XML do not change this behavior for inline stencils. This is acceptable for background containers (which rarely have arrows pointing at them) but worth noting if you need precise arrow targeting — use standard rectangles instead.
-
-### Quick Recipe: L-Shaped Tier Band
-
-The most common use case is an L-shaped background wrapping two groups of boxes arranged asymmetrically (e.g., 3 boxes on top, 2 on the side).
-
-```json
-{
-  "page": {"width": 800, "height": 600},
-  "cells": [
-    {"id": "tier1-bg", "type": "stencil", "stencil": "L", "orientation": "br",
-     "arm_w": 0.5, "arm_h": 0.4, "x": 40, "y": 80, "w": 400, "h": 300,
-     "style": "fillColor=#f8cecc;strokeColor=#b85450;opacity=40;"},
-    {"id": "tier1-label", "type": "text", "label": "<b>Tier 1</b>",
-     "x": 45, "y": 85, "w": 80, "h": 20,
-     "style": {"fontSize": "11", "fontColor": "#b85450"}},
-    {"id": "box-a", "type": "box", "label": "Service A", "preset": "red",
-     "x": 260, "y": 100, "w": 160, "h": 60},
-    {"id": "box-b", "type": "box", "label": "Service B", "preset": "red",
-     "x": 260, "y": 200, "w": 160, "h": 60},
-    {"id": "box-c", "type": "box", "label": "Worker", "preset": "red",
-     "x": 60, "y": 260, "w": 160, "h": 60}
-  ]
-}
-```
-
-### Stencil Parameters
-
-| Stencil | Parameters | Default |
-|---------|-----------|---------|
-| `L` | `orientation` (bl/br/tl/tr), `arm_w`, `arm_h` | bl, 0.5, 0.4 |
-| `T` | `stem_w`, `bar_h` | 0.4, 0.3 |
-| `U` | `arm_w`, `bar_h` | 0.3, 0.3 |
-
-All ratio parameters are fractions of the total bounding box (0.0–1.0). Ratios are baked into the stencil at generation time — resizing in DrawIO preserves the ratio proportionally.
+Moved to REFERENCE.md (loaded on demand) to keep SKILL.md's always-loaded
+context small. See REFERENCE.md -> "Section 32: Custom Shape Containers (Stencils)".
 
 ## Section 33: Opening .drawio Files in Draw.io Desktop (WSL)
 

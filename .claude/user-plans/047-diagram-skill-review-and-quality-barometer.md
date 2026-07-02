@@ -52,7 +52,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 | Task | Status | Definition of Done (checkable) |
 |------|--------|--------------------------------|
 | T1 Full review + findings | TASK:COMPLETE (2026-07-01) | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
-| T2 Apply agreed improvements + commit | TASK:IN_PROGRESS | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
+| T2 Apply agreed improvements + commit | TASK:COMPLETE (2026-07-01) | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
 | T3 Deploy (home-manager switch) | TASK:PENDING | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
 | T4 Finalize quality-barometer suite | TASK:PENDING | Test suite + scoring rubric below reviewed/refined; expected outcomes concrete; recorded in this plan; ready for the user to run. |
 | T5 Run the barometer (INTERACTIVE) | TASK:PENDING | USER runs the suite in a later session, scores each test against the rubric, records results in the Results section. `Interactive` — needs user judgment/vision. |
@@ -150,6 +150,26 @@ SVG - cannot display" appears). Only draw.io's own renderer is faithful.
   as an image (returns XML) → PNG step mandatory.
 - **F (include):** add "Adapted from Agents365-ai/drawio-skill (MIT)" provenance
   header to validate.py and autolayout.py.
+
+**T2 done (2026-07-01):**
+- **A:** Section 15 visual-pass step rewritten to the nix-shell
+  `xvfb-run … drawio -x -f png --width 2000` command; added the "harmless
+  GLX/EGL stderr / no --no-sandbox" caveats; Section 33 Windows `draw.io.exe`
+  kept as the alternative; the "cannot rasterize" fallback reworded to reference
+  the nix shell. (No separate Section 8 raster note existed — the only bare
+  `drawio -x -f png` was Section 15; Section 33's is the Windows alternative.)
+- **B:** Section 15 now states the Read tool does NOT render `.drawio.svg` as an
+  image (returns XML) so the PNG step is mandatory.
+- **C:** §6/§17/§18/§32 bodies moved to REFERENCE.md under "Extended Examples
+  (moved from SKILL.md)"; each SKILL.md heading left as a one-line pointer stub
+  (no renumbering → `Section NN` cross-refs still resolve). SKILL.md 3226→2675
+  lines (-551, ~17%); REFERENCE.md 712→1307.
+- **F:** NO-OP — validate.py (L31-34) and autolayout.py (L26-29) already carry
+  "Vendored and adapted from Agents365-ai/drawio-skill (MIT)" headers since
+  761a3bb. T1's finding F was a `head -3` false positive (headers sit just after
+  the docstring). No change needed.
+- DoD: `py_compile` clean on all 5 `.py`; `nix flake check --no-build` → all
+  checks passed.
 
 **Other spot-checks:** no dangling `Section NN` references beyond 35; changelog
 v1.11.0 matches what shipped (validate/autolayout/vision-loop/shape+icon search);
