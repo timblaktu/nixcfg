@@ -5,7 +5,8 @@ Subcommands:
     generate  — Create .drawio.svg from JSON spec (stdin or --input)
     extract   — Decode content attribute from .drawio.svg to raw mxFile XML
     inject    — Re-inject content attribute into .drawio.svg from mxFile XML (stdin)
-    verify    — Check .drawio.svg for common issues (orphan, missing cells)
+    wrap      — Wrap raw mxFile XML (stdin) into a fresh .drawio.svg (e.g. autolayout.py output)
+    verify    — Structural lint of .drawio.svg (delegates to validate.py)
     encode    — HTML-encode mxFile XML (stdin) for content attribute
     presets   — List available style presets
 
@@ -24,9 +25,18 @@ import os
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 import zlib
 from datetime import datetime
 from urllib.parse import quote
+
+# Deterministic structural linter (vendored validate.py, same dir). Used by
+# verify_file and as the pre-render gate. Imported lazily-safe: if the module is
+# missing the verify path degrades to a minimal built-in check.
+try:
+    import validate as _validate
+except Exception:  # pragma: no cover - defensive; validate.py ships with the skill
+    _validate = None
 
 # ── Style Presets ──────────────────────────────────────────────────────────────
 
@@ -433,51 +443,71 @@ def inject_content_attr(filepath, mxfile_xml):
         f.write(data)
 
 
+def _structural_lint(decoded_xml):
+    """Run the deterministic structural linter over decoded mxfile XML.
+
+    Returns (errors, warnings) as string lists. errors is None when the linter
+    module is unavailable, signalling the caller to use its minimal fallback.
+    Delegates to validate.check_page (dangling/duplicate/reserved ids, broken
+    parents, missing geometry, sibling overlaps, and — for waypointed edges —
+    edge crossings and edges routed through unrelated vertices).
+    """
+    if _validate is None:
+        return None, None
+    try:
+        root = ET.fromstring(decoded_xml)
+    except ET.ParseError as exc:
+        return [f"content XML does not parse: {exc}"], []
+    pages = root.findall("diagram") or [root]
+    errors, warns = [], []
+    for page in pages:
+        e, w = _validate.check_page(page)
+        errors += e
+        warns += w
+    return errors, warns
+
+
 def verify_file(filepath):
-    """Verify a .drawio.svg file for common issues. Returns (ok, messages)."""
+    """Verify a .drawio.svg file. Returns (ok, messages).
+
+    Structural checks are delegated to the deterministic linter (validate.py);
+    this function adds the two .drawio.svg-specific checks the linter cannot see:
+    presence of the editable content attribute, and whether the SVG body has
+    actually been rendered.
+    """
     messages = []
     with open(filepath, "r", encoding="utf-8") as f:
         data = f.read()
 
-    # Check content attribute exists
     m = re.search(r'content="([^"]*)"', data)
     if not m:
         messages.append("ERROR: No content attribute found — file is orphaned/view-only")
         return False, messages
-
     decoded = decode_content(m.group(1))
 
-    # Check required cells
-    if '<mxCell id="0"' not in decoded:
-        messages.append("ERROR: Missing root cell (id=0)")
-    if '<mxCell id="1"' not in decoded:
-        messages.append("ERROR: Missing default parent cell (id=1)")
+    errors, warns = _structural_lint(decoded)
+    if errors is None:                       # linter unavailable — minimal fallback
+        errors, warns = [], []
+        if '<mxCell id="0"' not in decoded:
+            errors.append("missing root cell id=0")
+        if '<mxCell id="1"' not in decoded:
+            errors.append("missing default parent cell id=1")
+        cell_ids = set(re.findall(r'id="([^"]+)"', decoded))
+        refs = set(re.findall(r'source="([^"]+)"', decoded)) | set(re.findall(r'target="([^"]+)"', decoded))
+        dangling = refs - cell_ids
+        if dangling:
+            warns.append(f"dangling edge references: {', '.join(sorted(dangling))}")
+    messages += [f"ERROR: {e}" for e in errors]
+    messages += [f"WARNING: {w}" for w in warns]
 
-    # Check mxfile structure
-    if "<mxfile" not in decoded:
-        messages.append("ERROR: No <mxfile> element in content")
-    if "<mxGraphModel" not in decoded:
-        messages.append("ERROR: No <mxGraphModel> element in content")
-
-    # Check for SVG body (rendered content)
+    # Check for SVG body (rendered content) — the one thing validate.py can't see.
     svg_body = re.sub(r'content="[^"]*"', '', data)
-    has_rendered = bool(re.search(r'<(rect|path|ellipse|line|polygon|image)\b', svg_body))
-    if not has_rendered:
+    if not re.search(r'<(rect|path|ellipse|line|polygon|image)\b', svg_body):
         messages.append("WARNING: SVG body has no graphical elements — needs drawio-svg-sync render")
 
-    # Collect all cell IDs and check for source/target references
-    cell_ids = set(re.findall(r'id="([^"]+)"', decoded))
-    sources = set(re.findall(r'source="([^"]+)"', decoded))
-    targets = set(re.findall(r'target="([^"]+)"', decoded))
-    dangling = (sources | targets) - cell_ids
-    if dangling:
-        messages.append(f"WARNING: Dangling edge references: {', '.join(sorted(dangling))}")
-
-    if not messages:
-        messages.append("OK: File is valid")
-        return True, messages
-
     has_errors = any(msg.startswith("ERROR") for msg in messages)
+    if not has_errors:
+        messages.append("OK: no structural errors")
     return not has_errors, messages
 
 
@@ -633,6 +663,18 @@ def _render_and_reinject(filepath):
         print("ERROR: No content attribute to preserve", file=sys.stderr)
         sys.exit(1)
 
+    # Pre-render structural gate — never spend a render on a structurally broken
+    # model. Errors (dangling/duplicate ids, broken parents, bad geometry) abort;
+    # warnings (overlaps, edge crossings) are surfaced but do not block.
+    errors, warns = _structural_lint(mxfile_xml)
+    for w in (warns or []):
+        print(f"  WARNING: {w}", file=sys.stderr)
+    if errors:
+        print("Structural errors — aborting render (fix these first):", file=sys.stderr)
+        for e in errors:
+            print(f"  ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
     print(f"Rendering with drawio-svg-sync...", file=sys.stderr)
     result = subprocess.run(
         ["nix", "run", "github:timblaktu/drawio-svg-sync", "--", filepath],
@@ -674,6 +716,34 @@ def cmd_inject(args):
     mxfile_xml = sys.stdin.read()
     inject_content_attr(args.file, mxfile_xml)
     print(f"Injected content attribute into: {args.file}", file=sys.stderr)
+
+
+def cmd_wrap(args):
+    """Wrap raw mxfile XML (stdin) into a fresh .drawio.svg.
+
+    Bridges tools that emit plain .drawio/mxfile XML (e.g. autolayout.py) into
+    this skill's editable-and-rendered .drawio.svg format, reusing build_svg and
+    the standard render/gate path. Page size is taken from the mxfile's
+    pageWidth/pageHeight when present.
+    """
+    mxfile_xml = sys.stdin.read()
+
+    def _dim(attr, default):
+        m = re.search(rf'{attr}="(\d+)"', mxfile_xml)
+        return int(m.group(1)) if m else default
+
+    page = {"width": _dim("pageWidth", 850), "height": _dim("pageHeight", 1100)}
+    svg = build_svg(mxfile_xml, page)
+
+    outpath = args.output or "/dev/stdout"
+    if outpath == "/dev/stdout":
+        sys.stdout.write(svg)
+    else:
+        with open(outpath, "w", encoding="utf-8") as f:
+            f.write(svg)
+        print(f"Wrapped mxfile into: {outpath}", file=sys.stderr)
+        if args.render:
+            _render_and_reinject(outpath)
 
 
 def cmd_verify(args):
@@ -735,6 +805,13 @@ def main():
     p_inj = sub.add_parser("inject", help="Inject content attr into .drawio.svg from stdin")
     p_inj.add_argument("file", help="Path to .drawio.svg file")
     p_inj.set_defaults(func=cmd_inject)
+
+    # wrap
+    p_wrap = sub.add_parser("wrap", help="Wrap raw mxfile XML (stdin) into a .drawio.svg")
+    p_wrap.add_argument("--output", "-o", help="Output .drawio.svg file (default: stdout)")
+    p_wrap.add_argument("--render", "-r", action="store_true",
+                        help="Run drawio-svg-sync after wrapping")
+    p_wrap.set_defaults(func=cmd_wrap)
 
     # verify
     p_ver = sub.add_parser("verify", help="Verify .drawio.svg for common issues")

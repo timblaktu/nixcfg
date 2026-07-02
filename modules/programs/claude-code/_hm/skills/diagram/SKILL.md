@@ -5,10 +5,30 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.10.0
-**Last Updated**: 2026-06-16
+**Version**: 1.11.0
+**Last Updated**: 2026-07-01
 
 ## Changelog
+
+### v1.11.0 (2026-07-01)
+- Integrated four capabilities adapted from Agents365-ai/drawio-skill (MIT):
+  - **Deterministic structural linter** (`validate.py`): dangling/duplicate/reserved
+    IDs, broken parents, bad geometry, sibling overlaps, and edge crossing /
+    edge-through-vertex for waypointed edges. `drawio_gen.py verify` now delegates
+    to it, and `--render` runs it as a **pre-render gate** (aborts on errors).
+    SUPERSEDES: the manual pre-render checklist in Section 8 and the
+    dup-ID/dangling-edge shell recipes in Section 13 (both removed).
+  - **Graphviz auto-layout** (`autolayout.py`) + `drawio_gen.py wrap` for dense
+    graphs (>~15 nodes) — new Section 34. Removes the manual-coordinate ceiling.
+  - **Vision self-check loop**: Section 15 rewritten from "ask the user for a
+    screenshot" into an active render -> validate -> raster -> self-read ->
+    auto-fix (<=2 rounds) loop. Collapsed the old templates/example; gutted the
+    five redundant extraction one-liners in Section 16 to a pointer at
+    `drawio_gen.py extract`/`verify`.
+  - **Shape & AI-icon search** (`shapesearch.py`, `aiicons.py`) — new Section 35:
+    exact official draw.io vendor style strings (10k+ shapes) and AI/LLM brand
+    logos.
+- Added a Helper Scripts toolbox table (below Overview) so the tools are discoverable.
 
 ### v1.10.0 (2026-06-16)
 - Section 5: added the "Arrows in label TEXT" rule - use a real Unicode arrow glyph
@@ -102,6 +122,26 @@ This skill enables creating and editing diagrams with automatic format selection
 
 ---
 
+## Helper Scripts (Toolbox)
+
+All scripts live in this skill directory. Python scripts are executable and use
+only the standard library (except `autolayout.py`, which shells out to Graphviz
+`dot`). Run `dot`-dependent commands under `nix shell nixpkgs#graphviz -c ...`.
+
+| Script | Use it to |
+|--------|-----------|
+| `drawio_gen.py` | Generate/extract/inject/wrap/verify `.drawio.svg`; the render entry point (Section 31) |
+| `validate.py` | Deterministically lint a `.drawio`/`.drawio.svg` for structural + geometry defects (Section 8) |
+| `autolayout.py` | Auto-place a dense graph (>~15 nodes) with Graphviz instead of hand coordinates (Section 34) |
+| `shapesearch.py` | Resolve exact official draw.io vendor style strings (AWS/Azure/GCP/K8s/Cisco/UML/…) (Section 35) |
+| `aiicons.py` | Resolve AI/LLM brand logos (OpenAI/Claude/Gemini/…) to draw.io image styles (Section 35) |
+
+**The validator is a hard gate**: `drawio_gen.py generate|wrap --render` runs
+`validate.py` on the model *before* invoking the renderer and aborts on structural
+errors. Run `python3 drawio_gen.py verify FILE` any time to check a file by hand.
+
+---
+
 ## Section 1: Format Selection Heuristic
 
 Before creating a diagram, determine the appropriate format:
@@ -124,6 +164,11 @@ Before creating a diagram, determine the appropriate format:
 - User explicitly requests DrawIO
 - Precise positioning matters
 - Complex styling (gradients, icons, custom colors)
+
+**Dense graphs (>~15 nodes, dependency/relationship graphs)**: still DrawIO, but
+do not hand-place coordinates - use Graphviz auto-layout (Section 34). Hand
+placement is for small, deliberately-composed diagrams; auto-layout is for graphs
+where readable positioning is mechanical.
 
 ### Decision Flowchart
 
@@ -670,19 +715,20 @@ When `parent="other-id"` (container): coordinates are **RELATIVE** to parent.
 
 After creating or editing the mxGraphModel XML, you MUST render it to update the visible SVG body.
 
-### Pre-Render Validation Checklist
+### Pre-Render Validation (Automated Gate)
 
-Before running the renderer, verify your XML:
+Do not hand-check invariants - run the deterministic linter, which is also the
+automatic pre-render gate:
 
-- [ ] Cell 0 exists with no `parent` attribute
-- [ ] Cell 1 exists with `parent="0"`
-- [ ] All element IDs are unique
-- [ ] All edges have valid `source`/`target` IDs (or explicit sourcePoint/targetPoint)
-- [ ] All shapes have `vertex="1" parent="1"`
-- [ ] All edges have `edge="1" parent="1"`
-- [ ] All shapes have `<mxGeometry>` with x, y, width, height
-- [ ] The `content` attribute is properly HTML-entity-encoded
-- [ ] No unclosed XML tags
+```bash
+python3 drawio_gen.py verify path/to/diagram.drawio.svg
+```
+
+It reports (and, via `--render`, blocks on) missing/duplicate/reserved IDs,
+broken parent references, dangling edge endpoints, missing/invalid geometry, and
+- as warnings - sibling overlaps and edge crossings for waypointed edges. Fix
+every ERROR before rendering; treat WARNINGs as review items. `generate`/`wrap`
+with `--render` run this gate for you and abort on errors.
 
 ### Step 1: Create/Edit the .drawio.svg File
 
@@ -1435,29 +1481,19 @@ style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;h
 
 ## Section 13: Editing Troubleshooting
 
-### Problem: Element Not Visible After Edit
+### Structural problems (element not visible, edge not connecting, won't load)
 
-**Check**:
-- Does element have `parent="1"` (or valid parent)?
-- Does element have `vertex="1"` or `edge="1"`?
-- Does element have `<mxGeometry>` with valid x, y, width, height?
-- Are coordinates within the page bounds?
+These are all structural and are diagnosed deterministically - do not eyeball
+them. Run the validator; it pinpoints the exact cell:
 
-### Problem: Edge Not Connecting
+```bash
+python3 drawio_gen.py verify diagram.drawio.svg
+```
 
-**Check**:
-- Do `source` and `target` IDs exist?
-- Does edge have `edge="1"` attribute?
-- Is mxGeometry present (even if minimal)?
-
-### Problem: Diagram Won't Load in DrawIO
-
-**Check**:
-- Cell 0 exists with no parent attribute
-- Cell 1 exists with `parent="0"`
-- All IDs are unique
-- XML is valid (no unclosed tags)
-- content attribute is properly encoded
+It covers the common causes: missing `vertex`/`edge`/`parent`, missing or invalid
+`<mxGeometry>`, non-existent `source`/`target`, missing cells 0/1, duplicate IDs.
+Fix the reported ERROR and re-verify. The two problems below are *not* structural,
+so the validator won't flag them:
 
 ### Problem: Changes Not Visible After Sync
 
@@ -1642,35 +1678,36 @@ When running drawio-svg-sync:
 
 ---
 
-## Section 15: Post-Render Critical Analysis
+## Section 15: Post-Render Self-Check Loop
 
-After rendering a diagram with drawio-svg-sync, you MUST perform visual quality analysis before considering the task complete.
+After rendering, run an active self-check loop before presenting the diagram.
+Two passes catch different defect classes: a deterministic structural pass, then
+a visual pass you perform yourself by reading the rendered raster.
 
-### Mandatory Analysis Workflow
+### The loop
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                POST-RENDER ANALYSIS WORKFLOW                 │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. Run drawio-svg-sync                                     │
-│     └─► Rendering complete                                  │
-│                                                              │
-│  2. Request visual verification                             │
-│     └─► "Please share a screenshot of the rendered diagram" │
-│     └─► OR: View file directly if in web context            │
-│                                                              │
-│  3. Analyze for common issues (see checklist below)         │
-│     └─► Identify ALL visual problems                        │
-│                                                              │
-│  4. Propose specific fixes                                  │
-│     └─► Describe exact changes needed                       │
-│     └─► Offer to implement fixes                            │
-│                                                              │
-│  5. Iterate until quality acceptable                        │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
+1. **Render** (`drawio_gen.py ... --render`, or `drawio-svg-sync` directly).
+2. **Structural pass (free, deterministic):** the render gate already ran
+   `validate.py`. If it reported sibling overlaps or edge crossings as WARNINGs,
+   treat them as real defects to fix here - the linter sees geometry you might miss.
+3. **Visual pass (you read the raster):** the `.drawio.svg` body is vector, so
+   rasterize to a PNG and read it with your own vision to actually "see" layout:
+   ```bash
+   # 1-based page index; cap width so the PNG stays under the vision 2576x2576 ceiling
+   drawio -x -f png --width 2000 -p 1 -o /tmp/diagram-check.png diagram.drawio.svg
+   ```
+   (Headless export recipe and WSL specifics: Section 33.) Then read
+   `/tmp/diagram-check.png` and scan for the issues in the checklist below.
+4. **Auto-fix, at most 2 rounds:** apply concrete XML fixes for what you find,
+   re-render, re-read. After 2 rounds, stop and present what you have with a note
+   on any residual issue - do not loop indefinitely.
+5. **Present** to the user; for diagrams they will iterate on, also offer the
+   fixes you deliberately did not auto-apply.
+
+Skip the visual pass only for trivial diagrams (<5 elements) or when the user
+said "quick draft" - the structural pass always runs. If you cannot rasterize
+(no `drawio` CLI available in context), fall back to asking the user for a
+screenshot and analyze that.
 
 ### Visual Quality Checklist
 
@@ -1712,83 +1749,13 @@ After viewing the rendered diagram, systematically check for:
 | **Wrong colors** | Colors don't match semantic meaning | Update fillColor/strokeColor |
 | **Incorrect connections** | Edges connect wrong elements | Fix source/target IDs |
 
-### Analysis Response Template
+### Applying fixes
 
-When reporting analysis results, use this format:
-
-```
-**Visual Analysis Results**
-
-✓ **Good**:
-- [What works well]
-- [Successful aspects]
-
-✗ **Issues Found**:
-1. **[Issue Type]**: [Description]
-   - Location: [Where in diagram]
-   - Fix: [Specific remedy]
-
-2. **[Issue Type]**: [Description]
-   - Location: [Where in diagram]
-   - Fix: [Specific remedy]
-
-**Recommended Actions**:
-- [ ] [Action 1]
-- [ ] [Action 2]
-
-Shall I implement these fixes?
-```
-
-### Example Analysis
-
-**Input**: User shares screenshot of network diagram
-
-**Analysis**:
-
-```
-**Visual Analysis Results**
-
-✓ **Good**:
-- Color scheme clearly distinguishes network zones
-- Overall left-to-right flow is correct
-- Element labels are readable
-
-✗ **Issues Found**:
-1. **Connector bundle**: Three Ethernet connections between switch and server rack create visual clutter
-   - Location: Center of diagram, switch-to-rack area
-   - Fix: Use grouping pattern (single labeled connection to container)
-
-2. **Redundant labels**: Every connection labeled "1x Eth" - redundant information
-   - Location: All 12 connection arrows
-   - Fix: Remove individual labels, add single legend entry or group label
-
-3. **Insufficient spacing**: Dev boards row too close to server row
-   - Location: Bottom third of diagram
-   - Fix: Increase y-coordinate of dev board elements by 60px
-
-4. **Legend overlap**: Legend box overlaps the rightmost server icon
-   - Location: Bottom-right corner
-   - Fix: Move legend 80px left or reposition to top-right
-
-**Recommended Actions**:
-- [ ] Replace individual connections with grouped container pattern
-- [ ] Remove redundant "1x Eth" labels
-- [ ] Add 60px vertical spacing between server and dev board rows
-- [ ] Reposition legend to avoid overlap
-
-Shall I implement these fixes?
-```
-
-### When to Skip Analysis
-
-Analysis can be abbreviated (not skipped entirely) when:
-- Diagram is very simple (< 5 elements)
-- User explicitly says "quick draft, don't polish"
-- Iterating on specific element (user already verified rest of diagram)
-
-Even in these cases, do a quick scan for obvious issues.
-
----
+Fix the highest-impact issues first (missing elements > overlap/clipping >
+routing noise > spacing polish). Make concrete, minimal XML edits - move or
+resize a cell, distribute edge anchors, add a waypoint, shorten a label - then
+re-render and re-read. Keep each round's changes small enough to verify in the
+next raster.
 
 ## Section 16: Large File Handling
 
@@ -1811,73 +1778,23 @@ The Read tool has token limits. A 400KB+ file will:
 - Consume excessive context
 - Potentially truncate the content attribute
 
-### Solution: Targeted Extraction
+### Solution: Extract, Don't Read Whole
 
-Instead of reading the entire file, extract only the mxGraphModel content:
-
-#### Method 1: Extract Content Attribute with Python
-
-```bash
-python3 -c "
-import html, re
-with open('diagram.drawio.svg') as f:
-    content = f.read()
-match = re.search(r'content=\"([^\"]+)\"', content)
-if match:
-    decoded = html.unescape(match.group(1))
-    print(decoded)
-else:
-    print('ERROR: No content attribute found')
-"
-```
-
-This extracts and decodes just the mxGraphModel (~5-50KB), ignoring the large SVG body.
-
-#### Method 2: Read SVG Header Only
+The editable model is small (5-50KB); the rendered SVG body is what bloats the
+file. Never Read a large `.drawio.svg` whole - use the helper to pull just the
+model, edit it, and re-inject:
 
 ```bash
-# Get first 100 lines (usually includes content attribute)
-head -100 diagram.drawio.svg
+python3 drawio_gen.py extract diagram.drawio.svg > /tmp/model.xml   # decoded mxfile XML
+# ...edit /tmp/model.xml (find by value="...", change, etc.)...
+python3 drawio_gen.py inject  diagram.drawio.svg < /tmp/model.xml   # re-encode into content attr
+python3 drawio_gen.py verify  diagram.drawio.svg                    # structural lint
+nix run 'github:timblaktu/drawio-svg-sync' -- diagram.drawio.svg    # re-render SVG body
 ```
 
-Useful for quick inspection of attributes and start of content.
-
-#### Method 3: Search for Specific Elements
-
-```bash
-# Find all cell IDs in the content
-python3 -c "
-import html, re
-with open('diagram.drawio.svg') as f:
-    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
-for match in re.finditer(r'id=\"([^\"]+)\"', content):
-    print(match.group(1))
-"
-```
-
-#### Method 4: Extract and Pretty-Print
-
-```bash
-python3 -c "
-import html, re
-import xml.dom.minidom
-with open('diagram.drawio.svg') as f:
-    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
-dom = xml.dom.minidom.parseString(content)
-print(dom.toprettyxml(indent='  '))
-" | head -200
-```
-
-### Reading Strategy by Task
-
-| Task | Approach |
-|------|----------|
-| **Find element by label** | Extract content, search for `value="..."` |
-| **List all IDs** | Extract content, regex for `id="..."` |
-| **Understand structure** | Extract + pretty-print, read first 200 lines |
-| **Edit specific element** | Extract content, find element, make change |
-| **Full diagram review** | Request screenshot from user |
-| **Verify rendering** | Check file exists and mtime updated |
+`extract` is also the way to inspect a multi-page file (grep its output to find
+which page holds an element). This replaces the ad-hoc `python3 -c "import
+html,re..."` extraction snippets - the helper does the decode/encode correctly.
 
 ### Writing Large Files
 
@@ -1905,52 +1822,6 @@ When writing updates to large files:
 - Simplifying (use grouping patterns)
 - Removing embedded images
 - Using external image references
-
-### Example: Edit Large File Workflow
-
-**Task**: Change "Database" to "PostgreSQL" in a 350KB diagram
-
-**Step 1**: Extract and find element
-```bash
-python3 -c "
-import html, re
-with open('big-diagram.drawio.svg') as f:
-    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
-# Find the element
-for line in content.split('\\n'):
-    if 'Database' in line:
-        print(line)
-"
-```
-
-**Step 2**: Extract full content for editing
-```bash
-python3 -c "
-import html, re
-with open('big-diagram.drawio.svg') as f:
-    content = html.unescape(re.search(r'content=\"([^\"]+)\"', f.read()).group(1))
-print(content)
-" > /tmp/content.xml
-```
-
-**Step 3**: Edit the extracted XML (change value="Database" to value="PostgreSQL")
-
-**Step 4**: Re-encode and update file
-```bash
-python3 -c "
-import html
-with open('/tmp/content.xml') as f:
-    content = f.read()
-encoded = html.escape(content, quote=True)
-print(encoded)
-" > /tmp/encoded.txt
-```
-
-**Step 5**: Use Edit tool to replace content attribute value in the .drawio.svg
-
-**Step 6**: Run drawio-svg-sync to regenerate SVG body
-
----
 
 ## Section 17: Grouping Pattern for Similar Elements
 
@@ -3038,7 +2909,10 @@ python3 drawio_gen.py extract diagram.drawio.svg
 # Inject mxFile XML (stdin) as content attribute
 python3 drawio_gen.py inject diagram.drawio.svg < mxfile.xml
 
-# Verify file integrity (content attr, required cells, dangling refs)
+# Wrap raw mxFile XML (stdin) into a fresh .drawio.svg (e.g. autolayout.py output; Section 34)
+python3 drawio_gen.py wrap --output diagram.drawio.svg [--render] < mxfile.xml
+
+# Structural lint (delegates to validate.py; Section 8)
 python3 drawio_gen.py verify diagram.drawio.svg
 
 # HTML-encode mxFile XML (stdin) for manual content attribute insertion
@@ -3048,7 +2922,9 @@ python3 drawio_gen.py encode < mxfile.xml
 python3 drawio_gen.py presets [--format json]
 ```
 
-The `--render` flag on `generate` runs `drawio-svg-sync`, re-injects content if stripped, and verifies the result.
+The `--render` flag on `generate`/`wrap` runs the structural gate (`validate.py`,
+aborting on errors), then `drawio-svg-sync`, re-injects content if stripped, and
+verifies the result.
 
 ### JSON Spec Format
 
@@ -3249,3 +3125,102 @@ Before opening any generated `.drawio` file, run programmatic XML validation:
 2. Check structure: `mxfile > diagram > mxGraphModel > root`
 3. Verify cells 0/1 exist, IDs are unique, no dangling edge refs
 4. `.drawio` files must contain raw XML `<mxGraphModel>` inside `<diagram>` tags - NOT HTML-entity-encoded content (causes "Failed to execute 'atob'" errors)
+
+---
+
+## Section 34: Auto-Layout for Dense Graphs (Graphviz)
+
+For graphs where positioning is mechanical rather than composed (>~15 nodes,
+dependency/relationship graphs), do not hand-place coordinates. `autolayout.py`
+runs Graphviz `dot` to position nodes and route edges (replaying dot's orthogonal
+bends as waypoints so edges go around nodes), emits mxfile XML, and
+`drawio_gen.py wrap` folds that into a `.drawio.svg`.
+
+### Input: a graph JSON
+
+```json
+{
+  "direction": "LR",
+  "nodes": [
+    {"id": "web", "label": "Web",      "group": "frontend"},
+    {"id": "api", "label": "API",      "group": "backend"},
+    {"id": "db",  "label": "Postgres", "group": "data"}
+  ],
+  "edges": [
+    {"source": "web", "target": "api", "label": "http"},
+    {"source": "api", "target": "db"}
+  ]
+}
+```
+
+- `direction`: `TB` (default) or `LR`.
+- Per node only `id` is required; `label` defaults to id, plus optional `style`,
+  `width`, `height`, and `group`.
+- `group` (`"a"` or nested `"a/b"`) draws a coloured dashed container per group,
+  tinted from this skill's palette (Section 4); `groupLabel` overrides the title.
+- IDs must be unique and must not be `0` or `1` (reserved root cells).
+
+### Run it (Graphviz required)
+
+`dot` is not on PATH by default here - run under `nix shell nixpkgs#graphviz`:
+
+```bash
+nix shell nixpkgs#graphviz -c bash -c '
+  python3 autolayout.py graph.json -o /tmp/model.drawio &&
+  python3 drawio_gen.py wrap -o out.drawio.svg --render < /tmp/model.drawio
+'
+```
+
+`--render` runs the structural gate (Section 8) then drawio-svg-sync. Add `--mono`
+to `autolayout.py` for uncoloured group boxes. A node's explicit `style` always
+wins over the auto-tint, so you can mix in Section 35 vendor/AI-icon styles.
+
+### When NOT to auto-layout
+
+Small, deliberately-composed diagrams (comparisons, tiered architectures, network
+topologies with meaningful physical placement) read better hand-placed - the
+techniques in Sections 3-7 and 17-29 still apply. Auto-layout is for graphs whose
+shape *is* the data, not the composition.
+
+---
+
+## Section 35: Shape and Icon Search
+
+Stop hand-guessing vendor `style=` strings and drawing AI services as blank
+boxes. Two scripts resolve exact styles from bundled indexes.
+
+### Vendor shapes (`shapesearch.py`)
+
+Resolves official draw.io shapes (10k+: AWS / Azure / GCP / Cisco / Kubernetes /
+UML / BPMN / P&ID / electrical / flowchart / network / general) to their exact
+`style=` string.
+
+```bash
+python3 shapesearch.py "aws lambda" --limit 3
+python3 shapesearch.py "kubernetes pod"
+python3 shapesearch.py "uml actor" --json     # machine-readable {style,w,h,title}
+```
+
+Paste the returned `style=` onto a `vertex="1"` cell and use the returned `w`/`h`
+as the geometry size. Data: `data/shape-index.json.gz` (Apache-2.0; see
+`data/SHAPE-INDEX-NOTICE.md`).
+
+### AI / LLM brand logos (`aiicons.py`)
+
+draw.io ships no modern AI/LLM logos, so an LLM-app diagram renders as generic
+boxes. This resolves a brand to a draw.io `image` style.
+
+```bash
+python3 aiicons.py "claude"
+python3 aiicons.py "openai" --variant mono --size 48
+python3 aiicons.py --list                      # all brand names
+python3 aiicons.py "claude" --embed            # inline the SVG as a data URI
+```
+
+**Use `--embed` for anything you commit.** Without it the style references a CDN
+URL that draw.io fetches only at render time - fine for a quick preview, but a
+committed `.drawio.svg` should be self-contained (no network dependency to
+render, and it renders inline on GitHub/GitLab). Common RAG/vector stores lacking
+a lobe logo (Postgres, Redis, Qdrant, ...) fall back to simple-icons
+automatically. Icon names: `data/lobe-icons.json` (lobehub/lobe-icons, MIT);
+logos are their owners' trademarks.

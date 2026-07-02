@@ -54,6 +54,17 @@ let
         "SKILL.md" = ./skills/diagram/SKILL.md;
         "REFERENCE.md" = ./skills/diagram/REFERENCE.md;
         "drawio_gen.py" = ./skills/diagram/drawio_gen.py;
+        # Deterministic structural linter (pre-render gate) and Graphviz
+        # auto-layout for dense graphs. Vendored+adapted from drawio-skill (MIT).
+        "validate.py" = ./skills/diagram/validate.py;
+        "autolayout.py" = ./skills/diagram/autolayout.py;
+        # Official draw.io shape search + AI/LLM brand logos. Scripts MIT;
+        # bundled data Apache-2.0 (shapes) / MIT (icon names) — see data/.
+        "shapesearch.py" = ./skills/diagram/shapesearch.py;
+        "aiicons.py" = ./skills/diagram/aiicons.py;
+        "data/shape-index.json.gz" = ./skills/diagram/data/shape-index.json.gz;
+        "data/lobe-icons.json" = ./skills/diagram/data/lobe-icons.json;
+        "data/SHAPE-INDEX-NOTICE.md" = ./skills/diagram/data/SHAPE-INDEX-NOTICE.md;
       };
     };
     screencast = {
