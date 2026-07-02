@@ -52,7 +52,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 | Task | Status | Definition of Done (checkable) |
 |------|--------|--------------------------------|
 | T1 Full review + findings | TASK:COMPLETE (2026-07-01) | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
-| T2 Apply agreed improvements + commit | TASK:PENDING | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
+| T2 Apply agreed improvements + commit | TASK:IN_PROGRESS | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
 | T3 Deploy (home-manager switch) | TASK:PENDING | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
 | T4 Finalize quality-barometer suite | TASK:PENDING | Test suite + scoring rubric below reviewed/refined; expected outcomes concrete; recorded in this plan; ready for the user to run. |
 | T5 Run the barometer (INTERACTIVE) | TASK:PENDING | USER runs the suite in a later session, scores each test against the rubric, records results in the Results section. `Interactive` — needs user judgment/vision. |
@@ -137,6 +137,19 @@ SVG - cannot display" appears). Only draw.io's own renderer is faithful.
 | D | LOW | REFUTED (docs adequate). Section 34's one-liner runs verbatim; `dot`-not-on-PATH is already handled by the documented `nix shell nixpkgs#graphviz -c` prefix. | `nix shell nixpkgs#graphviz -c bash -c 'python3 autolayout.py graph.json -o model.drawio'` → "wrote … (3 nodes, 2 edges)" exit 0; `py_compile` OK on all 5 scripts; `wrap`/`verify` subcommands and `--render`/`--output` flags exist and match docs. | No fix required. (Note only: `wrap --render` nests a separate `nix run …drawio-svg-sync` — serial, fine.) | no |
 | E | LOW | CONFIRMED. `docs/diagrams/nixcfg-structure.drawio.svg` has no `content=` attr → `validate.py` flags it AND drawio PNG export yields no file (orphaned view-only export). | `grep -c content= …nixcfg-structure.drawio.svg` = 0; `drawio -x -f png` on it produced no output file. | Follow-up, OUT OF SCOPE for this plan: re-export it editable (round-trip through draw.io to embed `content=`, or regenerate via the skill). | no (follow-up) |
 | F | LOW | NEW. `validate.py` and `autolayout.py` carry no per-file provenance/attribution; `shapesearch.py` (jgraph/drawio-mcp, Apache-2.0) and `aiicons.py` (lobe-icons, MIT) do. SKILL.md changelog credits Agents365-ai/drawio-skill (MIT) at skill level; upstream uses a single repo-level LICENSE. | `head` of each script; upstream `/home/tim/src/drawio-skill/LICENSE` (MIT, repo-level). | T2 (optional hygiene): add a one-line "Adapted from Agents365-ai/drawio-skill (MIT)" comment to `validate.py`/`autolayout.py` headers to match the other two. | optional |
+
+### T2 agreed fix list (user-confirmed 2026-07-01)
+- **A (firm):** rewrite Section 15 PNG code block + Section 8 raster note to the
+  confirmed nix-shell `drawio -x -f png` command; keep Section 33 Windows path as
+  alternative; do NOT downgrade the loop.
+- **C (scope = §6/§17/§18/§32, ~588 lines):** move these four example-dump section
+  bodies to REFERENCE.md, leaving each SKILL.md heading as a one-line pointer stub
+  (no section renumbering → no broken `Section NN` cross-refs). §14 stays inline
+  (procedural how-to, not an example dump).
+- **B (include):** add a note to Section 15 that Read cannot render `.drawio.svg`
+  as an image (returns XML) → PNG step mandatory.
+- **F (include):** add "Adapted from Agents365-ai/drawio-skill (MIT)" provenance
+  header to validate.py and autolayout.py.
 
 **Other spot-checks:** no dangling `Section NN` references beyond 35; changelog
 v1.11.0 matches what shipped (validate/autolayout/vision-loop/shape+icon search);
