@@ -54,7 +54,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 | T1 Full review + findings | TASK:COMPLETE (2026-07-01) | Findings table below filled: every seeded risk resolved (confirmed/refuted with evidence) + any new findings, each with severity + recommendation. No code changes in T1 (VALIDATION != FIXING). |
 | T2 Apply agreed improvements + commit | TASK:COMPLETE (2026-07-01) | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
 | T3 Deploy (home-manager switch) | TASK:COMPLETE (2026-07-02) | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
-| T4 Finalize quality-barometer suite | TASK:IN_PROGRESS (2026-07-02) | Test suite + scoring rubric below reviewed/refined; expected outcomes concrete; recorded in this plan; ready for the user to run. |
+| T4 Finalize quality-barometer suite | TASK:COMPLETE (2026-07-02) | Test suite + scoring rubric reviewed/refined: B1–B10 "Passes if" each backed by an objective command; the 3 placeholder inputs (B4/B7/B8) replaced with concrete reproducible fixtures; helper-script invocation syntax verified against deployed scripts; palette hexes + confirmed prefixes recorded. Ready for the user to run (T5). |
 | T5 Run the barometer (INTERACTIVE) | TASK:PENDING | USER runs the suite in a later session, scores each test against the rubric, records results in the Results section. `Interactive` — needs user judgment/vision. |
 
 ---
@@ -229,11 +229,11 @@ dir (e.g. `/tmp/diagram-barometer/`), NOT committed.
 | B1 | Format auto-select (Mermaid) | "Diagram the TCP connection state machine." | Chooses **Mermaid** (simple state graph), not DrawIO. |
 | B2 | Hand-placed DrawIO + palette + gate | "3-tier architecture: Web, API, Database, with a Cache between API and DB." | DrawIO `.drawio.svg`; orthogonal edges; palette colors; `verify` clean; renders. |
 | B3 | Side-by-side comparison | "Before vs After: manual deploy (3 pains) vs CI/CD (3 wins), with transformation arrows." | Two aligned columns; dashed transform arrows; readable. |
-| B4 | Auto-layout (dense) | "Lay out these 18 microservices and their call graph: <give edges>." | Uses `autolayout.py` + graphviz (not hand coords); grouped containers; `verify` warnings show **no** overlaps/crossings. |
+| B4 | Auto-layout (dense) | "Lay out these 18 microservices and their call graph" + the **B4 fixture** below (18 nodes / 22 edges). | Uses `autolayout.py` + graphviz (not hand coords); grouped containers; `verify` warnings show **no** overlaps/crossings. |
 | B5 | Vendor shape search | "AWS diagram: API Gateway -> Lambda -> DynamoDB, plus S3." | Uses `shapesearch.py` real AWS shapes (style contains `mxgraph.aws`), not generic boxes. |
 | B6 | AI/LLM icons | "RAG app: user -> Claude -> LangChain -> Qdrant + Postgres." | Uses `aiicons.py` with `--embed` (self-contained), real brand logos. |
-| B7 | Validate gate (NEGATIVE) | Hand it a model with a dangling edge + a duplicate ID; ask to render. | `verify` reports both as ERROR; `--render` **aborts** (does not render a broken file). |
-| B8 | Vision self-check loop | "Put these 12 nodes with these 20 edges on one page" (crowded on purpose). | Skill rasterizes, reads it, does >=1 auto-fix round, and the final has visibly fewer overlaps than round 0. |
+| B7 | Validate gate (NEGATIVE) | "Render the **B7 fixture** below" (a `.drawio` with a dangling edge + a duplicate ID). | `verify` reports both as ERROR; `--render` **aborts** (does not render a broken file). |
+| B8 | Vision self-check loop | "Put these 12 nodes with these 20 edges on one page" — the **B8 fixture** below (crowded on purpose). | Skill rasterizes, reads it, does >=1 auto-fix round, and the final has visibly fewer overlaps than round 0. |
 | B9 | Edit workflow | On B2's file: "Rename API to Gateway, make DB green, insert Redis between Gateway and DB." | Surgical `content=`-attr edit; connector split A->new->B; `verify` clean; only intended cells changed. |
 | B10 | Multi-page | "Network: page 1 physical topology, page 2 logical VLANs." | Two `<diagram>` pages; IDs namespaced per page; both render. |
 
@@ -253,7 +253,104 @@ graphviz nix-shell prefix or a working PNG rasterizer (depends on T1/A).
 - PNG rasterizer for the vision loop (B8): `nix shell nixpkgs#drawio nixpkgs#xvfb-run -c xvfb-run --auto-servernum drawio -x -f png --width 2000 -p 1 -o /tmp/x.png f.drawio.svg`.
 - The Read tool cannot render `.drawio.svg` as an image (returns XML text), so B8 MUST rasterize to PNG first.
 
+### Finalized reproducible inputs & objective checks (T4 — 2026-07-02)
+
+Run everything under a scratch dir (NOT committed):
+`mkdir -p /tmp/diagram-barometer && cd /tmp/diagram-barometer`. Below, "SKILL"
+means the deployed skill dir `/home/tim/.claude-max/skills/diagram/`. Helper
+invocation syntax verified against the deployed scripts:
+`autolayout.py graph.json [-o out.drawio]` (input schema:
+`{"direction":"TB|LR","nodes":[{"id","label","style?","width?","height?"}],"edges":[{"source","target","label?"}]}`,
+ids unique and never `"0"`/`"1"`); `shapesearch.py <query> [--limit N] [--json]`;
+`aiicons.py <query> [--variant color|mono|text] [--embed] [--json]`;
+`drawio_gen.py verify FILE` (delegates to `validate.py`, which accepts BOTH raw
+`.drawio` XML and this skill's `.drawio.svg`).
+
+**Per-test objective check (make each "Passes if" a command, not a judgment):**
+- **B1** — grep the produced artifact/response: a Mermaid fenced block (```` ```mermaid ````), NOT a `.drawio.svg`. FAIL if it emitted DrawIO.
+- **B2** — `drawio_gen.py verify b2.drawio.svg` exits 0; `grep -c 'edgeStyle=orthogonal\|rounded=0' b2.drawio.svg` > 0; palette hexes present (`grep -oE '#(dae8fc|d5e8d4|ffe6cc|e1d5e7|fff2cc|f8cecc)' b2.drawio.svg` non-empty); file renders via `nix run 'github:timblaktu/drawio-svg-sync' -- b2.drawio.svg`.
+- **B3** — visual (rubric #3): two vertically-aligned columns, dashed transform arrows (`grep -c 'dashed=1' b3.drawio.svg` > 0). `verify` clean.
+- **B4** — the model was produced by `autolayout.py` (node geometry is dot-derived, not round hand coords); `nix shell nixpkgs#graphviz -c bash -c 'python3 SKILL/autolayout.py /tmp/diagram-barometer/b4.graph.json -o b4.drawio'` then `drawio_gen.py verify b4.drawio.svg` → **no** overlap/crossing warnings.
+- **B5** — `grep -c 'mxgraph.aws' b5.drawio.svg` >= 3 (API Gateway, Lambda, DynamoDB, S3 as real AWS shapes, not `rounded=1` boxes).
+- **B6** — `aiicons.py` used with `--embed`: `grep -c 'data:image' b6.drawio.svg` >= 3 (inlined brand SVGs, self-contained — no CDN `image=https://` refs).
+- **B7** (NEGATIVE) — `drawio_gen.py verify b7.drawio` prints an ERROR line for the dangling edge AND for the duplicate ID (exit != 0); an attempted `--render`/generate-with-gate **aborts** and writes NO output SVG.
+- **B8** — evidence of >=1 loop iteration: a round-0 PNG and a round-1 PNG both exist under the scratch dir (rasterized with the confirmed `xvfb-run … drawio -x -f png` prefix); final `drawio_gen.py verify` shows fewer overlap warnings than round 0. Visual confirm (rubric #3).
+- **B9** — `diff <(git-style before) after` touches only the intended cells; `grep -c 'value="Gateway"' b2.drawio.svg` == 1 and no `value="API"` remains; Redis cell inserted with a split connector; `verify` clean; `content=` still decodes (`drawio_gen.py verify` succeeds ⇒ mxfile decoded).
+- **B10** — `grep -c '<diagram ' b10.drawio.svg` == 2; per-page id namespacing (no id collisions across pages — `verify` clean); both pages render.
+
+**B4 fixture** — write to `/tmp/diagram-barometer/b4.graph.json`:
+```json
+{
+  "direction": "TB",
+  "nodes": [
+    {"id": "gateway", "label": "API Gateway"}, {"id": "auth", "label": "Auth"},
+    {"id": "users", "label": "Users"}, {"id": "catalog", "label": "Catalog"},
+    {"id": "search", "label": "Search"}, {"id": "cart", "label": "Cart"},
+    {"id": "orders", "label": "Orders"}, {"id": "payments", "label": "Payments"},
+    {"id": "inventory", "label": "Inventory"}, {"id": "shipping", "label": "Shipping"},
+    {"id": "notify", "label": "Notifications"}, {"id": "email", "label": "Email"},
+    {"id": "sms", "label": "SMS"}, {"id": "recs", "label": "Recommendations"},
+    {"id": "reviews", "label": "Reviews"}, {"id": "analytics", "label": "Analytics"},
+    {"id": "warehouse", "label": "Warehouse"}, {"id": "ledger", "label": "Ledger"}
+  ],
+  "edges": [
+    {"source": "gateway", "target": "auth"}, {"source": "gateway", "target": "catalog"},
+    {"source": "gateway", "target": "search"}, {"source": "gateway", "target": "cart"},
+    {"source": "gateway", "target": "orders"}, {"source": "auth", "target": "users"},
+    {"source": "catalog", "target": "inventory"}, {"source": "search", "target": "catalog"},
+    {"source": "cart", "target": "catalog"}, {"source": "cart", "target": "inventory"},
+    {"source": "orders", "target": "payments"}, {"source": "orders", "target": "inventory"},
+    {"source": "orders", "target": "shipping"}, {"source": "orders", "target": "notify"},
+    {"source": "payments", "target": "ledger"}, {"source": "shipping", "target": "warehouse"},
+    {"source": "notify", "target": "email"}, {"source": "notify", "target": "sms"},
+    {"source": "catalog", "target": "reviews"}, {"source": "recs", "target": "catalog"},
+    {"source": "reviews", "target": "analytics"}, {"source": "orders", "target": "analytics"}
+  ]
+}
+```
+(18 nodes, 22 edges.) Objective: `verify` on the resulting `.drawio(.svg)` reports
+no overlaps/crossings; node coordinates are dot-derived, not hand-typed.
+
+**B7 fixture** — write to `/tmp/diagram-barometer/b7.drawio` (raw `.drawio`; a
+dangling edge → target `nope` that doesn't exist, AND two cells sharing id `dup`):
+```xml
+<mxfile><diagram name="Broken"><mxGraphModel><root>
+  <mxCell id="0"/><mxCell id="1" parent="0"/>
+  <mxCell id="dup" value="Box A" vertex="1" parent="1"><mxGeometry x="40" y="40" width="120" height="60" as="geometry"/></mxCell>
+  <mxCell id="dup" value="Box B" vertex="1" parent="1"><mxGeometry x="240" y="40" width="120" height="60" as="geometry"/></mxCell>
+  <mxCell id="e1" edge="1" parent="1" source="dup" target="nope"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram></mxfile>
+```
+Objective: `python3 SKILL/drawio_gen.py verify b7.drawio` emits an ERROR for the
+duplicate id `dup` AND for the edge `e1` whose target `nope` is dangling, and
+exits non-zero; the render gate must refuse to produce an SVG.
+
+**B8 fixture** — 12 nodes `A B C D E F G H I J K L`, 20 edges (dense, deliberately
+crowded if placed naively): `A-B, A-C, A-D, B-C, B-E, B-F, C-F, D-E, D-G, D-H,
+E-F, E-H, F-I, G-H, G-J, H-I, H-K, I-L, J-K, K-L`. Hand these to the skill as
+"put all 12 on one page with these 20 connections." Objective: the skill runs the
+vision loop (round-0 + round-1 PNGs both present under the scratch dir; final has
+visibly fewer overlaps).
+
 ---
+
+## T4 done (2026-07-02)
+Review pass only (no code changes — the suite was already authored; T4 hardened
+it for verbatim execution):
+- Verified the deployed helper-script invocation syntax (`autolayout.py` graph.json
+  schema, `shapesearch.py`/`aiicons.py` flags, `validate.py` accepts raw `.drawio`
+  AND `.drawio.svg`) — the fixtures/commands below match reality.
+- Replaced the three placeholder inputs with concrete, committed-to-plan fixtures:
+  **B4** graph.json (18 nodes/22 edges), **B7** broken `.drawio` (dangling edge +
+  duplicate id), **B8** 12-node/20-edge crowded set.
+- Turned each "Passes if" into an **objective check** (grep/`verify`/file-exists),
+  so scoring is command-driven, not judgment-driven, except the inherently-visual
+  rubric #3 items (B3/B8).
+- Confirmed palette hexes (`#dae8fc/#d5e8d4/#ffe6cc/#e1d5e7/#fff2cc/#f8cecc`) exist
+  in SKILL.md Section 4 (B2 grep is valid); confirmed prefixes (graphviz for B4;
+  `xvfb-run … drawio -x -f png` for B8; Read cannot render `.drawio.svg`) recorded.
+- Suite is ready for the user to run in T5 (interactive — needs a fresh session +
+  human vision judgment).
 
 ## Results (fill during T5)
 (empty until the user runs the barometer)
