@@ -319,19 +319,44 @@
 
           # === WSL Utilities ===
           {
-            # xdg-open wrapper that opens URLs/files in the Windows default handler.
-            # Uses powershell.exe Start-Process directly since wslu was removed from
-            # nixpkgs (project discontinued). Recovers Windows mounts if needed.
+            # xdg-open wrapper that opens URLs/files in the Windows default handler
+            # via powershell.exe Start-Process (wslu was removed from nixpkgs).
+            #
+            # Key point: a raw Linux path (e.g. /home/tim/foo.md) is meaningless to
+            # Windows, so Start-Process silently failed on any WSL-stored file. File
+            # arguments are converted to a Windows path first with `wslpath -w`
+            # (\\wsl.localhost\<distro>\... for the WSL filesystem, C:\... for
+            # /mnt/<drive>); URLs are passed through untouched.
             home.file.".local/bin/xdg-open" = {
               executable = true;
               text = ''
                 #!/bin/sh
+                arg="$1"
+                if [ -z "$arg" ]; then
+                  echo "xdg-open: missing operand" >&2
+                  exit 1
+                fi
+
                 # Recover Windows drive mounts if isar/kas builds unmounted them
+                # (the interop exes need /mnt/c; wslpath lives under /bin).
                 if ! mountpoint -q /mnt/c 2>/dev/null; then
                   wsl-recover-mounts -q -s 2>/dev/null || true
                 fi
-                # Use powershell.exe to open in Windows default handler
-                powershell.exe -NoProfile -Command "Start-Process '$1'" 2>/dev/null
+
+                case "$arg" in
+                  http://*|https://*|mailto:*)
+                    : ;;  # URL: hand to the Windows default handler unmodified
+                  *)
+                    # Treat as a path: drop any file:// scheme, resolve to an
+                    # absolute path, then convert to a Windows path. Reference
+                    # /bin/wslpath directly - NixOS omits /bin from PATH.
+                    p="''${arg#file://}"
+                    p="$(readlink -f "$p" 2>/dev/null || printf '%s' "$p")"
+                    arg="$(/bin/wslpath -w "$p" 2>/dev/null || printf '%s' "$arg")"
+                    ;;
+                esac
+
+                exec powershell.exe -NoProfile -Command "Start-Process '$arg'" 2>/dev/null
               '';
             };
           }
