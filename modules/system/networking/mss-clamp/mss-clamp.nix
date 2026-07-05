@@ -80,9 +80,12 @@ in
     # iptables (nft backend) mangle rule on locally-originated TCP SYNs, applied
     # by a boot oneshot. The netfilter rule is independent of the interface, so
     # it survives WSL re-creating eth0 on a network change; a full VM restart
-    # re-runs the oneshot. (If WSL resets eth0's MTU mid-session the explicit
-    # interfaceMtu is lost until next boot, but the load-bearing MSS clamp
-    # persists - which is why the clamp, not the MTU, is the primary mechanism.)
+    # re-runs the oneshot. Two hardening layers keep it robust on WSL, where eth0
+    # is re-created often and a bare `switch` may reload the firewall:
+    #   - services.udev.extraRules re-applies interfaceMtu on EVERY device `add`
+    #     (the oneshot is RemainAfterExit and will not re-fire on eth0 churn).
+    #   - networking.firewall.extraCommands re-adds the clamp on every firewall
+    #     (re)load (inert when the firewall is disabled, as on the WSL host).
     nixos.mss-clamp = { config, lib, pkgs, ... }:
       let cfg = config.mssClamp;
       in {
@@ -111,6 +114,37 @@ in
               ) cfg.interfaceMtu)}
             '';
           };
+
+          # HARDENING 1 (WSL interface churn): re-apply the interface MTU on every
+          # appearance of the device. WSL re-creates eth0 on network transitions
+          # (VPN reconnect, hotspot<->wifi, resume); the boot oneshot is
+          # RemainAfterExit and does not re-fire, so without this the MTU silently
+          # reverts to WSL's default until the next VM restart. udev's `add` action
+          # fires on every (re)creation, so the MTU persists across the churn. (The
+          # MSS clamp is interface-independent netfilter state and already survives
+          # this churn; only the MTU needs re-application.)
+          services.udev.extraRules = lib.concatStringsSep "\n" (lib.mapAttrsToList
+            (iface: mtu:
+              ''SUBSYSTEM=="net", ACTION=="add", KERNEL=="${iface}", RUN+="${pkgs.iproute2}/bin/ip link set ${iface} mtu ${toString mtu}"''
+            )
+            cfg.interfaceMtu);
+
+          # HARDENING 2 (firewall reload): re-add the MSS clamp whenever the NixOS
+          # firewall (re)loads. A `nixos-rebuild switch` that reloads the firewall
+          # flushes netfilter chains, and the boot oneshot above will not re-run on
+          # a switch - so the mangle rule could vanish until the next reboot.
+          # extraCommands runs on every firewall start/reload and re-adds it
+          # idempotently (check, then add). This only takes effect when
+          # networking.firewall.enable = true; on the WSL host the firewall is
+          # masked/disabled, so this path is inert there - harmless, because a
+          # disabled firewall never flushes the clamp in the first place.
+          networking.firewall.extraCommands = ''
+            if ! ${pkgs.iptables}/bin/iptables -t mangle -C OUTPUT -p tcp --tcp-flags SYN,RST SYN \
+                 -j TCPMSS --set-mss ${toString cfg.mss} 2>/dev/null; then
+              ${pkgs.iptables}/bin/iptables -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN \
+                -j TCPMSS --set-mss ${toString cfg.mss}
+            fi
+          '';
         };
       };
 
