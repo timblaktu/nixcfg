@@ -352,8 +352,37 @@ it for verbatim execution):
 - Suite is ready for the user to run in T5 (interactive — needs a fresh session +
   human vision judgment).
 
+## T5 — automated runner (2026-07-05)
+The barometer is now hands-off:
+`modules/programs/claude-code/_hm/skills/diagram/barometer/run-barometer.sh` runs
+B1-B10 as standalone `claudemax -p` sessions (fresh → unbiased; bounded-parallel),
+auto-scores rubric dims ①②④⑤, assembles all outputs into one PNG folder, and opens
+it. The human scores only the visual dim ③, once. Full per-test analysis +
+determinism model in `barometer/README.md`.
+
+Suite refinements folded in (improving what T4 authored):
+- **B9 decoupled from B2** — committed fixed input `fixtures/b9-input.mxfile`
+  (wrapped to `.drawio.svg` at setup) → deterministic, independently runnable.
+- **B7 scores the GATE** (`validate.py`), not `drawio_gen.py verify` — the latter
+  wrongly rejects a raw `.drawio` ("No content attribute found").
+- **B4/B5/B6/B8 prove helper usage** from the session tool-call stream
+  (`--output-format stream-json`), not just output shape.
+- All prompts force deterministic output paths.
+
+Skill finding (follow-up, not fixed here): `drawio_gen.py verify` rejects a raw
+`.drawio` while `validate.py` lints it fine — `verify` should fall back to
+raw-`.drawio` when there is no `content=` attr.
+
+Pilot (B1, sonnet-4-6): format auto-select → **Mermaid ✓**, 49s; full plumbing
+(prompt → fresh session → skill → forced path → tool-call capture) validated.
+
 ## Results (fill during T5)
-(empty until the user runs the barometer)
+(run `barometer/run-barometer.sh`; auto-scored dims land in
+`/tmp/diagram-barometer/scorecard.tsv`, then record the visual dim + totals here)
+
+| test | ①fmt | ②struct | ③visual | ④edit | ⑤faithful | /5 |
+|------|------|---------|---------|-------|-----------|----|
+| B1 | ✓ | - | - | - | - | (pilot: mermaid ok) |
 
 ---
 

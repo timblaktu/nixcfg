@@ -1,0 +1,3 @@
+12 nodes: A B C D E F G H I J K L
+20 edges: A-B A-C A-D B-C B-E B-F C-F D-E D-G D-H E-F E-H F-I G-H G-J H-I H-K I-L J-K K-L
+(dense on purpose — naive placement is crowded; the vision loop should reduce overlaps.)

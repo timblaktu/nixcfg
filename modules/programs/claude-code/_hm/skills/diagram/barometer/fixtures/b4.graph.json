@@ -1,0 +1,27 @@
+{
+  "direction": "TB",
+  "nodes": [
+    {"id": "gateway", "label": "API Gateway"}, {"id": "auth", "label": "Auth"},
+    {"id": "users", "label": "Users"}, {"id": "catalog", "label": "Catalog"},
+    {"id": "search", "label": "Search"}, {"id": "cart", "label": "Cart"},
+    {"id": "orders", "label": "Orders"}, {"id": "payments", "label": "Payments"},
+    {"id": "inventory", "label": "Inventory"}, {"id": "shipping", "label": "Shipping"},
+    {"id": "notify", "label": "Notifications"}, {"id": "email", "label": "Email"},
+    {"id": "sms", "label": "SMS"}, {"id": "recs", "label": "Recommendations"},
+    {"id": "reviews", "label": "Reviews"}, {"id": "analytics", "label": "Analytics"},
+    {"id": "warehouse", "label": "Warehouse"}, {"id": "ledger", "label": "Ledger"}
+  ],
+  "edges": [
+    {"source": "gateway", "target": "auth"}, {"source": "gateway", "target": "catalog"},
+    {"source": "gateway", "target": "search"}, {"source": "gateway", "target": "cart"},
+    {"source": "gateway", "target": "orders"}, {"source": "auth", "target": "users"},
+    {"source": "catalog", "target": "inventory"}, {"source": "search", "target": "catalog"},
+    {"source": "cart", "target": "catalog"}, {"source": "cart", "target": "inventory"},
+    {"source": "orders", "target": "payments"}, {"source": "orders", "target": "inventory"},
+    {"source": "orders", "target": "shipping"}, {"source": "orders", "target": "notify"},
+    {"source": "payments", "target": "ledger"}, {"source": "shipping", "target": "warehouse"},
+    {"source": "notify", "target": "email"}, {"source": "notify", "target": "sms"},
+    {"source": "catalog", "target": "reviews"}, {"source": "recs", "target": "catalog"},
+    {"source": "reviews", "target": "analytics"}, {"source": "orders", "target": "analytics"}
+  ]
+}
