@@ -75,18 +75,24 @@ run_one() {
 }
 
 # ---- phase 1: run sessions, bounded-parallel ---------------------------------
-echo "=== Phase 1: running ${#TESTS[@]} sessions (model=$MODEL jobs=$JOBS) ==="
-running=0
-for id in "${TESTS[@]}"; do
-  run_one "$id" &
-  running=$((running+1))
-  if [ "$running" -ge "$JOBS" ]; then wait -n 2>/dev/null || wait; running=$((running-1)); fi
-done
-wait
-echo "=== Phase 1 complete ==="
+# BAROMETER_SCORE_ONLY=1 re-scores existing artifacts without re-running sessions.
+if [ "${BAROMETER_SCORE_ONLY:-0}" != 1 ]; then
+  echo "=== Phase 1: running ${#TESTS[@]} sessions (model=$MODEL jobs=$JOBS) ==="
+  running=0
+  for id in "${TESTS[@]}"; do
+    run_one "$id" &
+    running=$((running+1))
+    if [ "$running" -ge "$JOBS" ]; then wait -n 2>/dev/null || wait; running=$((running-1)); fi
+  done
+  wait
+  echo "=== Phase 1 complete ==="
+else
+  echo "=== Phase 1 SKIPPED (BAROMETER_SCORE_ONLY) ==="
+fi
 
 # ---- helpers for scoring -----------------------------------------------------
 uses() { grep -qF "$1" "$OUT/$2.stream.jsonl" 2>/dev/null; }   # tool-call evidence in the stream
+dec()  { python3 "$SKILL/drawio_gen.py" extract "$1" 2>/dev/null; }  # decode the content= mxfile (structural greps MUST decode first)
 YN() { [ "$1" = 1 ] && echo PASS || echo fail; }
 
 # ---- phase 2: objective scoring ---------------------------------------------
@@ -102,23 +108,25 @@ for id in "${TESTS[@]}"; do
   B2) [ -f "$f" ] && { $GEN verify "$f" >/dev/null 2>&1 && d2=1; grep -q 'edgeStyle=orthogonal\|rounded=0' "$f" && grep -qoE '#(dae8fc|d5e8d4|ffe6cc|e1d5e7|fff2cc|f8cecc)' "$f" && d1=1; d4=$d2; d5=1; } || note="no artifact";;
   B3) [ -f "$f" ] && { $GEN verify "$f" >/dev/null 2>&1 && d2=1; grep -q 'dashed=1' "$f" && d1=1; d4=$d2; d5=1; } || note="no artifact";;
   B4) [ -f "$f" ] && { uses autolayout.py "$lc" && d1=1; $GEN verify "$f" 2>&1 | grep -qi 'overlap\|cross' || d2=1; d4=1; d5=1; note="autolayout used=$(YN $d1)"; } || note="no artifact";;
-  B5) [ -f "$f" ] && { uses shapesearch.py "$lc" && d1=1; grep -c 'mxgraph.aws' "$f" | awk '$1>=3{exit 0}{exit 1}' && d5=1; $GEN verify "$f" >/dev/null 2>&1 && d2=1; d4=$d2; note="aws shapes=$(grep -c mxgraph.aws "$f")";} || note="no artifact";;
-  B6) [ -f "$f" ] && { uses aiicons.py "$lc" && d1=1; grep -c 'data:image' "$f" | awk '$1>=3{exit 0}{exit 1}' && d5=1; $GEN verify "$f" >/dev/null 2>&1 && d2=1; d4=$d2; note="embedded icons=$(grep -c data:image "$f")";} || note="no artifact";;
-  B7) # NEGATIVE: gate must report errors AND no output rendered. Score via validate.py (the real gate), not the verify wrapper.
-      if python3 "$SKILL/validate.py" "$OUT/b7.drawio" 2>&1 | grep -qi 'error'; then d2=1; fi
+  B5) [ -f "$f" ] && { uses shapesearch.py "$lc" && d1=1; n=$(dec "$f" | grep -c 'mxgraph.aws'); [ "${n:-0}" -ge 3 ] && d5=1; $GEN verify "$f" >/dev/null 2>&1 && d2=1; d4=$d2; note="aws shapes=$n";} || note="no artifact";;
+  B6) [ -f "$f" ] && { uses aiicons.py "$lc" && d1=1; n=$(dec "$f" | grep -c 'data:image'); [ "${n:-0}" -ge 3 ] && d5=1; $GEN verify "$f" >/dev/null 2>&1 && d2=1; d4=$d2; note="embedded icons=$n";} || note="no artifact";;
+  B7) # NEGATIVE: gate must report errors AND no output rendered. Score via validate.py (the real gate).
+      # NB capture output (command subst) — a pipeline `if validate|grep` is defeated by pipefail + validate's rc=1.
+      v7=$(python3 "$SKILL/validate.py" "$OUT/b7.drawio" 2>&1 || true); echo "$v7" | grep -qi 'error' && d2=1
       [ ! -f "$OUT/b7.out.drawio.svg" ] && d1=1     # skill correctly refused to render
       d4=1; d5=$d2; note="gate flagged=$(YN $d2); refused-render=$(YN $d1)";;
   B8) # vision loop ran: both round PNGs present + rasterize evidence
       [ -f "$OUT/b8.round0.png" ] && [ -f "$OUT/b8.round1.png" ] && d1=1
       { uses 'drawio -x -f png' "$lc" || uses 'xvfb-run' "$lc"; } && : ; [ -f "$f" ] && { $GEN verify "$f" >/dev/null 2>&1 && d2=1; d4=$d2; d5=1; }
       note="round0+1 PNGs=$(YN $d1)";;
-  B9) [ -f "$f" ] && { $GEN verify "$f" >/dev/null 2>&1 && d2=1; grep -q 'value="Gateway"' "$f" && ! grep -q 'value="API"' "$f" && d5=1; grep -qi 'redis' "$f" && d1=1; d4=$d2; note="rename+redis=$(YN $d1)"; } || note="no artifact";;
-  B10) [ -f "$f" ] && { c=$(grep -c '<diagram ' "$f"); [ "$c" = 2 ] && d1=1 && d5=1; $GEN verify "$f" >/dev/null 2>&1 && d2=1; d4=$d2; note="pages=$c"; } || note="no artifact";;
+  B9) [ -f "$f" ] && { x=$(dec "$f"); $GEN verify "$f" >/dev/null 2>&1 && d2=1; echo "$x" | grep -q 'value="Gateway"' && ! echo "$x" | grep -q 'value="API"' && d5=1; echo "$x" | grep -qi 'redis' && d1=1; d4=$d2; note="rename+redis=$(YN $d1)"; } || note="no artifact";;
+  B10) [ -f "$f" ] && { c=$(dec "$f" | grep -c '<diagram '); [ "$c" = 2 ] && d1=1 && d5=1; $GEN verify "$f" >/dev/null 2>&1 && d2=1; d4=$d2; note="pages=$c"; } || note="no artifact";;
   esac
   printf '%s\t%s\t%s\t?\t%s\t%s\t%s\n' "$id" "$(YN $d1)" "$(YN $d2)" "$(YN $d4)" "$(YN $d5)" "$note" >> "$SCORE"
 done
 column -t -s$'\t' "$SCORE"
 echo "(visual dim = '?' → your call during review; scorecard: $SCORE)"
+[ "${BAROMETER_SCORE_ONLY:-0}" = 1 ] && { echo "(score-only: skipping render/open)"; exit 0; }
 
 # ---- phase 3: render review set (SERIAL — nix) ------------------------------
 echo "=== Phase 3: rendering review PNGs (serial) ==="
