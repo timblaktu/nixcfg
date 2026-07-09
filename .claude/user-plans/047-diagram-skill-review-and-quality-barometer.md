@@ -55,7 +55,7 @@ reached via `nixcfg-work` (`/home/tim/src/nixcfg-work`) with
 | T2 Apply agreed improvements + commit | TASK:COMPLETE (2026-07-01) | Agreed T1 fixes applied; `python3 -m py_compile` on all skill `.py` passes; `nix flake check --no-build` passes; committed on this branch; no AI attribution. |
 | T3 Deploy (home-manager switch) | TASK:COMPLETE (2026-07-02) | `home-manager switch` (via nixcfg-work override-input) succeeds; deployed skill dir contains validate.py/autolayout.py/shapesearch.py/aiicons.py/data/*; `drawio_gen.py verify` runs from the deployed copy. |
 | T4 Finalize quality-barometer suite | TASK:COMPLETE (2026-07-02) | Test suite + scoring rubric reviewed/refined: B1–B10 "Passes if" each backed by an objective command; the 3 placeholder inputs (B4/B7/B8) replaced with concrete reproducible fixtures; helper-script invocation syntax verified against deployed scripts; palette hexes + confirmed prefixes recorded. Ready for the user to run (T5). |
-| T5 Run the barometer (INTERACTIVE) | TASK:PENDING | USER runs the suite in a later session, scores each test against the rubric, records results in the Results section. `Interactive` — needs user judgment/vision. |
+| T5 Run the barometer (INTERACTIVE) | TASK:IN_PROGRESS | PAUSED 2026-07-09 by user to ship the skill. Automated runner built (`barometer/run-barometer.sh`) + run once on sonnet-4-6: **all 10 pass the 4 objective dims (40/50)**; the visual dim ③ (10 pts) awaits the user's one-pass review of `/tmp/diagram-barometer/review/`. Resume = eyeball those PNGs, fill ③ + totals below, then COMPLETE. `Interactive` — needs user vision. |
 
 ---
 
@@ -380,9 +380,23 @@ Pilot (B1, sonnet-4-6): format auto-select → **Mermaid ✓**, 49s; full plumbi
 (run `barometer/run-barometer.sh`; auto-scored dims land in
 `/tmp/diagram-barometer/scorecard.tsv`, then record the visual dim + totals here)
 
-| test | ①fmt | ②struct | ③visual | ④edit | ⑤faithful | /5 |
-|------|------|---------|---------|-------|-----------|----|
-| B1 | ✓ | - | - | - | - | (pilot: mermaid ok) |
+Objective dims (①②④⑤) auto-scored 2026-07-09 (sonnet-4-6, `scorecard.tsv`); ③
+pending user visual review of `/tmp/diagram-barometer/review/`.
+
+| test | ①fmt | ②struct | ③visual | ④edit | ⑤faithful | /5 | note |
+|------|------|---------|---------|-------|-----------|----|------|
+| B1  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | Mermaid auto-selected |
+| B2  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | palette + orthogonal + verify clean |
+| B3  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | dashed transform arrows |
+| B4  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | autolayout.py proven used |
+| B5  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | 4 real AWS shapes |
+| B6  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | 4 embedded icons |
+| B7  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | gate flagged both errors, refused render |
+| B8  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | vision loop ran (round0+1 PNGs) |
+| B9  | ✓ | ✓ | ? | ✓ | ✓ | 4+? | API→Gateway, Redis inserted |
+| B10 | ✓ | ✓ | ? | ✓ | ✓ | 4+? | 2 pages |
+
+**Objective subtotal: 40/50. Visual ③ (max +10) pending → final score = 40 + Σ③.**
 
 ---
 
