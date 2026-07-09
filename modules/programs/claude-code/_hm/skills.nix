@@ -77,6 +77,15 @@ let
         "scripts/embed.sh" = ./skills/screencast/scripts/embed.sh;
       };
     };
+    windows-vpn-dns = {
+      name = "windows-vpn-dns";
+      description = "Diagnose and fix Windows-host DNS / name resolution failing while WSL resolves fine, when a corporate VPN (GlobalProtect / PANGP) is connected. Use when internet or internal/corporate names work inside WSL but intermittently fail in Windows browsers/apps, when the VPN is up and Windows name resolution is flaky, or for the classic \"works in WSL, not in Windows\" split-tunnel DNS race.";
+      files = {
+        "SKILL.md" = ./skills/windows-vpn-dns/SKILL.md;
+        "diagnose.sh" = ./skills/windows-vpn-dns/diagnose.sh;
+        "fix-dns.ps1" = ./skills/windows-vpn-dns/fix-dns.ps1;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -369,6 +378,17 @@ in
           post-process them (compress idle gaps, add title cards + scrubber markers)
           into standalone, narration-free screencasts that embed in an HTML deck or
           export to GIF/MP4. Pulls asciinema, agg, ffmpeg, and vhs into the profile.
+        '';
+      };
+      windows-vpn-dns = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the Windows VPN DNS fix skill. Diagnoses and fixes the case where
+          DNS resolves inside WSL but intermittently fails in native Windows apps
+          while a corporate VPN (GlobalProtect / PANGP) is connected - the
+          split-tunnel "smart multi-homed name resolution" race. Ships a read-only
+          diagnose.sh (WSL-side) and an elevated fix-dns.ps1 (Windows-side).
         '';
       };
     };
