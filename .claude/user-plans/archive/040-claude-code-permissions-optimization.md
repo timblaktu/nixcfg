@@ -1,5 +1,18 @@
 # Plan 040: Claude Code Permissions Optimization
 
+> **SUPERSEDED (2026-07-11).** The "just upgrade CC past v2.1.126" resolution below
+> was correct for the *protected-directory* bug of that era, but it was NOT the whole
+> story. `.claude/` writes (esp. `.claude/user-plans/`) kept prompting long after CC
+> reached v2.1.191. Real root cause: the later-added allow rules `Write(/.claude/**)` /
+> `Edit(/.claude/**)` use a SINGLE leading slash, which in CC's permission-path grammar
+> anchors to the **settings file's own directory** — and these rules render into the
+> USER-level `~/.claude-<account>/settings.json`, so they resolved to
+> `~/.claude-<account>/.claude/**` and never matched project writes (a silent no-op).
+> Fixed by switching to a `//` (filesystem-root) anchor: `Write(//**/.claude/**)` /
+> `Edit(//**/.claude/**)` in `modules/programs/claude-code/claude-code.nix`
+> (branch `claude-code-permissions-path-fix`, commit `b8ad0a4`). See the
+> `cc-permission-path-anchor` auto-memory for the path-grammar reference.
+
 ## Problem Statement
 
 Even with `defaultMode: "bypassPermissions"` in `.claude-max/.claude.json`, Claude Code still prompts for user approval on certain operations (e.g., writing to `.claude/` directories in project repos). This interrupts autonomous workflows and requires the user to be present for actions that should be auto-approved.
