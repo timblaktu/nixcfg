@@ -1710,7 +1710,7 @@ Using separate text boxes requires manual repositioning when edges move:
 | Attribute | Value | Purpose |
 |-----------|-------|---------|
 | `labelBackgroundColor` | `none` | No background (critical for visual consistency) |
-| `fontColor` | `#RRGGBB` | Match edge color for visual cohesion |
+| `fontColor` | `#333333` | Neutral - do NOT match the edge color (line-colored label text is a defect) |
 | `fontSize` | `9` or `10` | Smaller font often works better |
 
 ### Multiline Labels
@@ -1736,7 +1736,10 @@ value="lock/&lt;br&gt;unlock"
      ON A BORDER/GRID LINE where it would otherwise be bisected (the fieldset/legend pattern -
      a *container* title centered on its own dashed border, NOT an arrow label). Even then,
      prefer offsetting the label off the line (Rule 5) over adding a background.
-2. **Match line color**: `fontColor` should match `strokeColor` of the edge
+2. **Neutral label text, NOT line color**: set edge-label `fontColor=#333333`. Do NOT match
+   the connector's `strokeColor` - line-colored label text reads as a defect. The line keeps its
+   color; the label stays neutral. (`drawio_gen.py` now defaults edge labels to `#333333` +
+   `labelBackgroundColor=none`; this supersedes the earlier "match line color" guidance.)
 3. **Consider vertical formatting**: Long labels can use `<br>` to stack vertically
 4. **Contrast**: Choose foreground color that contrasts with underlying objects
 5. **Offset the label off the line** instead of reaching for a background: add

@@ -174,6 +174,10 @@ def _build_box_style(cell):
     """Build style for a box cell (rounded rect by default)."""
     base = {
         "rounded": "1",
+        # Small, fixed corner radius. Without absoluteArcSize the default is a
+        # proportional arc that renders as ugly tight corners on tall shapes.
+        "absoluteArcSize": "1",
+        "arcSize": "6",
         "whiteSpace": "wrap",
         "html": "1",
     }
@@ -188,19 +192,37 @@ def _build_box_style(cell):
 
 
 def _build_container_style(cell):
-    """Build style for a container cell."""
+    """Build style for a container cell.
+
+    Containers are grouping boxes: transparent fill + thin colored border +
+    left-justified title. NEVER a heavy/dark fill (that buries the nodes inside).
+    A preset only contributes the BORDER (strokeColor) and title (fontColor) - its
+    fillColor is deliberately dropped in favor of fillColor=none.
+    """
     base = {
         "rounded": "1",
+        "absoluteArcSize": "1",
+        "arcSize": "8",
         "whiteSpace": "wrap",
         "html": "1",
         "container": "1",
         "collapsible": "0",
         "verticalAlign": "top",
+        # Left-justified title reserves the top-right corner for badges/annotations.
+        "align": "left",
+        "spacingLeft": "12",
         "fontStyle": "1",
+        # Transparent by default - a container must never fill over its contents.
+        "fillColor": "none",
     }
     preset_name = cell.get("preset")
     if preset_name and preset_name in BOX_PRESETS:
-        base.update(BOX_PRESETS[preset_name])
+        p = BOX_PRESETS[preset_name]
+        # Take only the border and title color from the preset; never its fill.
+        if "strokeColor" in p:
+            base["strokeColor"] = p["strokeColor"]
+        if "fontColor" in p:
+            base["fontColor"] = p["fontColor"]
     if "style" in cell:
         base.update({k: str(v) for k, v in cell["style"].items()})
     return _style_str(base)
@@ -211,6 +233,12 @@ def _build_text_style(cell):
     base = {
         "text": "",
         "html": "1",
+        # draw.io's canonical Text style is "text;...;strokeColor=none;fillColor=none;".
+        # WITHOUT these two, draw.io applies its DEFAULT black stroke (and white fill)
+        # to every text cell -> a black border box around titles/annotations/legends.
+        # Text-only elements must never have a border or fill.
+        "strokeColor": "none",
+        "fillColor": "none",
         "align": "center",
         "verticalAlign": "middle",
         "whiteSpace": "wrap",
@@ -236,10 +264,15 @@ def _build_edge_style(cell):
         "jettySize": "auto",
         "html": "1",
         "endArrow": "classic",
+        # Edge labels: neutral text, no white "sticker" background. The LINE keeps
+        # its preset color, but label TEXT stays neutral (do NOT match line color).
+        "labelBackgroundColor": "none",
+        "fontColor": "#333333",
     }
     preset_name = cell.get("preset")
     if preset_name and preset_name in EDGE_PRESETS:
-        base.update(EDGE_PRESETS[preset_name])
+        # Preset sets the line (strokeColor/arrow/dash); it must not recolor the label.
+        base.update({k: v for k, v in EDGE_PRESETS[preset_name].items() if k != "fontColor"})
     # Anchor points
     if "exit" in cell:
         base["exitX"] = str(cell["exit"][0])
@@ -642,7 +675,11 @@ def _fix_dark_mode_svg(filepath):
     #    CSS "background" on <svg> is ignored by many markdown renderers
     #    (GitHub, VS Code preview, etc.) when embedding SVGs as images.
     if 'data-bg-rect="true"' not in svg:
-        vb = re.search(r'viewBox="\d+\s+\d+\s+(\d+)\s+(\d+)"', svg)
+        # viewBox is emitted non-deterministically by drawio-svg-sync as either
+        # "0 0 W H" or "-0.5 -0.5 W H" (negative/decimal origin). Match both, or
+        # the white background rect is silently skipped -> transparent canvas ->
+        # the diagram bleeds the dark page through in dark-mode browsers.
+        vb = re.search(r'viewBox="[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)"', svg)
         first_g = svg.find("<g>")
         if vb and first_g != -1:
             w, h = vb.group(1), vb.group(2)
