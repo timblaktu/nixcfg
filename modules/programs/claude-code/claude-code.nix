@@ -110,12 +110,19 @@
                 "Edit"
                 "WebFetch"
                 # Path-scoped rules so writes/edits to project .claude/ content
-                # (user-plans, HANDOFF.md, active-plan, ...) never prompt. The
-                # bare Write/Edit rules above do not reliably suppress the prompt
-                # for files under .claude/; explicit gitignore-style subtree
-                # rules (project-root-relative, "**" recursive) do.
-                "Write(/.claude/**)"
-                "Edit(/.claude/**)"
+                # (user-plans, HANDOFF.md, active-plan, ...) never prompt.
+                #
+                # These rules land in the USER-level settings file
+                # (~/.claude-<account>/settings.json). Per CC's permission path
+                # semantics a SINGLE leading slash anchors to the settings
+                # file's own directory, NOT the project root -- so the old
+                # "Write(/.claude/**)" resolved to ~/.claude-<account>/.claude/**
+                # and never matched project writes (silent no-op). A DOUBLE
+                # leading slash "//" anchors at the filesystem root; "**/.claude"
+                # then matches any project's .claude/ subtree at any depth.
+                # See code.claude.com/docs/en/permissions ("Read and Edit rules").
+                "Write(//**/.claude/**)"
+                "Edit(//**/.claude/**)"
               ];
               description = "List of tools/patterns to allow";
             };
