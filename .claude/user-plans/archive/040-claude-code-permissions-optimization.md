@@ -1,17 +1,27 @@
 # Plan 040: Claude Code Permissions Optimization
 
-> **SUPERSEDED (2026-07-11).** The "just upgrade CC past v2.1.126" resolution below
-> was correct for the *protected-directory* bug of that era, but it was NOT the whole
-> story. `.claude/` writes (esp. `.claude/user-plans/`) kept prompting long after CC
-> reached v2.1.191. Real root cause: the later-added allow rules `Write(/.claude/**)` /
-> `Edit(/.claude/**)` use a SINGLE leading slash, which in CC's permission-path grammar
-> anchors to the **settings file's own directory** — and these rules render into the
-> USER-level `~/.claude-<account>/settings.json`, so they resolved to
-> `~/.claude-<account>/.claude/**` and never matched project writes (a silent no-op).
-> Fixed by switching to a `//` (filesystem-root) anchor: `Write(//**/.claude/**)` /
-> `Edit(//**/.claude/**)` in `modules/programs/claude-code/claude-code.nix`
-> (branch `claude-code-permissions-path-fix`, commit `b8ad0a4`). See the
-> `cc-permission-path-anchor` auto-memory for the path-grammar reference.
+> **SUPERSEDED (2026-07-12).** Both this plan's "just upgrade CC" conclusion AND a
+> follow-up allow-rule attempt were wrong trails. The persistent
+> `.claude/user-plans/` prompts had nothing to do with allow-rule path syntax.
+>
+> **Actual root cause (empirically confirmed 2026-07-12):** CC prompts on any write
+> whose RESOLVED path is BOTH under `.claude/` (its own config namespace) AND outside
+> the session's working directory. It surfaced because git worktrees shared one plan
+> dir by symlinking `.claude/user-plans` into a primary worktree's copy — so every
+> secondary-worktree plan edit resolved outside cwd, under `.claude/`. That guard is
+> NOT overridable by allow rules, permission mode, or "always allow" (approval isn't
+> persisted).
+>
+> **Durable fix:** move each shared plan dir OUT of `.claude/` (e.g. `…/hsw/.claude/
+> user-plans` → `…/hsw-plans`), keeping the symlink at `.claude/user-plans` pointed at
+> the new non-`.claude` target so all tool paths still work. Done for the `hsw` and
+> `n3x` worktree families via `/home/tim/src/migrate-plans.sh`.
+>
+> The interim nixcfg allow-rule `Write(//**/.claude/**)` (commit `b8ad0a4`, cherry-
+> picked to main as `a534fb5`) was INEFFECTIVE and has been removed. See the
+> `cc-permission-path-anchor` auto-memory. (For reference, the CC path-anchor grammar
+> that the interim attempt hinged on is still documented there, but it is not the
+> lever for this problem.)
 
 ## Problem Statement
 

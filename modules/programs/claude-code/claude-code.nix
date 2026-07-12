@@ -109,20 +109,14 @@
                 "Write"
                 "Edit"
                 "WebFetch"
-                # Path-scoped rules so writes/edits to project .claude/ content
-                # (user-plans, HANDOFF.md, active-plan, ...) never prompt.
-                #
-                # These rules land in the USER-level settings file
-                # (~/.claude-<account>/settings.json). Per CC's permission path
-                # semantics a SINGLE leading slash anchors to the settings
-                # file's own directory, NOT the project root -- so the old
-                # "Write(/.claude/**)" resolved to ~/.claude-<account>/.claude/**
-                # and never matched project writes (silent no-op). A DOUBLE
-                # leading slash "//" anchors at the filesystem root; "**/.claude"
-                # then matches any project's .claude/ subtree at any depth.
-                # See code.claude.com/docs/en/permissions ("Read and Edit rules").
-                "Write(//**/.claude/**)"
-                "Edit(//**/.claude/**)"
+                # NOTE: deliberately NO path-scoped `.claude/**` allow rules here.
+                # An earlier attempt (`Write(//**/.claude/**)`) was ineffective:
+                # CC gates writes whose RESOLVED path is under `.claude/` AND
+                # outside the session's working directory (e.g. a git worktree
+                # symlinking `.claude/user-plans` into a shared primary) and that
+                # guard is NOT overridable by allow rules or permission mode. The
+                # durable fix is to keep such shared dirs OUTSIDE `.claude/`, not
+                # to widen permissions. See the `cc-permission-path-anchor` memory.
               ];
               description = "List of tools/patterns to allow";
             };
