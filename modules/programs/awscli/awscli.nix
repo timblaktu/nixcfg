@@ -131,6 +131,48 @@
           print(f"Patched {f}: password handler clears field + waits for navigation")
         '';
 
+        # Force the Chrome DevTools Protocol *pipe* transport instead of the
+        # default WebSocket-over-loopback transport.
+        #
+        # ROOT CAUSE (diagnosed 2026-07-17, supersedes the "Puppeteer<->Chromium
+        # version mismatch" hypothesis): aws-azure-login failed at launch with
+        #   Error: connect ECONNREFUSED 127.0.0.1:<port>
+        #   _url: 'ws://127.0.0.1:<port>/devtools/browser/...'
+        # Chromium starts, prints "DevTools listening on ws://127.0.0.1:<port>",
+        # but Puppeteer's WebSocket connect to that loopback port is refused.
+        # This is a transport problem, NOT a version problem:
+        #   - The bundled Puppeteer 13.6.0 fails over WS against modern Chromium.
+        #   - A modern Puppeteer (25.3.0) ALSO fails over WS in the same env.
+        #   - BOTH succeed once launched with `pipe: true` (fd 3/4 instead of a
+        #     loopback socket). So upgrading Puppeteer alone would not have fixed
+        #     it; switching transports does.
+        # The loopback DevTools endpoint is unreachable under this WSL/Chromium
+        # combination (Chromium >=111 tightened the DevTools socket handshake);
+        # the pipe transport sidesteps the socket entirely and is version-robust.
+        #
+        # WORKAROUND — remove if a future aws-azure-login opts into pipe transport
+        # itself, or if the loopback WS endpoint becomes reachable again.
+        patchPipeTransport = pkgs.writeText "patch-pipe-transport.py" ''
+          import sys
+          f = sys.argv[1]
+          with open(f) as fh:
+              src = fh.read()
+
+          anchor = "puppeteer_1.default.launch({\n"
+          if "pipe: true" in src:
+              print(f"{f}: pipe transport already present, skipping")
+          elif anchor not in src:
+              print(f"ERROR: Could not find puppeteer launch call to patch in {f}", file=sys.stderr)
+              sys.exit(1)
+          else:
+              # Insert `pipe: true,` as the first launch option (16-space indent,
+              # matching the sibling `headless,` key).
+              src = src.replace(anchor, anchor + "                pipe: true,\n", 1)
+              with open(f, "w") as fh:
+                  fh.write(src)
+              print(f"Patched {f}: forced Chrome DevTools pipe transport (bypasses WS loopback)")
+        '';
+
         # On darwin, nixpkgs' aws-azure-login hard-sets PUPPETEER_EXECUTABLE_PATH
         # to nixpkgs `chromium`, which is not built for aarch64-darwin (it aborts
         # eval). aws-azure-login drives the browser via Puppeteer (Chrome DevTools
@@ -150,6 +192,8 @@
         aws-azure-login-patched = awsAzureLoginBase.overrideAttrs (old: {
           postInstall = (old.postInstall or "") + ''
             ${pkgs.python3}/bin/python3 ${patchPasswordHandler} \
+              "$out/lib/node_modules/aws-azure-login/lib/login.js"
+            ${pkgs.python3}/bin/python3 ${patchPipeTransport} \
               "$out/lib/node_modules/aws-azure-login/lib/login.js"
           '';
         });
