@@ -123,12 +123,19 @@ is user-writable (no admin). Set:
 dnsTunneling=false
 ```
 
-Then `wsl --shutdown` and restart. WSL now populates `/etc/resolv.conf` with the
-actual Windows per-interface DNS servers and queries them **sequentially in interface
-metric order (VPN adapter is metric 1, so first)** instead of the parallel Windows
-race. On 24H2 this often resolves the flap. Trade-off: this is the pre-22H2 behavior,
-so verify it survives VPN connect/disconnect with the capture script before relying
-on it. Revert by removing the line (or `dnsTunneling=true`) + `wsl --shutdown`.
+Then `wsl --shutdown` and restart. WSL falls back to **dnsProxy** mode:
+`/etc/resolv.conf` becomes a single `nameserver 172.25.240.1` (the WSL NAT gateway),
+which proxies DNS to the Windows host — and empirically this **sidesteps the
+smart-multi-homed race** that `dnsTunneling` triggers. (It does NOT list per-interface
+DNS servers; earlier notes here were wrong.) **VERIFIED on pa161878-nixos 2026-07-19**:
+across ~5 VPN connect/disconnect cycles (59 snapshots), steady-state DNS stayed 100%
+reliable and the race signature (`DNS=FAIL` while `ping <IP>=OK`) never reappeared;
+the only residual failures were single-sample, self-healing route blips at the toggle
+moments themselves (ping+DNS fail together for one ~15s beat, then recover) — inherent
+to NAT-mode VPN transitions, not the race. This is the **confirmed working no-admin
+fix.** Trade-off: dnsProxy is the pre-22H2 path; re-verify on other underlays (e.g. a
+phone hotspot) since `dnsTunneling` was originally meant to help there. Revert by
+removing the line (or `dnsTunneling=true`) + `wsl --shutdown`.
 
 **Option B — WSL-side split-DNS resolver (declarative, most robust).** Run a local
 resolver inside WSL and route corp suffixes to the corp DNS server, everything else
