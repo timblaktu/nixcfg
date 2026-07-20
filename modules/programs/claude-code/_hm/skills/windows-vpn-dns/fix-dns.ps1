@@ -16,6 +16,10 @@ $principal = New-Object Security.Principal.WindowsPrincipal(
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host 'ERROR: not elevated. This writes an HKLM policy key and needs Admin.' -ForegroundColor Red
     Write-Host 'Open an elevated PowerShell (Ctrl+Shift+Enter) and re-run.' -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host 'NO ADMIN? Fix the race from inside WSL instead (no elevation needed):' -ForegroundColor Cyan
+    Write-Host '  - .wslconfig  dnsTunneling=false   (then wsl --shutdown; test first), or' -ForegroundColor Cyan
+    Write-Host '  - WSL-side split-DNS via dnsmasq    (see SKILL.md "Fix WITHOUT admin").' -ForegroundColor Cyan
     exit 1
 }
 
