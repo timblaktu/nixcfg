@@ -86,6 +86,14 @@ let
         "fix-dns.ps1" = ./skills/windows-vpn-dns/fix-dns.ps1;
       };
     };
+    ci-pipeline-monitoring = {
+      name = "ci-pipeline-monitoring";
+      description = "Monitor a CI/CD pipeline by PROGRESS (not poll-for-completion) - event-driven watcher that wakes on stage transitions and failures, gives heartbeat updates during long jobs, and validates artifacts as it goes. Use when watching/babysitting a GitLab or GitHub Actions pipeline, waiting on a build/deploy/test job, or reporting CI progress to the user.";
+      files = {
+        "SKILL.md" = ./skills/ci-pipeline-monitoring/SKILL.md;
+        "scripts/pipeline-watch.sh" = ./skills/ci-pipeline-monitoring/scripts/pipeline-watch.sh;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -389,6 +397,16 @@ in
           while a corporate VPN (GlobalProtect / PANGP) is connected - the
           split-tunnel "smart multi-homed name resolution" race. Ships a read-only
           diagnose.sh (WSL-side) and an elevated fix-dns.ps1 (Windows-side).
+        '';
+      };
+      ci-pipeline-monitoring = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the CI pipeline progress-monitoring skill. Ships pipeline-watch.sh,
+          an event-driven GitLab/glab watcher that wakes on job transitions and
+          failures, heartbeats during long deploy/test jobs, and drives validating
+          artifacts as they land instead of polling for completion.
         '';
       };
     };
