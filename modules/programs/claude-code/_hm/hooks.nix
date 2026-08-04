@@ -379,13 +379,18 @@ in
         PreToolUse = lib.optional cfg.hooks.development.autoFormat (mkHook {
           matcher = "Edit|Write|MultiEdit";
           command = ''
-            file_path="$1"
+            # CC passes tool-call data as JSON on stdin; $1 is never set. Read
+            # the target path from .tool_input.file_path so formatting actually
+            # runs. `// empty` + trailing `exit 0` guarantee a clean exit (no
+            # spurious non-blocking-error notice on non-file / non-match tools).
+            file_path="$(${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
             case "$file_path" in
               *.nix)   ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt "$file_path" 2>/dev/null || true ;;
               *.py)    ${pkgs.black}/bin/black "$file_path" 2>/dev/null || true ;;
               *.rs)    ${pkgs.rustfmt}/bin/rustfmt "$file_path" 2>/dev/null || true ;;
               *.js|*.json) ${pkgs.prettier}/bin/prettier --write "$file_path" 2>/dev/null || true ;;
             esac
+            exit 0
           '';
           continueOnError = true;
           timeout = 10;
@@ -413,12 +418,14 @@ in
             matcher = "Edit|Write|MultiEdit";
             command = ''
               if [ -f flake.nix ] && [ -d .git ]; then
-                file_path="$1"
+                # CC passes tool-call data as JSON on stdin; $1 is never set.
+                file_path="$(${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
                 if [ -n "$file_path" ] && [ -f "$file_path" ]; then
                   ${pkgs.git}/bin/git add "$file_path" 2>/dev/null || true
                   echo "📁 Auto-staged: $file_path"
                 fi
               fi
+              exit 0
             '';
             continueOnError = true;
             timeout = 5;
@@ -430,13 +437,21 @@ in
           (mkHook {
             matcher = "Read|Edit|Write";
             command = ''
-              file_path="$1"
+              # CC passes tool-call data as JSON on stdin; $1 is never set. Read
+              # the real target path so the block actually fires (with $1 empty
+              # this hook silently never matched). Exit 2 is the CC convention
+              # that BLOCKS a PreToolUse call and feeds stderr back to the model;
+              # the old `exit 1` was a bug — a non-blocking error that printed
+              # "Access blocked" yet let the edit through. Clean `exit 0` on no
+              # match avoids the spurious non-blocking-error notice.
+              file_path="$(${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
               for pattern in ${toString cfg.hooks.security.blockedPatterns}; do
                 if echo "$file_path" | grep -qE "$pattern"; then
-                  echo "🚫 Security: Access blocked to sensitive file pattern: $pattern"
-                  exit 1
+                  echo "🚫 Security: Access blocked to sensitive file pattern: $pattern" >&2
+                  exit 2
                 fi
               done
+              exit 0
             '';
             continueOnError = false;
             timeout = 5;
