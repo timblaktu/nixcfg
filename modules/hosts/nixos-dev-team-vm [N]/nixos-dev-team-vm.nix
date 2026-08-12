@@ -68,11 +68,33 @@
       # system.build.images without polluting this base config.
       # qemu-efi = disk-image.nix with EFI support -> qcow2 + systemd-boot + ESP,
       # which is what UTM/QEMU boot on Apple Silicon.
-      image.modules.qemu-efi = {
+      image.modules.qemu-efi = { config, lib, pkgs, modulesPath, ... }: {
         image.format = "qcow2";
         # Provisioned virtual disk size (MB). Root auto-resizes on first boot,
         # so users can grow the qcow2 in UTM and the fs follows.
         virtualisation.diskSize = 20480;
+
+        # WORKAROUND (nixpkgs API limitation, verified nixpkgs 26.11 /
+        # 331800d): disk-image.nix invokes lib/make-disk-image.nix with the
+        # hardcoded default memSize = 1024 (MiB) and exposes NO option to
+        # change it. The image is assembled inside a full-system QEMU VM that
+        # copies the entire (large) dev-team closure; 1 GiB is tight and can
+        # OOM during the copy. Re-invoke make-disk-image with the SAME
+        # arguments disk-image.nix uses, only raising memSize for headroom.
+        # REMOVE once nixpkgs exposes a builder-memory option for disk-image.
+        #
+        # NOTE: this MUST be built on NATIVE aarch64 (a Graviton/remote
+        # builder). Cross-building on x86_64 via binfmt emulation fails
+        # regardless of memSize: the emulated builder VM's virtiofs transport
+        # returns ENOMEM on directory reads. See the dev-team-mac-vm project
+        # memory for the diagnosis.
+        system.build.image = lib.mkForce (import (modulesPath + "/../lib/make-disk-image.nix") {
+          inherit lib config pkgs;
+          inherit (config.virtualisation) diskSize;
+          inherit (config.image) baseName format;
+          partitionTableType = "efi";
+          memSize = 4096;
+        });
       };
     };
   };
