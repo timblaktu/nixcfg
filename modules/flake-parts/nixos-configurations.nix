@@ -123,6 +123,21 @@
         }
       );
 
+      # nixos-dev-team-vm: aarch64 Linux VM (qcow2) for a Mac hypervisor (UTM)
+      # module defined in modules/hosts/nixos-dev-team-vm [N]/
+      nixos-dev-team-vm = withSystem "aarch64-linux" ({ pkgs, ... }:
+        inputs.nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            { nixpkgs.config.allowUnfree = true; }
+            self.modules.nixos.nixos-dev-team-vm
+          ];
+          specialArgs = {
+            inherit inputs;
+          };
+        }
+      );
+
       # nuc-apt-repo: Dendritic pattern - module defined in modules/hosts/nuc-apt-repo [N]/
       nuc-apt-repo = withSystem "x86_64-linux" ({ pkgs, ... }:
         inputs.nixpkgs.lib.nixosSystem {

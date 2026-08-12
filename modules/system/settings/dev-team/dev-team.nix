@@ -68,10 +68,15 @@
       boot.binfmt.emulatedSystems = lib.mkDefault
         (lib.optionals (pkgs.stdenv.hostPlatform.system != "aarch64-linux") [ "aarch64-linux" ]);
       boot.binfmt.preferStaticEmulators = lib.mkDefault true;
-      # matchCredentials (C flag) enables credential pass-through for binfmt
-      # Only set when aarch64 emulation is active (not on native aarch64 hosts)
-      boot.binfmt.registrations.aarch64-linux.matchCredentials =
-        lib.mkIf (pkgs.stdenv.hostPlatform.system != "aarch64-linux") (lib.mkDefault true);
+      # matchCredentials (C flag) enables credential pass-through for binfmt.
+      # Guard at the `registrations` level (not the leaf): a leaf-level mkIf
+      # still instantiates the `aarch64-linux` submodule, which then demands a
+      # magicOrExtension that only emulatedSystems provides — so on a NATIVE
+      # aarch64 host (emulatedSystems = []) it errors. mkIf on the whole
+      # attrset drops the key entirely when no aarch64 emulation is active.
+      boot.binfmt.registrations = lib.mkIf (pkgs.stdenv.hostPlatform.system != "aarch64-linux") {
+        aarch64-linux.matchCredentials = lib.mkDefault true;
+      };
       nix.settings.extra-platforms = lib.mkDefault
         (lib.optionals (pkgs.stdenv.hostPlatform.system != "aarch64-linux") [ "aarch64-linux" ]);
 

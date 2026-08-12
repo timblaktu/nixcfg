@@ -51,6 +51,9 @@
         # Amazon EC2 AMI (aarch64 Graviton): result contains *.img (raw format for coldsnap)
         image-ec2-dev-team-graviton =
           self.nixosConfigurations.nixos-dev-team-graviton.config.system.build.images.amazon;
+        # Mac VM (aarch64 UTM/QEMU): result contains nixos.qcow2 (UEFI, ext4, auto-resize)
+        image-vm-dev-team =
+          self.nixosConfigurations.nixos-dev-team-vm.config.system.build.images.qemu-efi;
       };
   };
 }
