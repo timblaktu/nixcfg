@@ -70,9 +70,6 @@
       # which is what UTM/QEMU boot on Apple Silicon.
       image.modules.qemu-efi = { config, lib, pkgs, modulesPath, ... }: {
         image.format = "qcow2";
-        # Provisioned virtual disk size (MB). Root auto-resizes on first boot,
-        # so users can grow the qcow2 in UTM and the fs follows.
-        virtualisation.diskSize = 20480;
 
         # WORKAROUND (nixpkgs API limitation, verified nixpkgs 26.11 /
         # 331800d): disk-image.nix invokes lib/make-disk-image.nix with the
@@ -90,7 +87,14 @@
         # memory for the diagnosis.
         system.build.image = lib.mkForce (import (modulesPath + "/../lib/make-disk-image.nix") {
           inherit lib config pkgs;
-          inherit (config.virtualisation) diskSize;
+          # "auto" sizes the ext4 fs to the actual closure + additionalSpace
+          # instead of a fixed 20 GB. This shrinks the shipped qcow2 (and the
+          # .zst download): a 20 GB fs bakes 20 GB worth of ext4 metadata and
+          # carries non-zeroed free blocks that qcow2 keeps and zstd can't
+          # compress. Root has autoResize = true (_hardware-config.nix), so the
+          # colleague's fs still grows to fill UTM's provisioned disk on first
+          # boot -- no usable space lost.
+          diskSize = "auto";
           inherit (config.image) baseName format;
           partitionTableType = "efi";
           memSize = 4096;
