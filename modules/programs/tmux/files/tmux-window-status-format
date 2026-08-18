@@ -13,6 +13,9 @@
 #     #[dim]#I:#[default]#{=/16/…:window_name}}}'
 
 # Error handling and parameter validation
+# Emits only the window index + (width-truncated) name. Command-status styling
+# is applied by native tmux #{?} format conditionals in window-status-format
+# (see tmux.nix), NOT here - keeping this a pure, cacheable #() job.
 if [[ $# -ne 3 ]]; then
     printf "%s" "?:ERR"
     exit 1

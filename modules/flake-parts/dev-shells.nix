@@ -11,7 +11,10 @@
           nil # Nix language server
           sops # For secrets
           inputs.drawio-svg-sync.packages.${system}.default # For .drawio.svg rendering
+          self'.packages.dev-switch # Fast dev loop: switch with local --override-input
         ];
+
+        # dev-switch usage is listed in the shellHook banner below.
 
         shellHook = ''
           echo "Nixcfg development environment"
@@ -22,6 +25,7 @@
           echo "  nixos-rebuild switch --flake .#<hostname> - Apply NixOS config"
           echo "  home-manager switch --flake .#<user@hostname> - Apply home config"
           echo "  nix run .#drawio-svg-sync - Re-render .drawio.svg files"
+          echo "  dev-switch -o nixcfg=~/src/nixcfg ~/src/nixcfg-work - Switch with local input override (fast dev loop)"
         '';
       };
 
@@ -99,6 +103,23 @@
       drawio-svg-sync = inputs.drawio-svg-sync.apps.${system}.default // {
         meta = (inputs.drawio-svg-sync.apps.${system}.default.meta or { }) // {
           description = "Re-render .drawio.svg files from embedded mxGraphModel XML";
+        };
+      };
+
+      # Fast dev loop: switch a downstream flake config with local --override-input
+      # checkouts, so upstream module changes apply without commit/push/relock.
+      dev-switch = {
+        type = "app";
+        program = pkgs.lib.getExe self'.packages.dev-switch;
+        meta = {
+          description = "Activate a flake config with local --override-input checkouts (fast dev loop)";
+          longDescription = ''
+            Runs home-manager / nixos-rebuild / darwin-rebuild switch against a
+            downstream flake while overriding one or more inputs with local checkouts.
+            Generic over input name, local path, activation front-end and target.
+            Example: nix run '.#dev-switch' -- -o nixcfg=~/src/nixcfg ~/src/nixcfg-work
+          '';
+          category = "development";
         };
       };
     };

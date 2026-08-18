@@ -5,6 +5,13 @@ with lib;
 let
   cfg = config.programs.claude-code;
 
+  # Plan 050 T3 - shared per-pane tmux command-status writer. Imported from
+  # modules/lib so the claude-code and tmux modules share ONE implementation
+  # (no cross-config reads). Replaces the previously-inlined tmuxStateScript.
+  # T5: the CC tmuxStatus source now folds through mkProgramSource (which resolves
+  # the writer binary itself), so no direct `mkHelper` bin reference is needed here.
+  tmuxCmdState = import ../../../lib/tmux-cmd-state.nix { inherit pkgs lib; };
+
   # Canonical list of all CC hook events. When upstream adds events, add one
   # string here — the rest of the module (custom default, base structure,
   # hasHooks gate) derives from this list automatically.
@@ -359,6 +366,47 @@ in
     };
   };
 
+  # Plan 050 T5 (decision D9) — Claude Code as a declarative command-status SOURCE.
+  # A program declares its event->state map in ITS OWN namespace; the module folds
+  # that through the shared lib's mkProgramSource into its native hook mechanism
+  # (mkHook/mergeHookSets below) and publishes a read-only introspection entry into
+  # programs.tmux.commandStatus.sources.claude-code. Replaces the former
+  # programs.claude-code.hooks.tmuxStatus.enable (which hard-coded the three
+  # event->state mappings inline).
+  options.programs.claude-code.tmuxStatus = {
+    enable = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Drive the tmux per-pane command-status marker (@cmd_state; see
+        programs.tmux.commandStatus) from Claude Code lifecycle events, so a tmux
+        window running Claude shows its state at a glance. With the default
+        `events` map: running/working (amber) on prompt submit, attention
+        (magenta, blinking) on a Notification (Claude wants input or permission),
+        and done (green) when it stops. done/attention are suppressed on the
+        ACTIVE pane (you are already looking at it) so only background panes raise
+        a marker. The hook is a no-op outside tmux, so it is harmless when Claude
+        runs elsewhere. NOTE: hooks are module-global (deployed to every account).
+      '';
+    };
+    events = mkOption {
+      type = types.attrsOf types.str;
+      default = {
+        UserPromptSubmit = "running";
+        Notification = "attention";
+        Stop = "done";
+      };
+      description = ''
+        Map of Claude Code hook event name -> canonical command-status state (one
+        of programs.tmux.commandStatus.states: attention/error/running/done). Each
+        entry installs a CC hook that calls the shared `tmux-cmd-state` writer with
+        the mapped state. Overriding this is how you re-map or extend which CC
+        events raise which marker without touching hook plumbing; an unknown state
+        is a build-time error naming the offending event.
+      '';
+    };
+  };
+
   # Plan 046 T5 — assemble hooks by CONCATENATING per-event lists across all
   # contributors. `_internal.hooks` is `types.attrs`, whose native merge is a
   # right-biased `//` that keeps only the LAST contributor's value for any
@@ -501,6 +549,22 @@ in
           })
         ];
       };
+
+      # Plan 050 T5 (D9) — drive the tmux command-status marker from CC lifecycle
+      # events via the shared per-program SOURCE generator. `mkProgramSource`
+      # turns cfg.tmuxStatus.events ({ UserPromptSubmit = "running"; ... }) into
+      # per-event calls to the ONE shared `tmux-cmd-state` writer, validating each
+      # mapped state against the lib's canonical stateNames at eval time. We fold
+      # those commands into CC's native hook shape (mkHook per event), killing the
+      # previously hand-inlined event->state map. Default map preserves prior
+      # behavior: UserPromptSubmit->running, Notification->attention, Stop->done
+      # (done/attention suppressed on the active pane by the writer).
+      tmuxStatusHooks = lib.optionalAttrs cfg.tmuxStatus.enable (
+        let src = tmuxCmdState.mkProgramSource { events = cfg.tmuxStatus.events; };
+        in lib.mapAttrs
+          (_ev: command: [ (mkHook { matcher = ""; inherit command; continueOnError = true; timeout = 5; }) ])
+          src.commands
+      );
     in
     mergeHookSets [
       # Base scaffold — every known event present so cleanHooks/hasHooks can
@@ -511,6 +575,7 @@ in
       loggingHooks
       resumeHooks
       rtkHooks
+      tmuxStatusHooks
       # Plan 046 T5 — user-defined custom hooks. Freeform attrs keyed by event
       # name; concatenated alongside the categorized hooks so users can express
       # arbitrary entry types (http, mcp_tool, prompt, agent) and per-entry
@@ -518,4 +583,17 @@ in
       # an option but never serialized.)
       cfg.hooks.custom
     ];
+
+  # Plan 050 T5 refinement (supersedes D9 step 4): the CC module does NOT auto-write
+  # its event map into programs.tmux.commandStatus.sources. That cross-module publish
+  # was designed as "read-only introspection with no eval-order coupling", but a WRITE
+  # to another module's option still requires that option to be DECLARED in the eval,
+  # and claude-code composes standalone (e.g. with upstream home-manager `programs.tmux`,
+  # which has no `commandStatus`) — the write then fails with "option does not exist",
+  # and an `mkIf (config.programs.tmux ? commandStatus)` guard does NOT suppress it
+  # (the module system still records the unmatched definition path). The declaration
+  # coupling is irreducible, so the auto-publish is dropped for dendritic
+  # composability. The event->state map remains fully introspectable at its source of
+  # truth: programs.claude-code.tmuxStatus.events. A host that wants the unified
+  # registry view can set programs.tmux.commandStatus.sources.claude-code by hand.
 }

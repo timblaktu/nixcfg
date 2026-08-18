@@ -121,6 +121,15 @@ in
         # Select active color scheme
         activeScheme = colorSchemes.${colorScheme};
 
+        # Shared per-pane command-status helper (plan 050 T3). The SINGLE writer
+        # of the @cmd_state marker - imported from modules/lib so the tmux and
+        # claude-code modules share ONE implementation (no cross-config reads).
+        # Replaces the previously-duplicated set/clear logic in the three shell
+        # hook blocks below (and CC's tmuxStateScript).
+        tmuxCmdState = import ../../lib/tmux-cmd-state.nix { inherit pkgs lib; };
+        tmuxCmdStatePkg = tmuxCmdState.mkHelper { };
+        cmdStateBin = "${tmuxCmdStatePkg}/bin/tmux-cmd-state";
+
         # Fixed conditional logic using >= comparisons instead of < to avoid nesting issues
         cpuRamSection = "#{?#{>=:#{client_width},${mediumWidth}},#(tmux-cpu-mem wide),#{?#{>=:#{client_width},${narrowWidth}},#(tmux-cpu-mem medium),#(tmux-cpu-mem narrow)}}";
 
@@ -130,10 +139,114 @@ in
         pointerChar = "→";
         statusLeft = "#[''$lock_open]#(pgrep tmux | wc -l | awk '$1 > 1 {print \"${pointerChar}\"}')#[''$style_normal]#{=10;p10:host_short} %b %d %T";
         statusRight = "${batterySection} ${cpuRamSection}";
+
+        # ---- COMMAND-STATUS WINDOW STYLING ----
+        # Per-window command lifecycle indicator, driven by the shell preexec/precmd
+        # hooks (see the commandStatus config block) which set the @cmd_state window
+        # option. Styling is done with NATIVE tmux #{?} conditionals (not from #()
+        # shell output) so it repaints on every redraw - #() job output is cached on
+        # tmux's async cycle and would not reliably reflect a reverted state.
+        #   running -> emphasized (command in flight)
+        #   done    -> completion marker (cleared to original when the window is selected)
+        #   unset   -> original
+        # Selectable presets (programs.tmux.commandStatus.style). Each preset gives
+        # three states. Amber = running/working, magenta+blink = attention (a
+        # long-running app - e.g. Claude Code - wants input; see the CC tmuxStatus
+        # hooks), green = done. Space-separated attrs (NOT commas) so they don't
+        # clash with the #{?,} conditional separators.
+        # Each preset supplies a style for every declared state (attention, error,
+        # running, done - the lib's stateNames). `error` (colour196, added T4) marks
+        # a command that finished non-zero; no producer sets it yet (a T5 sources
+        # concern) so its arm is present but zero-cost until then.
+        cmdStateStyles = {
+          italic = { running = "fg=colour214 bold italics"; done = "italics"; error = "fg=colour196 bold italics"; attention = "fg=colour201 bold italics blink"; };
+          color = { running = "fg=colour214 bold"; done = "fg=colour46 bold"; error = "fg=colour196 bold"; attention = "fg=colour201 bold blink"; };
+          reverse = { running = "fg=colour214 bold reverse"; done = "fg=colour46 bold reverse"; error = "fg=colour196 bold reverse"; attention = "fg=colour201 bold reverse blink"; };
+          background = { running = "bg=colour214 fg=colour16 bold"; done = "bg=colour34 fg=colour16 bold"; error = "bg=colour196 fg=colour16 bold"; attention = "bg=colour201 fg=colour16 bold blink"; };
+          blink = { running = "fg=colour214 bold"; done = "bg=colour34 fg=colour16 bold blink"; error = "bg=colour196 fg=colour16 bold blink"; attention = "bg=colour201 fg=colour16 bold blink"; };
+        };
+        activeCmdStyle = cmdStateStyles.${config.programs.tmux.commandStatus.style};
+        # T4: both the styling conditional and the clear predicate are now GENERATED
+        # from the one declared state set by the shared lib's mkFold (no hand-written
+        # nested #{?} / literal predicate). styleExpr is a #{P:} priority-fold that
+        # aggregates EVERY pane's @cmd_state up to the window entry (fixes the T3
+        # active-pane-only gap); clearPredicate clears the viewed pane's marker.
+        cmdFold = tmuxCmdState.mkFold { styles = activeCmdStyle; };
+        windowStatusFormat = "${cmdFold.styleExpr}#(tmux-window-status-format #{client_width} #{window_index} #{window_name})#[default]";
+        # Command run when a window/pane is navigated to: clear the clearOnView
+        # markers (attention/error/done) so a viewed pane returns to its original
+        # style (running is left untouched). Unsets the PER-PANE option (set -up) to
+        # match tmux-cmd-state's per-pane writer (T3); the predicate reads the
+        # viewed pane's own @cmd_state.
+        cmdStateClearOnSelect = cmdFold.clearPredicate;
       in
       {
-        options.programs.tmux.autoReload = {
-          enable = lib.mkEnableOption "automatic tmux config reload on home-manager generation change";
+        options.programs.tmux = {
+          autoReload.enable = lib.mkEnableOption "automatic tmux config reload on home-manager generation change";
+          commandStatus = {
+            enable =
+              (lib.mkEnableOption "per-window command-running / command-complete status indicators driven by shell preexec/precmd hooks (running -> emphasized, done -> completed marker cleared when the window is navigated to)")
+              // { default = true; };
+            style = lib.mkOption {
+              type = lib.types.enum [ "italic" "color" "reverse" "background" "blink" ];
+              default = "background";
+              example = "reverse";
+              description = ''
+                Visual style for the per-window command-status indicator. Each option
+                styles two states - running (a command is in flight, e.g. in another
+                window) and done (it finished and hasn't been looked at yet, i.e. a
+                little completion notification); "done" clears to the original style
+                once you navigate to that window. Amber = running, green = done.
+
+                - italic:     running = amber bold italics; done = italics only
+                              (subtlest; needs a terminal/font that renders italics)
+                - color:      running = bold amber text;    done = bold green text
+                - reverse:    running = amber chip (reverse video); done = green chip
+                - background: running = amber background;    done = green background
+                - blink:      running = bold amber; done = green background, blinking
+                              (most attention-grabbing; blink support is terminal-dependent)
+              '';
+            };
+
+            # Plan 050 T5 (decisions D2+D9) — the `sources` model. Two kinds of feed
+            # coexist here:
+            #   * `shell` is a REAL generic source this module owns and installs:
+            #     the zsh/bash/fish preexec/precmd lifecycle hooks that call the
+            #     shared `tmux-cmd-state` writer. Toggle it independently of the
+            #     whole indicator (e.g. to run ONLY the Claude Code source).
+            #   * every other key is an OPTIONAL introspection registry: an
+            #     `events = { <nativeEvent> = <state>; }` map giving ONE place to
+            #     view a program's feed. NOTE (T5 refinement of D9): programs do
+            #     NOT auto-populate this. A program module writing into another
+            #     module's option requires that option to be DECLARED, but
+            #     claude-code composes standalone (with upstream `programs.tmux`,
+            #     which has no `commandStatus`), so an auto-publish breaks that eval
+            #     ("option does not exist") and an mkIf guard does not suppress it.
+            #     The source of truth stays each program's own namespace
+            #     (e.g. programs.claude-code.tmuxStatus.events); a host may mirror it
+            #     here BY HAND for a unified view. Freeform `attrsOf (attrsOf str)`
+            #     covers such maps; the declared `shell` option keeps its own type.
+            sources = lib.mkOption {
+              type = lib.types.submodule {
+                freeformType = lib.types.attrsOf (lib.types.attrsOf lib.types.str);
+                options.shell.enable =
+                  (lib.mkEnableOption "the generic shell (zsh/bash/fish) command-lifecycle source")
+                  // { default = true; };
+              };
+              default = { };
+              example = lib.literalExpression ''
+                { shell.enable = true; claude-code = { UserPromptSubmit = "running"; Stop = "done"; }; }
+              '';
+              description = ''
+                Command-status feeds. `sources.shell.enable` toggles the built-in
+                shell lifecycle source (default on). Per-program keys are an
+                optional, hand-set introspection registry (event -> state map);
+                programs do NOT auto-populate them (see the note above) - each
+                program's own namespace (e.g. programs.claude-code.tmuxStatus.events)
+                is the source of truth.
+              '';
+            };
+          };
         };
 
         config = lib.mkMerge [
@@ -150,7 +263,22 @@ in
               mouse = true;
               historyLimit = 100000;
               aggressiveResize = true;
-              focusEvents = false;
+              # Focus reporting (DECSET 1004). Re-enabled 2026-08-17 after research.
+              # HISTORY: disabled 2026-01-22 (ccd345b) + terminal-features focus:0
+              # added 2026-01-26 (e1000d6) because Claude Code emitted `?1004h` but
+              # mis-rendered the resulting ^[[I/^[[O focus sequences as visible garbage
+              # in its input box on every window switch. That was a Claude Code bug
+              # (issues #11391/#18363), CLOSED Jan 2026, fixed ~v2.0.67 - we run 2.1.191.
+              # WHY RE-ENABLING IS SAFE: tmux only forwards ^[[I/^[[O to a pane whose
+              # app itself enabled `?1004h` (the per-pane MODE_FOCUSON gate in tmux
+              # window.c) - apps that don't opt in (btop, tio, less, shells) never see
+              # them regardless. So the old global-off was a sledgehammer for one app's
+              # bug. BENEFIT: restores neovim FocusGained/checktime autoread-on-refocus.
+              # NOTE: our command-status "clear on pane view" does NOT rely on this -
+              # it uses the focus-events-free window-pane-changed hook (see below).
+              # Residual: CC #72067 (open) re-renders on focus-out -> looks like pane
+              # activity to `monitor-activity` (off by default here), cosmetic only.
+              focusEvents = true;
 
               # Shell configuration
               shell = if config.programs.zsh.enable then "${config.programs.zsh.package}/bin/zsh" else "${pkgs.bash}/bin/bash";
@@ -183,7 +311,12 @@ in
                 set -ga terminal-overrides ",*:dim=\\E[2m"
                 set -ga terminal-overrides ",*:smul=\\E[4m"
                 set -ga terminal-overrides ",*:sitm=\\E[3m"
-                set -ga terminal-features ",*:focus:0"
+                # (Removed 2026-08-17: `terminal-features ",*:focus:0"`. It stripped
+                # the focus capability so tmux never requested focus reports from the
+                # terminal - which also blocks neovim's FocusGained. It was a
+                # belt-and-suspenders companion to the old focusEvents=false; both are
+                # undone together now that Claude Code no longer mis-renders ^[[I/^[[O.
+                # See the focusEvents comment above for the full rationale.)
                 set-hook -g client-resized 'refresh-client -S'
 
                 # ---- PANE BORDER ----
@@ -213,10 +346,11 @@ in
                 bind - split-window -v -c "#{pane_current_path}"
                 bind v split-window -h -c "#{pane_current_path}"
 
-                # Window navigation
-                bind l last-window
-                bind-key -n M-h previous-window
-                bind-key -n M-l next-window
+                # Window navigation (append the command-status clear so navigating
+                # via these keys also resets a "done" marker, like select-window does)
+                bind l last-window \; ${cmdStateClearOnSelect}
+                bind-key -n M-h previous-window \; ${cmdStateClearOnSelect}
+                bind-key -n M-l next-window \; ${cmdStateClearOnSelect}
 
                 # Window reordering - use prefix-based bindings (more reliable in Windows Terminal)
                 bind-key < swap-window -t -1\; select-window -t -1
@@ -278,10 +412,32 @@ in
                 # ---- WINDOW CONFIG
                 setw -g window-status-style "''$style_normal"
                 setw -g window-status-current-style "''$style_current_window"
-                setw -g window-status-format '#(tmux-window-status-format #{client_width} #{window_index} #{window_name})'
-                setw -g window-status-current-format '#(tmux-window-status-format #{client_width} #{window_index} #{window_name})'
+                setw -g window-status-format '${windowStatusFormat}'
+                setw -g window-status-current-format '${windowStatusFormat}'
                 set -g status-justify centre
                 set -g visual-activity on
+
+                # ---- COMMAND-STATUS: reset clearOnView markers on navigation (D3) ----
+                # Clears the VIEWED pane's attention/error/done marker (per-pane, not
+                # the whole window). Two legs, NEITHER of which needs focus-events (D3,
+                # refined 2026-08-17 after the focus-events research - see the
+                # focusEvents comment above):
+                #   after-select-window - fires on window (tab) switches: select-window
+                #     (prefix-N, choose-tree, mouse, the swap </> binds); clears the
+                #     newly-active window's active pane.
+                #   window-pane-changed - fires on ACTIVE-PANE changes WITHIN a window:
+                #     select-pane (incl. the C-h/j/k/l vim-nav binds), mouse click on a
+                #     pane, last-pane, and split-window. Fired from tmux's core
+                #     window_set_active_pane() - independent of focus-events (verified
+                #     against tmux source), so it works with focusEvents on OR off and
+                #     never depends on the terminal delivering focus reports. In the
+                #     hook body #{@cmd_state}/`set -up` resolve to the just-entered
+                #     (now-active) pane. Strictly more complete than after-select-pane
+                #     (which misses last-pane + splits).
+                # next/previous/last-window are separate commands, so their bindings
+                # (above) append the same clear explicitly.
+                set-hook -g after-select-window '${cmdStateClearOnSelect}'
+                set-hook -g window-pane-changed '${cmdStateClearOnSelect}'
 
                 # ---- NESTED SESSION TOGGLE (F12) ----
                 bind -T root F12 \
@@ -395,6 +551,11 @@ in
             home.packages = with pkgs; [
               procps
               bc
+
+              # Shared per-pane command-status writer (plan 050 T3). Installed on
+              # PATH for interactive/keybinding use; the shell hooks and the CC
+              # module reference it by store path.
+              tmuxCmdStatePkg
 
               # Tmux session picker
               (
@@ -760,6 +921,101 @@ in
               fi
             '');
           })
+
+          # Per-window command lifecycle indicators.
+          #
+          # Shell hooks set a per-window @cmd_state user option on each command
+          # boundary and force a status redraw with refresh-client -S:
+          #   preexec  -> "running"  (a real command started; set regardless of focus
+          #               so that switching away mid-command still shows it running)
+          #   precmd   -> if this window is ACTIVE (you're looking at it) the marker is
+          #               cleared to original - a completion in the window you're viewing
+          #               needs no notification; if it's a BACKGROUND window it is set to
+          #               "done" so you get a visual notification, cleared when you
+          #               navigate to it.
+          # Styling is applied by native #{?} conditionals in window-status-format
+          # (see the let block / commandStatus.style). The "done" marker is also cleared
+          # when the window is navigated to (after-select-window hook + nav-key binds).
+          # The per-shell "ran" guard ensures shell startup and bare Enter presses do
+          # NOT mark a window.
+          #
+          # Implemented for every shell this config might make interactive
+          # (zsh / bash / fish), each guarded by its own enable flag, so the
+          # indicator works regardless of which shell is selected.
+          #
+          # Plan 050 T5: this is the generic `shell` SOURCE. It is gated on
+          # commandStatus.sources.shell.enable (default on) so it can be turned off
+          # independently - e.g. to drive the indicator ONLY from per-program
+          # sources like Claude Code - without disabling the whole indicator.
+          (lib.mkIf
+            (config.programs.tmux.commandStatus.enable
+              && config.programs.tmux.commandStatus.sources.shell.enable)
+            {
+              programs.zsh.initContent = lib.mkIf config.programs.zsh.enable (lib.mkAfter ''
+                # Tmux per-pane command status indicator (zsh preexec/precmd).
+                # The shared tmux-cmd-state helper is the single writer (set/clear/
+                # active-suppression + redraw all live there); the shell only owns
+                # the "ran" guard so startup / bare-Enter do NOT mark a pane.
+                if [[ -n "$TMUX" ]]; then
+                  _tmux_cmd_ran=""
+                  _tmux_cmd_preexec() { _tmux_cmd_ran=1; ${cmdStateBin} running; }
+                  _tmux_cmd_precmd() {
+                    [[ -n "$_tmux_cmd_ran" ]] || return   # only after a real command
+                    _tmux_cmd_ran=""
+                    ${cmdStateBin} done
+                  }
+                  autoload -Uz add-zsh-hook
+                  add-zsh-hook preexec _tmux_cmd_preexec
+                  add-zsh-hook precmd _tmux_cmd_precmd
+                fi
+              '');
+
+              programs.bash.initExtra = lib.mkIf config.programs.bash.enable (lib.mkAfter ''
+                # Tmux per-pane command status indicator (bash DEBUG trap + PROMPT_COMMAND).
+                # The shared tmux-cmd-state helper is the single writer; the shell
+                # owns only the first-command-of-line + "ran" guards.
+                if [[ -n "$TMUX" ]]; then
+                  _tmux_cmd_at_prompt=1
+                  _tmux_cmd_ran=0
+                  _tmux_cmd_preexec() {
+                    [[ -n "$COMP_LINE" ]] && return                 # skip during completion
+                    [[ "$BASH_COMMAND" == _tmux_cmd_postcmd* ]] && return
+                    [[ "$_tmux_cmd_at_prompt" == 1 ]] || return     # only the first command of the line
+                    _tmux_cmd_at_prompt=0
+                    _tmux_cmd_ran=1
+                    ${cmdStateBin} running
+                  }
+                  _tmux_cmd_postcmd() {
+                    _tmux_cmd_at_prompt=1
+                    [[ "$_tmux_cmd_ran" == 1 ]] || return           # only after a real command
+                    _tmux_cmd_ran=0
+                    ${cmdStateBin} done
+                  }
+                  trap '_tmux_cmd_preexec' DEBUG
+                  case "$PROMPT_COMMAND" in
+                    *_tmux_cmd_postcmd*) ;;
+                    *) PROMPT_COMMAND="_tmux_cmd_postcmd''${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
+                  esac
+                fi
+              '');
+
+              programs.fish.interactiveShellInit = lib.mkIf config.programs.fish.enable (lib.mkAfter ''
+                # Tmux per-pane command status indicator (fish preexec/postexec events).
+                # The shared tmux-cmd-state helper is the single writer; the shell
+                # owns only the "ran" guard.
+                if set -q TMUX
+                  function _tmux_cmd_preexec --on-event fish_preexec
+                    set -g _tmux_cmd_ran 1
+                    ${cmdStateBin} running
+                  end
+                  function _tmux_cmd_postexec --on-event fish_postexec
+                    set -q _tmux_cmd_ran; or return   # only after a real command
+                    set -e _tmux_cmd_ran
+                    ${cmdStateBin} done
+                  end
+                end
+              '');
+            })
         ];
       };
 

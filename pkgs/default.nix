@@ -7,4 +7,5 @@ rec {
   marker-pdf = pkgs.callPackage ./marker-pdf { };
   tomd = pkgs.callPackage ./tomd { inherit marker-pdf; };
   confluence-markdown-exporter = pkgs.callPackage ./confluence-markdown-exporter { };
+  dev-switch = pkgs.callPackage ./dev-switch { };
 }

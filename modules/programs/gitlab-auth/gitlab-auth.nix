@@ -302,6 +302,97 @@
                 glab mr list --state opened
                 ```
 
+                ## MR Reviews - submitting a review that BLOCKS the MR
+                When asked to "submit a review requesting changes", the goal is that the
+                review actually BLOCKS the merge. Know which artifact blocks on GitLab -
+                these are THREE separate things and only some block:
+
+                - A plain note (`glab mr note create`, notes API) is `resolvable=false` -
+                  informational only, NEVER blocks. THE TRAP: a "request changes" written as
+                  a plain note blocks nothing. (Verified: this is how a review can look
+                  posted yet not block.)
+                - A RESOLVABLE discussion thread (discussions API) BLOCKS merge when the
+                  project has "All threads must be resolved" on
+                  (`only_allow_merge_if_all_discussions_are_resolved: true`). This is the
+                  reliable blocker - it flips detailed_merge_status to
+                  "discussions_not_resolved".
+                - The REQUESTED_CHANGES reviewer state (GraphQL, step 3) is the semantic
+                  verdict but hard-blocks ONLY if a Merge Request Approval Policy enforces it
+                  (Secure > Policies). With no such policy it is ADVISORY - it will NOT stop
+                  a merge on its own, and approvals can still merge over it.
+
+                PRECONDITION - confirm the MR is still open (a merged MR silently accepts a
+                "request changes" that blocks nothing; check before you act):
+                  glab api projects/<ID>/merge_requests/<IID> | jq -r .state   # must be "opened"
+
+                ### Recipe: comments + request-changes that BLOCKS
+                ```bash
+                # 1. Post the review summary as a RESOLVABLE thread (THIS is what blocks,
+                #    given all-threads-must-resolve is on). Use discussions, NOT `mr note`.
+                glab api projects/<ID>/merge_requests/<IID>/discussions -X POST \
+                  -f "body=$(cat review.md)"
+                #    Verify it can block: response .notes[0].resolvable == true.
+
+                # 2. (optional) inline code comments -> see "Inline diff comments" below;
+                #    diff-anchored DiffNotes are also resolvable and block the same way.
+
+                # 3. Set the reviewer verdict to REQUESTED_CHANGES. NO REST endpoint - it is
+                #    a GraphQL mutation. It ONLY sets your state; it does NOT add you as a
+                #    reviewer, and you must ALREADY be a reviewer. Add yourself if missing:
+                #      glab mr update <IID> --reviewer <your-username>
+                glab api graphql -f query='mutation {
+                  mergeRequestRequestChanges(input: {projectPath: "<GROUP/SUBGROUP/PROJECT>", iid: "<IID>"}) {
+                    errors
+                    mergeRequest { reviewers { nodes { username mergeRequestInteraction { reviewState } } } }
+                  }
+                }'
+                #    projectPath = full namespace path (NOT numeric ID); iid is a STRING.
+                #    Success = errors:[] AND your username shows reviewState REQUESTED_CHANGES.
+
+                # 4. VERIFY the review actually blocks (do not trust that it posted):
+                glab api projects/<ID>/merge_requests/<IID> | jq -r .detailed_merge_status
+                #    Expect "discussions_not_resolved" (blocked). "mergeable"/"ci_must_pass"
+                #    means nothing is blocking on the thread - step 1 used a plain note, or
+                #    all-threads-must-resolve is off (then only an approval policy can block).
+                ```
+
+                ### Clearing / other verdicts
+                ```bash
+                glab mr approve <IID>            # approve (REST)
+                glab mr unapprove <IID>          # remove your approval (REST)
+                # Clear REQUESTED_CHANGES: approve/unapprove, or the mutation
+                #   mergeRequestDestroyRequestedChanges(input: {projectPath, iid})
+                # Resolve a thread (unblocks it): PUT .../discussions/<HASH>?resolved=true
+                ```
+                Reviewer states: UNREVIEWED, REVIEW_STARTED, REVIEWED, REQUESTED_CHANGES,
+                APPROVED, UNAPPROVED (uppercase in GraphQL responses).
+
+                ## Inline diff comments + code suggestions (positioned notes)
+                glab's -f "position[..]=" bracket fields do NOT anchor (they silently create a
+                general comment, type "DiscussionNote"). Build a JSON body and post via --input -
+                WITH an explicit content-type header (else HTTP 415):
+                ```bash
+                # 1. Get the three diff SHAs:
+                glab api projects/<ID>/merge_requests/<IID> | jq .diff_refs   # base_sha/start_sha/head_sha
+
+                # 2. Post a diff-anchored comment. Body may contain a fenced "suggestion" block
+                #    (```suggestion:-a+b) to propose exact code. new_line = line in the NEW file
+                #    (added/context lines only). Omit old_line for added lines.
+                jq -n --arg body "$(cat comment.md)" \
+                  --arg base <BASE> --arg start <START> --arg head <HEAD> --arg path <NEW_PATH> --argjson line <N> \
+                  '{body:$body, position:{position_type:"text", base_sha:$base, start_sha:$start,
+                    head_sha:$head, new_path:$path, old_path:$path, new_line:$line}}' \
+                | glab api projects/<ID>/merge_requests/<IID>/discussions -X POST \
+                    -H "Content-Type: application/json" --input -
+                # Verify it anchored: response .notes[0].type must be "DiffNote" (not "DiscussionNote").
+
+                # Reply to a thread (body only; a suggestion in the reply targets the thread's line):
+                glab api projects/<ID>/merge_requests/<IID>/discussions/<HASH>/notes -X POST \
+                  -H "Content-Type: application/json" --input <(jq -n --arg b "$(cat reply.md)" '{body:$b}')
+                # Resolve / unresolve a thread:
+                glab api "projects/<ID>/merge_requests/<IID>/discussions/<HASH>?resolved=true" -X PUT
+                ```
+
                 ## API Calls
                 ```bash
                 # Simple REST API call

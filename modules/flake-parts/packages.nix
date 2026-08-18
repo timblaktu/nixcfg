@@ -8,7 +8,7 @@
       in
       {
         # Include all custom packages
-        inherit (customPkgs) nixvim-anywhere markitdown marker-pdf tomd confluence-markdown-exporter;
+        inherit (customPkgs) nixvim-anywhere markitdown marker-pdf tomd confluence-markdown-exporter dev-switch;
 
         # Docling package (using nlohmann_json 3.10.5 from nixpkgs)
         inherit (pkgs) docling;
