@@ -1923,6 +1923,51 @@ in
           '';
         };
 
+        # Shipped dev-team image smoketest. Reproduces the SHIPPED defaults
+        # (default user "user", passwordless wheel sudo) and asserts the
+        # invariants that the 2026-08-13 "user is not in sudoers file"
+        # regression violated. Unlike vm-dev-team-stack, this does NOT override
+        # systemDefault.userName or wheelNeedsPassword -- it validates the image
+        # exactly as distributed. Consumed by the nixcfg-work dev-team-vm CI as a
+        # test-stage gate after the image build, on the aarch64 KVM-metal runner
+        # (tag aws-uswest2-metal-nix-arm64-kvm), which provides hardware /dev/kvm.
+        vm-dev-team-vm-smoketest = mkVmTest {
+          name = "dev-team-vm-smoketest";
+          description = "Shipped dev-team image: default user 'user' boots with passwordless wheel sudo";
+          # Import the dev-team settings layers with DEFAULTS (system-cli
+          # co-imported per dev-team's documented usage). No userName /
+          # wheelNeedsPassword override: the wheel/sudo invariant lives in the
+          # dev-team + libvirt layers, independent of the host's disk/bootloader,
+          # so the test driver's own VM disk suffices (no grub/tmpfs juggling).
+          modules = [
+            self.modules.nixos.system-cli
+            self.modules.nixos.dev-team
+          ];
+          memory = 3072;
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # Default distributed user exists (dev-team sets userName = "user").
+            machine.succeed("id user")
+
+            # Regression guard: the user MUST be in wheel. Before the fix, the
+            # libvirt layer's bare extraGroups = [ libvirtd kvm ] clobbered the
+            # mkDefault wheel/plugdev, leaving the user in no sudo group at all
+            # ("user is not in sudoers file").
+            machine.succeed("id -nG user | grep -qw wheel")
+
+            # Passwordless sudo actually works for the shipped user
+            # (wheelNeedsPassword = false in the dev-team base).
+            machine.succeed("su - user -c 'sudo -n true'")
+
+            # SSH daemon up (admin requirement: sshPasswordAuth = true).
+            machine.wait_for_unit("sshd.service")
+
+            # Core dev-team feature present.
+            machine.succeed("command -v podman")
+          '';
+        };
+
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
         vm-user-config = mkVmTest {

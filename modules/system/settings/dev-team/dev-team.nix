@@ -47,9 +47,17 @@
       users.users.${config.systemDefault.userName} = {
         hashedPassword = lib.mkDefault
           "$6$2VLAqVZZHeMdVqhL$TLfROheuwsIheXUaz4CHuceiXmdsRdTVtmQUEGTgRrHpTUgr7aiMzq7vGGqdS62x7pDI1Ryhxd4DWDloeCRc0/";
-        # Note: On WSL, plugdev must also be in wsl-settings.userGroups (wsl-dev-team
+        # wheel: grants sudo (paired with wheelNeedsPassword=false below for
+        # passwordless sudo). Without it the default "user" is in no sudo group
+        # at all -> "user is not in sudoers file".
+        # NOT mkDefault: extraGroups is an additive list, and the libvirt layer
+        # (system-cli enableLibvirt) assigns [ "libvirtd" "kvm" ] at bare
+        # priority. A mkDefault (1000) here is discarded entirely by that bare
+        # (100) def instead of merging, so the user silently lost wheel/plugdev.
+        # A bare value merges with it -> [ wheel plugdev libvirtd kvm ].
+        # Note: On WSL, these must also be in wsl-settings.userGroups (wsl-dev-team
         # handles this) because wsl.nix uses mkOverride 90 on extraGroups.
-        extraGroups = lib.mkDefault [ "plugdev" ];
+        extraGroups = [ "wheel" "plugdev" ];
       };
 
       # Passwordless sudo for wheel group (standard for dev images)
