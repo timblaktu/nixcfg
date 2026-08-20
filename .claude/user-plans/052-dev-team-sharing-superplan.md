@@ -1,6 +1,6 @@
 # Plan 052 — Super-plan: Share nixcfg nix-darwin + NixOS VM/WSL configs with the dev team
 
-Status: PLANNING (coordinating meta-plan; milestone ordering = first open decision)
+Status: ACTIVE (coordinating meta-plan; M0 decided 2026-08-20 → M-A/darwin bring-up first; M-C standing)
 Owner: Tim
 Created: 2026-08-20
 Kind: **Coordinating meta-plan** — it TRACKS and sequences sub-plans that live in two
@@ -177,23 +177,36 @@ Structural / high-leverage (each kills several rows):
 ## Progress tracking (this super-plan's OWN coordination tasks)
 | ID | Task | Kind | Status |
 |----|------|------|--------|
-| M0 | Order the SEQUENCED milestones (A/B/D) + define "done" for the near-term one (M-C is not ordered — always-on) | Interactive | TASK:PENDING |
-| M-A | Drive first Mac hardware bring-up (→ nixcfg-work 001 T7/T8b/T18b) | gated: hardware | TASK:PENDING |
+| M0 | Order the SEQUENCED milestones + define near-term "done" | Interactive | TASK:COMPLETE 2026-08-20 — order = **M-A first**, then M-B/M-D |
+| M-A | Drive first Mac hardware bring-up (→ nixcfg-work 001 T7/T8b/T18b) | 1 · Mac (+ Linux prep) | TASK:IN_PROGRESS 2026-08-20 |
 | M-B | Drive CI/delivery unification (→ nixcfg-work 004 T0–T5) | gated: infra/budget | TASK:PENDING |
-| M-C | **STANDING** docs & consumption workstream — always-on; fill ALL blocked time (see its section) | continuous | TASK:IN_PROGRESS (never "done") |
+| M-C | **STANDING** docs & consumption workstream — always-on; fill ALL blocked time (see §STANDING WORKSTREAM) | continuous | STANDING (NOT a /next-task cursor row) |
 | M-D | IT/CrowdStrike compliance demo (→ nixcfg 026 T6) | Interactive: IT | TASK:PENDING |
 | H1 | Refresh DISTRIBUTION.md + SHARED-MODULES.md for the new image/darwin outputs | 1 · portable | TASK:PENDING |
 | H2 | Resolve plan-number collisions (nixcfg-work 002; note nixcfg 013 pair) | chore | TASK:PENDING |
 
+## ACTIVE cursor — M-A (Mac/darwin bring-up first; Tim's order 2026-08-20)
+M0 is decided: **do M-A first**, then M-B/M-D. `/next-task` resumes on **M-A** (the only
+IN_PROGRESS milestone; M-C is standing, not a cursor row). M-A splits into work you can do
+HERE (Linux) and work that needs a Mac — start with the Linux prep so a session is never a
+dead-end:
+- **Linux-side prep (do now, on this host):** in `~/src/nixcfg-work`, confirm the darwin
+  configs still eval-green (`corp-darwin-dev-team`, `pa163076mac`); make `bootstrap-darwin.sh`
+  + `docs/darwin/RESUME-mac-nix-bringup.md` current + fully self-contained; enumerate the
+  EXACT Mac-side activation steps + expected failure modes (Nix installer backup-file clash,
+  primaryUser, FileVault/MDM/Rosetta `[HW-VERIFY]` flags). Detail owner = nixcfg-work **001**.
+- **Mac-side (a session ON Apple Silicon):** execute the first real `darwin-rebuild switch`
+  per the RESUME doc; clear the `[HW-VERIFY]` flags and mark nixcfg-work **001** T7/T8b/T18b.
+- If a Linux session has finished the prep and only the hardware step remains → that is
+  `ENVIRONMENT_NOT_CAPABLE` here (needs a Mac); fall to M-C docs, don't invent a workaround.
+
 ## How to resume (for the next session)
-1. This is the active plan (`.claude/active-plan` → this file). Read it + the two active
-   sub-plans (`~/src/nixcfg-work/.claude/user-plans/001-darwin-support.md`,
-   `004-machine-image-ci-release.md`) and nixcfg `026` T6.
-2. **M-C is ALWAYS running** — any time you are blocked on a build / CI / hardware wait /
-   pending decision, do the top M-C backlog item (see the STANDING WORKSTREAM section);
-   never idle-wait on a long op. M0 only orders the SEQUENCED milestones A/B/D: M-A is
-   highest-learning but needs a physical Mac; M-B is the delivery backbone but budget/infra-
-   gated; M-D is IT-gated.
+1. This is the active plan (`.claude/active-plan` → this file). Read it + the active sub-plans
+   (`~/src/nixcfg-work/.claude/user-plans/001-darwin-support.md`, `004-machine-image-ci-release.md`)
+   and nixcfg `026` T6.
+2. **Drive M-A** (above). **M-C is ALWAYS available** as blocked-time fallback — any time M-A
+   (or later M-B/M-D) blocks on a build / CI / hardware wait / pending decision, do the top
+   M-C backlog item (see §STANDING WORKSTREAM); never idle-wait on a long op.
 3. Do NOT put corporate detail in this file (see PUBLIC-SAFETY CONSTRAINT). Corporate work is
    tracked in nixcfg-work's plans; this file only rolls up status + sequences milestones.
 
