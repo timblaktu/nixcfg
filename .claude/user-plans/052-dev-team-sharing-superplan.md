@@ -66,9 +66,10 @@ Numbering-collision note (housekeeping H2 below): nixcfg-work still has a second
   `pa163076mac` Tim's), full Model A system+HM, `bootstrap-darwin.sh`, colleague quickstart —
   all eval-green from Linux, none activated on a Mac.
 
-## Open frontier — the four candidate milestones
-The super-plan drives these. **Ordering is the first decision (task M0).** Each points at
-sub-plan tasks for detail.
+## Open frontier — three SEQUENCED milestones + one STANDING workstream
+M-A / M-B / M-D are sequenced milestones (their ordering = task **M0**). **M-C is NOT a
+milestone with an end — it is an always-on parallel workstream** (its own section below).
+Each points at sub-plan tasks for detail.
 
 - **M-A — First real Mac (nix-darwin) hardware bring-up.** The biggest unknown; everything
   darwin is eval-only until a Mac boots the shared config. Drives nixcfg-work **001** T7/T8b/T18b;
@@ -79,13 +80,44 @@ sub-plan tasks for detail.
   (offline), + 5 budget/infra decisions (004 T0). Insight (004 design doc): WSL ships a `.wsl`
   FILE asset; darwin ships NO file — deliverable = green build gate + warm cache consumed via
   substituter + `darwin-rebuild switch`.
-- **M-C — Consumption & docs polish (lowest-gate, fastest team value).** Make TODAY's working
-  artifacts cleanly self-serviceable: refresh `docs/DISTRIBUTION.md` + `docs/SHARED-MODULES.md`
-  (both predate the Mac-VM qcow2 / EC2-Graviton / Darwin additions; export counts drifted
-  47↔54), write the Mac-VM qcow2 consumption path + darwin onboarding path, reconcile numbering.
-  No hardware/budget gates.
+- **M-C — Docs & consumption polish → see the STANDING WORKSTREAM section below.** Runs
+  CONTINUOUSLY in parallel; not ordered against A/B/D.
 - **M-D — IT/CrowdStrike compliance.** The Falcon/IT demo (nixcfg **026** T6) that unlocks
   production security compliance on the shared WSL image. Human/IT-gated.
+
+## STANDING WORKSTREAM — M-C: docs & consumption polish (always-on, parallel)
+**This is not a milestone that finishes; it is how the super-plan uses blocked time.**
+Whenever ANY task is blocked on a long-running operation (a build, a CI run, a hardware
+wait, an IT/budget decision), fall to this workstream and improve the docs. It runs in
+parallel with M-A/M-B/M-D for the life of the plan and is never "done".
+
+**Audience — weight every doc edit by this:**
+1. A **dev-team colleague** who wants to CONSUME the shared configs/images with minimal friction.
+2. Anyone **LEARNING** nix, NixOS, NixOS-WSL, nix-darwin, or reproducible configuration
+   management — using this repo as a worked exemplar.
+
+**Quality bar (all five, not merely "correct"):** accurate · current · approachable ·
+intelligible · highly useful. Teach the *why* (reproducibility, the dendritic module pattern,
+the layer model, flake inputs/pins) — not just enumerate the *what* — and give a followable
+on-ramp for a Nix newcomer.
+
+**Operating rule:** on hitting a block — (1) take the top unstarted item from the M-C backlog,
+(2) VERIFY the current code before editing prose (never trust stale docs — the doc set is
+known-drifted), (3) make the fix and mark it done, (4) return to the blocking task when it
+unblocks. Keep edits small + shippable; `.md`-only commits skip the flake-check hook, so
+commit freely.
+
+**Scope = PUBLIC nixcfg docs.** Corporate onboarding (corp-wsl / corp-darwin specifics) is
+tracked in nixcfg-work; a public doc may POINT to it but must carry no corporate detail.
+
+**M-C backlog (LIVING — a survey agent is verifying + expanding this; seed items):**
+- `docs/DISTRIBUTION.md`: cover the newer artifacts (Mac-VM aarch64 qcow2 `image-vm-dev-team`,
+  EC2/Graviton AMIs, `nixos-dev-team-vm` host) + a followable consumption path for EACH shape.
+- `docs/SHARED-MODULES.md`: reconcile the module-count drift (47 vs 16+29+9=54), add missing
+  rows (awscli, pulumi, jfrog-cli), confirm the platform-compatibility matrix.
+- Add a "start here" learning on-ramp for a Nix newcomer (what a flake/module/host means *here*,
+  the layer model, how to read the dendritic pattern) — the biggest approachability gap.
+- (Verified/expanded backlog appended by the survey agent below.)
 
 ## Cross-cutting housekeeping
 - **H1 — doc refresh:** `DISTRIBUTION.md`/`SHARED-MODULES.md` to cover Mac-VM qcow2, EC2/Graviton,
@@ -99,10 +131,10 @@ sub-plan tasks for detail.
 ## Progress tracking (this super-plan's OWN coordination tasks)
 | ID | Task | Kind | Status |
 |----|------|------|--------|
-| M0 | Decide milestone ordering (A/B/C/D) + define "done" for the near-term milestone | Interactive | TASK:PENDING |
+| M0 | Order the SEQUENCED milestones (A/B/D) + define "done" for the near-term one (M-C is not ordered — always-on) | Interactive | TASK:PENDING |
 | M-A | Drive first Mac hardware bring-up (→ nixcfg-work 001 T7/T8b/T18b) | gated: hardware | TASK:PENDING |
 | M-B | Drive CI/delivery unification (→ nixcfg-work 004 T0–T5) | gated: infra/budget | TASK:PENDING |
-| M-C | Consumption & docs polish (nixcfg docs + onboarding paths) | 1 · portable | TASK:PENDING |
+| M-C | **STANDING** docs & consumption workstream — always-on; fill ALL blocked time (see its section) | continuous | TASK:IN_PROGRESS (never "done") |
 | M-D | IT/CrowdStrike compliance demo (→ nixcfg 026 T6) | Interactive: IT | TASK:PENDING |
 | H1 | Refresh DISTRIBUTION.md + SHARED-MODULES.md for the new image/darwin outputs | 1 · portable | TASK:PENDING |
 | H2 | Resolve plan-number collisions (nixcfg-work 002; note nixcfg 013 pair) | chore | TASK:PENDING |
@@ -111,10 +143,11 @@ sub-plan tasks for detail.
 1. This is the active plan (`.claude/active-plan` → this file). Read it + the two active
    sub-plans (`~/src/nixcfg-work/.claude/user-plans/001-darwin-support.md`,
    `004-machine-image-ci-release.md`) and nixcfg `026` T6.
-2. Start with **M0**: get Tim to pick the near-term milestone. Recommendation absent other
-   signal: **M-C** (no gates, fastest team value) runs in parallel while M-A/M-B wait on
-   hardware/infra; M-A is the highest-learning but needs a physical Mac; M-B is the backbone
-   but budget/infra-gated.
+2. **M-C is ALWAYS running** — any time you are blocked on a build / CI / hardware wait /
+   pending decision, do the top M-C backlog item (see the STANDING WORKSTREAM section);
+   never idle-wait on a long op. M0 only orders the SEQUENCED milestones A/B/D: M-A is
+   highest-learning but needs a physical Mac; M-B is the delivery backbone but budget/infra-
+   gated; M-D is IT-gated.
 3. Do NOT put corporate detail in this file (see PUBLIC-SAFETY CONSTRAINT). Corporate work is
    tracked in nixcfg-work's plans; this file only rolls up status + sequences milestones.
 
