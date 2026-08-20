@@ -13,7 +13,7 @@ This is a **feature-centric Nix configuration** using the dendritic pattern:
 - **8 NixOS hosts** (2 WSL, 3 non-WSL dev-team variants, 1 template, 1 ARM SBC, 1 Intel laptop) + 1 Darwin host + 1 vanilla WSL
 - **6 home-manager configurations** (standalone approach)
 - **23 feature modules** in `modules/programs/`
-- **54 exported modules** (16 NixOS + 29 HM + 9 Darwin)
+- **57 exported modules** (16 NixOS + 32 HM + 9 Darwin)
 - **4-layer system type hierarchy** for composition
 - **Pre-built WSL tarballs** via CI/CD for team distribution
 
@@ -48,7 +48,7 @@ nixcfg/
 │   │   ├── nixos-configurations.nix
 │   │   ├── darwin-configurations.nix
 │   │   ├── home-configurations.nix
-│   │   ├── shared-modules.nix   # Module exports (54 modules)
+│   │   ├── shared-modules.nix   # Module exports (57 modules)
 │   │   ├── github-actions.nix   # CI workflow generation
 │   │   └── termux-outputs.nix   # Android package outputs
 │   │
@@ -132,7 +132,7 @@ nixcfg/
 | Darwin hosts | 1 |
 | Home Manager configs | 6 |
 | Feature modules (programs/) | 23 |
-| Exported modules total | 54 (16 NixOS + 29 HM + 9 Darwin) |
+| Exported modules total | 57 (16 NixOS + 32 HM + 9 Darwin) |
 | System type layers | 4 |
 | Flake-parts modules | 16 |
 
@@ -314,7 +314,7 @@ Hosts combine system modules + home manager modules:
 
 ## Module Namespaces
 
-### Exported Modules (54 total)
+### Exported Modules (57 total)
 
 These are the modules available to external consumers via flake input.
 See [SHARED-MODULES.md](SHARED-MODULES.md) for the full catalog with
@@ -332,20 +332,20 @@ nixosModules = {
   # Image configs
   proxmox-image-config, amazon-image-config,
   # Feature modules
-  crowdstrike-falcon, monitoring, secrets-management, shell, git, tmux, neovim,
+  crowdstrike-falcon, secrets-management, shell, git, tmux, neovim,
 };
 
-# Home Manager modules (29)
+# Home Manager modules (32)
 homeManagerModules = {
   # System type layers
   home-minimal, home-default, home-cli, home-desktop,
-  # WSL and enterprise layers
-  wsl-home-base, home-enterprise, home-dev-team,
+  # WSL / enterprise / team bundles
+  wsl-home-base, home-enterprise, home-dev-team, home-wsl, home-darwin,
   # Feature modules
   shell, git, tmux, neovim, claude-code, opencode,
-  monitoring, development-tools, yazi, terminal, system-tools, shell-utils,
+  development-tools, yazi, terminal, system-tools, shell-utils,
   esp-idf, onedrive, podman, windows-terminal, secrets-management,
-  github-auth, gitlab-auth, git-auth-helpers, files, awscli, pulumi,
+  github-auth, gitlab-auth, git-auth-helpers, files, awscli, jfrog-cli, pulumi,
 };
 
 # Darwin modules (9)
@@ -371,7 +371,7 @@ darwinModules = {
   };
 
   nixosModules = { ... };           # 16 shared NixOS modules
-  homeManagerModules = { ... };     # 29 shared HM modules
+  homeManagerModules = { ... };     # 32 shared HM modules
   darwinModules = { ... };          # 9 shared Darwin modules
 
   packages.x86_64-linux = { ... };  # Custom packages
@@ -676,7 +676,7 @@ GitHub Release asset alongside `Import-NixOSWSL.ps1`.
 - **flake-parts**: [hercules-ci/flake-parts](https://github.com/hercules-ci/flake-parts)
 - **NixOS-WSL**: [nix-community/NixOS-WSL](https://github.com/nix-community/NixOS-WSL)
 - **Distribution**: [DISTRIBUTION.md](DISTRIBUTION.md) — layer architecture, release, consumption
-- **Module Catalog**: [SHARED-MODULES.md](SHARED-MODULES.md) — 54 exported modules with usage examples
+- **Module Catalog**: [SHARED-MODULES.md](SHARED-MODULES.md) — 57 exported modules with usage examples
 - **Team Quickstart**: [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md) — end-user import guide
 - **Release Process**: [../RELEASE.md](../RELEASE.md) — versioning and pipeline details
 - **CrowdStrike**: [CROWDSTRIKE-WSL2-SECURITY-BRIEF.md](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) — IT security analysis
@@ -686,5 +686,5 @@ GitHub Release asset alongside `Import-NixOSWSL.ps1`.
 **Document Version**: 3.0
 **Last Updated**: 2026-03-19
 **Changes in 3.0**: Updated for distributable images (Plan 023), CI/CD pipeline,
-enterprise/dev-team layers, new hosts, expanded module catalog (54 modules),
+enterprise/dev-team layers, new hosts, expanded module catalog (57 modules),
 CrowdStrike integration, and cross-references to distribution documentation.

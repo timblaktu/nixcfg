@@ -79,7 +79,7 @@ Hierarchical layers — each imports the one above it.
 
 ---
 
-## Home Manager Modules (29)
+## Home Manager Modules (32)
 
 ### System Type Layers
 
@@ -95,8 +95,10 @@ Hierarchical layers — each imports the one above it.
 | Export Name | Description |
 |-------------|-------------|
 | `wsl-home-base` | WSL user-level tweaks. Works on **any** WSL distro (Ubuntu, Debian, Alpine, NixOS) |
-| `home-enterprise` | Enterprise bundle: shell, git, tmux, neovim, yazi, files, onedrive |
-| `home-dev-team` | Dev team bundle: enterprise + claude-code, opencode, gitlab-auth, podman |
+| `home-enterprise` | Common, platform-neutral bundle: shell, git, tmux, neovim, terminal, shell-utils, system-tools, yazi, files, git-auth-helpers |
+| `home-dev-team` | Dev team bundle: enterprise + claude-code, opencode, gitlab-auth, podman, development-tools, awscli, jfrog-cli |
+| `home-wsl` | WSL-only layer: wsl-home + onedrive + windows-terminal. WSL hosts compose `home-dev-team` + `home-wsl` |
+| `home-darwin` | Darwin-only layer (thin). macOS hosts compose `home-dev-team` + `home-darwin` |
 
 ### Feature Modules (Home Manager)
 
@@ -121,6 +123,7 @@ Hierarchical layers — each imports the one above it.
 | `development-tools` | Python, Rust, Node, Go toolchains |
 | `windows-terminal` | Windows Terminal settings management for WSL |
 | `awscli` | AWS CLI v2 with Azure AD SSO support |
+| `jfrog-cli` | JFrog CLI with Bitwarden/SOPS credential injection |
 | `pulumi` | Pulumi infrastructure-as-code CLI |
 | `esp-idf` | ESP-IDF embedded development environment |
 | `secrets-management` | Bitwarden CLI, rbw helpers |

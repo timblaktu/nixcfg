@@ -4,7 +4,7 @@ Modular Nix configurations for NixOS, macOS, and WSL, built with
 [flake-parts](https://flake.parts) and
 [import-tree](https://github.com/vic/import-tree) for automatic module
 discovery. The repository produces **pre-built NixOS-WSL images** for team
-onboarding and exports **54 reusable modules** (NixOS, Home Manager, Darwin)
+onboarding and exports **57 reusable modules** (16 NixOS, 32 Home Manager, 9 Darwin)
 that can be composed into any Nix configuration via flake input.
 
 ## Who This Is For

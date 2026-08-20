@@ -11,7 +11,7 @@ primary outputs:
 
 1. **Pre-built WSL tarballs** — Ready-to-import `.wsl` images for Windows users
    who want a turnkey NixOS development environment.
-2. **Reusable Nix modules** — 47 exported modules (NixOS, Home Manager, Darwin)
+2. **Reusable Nix modules** — 57 exported modules (16 NixOS, 32 Home Manager, 9 Darwin)
    that teams can compose into their own configurations via flake input.
 
 ## Layer Architecture
