@@ -110,14 +110,60 @@ commit freely.
 **Scope = PUBLIC nixcfg docs.** Corporate onboarding (corp-wsl / corp-darwin specifics) is
 tracked in nixcfg-work; a public doc may POINT to it but must carry no corporate detail.
 
-**M-C backlog (LIVING — a survey agent is verifying + expanding this; seed items):**
-- `docs/DISTRIBUTION.md`: cover the newer artifacts (Mac-VM aarch64 qcow2 `image-vm-dev-team`,
-  EC2/Graviton AMIs, `nixos-dev-team-vm` host) + a followable consumption path for EACH shape.
-- `docs/SHARED-MODULES.md`: reconcile the module-count drift (47 vs 16+29+9=54), add missing
-  rows (awscli, pulumi, jfrog-cli), confirm the platform-compatibility matrix.
-- Add a "start here" learning on-ramp for a Nix newcomer (what a flake/module/host means *here*,
-  the layer model, how to read the dendritic pattern) — the biggest approachability gap.
-- (Verified/expanded backlog appended by the survey agent below.)
+**M-C backlog (LIVING — verified against code 2026-08-20; re-verify each before editing).**
+GROUND TRUTH to fix everywhere: `shared-modules.nix` exports **57 modules = 16 NixOS + 32 HM
++ 9 Darwin**; `nixos-configurations.nix` registers **10 NixOS hosts**, `darwin-configurations.nix`
+**2 Darwin hosts** (`macbook-air`, `powerbook`). Every doc currently disagrees, differently.
+
+P1 (actively misleading / blocks a teammate):
+- **Module counts contradict across 4 docs** (README "54", DISTRIBUTION "47", SHARED-MODULES
+  "16+29+9=54", ARCHITECTURE "54"). Fix all to **57 (16/32/9)**; see the SSOT idea below.
+- **SHARED-MODULES HM section says 29 but code exports 32** — missing rows for `home-wsl`,
+  `home-darwin`, `jfrog-cli` (a teammate can't cherry-pick a module not in the catalog;
+  `home-wsl`/`home-darwin` are the real composition layers). Bump header + add the 3 rows.
+- **Image OUTPUTS undocumented as consumable artifacts.** `packages.nix` exports
+  `image-proxmox-dev-team`, `image-ec2-dev-team`(+`-graviton`), `image-wsl-dev-team`, and the
+  aarch64 **`image-vm-dev-team` (Mac-VM qcow2)** — DISTRIBUTION gives NO `nix build` for any,
+  and the Mac-VM qcow2 consumption path exists nowhere. Add a "prebuilt image outputs" table
+  (artifact→attr→arch→build cmd→result) + a Mac-VM/UTM walkthrough.
+- **README host tables wrong:** missing `nixos-dev-team-vm` + `nuc-apt-repo` (NixOS) and
+  `powerbook` (Darwin); `mbp` mislabeled "Intel MacBook Pro/x86_64" but is an x86_64-linux
+  NixOS host. Fix rows + label.
+
+P2 (stale/incomplete):
+- ARCHITECTURE stats stale: "8 NixOS hosts"→10, "1 Darwin"→2, module total→57.
+- DISTRIBUTION + README CI-stage counts hardcoded ("26/14/23/3/20/6") and drift-prone — verify
+  against `flake-parts/{tests,vm-tests,github-actions}.nix` or replace with "enumerated by CI".
+- SHARED-MODULES "Bundle Composition" boxes drift from the export comments in `shared-modules.nix`
+  (`home-dev-team` understates its contents; `home-enterprise` omits members) — reconcile.
+- Darwin `system-desktop` row is meaningless on macOS — clarify what it actually configures.
+- WSL-TEAM-QUICKSTART SCM section mentions only `glab`/GitLab; repo is on GitHub + ships
+  `github-auth` — add `gh`.
+
+P3 (pedagogy / approachability — the teaching-example goal):
+- **No "start here" on-ramp for a Nix newcomer** (README "Who This Is For" has no learner row;
+  DISTRIBUTION assumes fluency). Add an annotated tour: `flake.nix`→import-tree auto-discovery→
+  dendritic `flake.modules.*`→one worked module (e.g. `programs/git`)→compose→build, linking nix.dev.
+- **Dendritic pattern + `[N]`/`[D]` host-dir convention never explained** — add a "how this repo
+  is wired" section / glossary (dendritic, `[N]`/`[D]`, import-tree, bundle vs feature module, RFM).
+- **SHARED-MODULES has no "required config / key options" per module** — turn the name list into
+  a usable API reference (option namespaces already in the export comments).
+- Tarball "~1.8 GiB" size asserted without provenance — mark measured-as-of / derive from CI.
+
+Structural / high-leverage (each kills several rows):
+- **Single source of truth for counts:** emit counts from a `nix eval` over `shared-modules.nix`
+  into a docs include, OR a CI lint that greps the 4 docs and fails on mismatch. Kills the 47/54/57
+  problem permanently.
+- **`docs/LEARNING-NIX-HERE.md`** (or README section): one real module walked end-to-end — makes
+  the repo a genuine exemplar, not a reference dump.
+- **Artifact-topology diagram:** `host → build output → consumer` (e.g. `nixos-dev-team-vm`→qcow2→
+  Mac/UTM; `nixos-wsl-dev-team`→`.wsl`→Windows; `-graviton`→AMI→EC2) — answers "what do I build for
+  my platform?" which prose can't.
+- **Per-audience TOC** (README "Who This Is For") extended to all 4 audiences + every artifact shape,
+  as the canonical entry other docs link back to. Plus a repo-wide **glossary**.
+- **Consumption completeness matrix** `(artifact shape) × (consumption path)` — verified gaps today:
+  Mac-VM qcow2 (no path), Graviton/EC2 AMI (no build+deploy), Proxmox VMA (prose-only). Filling it
+  makes "how a teammate consumes this" true for EVERY artifact, not just `.wsl`.
 
 ## Cross-cutting housekeeping
 - **H1 — doc refresh:** `DISTRIBUTION.md`/`SHARED-MODULES.md` to cover Mac-VM qcow2, EC2/Graviton,
