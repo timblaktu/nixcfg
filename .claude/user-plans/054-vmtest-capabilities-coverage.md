@@ -130,7 +130,7 @@ builtins.attrNames` shows: **GONE** = the 12 standalone evals + 20 `eval-hm-modu
 Net check count drops from 106 to ~59 (exact delta reconciled during execution; the named GONE/PRESENT lists
 are the real gate, not the absolute number). x86_64 and aarch64 attrName sets remain mirrored. Committed.
 
-### P5b — nspawn-fidelity spike `TASK:PENDING` (dep P4 — COMPLETE; MUST precede P5c)
+### P5b — nspawn-fidelity spike `TASK:IN_PROGRESS` (dep P4 — COMPLETE; MUST precede P5c)
 "Verify before migrating." A short, throwaway-friendly proof that `mkContainerTest` (nspawn, 053 T6) can host
 the three semantics P5c wants to move off QEMU. Add temporary spike checks (may be removed/absorbed in P5c):
 (i) **HM activation** — a container that reaches `home-manager-<user>.service` and finds one generated
@@ -175,7 +175,7 @@ Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — nixcfg-work Tier-A audit in VMTEST-AUDIT.md; backend=aggressive-nspawn; renames=both; Tier-0=12-host collapse (add nixos-wsl-dev-team); eval-hm-module-*=consolidate (see "P3 decisions") |
 | P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-TARGET-DESIGN.md` (AGREED); Q1-Q4 signed off (see "P4 decisions") |
 | P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:COMPLETE 2026-08-21 — 106→60 checks (x86/aarch64 mirrored); flake check --no-build exit 0; 3 rewrites + 4 new/merged gates build+pass (see "P5a execution") |
-| P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P4) |
+| P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:IN_PROGRESS (dep P4) — started 2026-08-21 on pa161878-nixos (KVM+nspawn present) |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
