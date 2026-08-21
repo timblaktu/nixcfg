@@ -33,9 +33,15 @@ Per-host smoke and QEMU→nspawn migration are *outcomes* of the analysis, not t
 - **P4 Target design (Interactive):** the redesigned **2-tier** suite — Tier 0 (consolidated eval-regression
   gate) + Tier 1 (behavioral node/container VMTests), Tier-A hosts first — keep/merge/rewrite/drop/add with
   backend assignment + rationale. Bakes in the already-decided deletions/renames. Agreed with Tim before execution.
-- **P5 Execute:** implement the target — delete the 2 mocks + unsalvageable weak no-ops; rename
-  `build-*-dryrun`→`eval-*-toplevel`; consolidate `eval-*`→`regression-test`; merge the SSH-2223 triple;
-  write new Tier-1 behavioral tests for Tier-A hosts.
+- **P5 Execute (split into P5a/P5b/P5c — Tim, 2026-08-21):** implement the agreed design
+  (`docs/VMTEST-TARGET-DESIGN.md`) in three de-risked sub-steps. **P5a** = Tier-0 eval-regression
+  consolidation (pure eval, low-risk, single `nix flake check --no-build` gate): expand `regression-test`,
+  create `eval-hm-modules` + `eval-nixos-modules`, rename the 8 `build-*-dryrun`, merge the SSH-2223 triple,
+  delete the no-ops, rewrite the 3 salvage checks. **P5b** = nspawn-fidelity SPIKE (own step, before the
+  bulk migration): prove `mkContainerTest` can host HM activation + sops-nix activation (+ multi-node
+  isolation) so P5c's backend assignments are evidence-based, not assumed. **P5c** = Tier-1 behavioral
+  refactor (dep P5b): delete the 2 mocks, drop `vm-yazi`, merge the two stacks → `vm-compose-stack`, migrate
+  the boot-independent tests to nspawn per the spike findings, add `vm-wsl-dev-team-layers`.
 - **P6 CI + nixcfg-work:** wire the redesigned suite onto the KVM runners (both arches; QEMU node tests are
   first-class in CI, nspawn an opt-in speedup) and carry the cohesive approach into nixcfg-work's corp hosts.
 - **P7 Backlog (deferred):** `nuc-apt-repo` (aptly-repo + apt-cacher-ng), `mss-clamp`, enterprise/
@@ -94,6 +100,72 @@ What this task covers (a collaborative working session over `docs/VMTEST-AUDIT.m
 and (c) the confirmed-or-revised P3-P6 roadmap. No code changes. P3 does not start until this is recorded
 and Tim has signed off.
 
+### P5a — Tier-0 eval-regression consolidation `TASK:PENDING` (dep P4 — COMPLETE)
+Portable, **eval-only, no boot** — the low-risk half of the execution. Source of truth for every change:
+`docs/VMTEST-TARGET-DESIGN.md` §T0.1-T0.9. Edits `modules/flake-parts/tests.nix` only. Do it in this order,
+`nix flake check --no-build` after each group (idempotent: check-before-edit; a resumed run converges):
+1. **Expand `regression-test`** (T0.1 + folded `config-snapshot-validation`): add `nixos-wsl-dev-team`
+   `system.stateVersion`; add `home.username` for the 4 HM configs (parity); add the
+   `stateVersion == "24.11"` equality assertions for thinky-nixos/potato/nixos-wsl-minimal/mbp.
+2. **Create `eval-hm-modules`** (T0.2) folding all **20** `eval-hm-module-*`; **create `eval-nixos-modules`**
+   (T0.3) folding the **6** `eval-nixos-module-*` (per-layer `extraConfig` as noted).
+3. **Rename** the 8 `build-*-dryrun` → `eval-*-toplevel`/`-tarball`/`eval-images-*` (T0.4), preserving their
+   `hasProxmox`/`hasAmazon` asserts.
+4. **Merge the SSH-2223 triple** (T0.5): `ssh-service-configured` + `cross-module-wsl-base` +
+   `module-wsl-settings-integration` → one `eval-wsl-settings-*` check keeping the openssh-port==sshPort and
+   userName==defaultUser invariants.
+5. **Delete** the 12 standalone host/config evals (folded into regression-test), the 20 `eval-hm-module-*`,
+   the 6 `eval-nixos-module-*`, and the no-ops: `flake-validation`, `validated-scripts-module`,
+   `ssh-public-keys-registry`, `opencode-config-validation`, `cross-module-home-manager`,
+   `cross-module-sops-base`, `config-snapshot-validation`, `unified-files-diagnostic-test`,
+   `hybrid-files-module-test`.
+6. **Rewrite to actually assert**: `tmux-picker-syntax` (run `bash -n` on the picker), `module-base-integration`
+   (assert `userGroups`, keep `userName`), `files-module-test` (assert one real generated `home.file` exists
+   with expected content). Add `activate-hm-nixvim-minimal` (T0.7, build-tier).
+**DoD (checkable):** `nix flake check --no-build` exits 0. `nix eval '.#checks.x86_64-linux' --apply
+builtins.attrNames` shows: **GONE** = the 12 standalone evals + 20 `eval-hm-module-*` + 6
+`eval-nixos-module-*` + the 9 no-ops + the 3 old SSH-2223 names + the 8 old `build-*-dryrun` names; **PRESENT**
+= `eval-hm-modules`, `eval-nixos-modules`, the 8 `eval-*-toplevel/-tarball/eval-images-*`, one
+`eval-wsl-settings-*`, and `tmux-picker-syntax`/`module-base-integration`/`files-module-test` still present.
+Net check count drops from 106 to ~59 (exact delta reconciled during execution; the named GONE/PRESENT lists
+are the real gate, not the absolute number). x86_64 and aarch64 attrName sets remain mirrored. Committed.
+
+### P5b — nspawn-fidelity spike `TASK:PENDING` (dep P4 — COMPLETE; MUST precede P5c)
+"Verify before migrating." A short, throwaway-friendly proof that `mkContainerTest` (nspawn, 053 T6) can host
+the three semantics P5c wants to move off QEMU. Add temporary spike checks (may be removed/absorbed in P5c):
+(i) **HM activation** — a container that reaches `home-manager-<user>.service` and finds one generated
+`home.file`; (ii) **sops-nix activation** — a container where a checked-in fixture secret is decrypted to
+`/run/secrets` with the expected mode/owner (mirror the `vm-sops-secrets` fixture path); (iii) **multi-node
+isolation** — two containers via `start_all` (stand-in for `vm-hm-composition-pairs`/`-module-isolation`).
+**DoD (checkable):** each of the three either **builds+passes** under `nix build '.#checks.<sys>.<spike>'`
+(→ that semantic is nspawn-safe) **or** produces a recorded, specific failure. Append a **"P5b spike findings"**
+subsection to this plan's Session log stating, per semantic, nspawn-OK vs must-stay-QEMU + the evidence.
+Those findings become P5c's authoritative backend map (overriding any `N?` guess in the design doc). Needs a
+KVM/nspawn-capable builder (present on `pa161878-nixos`); on an incapable host → ENVIRONMENT_NOT_CAPABLE.
+
+### P5c — Tier-1 behavioral refactor `TASK:PENDING` (dep P5b)
+Edits `modules/flake-parts/vm-tests.nix` + deletes `tests/integration/{ssh-management,sops-deployment}.nix`.
+Backend per each test = the **P5b findings** (not the design doc's `N?` guesses). Steps (idempotent):
+1. **Delete** `vm-ssh-management` + `vm-sops-deployment` and their two `tests/integration/*.nix` files.
+2. **Drop `vm-yazi`**, folding its `init.lua`+`keymap.toml` existence asserts into `vm-hm-module-isolation`'s
+   yazi node.
+3. **Merge** `vm-full-cli-stack` + `vm-dev-team-stack` → one parameterized `vm-compose-stack` (param =
+   `system-cli` layer vs real `nixos-dev-team` host module with grub/disk forced off, `/`=tmpfs); union of
+   asserts runs per parameterization.
+4. **Migrate to nspawn** every test P5b proved safe (candidates: `vm-system-type-default`, `vm-user-config`,
+   `vm-shell-env`, `vm-development-tools`, `vm-git-advanced`, `vm-neovim`, `vm-tmux`, `vm-hm-activation`,
+   `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-sops-secrets`, `vm-compose-stack`); rewrite any
+   `sshd.service` assert to the socket form. **Keep QEMU**: `vm-boot-minimal`, `vm-system-type-cli`,
+   `vm-system-type-desktop`, `vm-nspawn-smoke`, `vm-ssh-service`, `vm-dev-team-vm-smoketest`.
+5. **Add `vm-wsl-dev-team-layers`** (nspawn): compose `system-cli + wsl-dev-team + wsl-enterprise` +
+   `monitoring` + `mss-clamp` — first behavioral coverage of `monitoring`/`mss-clamp` (the Tier-A WSL stack).
+**DoD (checkable):** `nix flake check --no-build` exits 0. attrNames show: **GONE** = `vm-ssh-management`,
+`vm-sops-deployment`, `vm-yazi`, `vm-full-cli-stack`, `vm-dev-team-stack`; **PRESENT** = `vm-compose-stack`,
+`vm-wsl-dev-team-layers`. The two `tests/integration/*.nix` files no longer exist. The retained-QEMU set is
+unchanged. Representative build-verify (heavy full-suite VM builds are CI/P6, not this DoD): `nix build
+'.#checks.x86_64-linux.vm-nspawn-smoke'` passes AND at least one newly-migrated nspawn test builds+passes.
+Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
+
 ## Progress tracking
 | ID | Task | Kind | Status |
 |----|------|------|--------|
@@ -102,8 +174,10 @@ and Tim has signed off.
 | P2 | **Audit review & roadmap sign-off** — review findings + confirm/revise P3-P6 sequence | Interactive (gate) | TASK:COMPLETE 2026-08-21 — findings dispositioned, 2-tier priority + both-repos/CI-first framing settled, roadmap revised to P3-P7 (see "P2 review decisions") |
 | P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — nixcfg-work Tier-A audit in VMTEST-AUDIT.md; backend=aggressive-nspawn; renames=both; Tier-0=12-host collapse (add nixos-wsl-dev-team); eval-hm-module-*=consolidate (see "P3 decisions") |
 | P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-TARGET-DESIGN.md` (AGREED); Q1-Q4 signed off (see "P4 decisions") |
-| P5 | Execute the refactor (conversions, new tests, deletions, renames, consolidations) | 1 · portable | TASK:PENDING (dep P4) ← **/next-task starts here** |
-| P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5) |
+| P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:PENDING (dep P4) ← **/next-task starts here** |
+| P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P4) |
+| P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
+| P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 
 ## Inputs already gathered this session (feed P1-P4)
@@ -286,3 +360,13 @@ stacks→1, add `vm-wsl-dev-team-layers` for the WSL daily-driver layer stack in
 `vm-system-type-cli`), graphics (`vm-system-type-desktop`), real cross-node SSH (`vm-ssh-service`), and the
 shipped-image gate (`vm-dev-team-vm-smoketest`, re-exported into nixcfg-work CI). No coverage dropped
 silently — see the design doc's "Coverage-preservation ledger". P5 executes this; no code changed in P4.
+
+**P4 close-out verification (2026-08-21).** Before declaring P4 done, cross-checked the design against the
+live flake (`nix eval '.#checks.x86_64-linux' --apply builtins.attrNames` = 106): all 34 check names the
+design proposes to drop/rename/merge exist. Found + fixed ONE inaccuracy — `eval-hm-module-*` is **20**, not
+18 (corrected in the design doc + this plan). Then, at Tim's direction, **split P5 into P5a/P5b/P5c with
+checkable DoDs** (see Task definitions): P5a = Tier-0 eval consolidation (low-risk, eval-only, next up);
+P5b = nspawn-fidelity spike (verify HM-activation + sops-nix + multi-node isolation under `mkContainerTest`
+BEFORE migrating); P5c = Tier-1 behavioral refactor (dep P5b, backend map from the spike). P6 now deps
+P5a+P5c. P5a and P5b both depend only on P4 (actionable now); P5a is ordered first as the intended
+`/next-task` target, P5b must precede P5c.
