@@ -29,7 +29,7 @@ Per-host smoke and QEMU→nspawn migration are *outcomes* of the analysis, not t
 
 ## Task definitions
 
-### P1 — Parallel test-suite audit `TASK:PENDING` (run as a multi-agent Workflow — Tim opted in)
+### P1 — Parallel test-suite audit `TASK:IN_PROGRESS` (run as a multi-agent Workflow — Tim opted in)
 **Execute this as a `Workflow` (multi-agent), not inline.** Tim has explicitly authorized the parallel
 audit; the whole-suite scope (100+ checks across both repos, cross-referenced against ~57 modules)
 is exactly the decompose-and-cover-in-parallel case.
