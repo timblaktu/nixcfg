@@ -87,7 +87,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:COMPLETE 2026-08-20 (rescoped) — eligibility MAP done (21-test inventory + API pinned, see Findings T2 addendum); empirical WSL2 smoke run + GHA/GitLab runner probes **deliberately deferred WITH the test-migration workstream** (T4/T6) per the 2026-08-20 session-2 re-sequencing (repoint-first; test suite = thin regression net) |
 | T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:COMPLETE 2026-08-20 (session 4) — DoD MET + authoritatively verified. Both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix `b6e6bf3`; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed `984df0c`+input-bump `35e024e`); ancillary community inputs bumped `dd0cff1`; **nixpkgs-stable `nixos-24.11`→`nixos-26.05` bumped `7c056ca`** (Tim decision session 4). **`nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, 47 non-blocking deprecation warnings)** + aarch64 graviton toplevel evals clean separately. Deferred non-DoD coordination items promoted to **T7** (`timblaktu/*` fork bumps) + **T8** (merge→main + nixcfg-work pin). See Findings T3 session-3/session-4. |
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | **Interactive (parked)** | TASK:PENDING — **PARKED**: do NOT auto-execute. Un-parking is a Tim decision (`USER_INPUT_REQUIRED`) — deferred per 2026-08-20 session-2 (low regression value); revisit after T8 merge. Marked Interactive so `/next-task` stops-and-asks instead of running the migration. Map ready in Findings T2 addendum. (dep: T2✓) |
-| T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:IN_PROGRESS 2026-08-20 (session 6) |
+| T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:COMPLETE 2026-08-20 (session 6) — **DOCUMENT-ONLY** (Tim's call). `system.nix` solves a problem nixcfg doesn't have (already flake-based + channel-free; teammates already get a zero-Nix path via the `.wsl` image). Added a one-paragraph note to `docs/DISTRIBUTION.md`. See Findings T5. |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | **Interactive (parked)** | TASK:PENDING — **PARKED** with T4: do NOT auto-execute; un-parking is a Tim decision (`USER_INPUT_REQUIRED`). (dep: T4) |
 | T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:COMPLETE 2026-08-20 (session 5) — **all 3 fork inputs already at their tracked-branch HEADs (locked rev == remote HEAD); no `flake.lock` bump possible/needed.** `nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, unchanged lock, docling resolves to 2.47.1). Two upstream-edit follow-ups NOTED (not silently skipped) — see Findings T7. |
 | T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:PENDING — split out of T3; DEFERRED by Tim (session 4). Cross-repo blast radius (corp hosts consume nixcfg `main`); guardrail: confirm w/ Tim before executing. |
@@ -349,6 +349,47 @@ removal task, not a `flake.lock` bump):**
    provides is unaffected by the root bump. Rebasing `c5` onto newer nixpkgs-esp-dev upstream is a
    separate fork-maintenance task, not required here.
 
+### T5 — `system.nix` / channel-free consumption evaluation (2026-08-20, session 6)
+
+**Decision: DOCUMENT-ONLY** (Tim, via /next-task). Recommendation and rationale below; the
+one-paragraph teammate-facing note landed in `docs/DISTRIBUTION.md` (new "A Note on `system.nix`"
+subsection under Option C).
+
+**What `system.nix` is (source-verified, not from memory).** Release note rl-2605 §17 (read via the
+Read tool against the pinned nixpkgs store path `/nix/store/rw3xm39…-source/nixos/doc/manual/
+release-notes/rl-2605.section.md`, because Bash `rg`/`grep` token-corrupts `system.nix`→`n` in this
+env — the same corruption class noted in T3 session-3): an alternative entry point to
+`configuration.nix`/`flake.nix` that builds a NixOS system **without `nix-channel`**. The file
+evaluates to a NixOS system derivation (or an attrset of them, selected with `--attr`); the canonical
+form pins nixpkgs via `builtins.fetchTarball` then `import "${nixpkgs}/nixos" { configuration =
+./configuration.nix; }`. Default location `/etc/nixos/system.nix` (overridable via the
+`<nixos-system>` search path); `nixos-rebuild`/`nixos-install` also load it from the CWD (with
+`--attr`) or `--file <dir>`.
+
+**Does it buy nixcfg anything? — essentially no (three angles):**
+1. **No-flakes consumption path for teammates.** nixcfg is a flake-parts *dendritic* flake — modules
+   live in the `flake.modules.*` namespace wired by `import-tree`, NOT as plain importable NixOS
+   module paths. There is no channel-style `${nixcfg}/nixos` entry point and `system.nix` doesn't
+   create one. A teammate refusing flakes is already better served by DISTRIBUTION.md **Option A**
+   (pre-built `.wsl` image, zero Nix knowledge). `system.nix` targets a near-empty niche
+   ("build-from-source + customize, but refuses flakes"); building a parallel non-flake export
+   surface to serve it is real maintenance for ~nobody.
+2. **Tightening `nixpkgs.flake.source` for pinned non-flake builds.** No in-repo usage
+   (`rg 'flake\.source|nixpkgs\.flake'` = 0 hits outside flake.lock); nixcfg already pins everything
+   via `flake.lock`. Nothing to gain.
+3. **Channel-free hygiene.** Re-confirmed T1's audit under the current tree: the repo is channel-free
+   for its own eval. Residual `nix-channel` usages are all orthogonal to `system.nix` and unremoved
+   by it: `modules/system/settings/wsl-enterprise/wsl-enterprise.nix:215` (adds a *nixos-wsl* channel
+   INSIDE the shipped WSL image — image-internal, not nixcfg's eval), `pkgs/nixvim-anywhere/lib/
+   {nix,backup}.sh` (by-design portable installer for non-flake consumers), and cosmetic
+   `import <nixpkgs>` default args in `shell.nix:1` + `pkgs/default.nix:2` (only bind when invoked
+   outside a flake).
+
+**Outcome.** Document-only: DISTRIBUTION.md now points teammates at `system.nix` as an *upstream
+option for their own non-flake NixOS configs*, explicitly NOT a nixcfg consumption path, and steers
+flake-averse teammates to Option A. No nixcfg core change; no follow-up task list. Revisit only if a
+concrete teammate demand for a non-flake nixcfg path appears.
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
@@ -406,7 +447,7 @@ tests and record the delta.
 measured speedup/RAM table is recorded here; ineligible tests are explicitly listed as
 intentionally-still-QEMU. No test logic (Python `testScript`) was rewritten, only infra config.
 
-### T5 — Evaluate `system.nix` / channel-free consumption `TASK:PENDING`  (dep: T3, Interactive)
+### T5 — Evaluate `system.nix` / channel-free consumption `TASK:COMPLETE`  (dep: T3, Interactive)
 Assess whether `system.nix` buys nixcfg anything: (a) a no-flakes consumption path for teammates
 who don't want flakes; (b) tightening `nixpkgs.flake.source` for pinned non-flake builds. Since the
 repo is already flake-based, the likely outcome is "document as an option, don't adopt in core" —
@@ -487,3 +528,12 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   Noted two out-of-scope upstream follow-ups (docling stale-fork: drop-if-PR#184-merged or rebase;
   esp-dev `c5` rebase) — both Interactive, deferred. **T7 marked COMPLETE.** Remaining: T5 (system.nix
   eval), T8 (merge→main + pin, deferred), T4/T6 (parked nspawn migration). See Findings T7.
+- 2026-08-20 (session 6 — T5 CLOSED, document-only): Tim (via /next-task) chose T5, then decided
+  **document-only** for the final call. Verified `system.nix` (rl-2605 §17) against the pinned nixpkgs
+  store path with the Read tool (Bash grep token-corrupts `system.nix`→`n` here). Concluded it solves
+  a problem nixcfg doesn't have (already flake-based + channel-free; flake-averse teammates already get
+  a zero-Nix path via the `.wsl` image; no `${nixcfg}/nixos` entry point exists to hook). Added a
+  one-paragraph "A Note on `system.nix`" subsection to `docs/DISTRIBUTION.md` (upstream option for
+  teammates' OWN non-flake configs, NOT a nixcfg consumption path). No core change. **T5 marked
+  COMPLETE.** Remaining: T8 (merge→main + pin, deferred by Tim), T4/T6 (parked nspawn migration —
+  un-parking is a Tim decision). See Findings T5.

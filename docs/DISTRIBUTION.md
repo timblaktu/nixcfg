@@ -173,6 +173,18 @@ nix build '.#nixosConfigurations.nixos-wsl-dev-team.config.system.build.tarballB
 sudo ./result/bin/nixos-wsl-tarball-builder nixos.wsl
 ```
 
+### A Note on `system.nix` (No-Flakes NixOS)
+
+NixOS 26.05 added [`system.nix`](https://nixos.org/manual/nixos/stable/release-notes),
+an entry point that lets you configure NixOS **without channels and without flakes** —
+you pin nixpkgs with `builtins.fetchTarball` and `import "${nixpkgs}/nixos" { configuration = ./configuration.nix; }`,
+then build with `nixos-rebuild --file`/`--attr`. This is an **upstream option for your own
+machines**, not a nixcfg consumption path: nixcfg's modules are exported through flake-parts
+(the `flake.modules.*` namespace), so there is no channel-style `${nixcfg}/nixos` import target.
+Teammates who prefer to avoid flakes should use **Option A** (the pre-built `.wsl` image, zero Nix
+knowledge required); `system.nix` is only relevant if you are hand-rolling a non-flake NixOS
+config of your own and want to reference upstream nixpkgs without `nix-channel`.
+
 ## Import Script
 
 `Import-NixOSWSL.ps1` automates WSL tarball import and Windows Terminal profile
