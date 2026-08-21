@@ -88,7 +88,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:COMPLETE 2026-08-20 (session 4) — DoD MET + authoritatively verified. Both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix `b6e6bf3`; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed `984df0c`+input-bump `35e024e`); ancillary community inputs bumped `dd0cff1`; **nixpkgs-stable `nixos-24.11`→`nixos-26.05` bumped `7c056ca`** (Tim decision session 4). **`nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, 47 non-blocking deprecation warnings)** + aarch64 graviton toplevel evals clean separately. Deferred non-DoD coordination items promoted to **T7** (`timblaktu/*` fork bumps) + **T8** (merge→main + nixcfg-work pin). See Findings T3 session-3/session-4. |
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | **Interactive (parked)** | TASK:PENDING — **PARKED**: do NOT auto-execute. Un-parking is a Tim decision (`USER_INPUT_REQUIRED`) — deferred per 2026-08-20 session-2 (low regression value); revisit after T8 merge. Marked Interactive so `/next-task` stops-and-asks instead of running the migration. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:COMPLETE 2026-08-20 (session 6) — **DOCUMENT-ONLY** (Tim's call). `system.nix` solves a problem nixcfg doesn't have (already flake-based + channel-free; teammates already get a zero-Nix path via the `.wsl` image). Added a one-paragraph note to `docs/DISTRIBUTION.md`. See Findings T5. |
-| T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | **Interactive (parked)** | TASK:PENDING — **PARKED** with T4: do NOT auto-execute; un-parking is a Tim decision (`USER_INPUT_REQUIRED`). (dep: T4) |
+| T6 | nspawn container backend POC + per-host smoke seed (reframed session 6 — DECOUPLED from T4 per Tim) | Interactive | TASK:IN_PROGRESS 2026-08-20 (session 6) — **POC DELIVERED**: `mkContainerTest` helper + `vm-nspawn-smoke` test added; API proven (`runNixOSTest` + `containers.<n>`), full pipeline BUILDS (test-driver + `run-machine-nspawn` + container system). **Blocked only on one host prereq** — the run derivation requires the `uid-range` system feature (Nix `auto-allocate-uids`), which the WSL2 daemon doesn't advertise; enabling it is a root/NixOS-config decision (see Findings T6 + the recommendation). Migration of the 18 clean candidates (old T4) is now mechanical once enabled. (no longer dep T4) |
 | T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:COMPLETE 2026-08-20 (session 5) — **all 3 fork inputs already at their tracked-branch HEADs (locked rev == remote HEAD); no `flake.lock` bump possible/needed.** `nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, unchanged lock, docling resolves to 2.47.1). Two upstream-edit follow-ups NOTED (not silently skipped) — see Findings T7. |
 | T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:IN_PROGRESS 2026-08-20 (session 6) — **split T8a/T8b**. **T8a (merge feat→main): DONE + PUSHED** — clean fast-forward, `main` @ `b2dace8` (= feat HEAD + M-C docs); pushed to `origin/main` (`c07cbce → b2dace8`, 18 commits) 2026-08-20. **T8b (nixcfg-work `flake.lock` pin bump): DEFERRED** to the darwin M-A milestone (the corp-blast-radius half; corp hosts pin a rev so T8a alone doesn't move them). |
 
@@ -390,6 +390,80 @@ option for their own non-flake NixOS configs*, explicitly NOT a nixcfg consumpti
 flake-averse teammates to Option A. No nixcfg core change; no follow-up task list. Revisit only if a
 concrete teammate demand for a non-flake nixcfg path appears.
 
+### T6 — nspawn container backend POC (2026-08-20, session 6)
+
+**Reframe (Tim):** T6 decoupled from T4. Instead of first bulk-migrating the 18 existing tests, T6
+is a focused **nspawn container POC** — prove the backend end-to-end with one NEW per-host smoke
+test, which also empirically resolves the T2 unknowns and de-risks any later migration.
+
+**Candidate review (Tim's "what would we migrate / are we missing anything", verified against the
+actual 21 vm-\* tests, NOT the plan's prior list):** source-verified that **not one** of the 21
+tests asserts kernel/boot/`/dev/kvm`/`modprobe`/device-units/nested-container-exec at runtime — all
+are pure userspace (config files, `tool --version`, `su - user`, `systemctl`, service units,
+`wait_for_unit`). Two candidacy checks flipped by verification: `node_podman` (in
+`vm-hm-module-isolation`) only asserts `which podman-tui` + a config file (NO nested `podman run`) ⇒
+eligible; no test starts a real display-manager at runtime ⇒ `vm-system-type-desktop` likely
+eligible (one empirical confirm). ⇒ **18 clean userspace candidates**, **1 keep-QEMU-on-principle**
+(`vm-boot-minimal` — a container reaching `multi-user.target` doesn't prove *bootability*), **2
+verify** (`vm-system-type-desktop`, `vm-dev-team-vm-smoketest`). Biggest wins = multi-node tests:
+`vm-hm-module-isolation` (8 nodes → 8 containers) + the two 2-node SSH tests (networking proof). The
+one least-certain candidate to verify empirically during migration = `vm-sops-secrets` (sops-nix
+`/run/secrets` activation). Migration ADDS no coverage — it makes the same assertions cheaper
+(RAM/wall-clock); the only thing a container can't catch (kernel/boot/device/nesting) is exactly
+what the QEMU-kept tests cover, so nothing useful is lost.
+
+**API — source-verified against the pinned nixpkgs (store `…-3a2vdn5i7vd2wl654xs8nb52jf1v6cbh-source`):**
+- The repo's `mkVmTest`/`mkHmModuleTest` wrap `pkgs.testers.nixosTest` = the LEGACY
+  `simpleTest`/`testing-python.nix` path, which has **NO `containers` option**.
+- The nspawn backend lives ONLY on `pkgs.testers.runNixOSTest` (= `nixos.runTest`, the module-based
+  `nixos/lib/testing/` framework). `nixos/lib/testing/nodes.nix:179` declares `containers =
+  mkOption { type = lazyAttrsOf config.container.type; … }` (base `baseNspawnOS`) alongside `nodes`
+  (QEMU); `allMachines` merges both (name-collision-guarded). To run a machine on nspawn you place it
+  under `containers.<name>` (Python `testScript` unchanged — names persist via `allMachines`).
+
+**What was built (commit — see below):**
+- **`mkContainerTest`** helper in `modules/flake-parts/vm-tests.nix` — parallel to `mkVmTest`, wraps
+  `pkgs.testers.runNixOSTest` with `containers.machine` (auto-enables nspawn + the host `uid-range`
+  requirement); drops `virtualisation.memorySize` (QEMU-only). API-ADAPTATION comment inline.
+- **`vm-nspawn-smoke`** check — a deliberate TWIN of `vm-system-type-cli` (same `system-cli` module +
+  same userspace assertions) so the ONLY variable is the backend ⇒ clean apples-to-apples
+  wall-clock/RAM comparison.
+
+**Empirical result (the POC's real deliverable):** `nix build '.#checks.x86_64-linux.vm-nspawn-smoke'`
+on the WSL2 host built the **entire** pipeline successfully — the container system
+(`nixos-system-machine-test`), the nspawn run-script (`run-machine-nspawn`), and the test driver
+(`nixos-test-driver-vm-nspawn-smoke`: type-check + lint **All checks passed**). It then stopped at
+exactly ONE gate:
+```
+error: Cannot build container-test-run-vm-nspawn-smoke.drv
+       Reason: missing system features
+       Required features: {kvm, nixos-test, uid-range}
+       Available features:  {benchmark, big-parallel, kvm, nixos-test}
+```
+⇒ **The nspawn backend is fully functional on the current 26.05 pin; the sole prerequisite to
+actually RUN containers is the Nix `uid-range` system feature**, which requires the daemon setting
+`auto-allocate-uids = true` (+ `experimental-features += auto-allocate-uids`). This is exactly the
+"host auto-allocate-uids" gate T2 predicted, now pinned precisely. A trusted-user client override
+does NOT work (`Ignoring setting 'auto-allocate-uids' because experimental feature … is not
+enabled`) — it is a **daemon-level (root) change**.
+
+**Recommendation / next step (Interactive → USER_INPUT_REQUIRED):** enable in the repo's base nix
+daemon config — `modules/system/types/1-minimal/minimal.nix` (where `nix.settings.experimental-features`
+is set) — add:
+```nix
+nix.settings.experimental-features = [ … "auto-allocate-uids" ];
+nix.settings.auto-allocate-uids = true;
+```
+This affects the **shared base module ⇒ fleet-wide** (all NixOS hosts gain nspawn-test capability),
+so it is Tim's call (scope: base module vs dev-host-only vs CI-runner-only). Once enabled + a
+`nixos-rebuild switch`, re-run `nix build '.#checks.x86_64-linux.vm-nspawn-smoke'` to get the first
+green container run + speedup number, then add it to the CI matrix
+(`.github/workflows/ci.yml` — CI builds only matrix-listed checks, so `vm-nspawn-smoke` is currently
+safe/inert there) and proceed to migrate the 18 clean candidates. **Guardrail:** `vm-nspawn-smoke`
+is registered as a check but intentionally NOT in the CI matrix and cannot build without the host
+prereq — `nix flake check --no-build` (the green gate) evals it fine; do NOT add it to CI until
+`auto-allocate-uids` lands.
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
@@ -541,3 +615,15 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   (nixcfg-work pin) stays DEFERRED**; then landed the H1/M-C image-outputs docs on `main`
   (DISTRIBUTION "Prebuilt Image Outputs" section). Remaining: push `main` (Tim confirm), M-C backlog,
   T4/T6 parked nspawn. See super-plan 052 session log 2026-08-20.
+- 2026-08-20 (session 6 cont. — T6 nspawn POC): Tim chose non-docs work and reframed T6 as an
+  **nspawn container POC decoupled from T4** ("per-host smoke via containers; don't need to migrate
+  the existing suite first"). Did the candidate review he asked for (verified all 21 vm-\* tests are
+  pure userspace ⇒ 18 clean candidates, 1 keep-QEMU, 2 verify; `node_podman` is config-only ⇒
+  eligible). Source-verified the API (`runNixOSTest`+`containers`, NOT the legacy `nixosTest` the
+  repo's `mkVmTest` wraps). Built **`mkContainerTest`** + **`vm-nspawn-smoke`** (twin of
+  `vm-system-type-cli`): the whole nspawn pipeline BUILDS on the WSL2 host (driver type-check+lint
+  pass, container system + `run-machine-nspawn` built) — stops at exactly one gate, the `uid-range`
+  system feature (needs daemon `auto-allocate-uids`; client override rejected ⇒ root/NixOS-config
+  change). **nspawn backend proven functional on the current pin; one fleet-scope host-config
+  decision (auto-allocate-uids) is all that's left to run containers.** Chose "POC only, then
+  reassess". See Findings T6.

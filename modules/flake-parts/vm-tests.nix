@@ -77,6 +77,47 @@ in
           inherit testScript;
         };
 
+      # mkContainerTest: like mkVmTest, but runs the machine on the systemd-nspawn
+      # CONTAINER backend (NixOS 26.05 test-driver feature) instead of a QEMU VM.
+      #
+      # WHY a separate helper (not a flag on mkVmTest): mkVmTest wraps
+      # pkgs.testers.nixosTest — the legacy `simpleTest`/testing-python.nix path,
+      # which does NOT expose the `containers` option. The nspawn backend lives only
+      # on pkgs.testers.runNixOSTest (the module-based nixos/lib/testing framework),
+      # where a top-level `containers.<name>` attr sits alongside `nodes.<name>`.
+      # Placing a machine under `containers` auto-enables nspawn
+      # (driver.nix: enableNspawn = containers != {}) and the host `uid-range`
+      # requirement (run.nix — nspawn needs pid 0 inside the sandbox).
+      #
+      # CONSTRAINT: a container shares the host kernel — userspace systemd only, no
+      # initrd/bootloader/kernel-modules/KVM. Use for service/user/package/HM
+      # smoke assertions; keep boot/kernel/hardware semantics on mkVmTest.
+      #
+      # Args mirror mkVmTest MINUS `memory` (containers take no
+      # virtualisation.memorySize). `containers` overrides the single-machine
+      # shorthand when a multi-container topology is needed.
+      mkContainerTest =
+        { name
+        , description ? "Container test: ${name}"
+        , modules ? [ ]
+        , containers ? null
+        , testScript
+        , extraConfig ? { }
+        ,
+        }:
+        pkgs.testers.runNixOSTest {
+          name = "vm-${name}";
+
+          containers = if containers != null then containers else {
+            machine = { config, pkgs, ... }: {
+              imports = modules;
+              networking.firewall.enable = false;
+            } // extraConfig;
+          };
+
+          inherit testScript;
+        };
+
       # mkHmModuleTest: Create a VM test for Home Manager module(s)
       #
       # Provides system-default + home-manager NixOS integration + home-minimal
@@ -247,6 +288,42 @@ in
             machine.succeed("which nvim")
 
             # Tmux available
+            machine.succeed("which tmux")
+          '';
+        };
+
+        # === NSPAWN CONTAINER BACKEND POC (plan 053 T6) ===
+
+        # vm-nspawn-smoke: proof-of-concept for the NixOS 26.05 systemd-nspawn
+        # container test backend. Deliberately a TWIN of vm-system-type-cli above —
+        # same `system-cli` module + same userspace assertions — so the ONLY
+        # difference is the backend (mkContainerTest/runNixOSTest + containers.machine
+        # vs mkVmTest/nixosTest + nodes.machine). That makes it a clean apples-to-apples
+        # wall-clock/RAM comparison and proves the nspawn toggle end-to-end.
+        # NOTE (host prereq): the nspawn backend requires the builder to grant the
+        # `uid-range` system feature (Nix `auto-allocate-uids`); see plan 053 Findings T6.
+        vm-nspawn-smoke = mkContainerTest {
+          name = "nspawn-smoke";
+          description = "POC: system-cli userspace smoke on the systemd-nspawn container backend";
+          modules = [ self.modules.nixos.system-cli ];
+          extraConfig = {
+            systemDefault.userName = testUsername;
+          };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # SSH daemon running (cli layer enables sshd by default) — userspace service
+            machine.wait_for_unit("sshd.service")
+
+            # Inherits default: user exists
+            machine.succeed("id ${testUsername}")
+
+            # Dev tools present (enableDevTools = true by default)
+            machine.succeed("git --version")
+            machine.succeed("which jq")
+            machine.succeed("which fzf")
+            machine.succeed("which eza")
+            machine.succeed("which nvim")
             machine.succeed("which tmux")
           '';
         };
