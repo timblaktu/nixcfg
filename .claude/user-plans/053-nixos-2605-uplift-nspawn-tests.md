@@ -85,10 +85,12 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T0 | Decide working branch + release target | Interactive | TASK:COMPLETE 2026-08-20 — branch `feat/nixos-26.05` (created+pushed); target = **fresh `nixos-unstable`** (Tim: continues wanting latest features) |
 | T1 | Audit current input pins + channel usage | 1 · portable | TASK:COMPLETE 2026-08-20 — see Findings T1 |
 | T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:COMPLETE 2026-08-20 (rescoped) — eligibility MAP done (21-test inventory + API pinned, see Findings T2 addendum); empirical WSL2 smoke run + GHA/GitLab runner probes **deliberately deferred WITH the test-migration workstream** (T4/T6) per the 2026-08-20 session-2 re-sequencing (repoint-first; test suite = thin regression net) |
-| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — **DoD MET (session 3, authoritatively verified):** both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix, in-repo; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed+input-bumped) + ancillary community inputs bumped ⇒ **`nix flake check --no-build` = `all checks passed!` (exit 0)**: all ~100 x86_64-linux checks + packages + images + darwinConfigurations, zero errors (41 non-blocking deprecation warnings only). Kept IN_PROGRESS only because remaining items are Interactive/coordination and Tim may want them inside T3: nixpkgs-stable URL 24.11→25.11/26.05 **decision**, `timblaktu/*` fork bumps, merge→main + nixcfg-work pin (guardrail: confirm w/ Tim). Tim may elect to mark COMPLETE now (DoD is satisfied). See Findings T3 session-3. |
+| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:COMPLETE 2026-08-20 (session 4) — DoD MET + authoritatively verified. Both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix `b6e6bf3`; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed `984df0c`+input-bump `35e024e`); ancillary community inputs bumped `dd0cff1`; **nixpkgs-stable `nixos-24.11`→`nixos-26.05` bumped `7c056ca`** (Tim decision session 4). **`nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, 47 non-blocking deprecation warnings)** + aarch64 graviton toplevel evals clean separately. Deferred non-DoD coordination items promoted to **T7** (`timblaktu/*` fork bumps) + **T8** (merge→main + nixcfg-work pin). See Findings T3 session-3/session-4. |
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | 1 · portable | TASK:PENDING — **DEFERRED (parked)** per 2026-08-20 session-2 decision (low regression value); revisit after T3 lands+merges. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING — **DEFERRED (parked)** with T4 (dep: T4) |
+| T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:PENDING — split out of T3 (user-owned repos; bump-last with coordination per CLAUDE.md). Not a T3-DoD blocker. |
+| T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:PENDING — split out of T3; DEFERRED by Tim (session 4). Cross-repo blast radius (corp hosts consume nixcfg `main`); guardrail: confirm w/ Tim before executing. |
 
 ## Findings (T1 + T2, 2026-08-20)
 
@@ -294,6 +296,28 @@ flake-parts, import-tree, nixvim, flake-utils → current HEADs. No new breakers
 3. **merge→main + nixcfg-work `flake.lock` pin bump** — cross-repo blast radius; guardrail says
    confirm with Tim before doing it. → USER_INPUT_REQUIRED.
 
+#### T3 session-4 (2026-08-20) — nixpkgs-stable bumped, T3 marked COMPLETE
+
+Tim's session-4 decisions (via /next-task): (1) **mark T3 COMPLETE** now (autonomous DoD met);
+(2) **bump `nixpkgs-stable` `nixos-24.11`→`nixos-26.05`**; (3) **defer** the merge→main + nixcfg-work
+pin. Deferred coordination items split into **T7** (fork bumps) + **T8** (merge+pin) so the T3 cursor
+closes cleanly.
+
+**nixpkgs-stable bump (commit `7c056ca`).** `flake.nix:7` URL `nixos-24.11`→`nixos-26.05` +
+`nix flake update nixpkgs-stable`: `50ab7937` (2025-06-30) → `b18a4b90` (2026-08-19, current
+stable-channel HEAD, confirmed via mcp-nixos channels: `stable → nixos-26.05`). **Blast radius nil:**
+`nixpkgs-stable` is threaded as a `specialArg` into every nixos/darwin/home builder (`lib.nix`,
+`{nixos,darwin,home}-configurations.nix`) but **no module consumes it as a function arg** (verified:
+zero `{ …nixpkgs-stable… }` module signatures repo-wide) — it is available-but-unused plumbing, so the
+bump only needed to lock+eval cleanly.
+
+**Verification (committed lock, no override):** `nix flake check --no-build --keep-going` =
+**`all checks passed!`** — full x86_64-linux surface, **0 errors**, 47 non-blocking deprecation
+*warnings* (same classes: `stdenv.isLinux/isDarwin`, `xorg.lndir`→`lndir`,
+`proxmox.qemuConf.diskSize`→`virtualisation.diskSize`). aarch64 omitted by single-system check →
+`nixos-dev-team-graviton` `toplevel.drvPath` evaluated clean separately. Log:
+`/tmp/t3-stable-bump-check.log`.
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
@@ -324,7 +348,7 @@ probe). Record gaps (e.g. "WSL2 host can't nspawn → those run QEMU locally, ns
 real probe result per runner class (or an explicit ENVIRONMENT_NOT_CAPABLE note where a runner
 class isn't reachable from the current session).
 
-### T3 — Input bump to the T0 target `TASK:IN_PROGRESS`  (dep: T0, T1 — both COMPLETE)
+### T3 — Input bump to the T0 target `TASK:COMPLETE`  (dep: T0, T1 — both COMPLETE)
 On `feat/nixos-26.05`: update `flake.nix` input refs + `nix flake update` the relevant inputs to
 fresh `nixos-unstable` HEAD (target confirmed in T0/session-2); run `nix flake check --no-build`
 and fix eval breakers **across the 10 NixOS hosts + x86_64-linux HM configs** (WSL, NixOS
@@ -369,6 +393,22 @@ CI enumerates them.
 **DoD:** new smoke checks exist + pass for each eligible host; `nix flake check` enumerates them;
 a coverage table (host → test kind → backend) is recorded. Silent gaps are logged, not hidden.
 
+### T7 — Bump remaining `timblaktu/*` forks `TASK:PENDING`  (Interactive · coordination)
+Bump the user-owned fork inputs that were intentionally left for last: `nixpkgs-docling`
+(`docling-parse-fix`), `nixpkgs-esp-dev` (`c5`), `drawio-svg-sync`. (`home-manager-wsl` and
+`nixos-wsl` were already handled in T3.) These track feature branches on Tim's own GitHub, so per
+CLAUDE.md user-owned-repo workflow, bump only with coordination and verify each consumer still evals.
+**DoD:** chosen forks bumped in `flake.lock`; `nix flake check --no-build` stays green; any fork that
+needs an upstream edit first is noted (not silently skipped).
+
+### T8 — Merge `feat/nixos-26.05`→`main` + nixcfg-work pin bump `TASK:PENDING`  (Interactive · coordination)
+Merge the completed repoint branch to `main`, then bump the `nixcfg` `flake.lock` pin **inside
+nixcfg-work** so the corp hosts consume it deliberately (mirrors the darwin-branch pin discipline).
+Cross-repo blast radius — corp hosts consume nixcfg `main`. **Guardrail: confirm with Tim before
+executing.** Deferred by Tim in session 4. **DoD:** `main` fast-forwarded/merged with the T3 work;
+nixcfg-work `flake.lock` bumped to the new nixcfg `main` rev + its `nix flake check` green; both
+recorded here + in parent 052.
+
 ## Guardrails
 Serialize nix (no concurrent evals — an input bump eval is heavy). No AI attribution. Confirm the
 merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). This plan is Mode A
@@ -402,3 +442,10 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   items are all Interactive/coordination (nixpkgs-stable URL decision, `timblaktu/*` fork bumps,
   merge->main + nixcfg-work pin). See Findings T3 session-3. Discovered + worked around Bash grep
   token-corruption (`claude-code`->`ln`) by trusting the Read tool for file content.
+- 2026-08-20 (session 4 — T3 CLOSED): Tim (via /next-task) decided: mark T3 COMPLETE, bump
+  nixpkgs-stable `nixos-24.11`->`nixos-26.05`, defer the merge. Bumped nixpkgs-stable to
+  `nixos-26.05` HEAD `b18a4b90` (commit `7c056ca`); confirmed nil blast radius (input is unused
+  specialArg plumbing); `nix flake check --no-build` = all checks passed (0 errors) + graviton
+  evals clean. **T3 marked COMPLETE.** Split the two remaining coordination items into **T7**
+  (`timblaktu/*` fork bumps) and **T8** (merge->main + nixcfg-work pin, deferred). See Findings T3
+  session-4.
