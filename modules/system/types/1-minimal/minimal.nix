@@ -83,8 +83,17 @@
             package = lib.mkDefault pkgs.nixVersions.stable;
 
             settings = {
-              # Enable modern Nix features (flakes, nix command)
-              experimental-features = [ "nix-command" "flakes" ];
+              # Enable modern Nix features (flakes, nix command).
+              # `auto-allocate-uids` (still experimental in nixVersions.stable) lets a build
+              # request a transient uid-range sandbox — REQUIRED by the systemd-nspawn NixOS
+              # test backend (26.05): container-test run derivations require the `uid-range`
+              # system feature, which the daemon only advertises when this is enabled. Fleet-wide
+              # so every NixOS host (and CI runner built from this base) can run nspawn container
+              # tests. See plan 053 Findings T6. Darwin/HM omit this (no systemd-nspawn there).
+              experimental-features = [ "nix-command" "flakes" "auto-allocate-uids" ];
+
+              # Allocate a per-build transient uid range (enables the nspawn `uid-range` feature).
+              auto-allocate-uids = lib.mkDefault true;
 
               # Optimize store to save disk space
               auto-optimise-store = lib.mkDefault true;
