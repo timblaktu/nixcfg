@@ -86,9 +86,9 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T1 | Audit current input pins + channel usage | 1 · portable | TASK:COMPLETE 2026-08-20 — see Findings T1 |
 | T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:COMPLETE 2026-08-20 (rescoped) — eligibility MAP done (21-test inventory + API pinned, see Findings T2 addendum); empirical WSL2 smoke run + GHA/GitLab runner probes **deliberately deferred WITH the test-migration workstream** (T4/T6) per the 2026-08-20 session-2 re-sequencing (repoint-first; test suite = thin regression net) |
 | T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:COMPLETE 2026-08-20 (session 4) — DoD MET + authoritatively verified. Both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix `b6e6bf3`; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed `984df0c`+input-bump `35e024e`); ancillary community inputs bumped `dd0cff1`; **nixpkgs-stable `nixos-24.11`→`nixos-26.05` bumped `7c056ca`** (Tim decision session 4). **`nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, 47 non-blocking deprecation warnings)** + aarch64 graviton toplevel evals clean separately. Deferred non-DoD coordination items promoted to **T7** (`timblaktu/*` fork bumps) + **T8** (merge→main + nixcfg-work pin). See Findings T3 session-3/session-4. |
-| T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | 1 · portable | TASK:PENDING — **DEFERRED (parked)** per 2026-08-20 session-2 decision (low regression value); revisit after T3 lands+merges. Map ready in Findings T2 addendum. (dep: T2✓) |
+| T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | **Interactive (parked)** | TASK:PENDING — **PARKED**: do NOT auto-execute. Un-parking is a Tim decision (`USER_INPUT_REQUIRED`) — deferred per 2026-08-20 session-2 (low regression value); revisit after T8 merge. Marked Interactive so `/next-task` stops-and-asks instead of running the migration. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
-| T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING — **DEFERRED (parked)** with T4 (dep: T4) |
+| T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | **Interactive (parked)** | TASK:PENDING — **PARKED** with T4: do NOT auto-execute; un-parking is a Tim decision (`USER_INPUT_REQUIRED`). (dep: T4) |
 | T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:PENDING — split out of T3 (user-owned repos; bump-last with coordination per CLAUDE.md). Not a T3-DoD blocker. |
 | T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:PENDING — split out of T3; DEFERRED by Tim (session 4). Cross-repo blast radius (corp hosts consume nixcfg `main`); guardrail: confirm w/ Tim before executing. |
 
@@ -365,7 +365,7 @@ darwin → 2026-08-16/19); lock staged. Remaining: NixOS/HM breaker triage under
 follow-on bumps (nixpkgs-stable URL→25.11/26.05, ancillary community inputs, `timblaktu/*` forks);
 re-check to green. See Findings T3.
 
-### T4 — Enable nspawn backend on eligible tests `TASK:PENDING`  (dep: T2, T3)
+### T4 — Enable nspawn backend on eligible tests `TASK:PENDING`  (Interactive/parked → USER_INPUT_REQUIRED; dep: T2, T3)
 For each T2-eligible test, flip it to the nspawn backend (the declarative switch from PR #478109 —
 confirm the exact option name against the pinned nixpkgs, do NOT guess) and add the required host
 setting (`auto-allocate-uids`, per docs PR #479968) to the test's node config. Keep ineligible
@@ -384,7 +384,7 @@ but decide explicitly with Tim, don't assume.
 follow-up task list; if not, a one-paragraph note in DISTRIBUTION.md pointing teammates at the
 option. Interactive → USER_INPUT_REQUIRED for the final call.
 
-### T6 — Expand coverage across all hosts `TASK:PENDING`  (dep: T4)
+### T6 — Expand coverage across all hosts `TASK:PENDING`  (Interactive/parked → USER_INPUT_REQUIRED; dep: T4)
 With cheap containers available, add per-host smoke tests (boots, key services up, sudo/wheel,
 expected packages present) for the 10 NixOS hosts, and the maximal-feasible darwin coverage (note:
 darwin has no NixOS test driver — its "test" is the eval-green `.drv` gate + the shipped-image
