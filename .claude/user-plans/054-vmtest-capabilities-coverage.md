@@ -226,7 +226,7 @@ to `docs/VMTEST-AUDIT.md`). Findings that drive P4/P5:
   Testability class = **eval + layer composition** (WSL cannot boot on KVM).
 - **`pa163076mac` (Darwin, "macbook", daily driver)** — HM `corp-dev-team + home-darwin + tim-corp-personal`.
   Testability class = **eval + build-dryrun + shared-module-on-Linux-proxy** (macOS cannot boot on KVM).
-- **Correction to nixcfg audit:** `modules/lib/rbw.nix` (`n`/rbw) is consumed by BOTH daily drivers (WSL via
+- **Correction to nixcfg audit:** `modules/lib/rbw.nix` (rbw) is consumed by BOTH daily drivers (WSL via
   `awscli`, and Darwin), not darwin-only. Corp HM bundles (`corp-dev-team`, `tim-corp-personal`) are the
   real Tier-A HM surface and are wholly untested.
 
