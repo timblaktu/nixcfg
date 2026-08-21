@@ -4,7 +4,7 @@
   inputs = {
     # MAIN NIXPKGS - upstream, used for 99% of packages
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
 
     # CUSTOM NIXPKGS - isolated inputs for packages needing specific fixes
     # Temporary: Only for docling-parse until PR #184 merges upstream
