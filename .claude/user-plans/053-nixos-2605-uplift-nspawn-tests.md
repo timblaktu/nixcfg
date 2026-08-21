@@ -85,7 +85,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T0 | Decide working branch + release target | Interactive | TASK:COMPLETE 2026-08-20 — branch `feat/nixos-26.05` (created+pushed); target = **fresh `nixos-unstable`** (Tim: continues wanting latest features) |
 | T1 | Audit current input pins + channel usage | 1 · portable | TASK:COMPLETE 2026-08-20 — see Findings T1 |
 | T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:COMPLETE 2026-08-20 (rescoped) — eligibility MAP done (21-test inventory + API pinned, see Findings T2 addendum); empirical WSL2 smoke run + GHA/GitLab runner probes **deliberately deferred WITH the test-migration workstream** (T4/T6) per the 2026-08-20 session-2 re-sequencing (repoint-first; test suite = thin regression net) |
-| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green (all 10 NixOS + 2 darwin hosts) | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — session-2-elevated top deliverable; started with community-core lock bump + discovery `flake check --no-build` (see Findings T3) |
+| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — community-core inputs bumped (lock staged); discovery `flake check --no-build` running; NixOS/HM breaker triage + follow-on input bumps remain (see Findings T3) |
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | 1 · portable | TASK:PENDING — **DEFERRED (parked)** per 2026-08-20 session-2 decision (low regression value); revisit after T3 lands+merges. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING — **DEFERRED (parked)** with T4 (dep: T4) |
@@ -178,6 +178,71 @@ empirical check. **Still-outstanding T2 items (deferred pending the T3-first re-
 the one real nspawn smoke run on the WSL2 host, and the GHA + hsw-infra GitLab runner probes
 (likely `ENVIRONMENT_NOT_CAPABLE` from this session — neither runner class is reachable here).
 
+### T3 — repoint (IN_PROGRESS, session 2, 2026-08-20)
+
+**Scope decision (Tim, session 2):** darwin is **OUT OF SCOPE** for this repoint's green-gate.
+Both public-repo darwin configs — **`macbook-air` AND `powerbook` — are x86 Macs Tim owns but will
+NOT maintain in this work**, and NixOS/nix-darwin **26.05 deprecates x86 darwin**. ⇒ T3's success
+gate is **the 10 NixOS hosts + the x86_64-linux HM configs eval-green**, NOT the darwin configs.
+The x86 darwin configs may break under the bump; that is acceptable and explicitly not a blocker.
+(The Apple-Silicon darwin work lives in nixcfg-work `pa163076mac` / plan 052 M-A — untouched here.)
+
+**Community-core inputs bumped** (on `feat/nixos-26.05`, ~3 months forward; lock staged, WIP):
+| input | new rev | date |
+|---|---|---|
+| nixpkgs (nixos-unstable) | `ffb3c9b700e759…` | 2026-08-19 |
+| nixpkgs-unstable | `07e1d92cdc0ed4…` | 2026-08-19 |
+| home-manager (master) | `c53d643b3737e2…` | 2026-08-19 |
+| darwin (lnl7/nix-darwin) | `4cff07de74b50e…` | 2026-08-16 |
+
+**NOT yet touched (deliberate follow-ons, still PENDING within T3):**
+- `nixpkgs-stable` = `nixos-24.11` (stale secondary) → decide bump to `nixos-25.11` or `nixos-26.05`
+  (URL edit in `flake.nix`, not just a lock update).
+- Ancillary community inputs (`sops-nix`, `disko`, `flake-parts`, `import-tree`, `nixvim`,
+  `flake-utils`, `nix-writers`) — bump after core is green to keep breaker attribution clean.
+- `timblaktu/*` forks (`nixpkgs-docling`, `home-manager-wsl`, `nixos-wsl`, `nixpkgs-esp-dev`,
+  `drawio-svg-sync`) — user-owned, track feature branches; bump only with coordination, last.
+
+**Pre-bump baselines (for cross-check):** `powerbook` drvPath was
+`pk130y2jywdaq36vh017qfpw5rvq32ir-darwin-system-26.11.6a77112` (clean). `macbook-air` ALREADY
+failed pre-bump on a nix-darwin deprecation (`services.nix-daemon.enable` "no longer has any
+effect") — now moot (darwin out of scope).
+
+**Darwin wiring note (out of scope, but recorded):** the host dir `modules/hosts/macbook-air [D]/`
+actually defines `flake.modules.darwin.n` + `flake.modules.homeManager.tim@n` (a rename to short
+host "n" is in flight), while `darwinConfigurations` still enumerates `macbook-air` + `powerbook`.
+Any future darwin cleanup must reconcile this; not part of T3.
+
+**Discovery `nix flake check --no-build --keep-going`** results (bumped lock; `sort -u` over the
+hard-error signatures ⇒ exactly **TWO breaker classes**; everything else is non-blocking
+deprecation *warnings*: `stdenv.isLinux/isDarwin`, `xorg.lndir`→`lndir`, `system`→
+`stdenv.hostPlatform.system`):
+
+- **Breaker A — `programs.claude-code.hooks` option-type conflict (IN-REPO, dominant).** Message:
+  *"The option `programs.claude-code.hooks` in module `modules/programs/claude-code/options.nix`
+  would be a parent of the following options, but its type `attribute set of (strings concatenated
+  with "\n" or absolute path)` does not support nested options."* The newer nixpkgs module system is
+  stricter: our `hooks` option is typed as an `attrsOf (lines|path)` **leaf**, yet something now
+  declares nested options *under* `hooks.<name>.*`. Hits **every HM config that enables
+  claude-code** (the 84 log hits are this, ×configs×trace-frames). **Fix locus:**
+  `modules/programs/claude-code/options.nix` — rework the `hooks` option type (e.g. `submodule` /
+  `attrsOf submodule`, or stop co-declaring nested options under a leaf). This is the priority fix.
+- **Breaker B — `boot.bootspec.enable` removed (in the `timblaktu/NixOS-WSL` FORK).** Message:
+  *"The option definition `boot.bootspec.enable` in `…/modules/wsl-distro.nix` no longer has any
+  effect; please remove it. Bootspec is now always generated and can no longer be disabled."* nixpkgs
+  dropped the option; the **nixos-wsl fork** still sets it. Hits the WSL NixOS hosts. **Fix locus:**
+  the user-owned fork worktree `~/src/NixOS-WSL` (`modules/wsl-distro.nix`) — remove the
+  `boot.bootspec.enable` definition, push, bump the `nixos-wsl` input. (Coordination step — a fork
+  edit, per CLAUDE.md user-owned-repo workflow.)
+
+**NEXT SESSION (T3 continuation):** (1) fix Breaker A in `modules/programs/claude-code/options.nix`
+(dominant, in-repo — start here); (2) fix Breaker B in the `~/src/NixOS-WSL` fork + bump the
+`nixos-wsl` input; (3) re-run `nix flake check --no-build --keep-going` to confirm the NixOS+HM
+surface is green (darwin out of scope); (4) THEN the follow-on input bumps (nixpkgs-stable URL→
+25.11/26.05, ancillary community inputs, remaining `timblaktu/*` forks) + re-check; (5) only then
+merge→main + coordinate the nixcfg-work pin bump. Full log this session was at
+`/tmp/t3-flakecheck.log` (ephemeral — re-run the check for a fresh landscape).
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
@@ -208,16 +273,22 @@ probe). Record gaps (e.g. "WSL2 host can't nspawn → those run QEMU locally, ns
 real probe result per runner class (or an explicit ENVIRONMENT_NOT_CAPABLE note where a runner
 class isn't reachable from the current session).
 
-### T3 — Input bump to the T0 target `TASK:PENDING`  (dep: T0, T1)
-On the T0 branch: update `flake.nix` input refs + `nix flake update` the relevant inputs to the
-chosen 26.05-aligned revisions; run `nix flake check --no-build` and fix eval breakers across ALL
-hosts (WSL, NixOS VM/EC2/graviton, both darwin). Follow the repo's workaround-documentation
-protocol for any version-incompat shims. Do NOT bump the nixcfg-work pin yet (separate coordinated
-step at plan completion).
-**DoD:** `nix flake check --no-build` passes on the branch; `git grep` shows the new input refs;
-darwin configs still eval to a real `.drv` (`nix eval '.#darwinConfigurations.pa163076mac...
-toplevel.drvPath'` — cross-check against 052's recorded value, expecting a new hash, same shape).
-Any workaround carries an inline WORKAROUND/API-ADAPTATION comment + commit note.
+### T3 — Input bump to the T0 target `TASK:IN_PROGRESS`  (dep: T0, T1 — both COMPLETE)
+On `feat/nixos-26.05`: update `flake.nix` input refs + `nix flake update` the relevant inputs to
+fresh `nixos-unstable` HEAD (target confirmed in T0/session-2); run `nix flake check --no-build`
+and fix eval breakers **across the 10 NixOS hosts + x86_64-linux HM configs** (WSL, NixOS
+VM/EC2/graviton). Follow the repo's workaround-documentation protocol for any version-incompat
+shims. Do NOT bump the nixcfg-work pin yet (separate coordinated step at plan completion).
+**SCOPE (session-2 decision):** the public-repo x86 darwin configs (`macbook-air`, `powerbook`) are
+**unmaintained and OUT OF SCOPE** (26.05 deprecates x86 darwin); they need NOT eval-green and do NOT
+block T3. (Apple-Silicon darwin lives in nixcfg-work / 052 M-A, untouched here.)
+**DoD:** `nix flake check --no-build` passes on the branch for the NixOS+HM surface; `git grep`
+shows the new input refs. Any workaround carries an inline WORKAROUND/API-ADAPTATION comment +
+commit note.
+**Progress (2026-08-20):** community-core inputs bumped (nixpkgs/nixpkgs-unstable/home-manager/
+darwin → 2026-08-16/19); lock staged. Remaining: NixOS/HM breaker triage under the bump;
+follow-on bumps (nixpkgs-stable URL→25.11/26.05, ancillary community inputs, `timblaktu/*` forks);
+re-check to green. See Findings T3.
 
 ### T4 — Enable nspawn backend on eligible tests `TASK:PENDING`  (dep: T2, T3)
 For each T2-eligible test, flip it to the nspawn backend (the declarative switch from PR #478109 —
