@@ -229,11 +229,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776277021,
-        "narHash": "sha256-7kYXBFyZyBKJ9ZCZDluI6eJ28oZTJu6kdwxO5E3UL3A=",
+        "lastModified": 1787277064,
+        "narHash": "sha256-/z7cx6I3PI24QsJfDHLVG8THF/X7UY/l3qjOTtt9tqA=",
         "owner": "timblaktu",
         "repo": "NixOS-WSL",
-        "rev": "51a80ac03832ba3c637ef4725d57f6bfdc831cb0",
+        "rev": "984df0cc7367467123320688a254d8ac9ecb66d0",
         "type": "github"
       },
       "original": {
