@@ -83,17 +83,25 @@
             package = lib.mkDefault pkgs.nixVersions.stable;
 
             settings = {
-              # Enable modern Nix features (flakes, nix command).
-              # `auto-allocate-uids` (still experimental in nixVersions.stable) lets a build
-              # request a transient uid-range sandbox — REQUIRED by the systemd-nspawn NixOS
-              # test backend (26.05): container-test run derivations require the `uid-range`
-              # system feature, which the daemon only advertises when this is enabled. Fleet-wide
-              # so every NixOS host (and CI runner built from this base) can run nspawn container
-              # tests. See plan 053 Findings T6. Darwin/HM omit this (no systemd-nspawn there).
-              experimental-features = [ "nix-command" "flakes" "auto-allocate-uids" ];
+              # Enable modern Nix features (flakes, nix command) + the two experimental features
+              # the systemd-nspawn NixOS test backend (26.05) needs on the BUILDER:
+              #   - auto-allocate-uids: lets a build request a transient uid range (the nspawn
+              #     container test derivation requires the `uid-range` system feature).
+              #   - cgroups: the test driver places the nspawn container in a cgroup; without it
+              #     the run fails "experimental Nix feature 'cgroups' is disabled".
+              # Empirically verified end-to-end on 2026-08-20 (plan 053 Findings T6): with these
+              # three settings a `vm-nspawn-smoke` container boots + passes in ~4.7s vs ~24s for the
+              # identical QEMU test. Fleet-wide so every NixOS host + CI runner can run nspawn tests.
+              # Darwin/HM blocks omit all of this (no systemd-nspawn there).
+              experimental-features = [ "nix-command" "flakes" "auto-allocate-uids" "cgroups" ];
 
-              # Allocate a per-build transient uid range (enables the nspawn `uid-range` feature).
+              # Allocate a per-build transient uid range for nspawn containers.
               auto-allocate-uids = lib.mkDefault true;
+
+              # Advertise the `uid-range` system feature so nspawn container-test derivations
+              # (which requiredSystemFeatures = [ "uid-range" ]) are buildable. `extra-` appends,
+              # so this does not clobber nix's auto-detected features (kvm, nixos-test, …).
+              extra-system-features = [ "uid-range" ];
 
               # Optimize store to save disk space
               auto-optimise-store = lib.mkDefault true;
