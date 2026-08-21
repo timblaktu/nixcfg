@@ -101,8 +101,8 @@ and Tim has signed off.
 | P1 | **Parallel test-suite audit** — inventory + feature/code coverage map (run as a multi-agent Workflow) | 1 · analysis (workflow) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-AUDIT.md` (all 106 checks + 65 coverage rows + gaps/redundancies/weak + adversarial verification) |
 | P2 | **Audit review & roadmap sign-off** — review findings + confirm/revise P3-P6 sequence | Interactive (gate) | TASK:COMPLETE 2026-08-21 — findings dispositioned, 2-tier priority + both-repos/CI-first framing settled, roadmap revised to P3-P7 (see "P2 review decisions") |
 | P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — nixcfg-work Tier-A audit in VMTEST-AUDIT.md; backend=aggressive-nspawn; renames=both; Tier-0=12-host collapse (add nixos-wsl-dev-team); eval-hm-module-*=consolidate (see "P3 decisions") |
-| P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:PENDING (dep P3) ← **/next-task starts here** |
-| P5 | Execute the refactor (conversions, new tests, deletions, renames, consolidations) | 1 · portable | TASK:PENDING (dep P4) |
+| P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-TARGET-DESIGN.md` (AGREED); Q1-Q4 signed off (see "P4 decisions") |
+| P5 | Execute the refactor (conversions, new tests, deletions, renames, consolidations) | 1 · portable | TASK:PENDING (dep P4) ← **/next-task starts here** |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 
@@ -250,7 +250,7 @@ regression-test's forced list, so P5 first ADDS `nixos-wsl-dev-team.config.syste
 `home.username` for HM parity) to regression-test's inherited attrs, THEN drops the standalone. This is
 pure eval batching (no runtime/WSL boot); zero coverage loss.
 
-**(e) eval-hm-module-* (18 isolation evals) = CONSOLIDATE into ONE multi-module eval gate.** Same coverage
+**(e) eval-hm-module-* (20 isolation evals) = CONSOLIDATE into ONE multi-module eval gate.** Same coverage
 (every HM module forced to evaluate standalone — the property that catches breakage in modules no tested
 host enables, e.g. corp-only modules), far less boilerplate, matches the regression-test batching approach.
 Nix names the broken module on failure. Not dropped per-module.
@@ -259,3 +259,30 @@ P3 outputs feed P4 (2-tier target design): Tier 0 = `regression-test` (12-host+H
 multi-module HM eval + the renamed `eval-*-toplevel` forcers; Tier 1 = behavioral node/container tests,
 default-to-nspawn-where-boot-independent, Tier-A hosts first (WSL/Darwin daily drivers get eval+layer+
 build-dryrun coverage since they can't QEMU-boot).
+
+### P4 decisions (2026-08-21) — Tim signed off
+
+Durable artifact: **`docs/VMTEST-TARGET-DESIGN.md`** (status AGREED) — the full 2-tier keep/merge/rewrite/
+drop/add table with backend + rationale per check, baking in all P2+P3 decisions. `/next-task` on P4
+correctly yielded USER_INPUT_REQUIRED; the four open design choices were resolved interactively:
+
+- **Q1 (sops backend):** MIGRATE `vm-sops-secrets` to nspawn, with a P5 fidelity verification of the
+  sops-nix activation path; fall back to QEMU only if that verification fails.
+- **Q2 (compose-test consolidation):** DROP `vm-yazi` (fold its `init.lua`/`keymap.toml` asserts into
+  `vm-hm-module-isolation`'s yazi node) AND MERGE `vm-full-cli-stack` + `vm-dev-team-stack` into one
+  parameterized `vm-compose-stack` (param = `system-cli` layer vs real `nixos-dev-team` host module).
+- **Q3 (weak tests):** delete the no-ops (`flake-validation`, `validated-scripts-module`,
+  `ssh-public-keys-registry`, `opencode-config-validation`, `cross-module-home-manager`,
+  `cross-module-sops-base`) + 2 of 3 files-family; SALVAGE `files-module-test` into one genuine files-module
+  assertion; rewrite `tmux-picker-syntax` (`bash -n`) + `module-base-integration` (`userGroups`); fold
+  `config-snapshot-validation`'s `stateVersion=="24.11"` into `regression-test`.
+- **Q4 (NixOS layer evals):** CONSOLIDATE the 6 `eval-nixos-module-*` into one `eval-nixos-modules` gate
+  (mirrors the HM 20→1), per-layer assertion setup carried as per-module `extraConfig`.
+
+**Net target:** Tier 0 = ~4 batched eval gates + 8 renamed toplevel/tarball/image forcers + kept
+builds/lints (−~7 weak checks, 3 rewritten). Tier 1 = 22 `vm-*` → 17 (drop 2 mocks + `vm-yazi`, merge 2
+stacks→1, add `vm-wsl-dev-team-layers` for the WSL daily-driver layer stack incl. first behavioral
+`monitoring`/`mss-clamp` coverage), majority migrated QEMU→nspawn. QEMU retained for boot (`vm-boot-minimal`,
+`vm-system-type-cli`), graphics (`vm-system-type-desktop`), real cross-node SSH (`vm-ssh-service`), and the
+shipped-image gate (`vm-dev-team-vm-smoketest`, re-exported into nixcfg-work CI). No coverage dropped
+silently — see the design doc's "Coverage-preservation ledger". P5 executes this; no code changed in P4.
