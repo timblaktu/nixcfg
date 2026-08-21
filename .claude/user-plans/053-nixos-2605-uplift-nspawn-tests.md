@@ -88,7 +88,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:COMPLETE 2026-08-20 (session 4) — DoD MET + authoritatively verified. Both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix `b6e6bf3`; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed `984df0c`+input-bump `35e024e`); ancillary community inputs bumped `dd0cff1`; **nixpkgs-stable `nixos-24.11`→`nixos-26.05` bumped `7c056ca`** (Tim decision session 4). **`nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, 47 non-blocking deprecation warnings)** + aarch64 graviton toplevel evals clean separately. Deferred non-DoD coordination items promoted to **T7** (`timblaktu/*` fork bumps) + **T8** (merge→main + nixcfg-work pin). See Findings T3 session-3/session-4. |
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | **Interactive (parked)** | TASK:PENDING — **PARKED**: do NOT auto-execute. Un-parking is a Tim decision (`USER_INPUT_REQUIRED`) — deferred per 2026-08-20 session-2 (low regression value); revisit after T8 merge. Marked Interactive so `/next-task` stops-and-asks instead of running the migration. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:COMPLETE 2026-08-20 (session 6) — **DOCUMENT-ONLY** (Tim's call). `system.nix` solves a problem nixcfg doesn't have (already flake-based + channel-free; teammates already get a zero-Nix path via the `.wsl` image). Added a one-paragraph note to `docs/DISTRIBUTION.md`. See Findings T5. |
-| T6 | nspawn container backend POC + per-host smoke seed (reframed session 6 — DECOUPLED from T4 per Tim) | Interactive | TASK:IN_PROGRESS 2026-08-20 (session 6) — **POC DELIVERED**: `mkContainerTest` helper + `vm-nspawn-smoke` test added; API proven (`runNixOSTest` + `containers.<n>`), full pipeline BUILDS (test-driver + `run-machine-nspawn` + container system). **Blocked only on one host prereq** — the run derivation requires the `uid-range` system feature (Nix `auto-allocate-uids`), which the WSL2 daemon doesn't advertise; enabling it is a root/NixOS-config decision (see Findings T6 + the recommendation). Migration of the 18 clean candidates (old T4) is now mechanical once enabled. (no longer dep T4) |
+| T6 | nspawn container backend POC + per-host smoke seed (reframed session 6 — DECOUPLED from T4 per Tim) | Interactive | TASK:COMPLETE 2026-08-20 (session 6) — **POC GREEN, empirically verified.** `mkContainerTest` + `vm-nspawn-smoke` (twin of `vm-system-type-cli`) ran end-to-end on the WSL2 host and PASSED: **boot→multi-user 4.66s vs QEMU 24.38s (~5.2×); test script 3.75s vs 24.94s (~6.6×)**. Full working builder recipe discovered + committed fleet-wide in `minimal.nix` (`auto-allocate-uids` + **`cgroups`** experimental features + **`uid-range`** system feature; commits `405cf9d`+`4e7abf7`, eval-verified). Surfaced a real migration finding: sshd.service is inactive under nspawn (VM-vs-container activation diff). **Follow-on (optional, not blocking):** permanent host rebuild to run via daemon (couples w/ T8b for the WSL dev host) + migrate the 18 clean candidates + add `vm-nspawn-smoke` to CI matrix. See Findings T6. |
 | T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:COMPLETE 2026-08-20 (session 5) — **all 3 fork inputs already at their tracked-branch HEADs (locked rev == remote HEAD); no `flake.lock` bump possible/needed.** `nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, unchanged lock, docling resolves to 2.47.1). Two upstream-edit follow-ups NOTED (not silently skipped) — see Findings T7. |
 | T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:IN_PROGRESS 2026-08-20 (session 6) — **split T8a/T8b**. **T8a (merge feat→main): DONE + PUSHED** — clean fast-forward, `main` @ `b2dace8` (= feat HEAD + M-C docs); pushed to `origin/main` (`c07cbce → b2dace8`, 18 commits) 2026-08-20. **T8b (nixcfg-work `flake.lock` pin bump): DEFERRED** to the darwin M-A milestone (the corp-blast-radius half; corp hosts pin a rev so T8a alone doesn't move them). |
 
@@ -475,9 +475,45 @@ long-running ⇒ ENVIRONMENT_NOT_CAPABLE from this session):
   `nix build '.#checks.x86_64-linux.vm-nspawn-smoke'` → first green run + speedup vs the QEMU twin
   `vm-system-type-cli`.
 - **The WSL2 dev host `pa161878-nixos` (where the POC ran):** it is managed by **nixcfg-work**, which
-  pins nixcfg `main`. So it picks up `405cf9d` only via a **nixcfg-work `flake.lock` pin bump** (=
-  the deferred **T8b** coordination) + rebuild — OR a one-off manual rebuild against nixcfg `main`
-  (`--override-input nixcfg …`). This couples T6's final demonstration to the T8b pin story.
+  pins nixcfg `main`. So it picks up the base-module change only via a **nixcfg-work `flake.lock` pin
+  bump** (= the deferred **T8b** coordination) + rebuild — OR a one-off manual rebuild against nixcfg
+  `main` (`--override-input nixcfg …`). This couples the *permanent* enablement to the T8b pin story.
+
+**GREEN — EMPIRICALLY VERIFIED end-to-end on the WSL2 host (2026-08-20, single-user root build,
+daemon-bypass — no host rebuild, zero blast radius).** Rather than rebuild the corp host (which would
+deploy the whole deferred 26.05 uplift), ran the test as root against the local store with the nix
+config supplied via `NIX_CONFIG`. **The nspawn container booted and the test PASSED.** Timings vs the
+identical QEMU twin `vm-system-type-cli` (same `system-cli` module + assertions):
+| metric | QEMU | nspawn | speedup |
+|---|---|---|---|
+| boot → `multi-user.target` | 24.38s | **4.66s** | ~5.2× |
+| test script total | 24.94s | **3.75s** | ~6.6× |
+| (QEMU "connecting" alone) | 16.50s | ~0 | — |
+The nspawn container ran the entire smoke faster than QEMU took just to *connect*. This is the
+payoff the whole plan targeted.
+
+**Two corrections the empirical run forced (both now committed `4e7abf7`):**
+1. **The fleet-wide config needed THREE settings, not one** (405cf9d only had `auto-allocate-uids`).
+   Working builder recipe = `experimental-features = [ … auto-allocate-uids cgroups ]` (nspawn places
+   the container in a cgroup ⇒ needs the `cgroups` experimental feature) + `auto-allocate-uids = true`
+   + advertise `uid-range` (`extra-system-features = [ "uid-range" ]`, append-safe). `minimal.nix`
+   NixOS block updated to all three; `nixos-dev-team` toplevel evals clean.
+2. **Test-assertion divergence (a real migration finding):** `vm-nspawn-smoke` first FAILED on
+   `wait_for_unit("sshd.service")` — **sshd.service is inactive under nspawn** although the QEMU twin
+   has it active (VM-vs-container service-activation difference; `system-cli` sets
+   `services.openssh.enable = true` with no `startWhenNeeded`, so this is nspawn-specific). Switched to
+   an activation-agnostic assertion (ssh host key generated). **Lesson for migrating the 18 candidates:
+   service-`wait_for_unit` assertions may need container-aware equivalents; the SSH tests especially.**
+
+**Enablement invocation that worked (for repro/CI-runner setup), for the record:**
+```
+sudo env NIX_CONFIG=$'experimental-features = nix-command flakes auto-allocate-uids cgroups\nauto-allocate-uids = true\nsystem-features = kvm nixos-test uid-range benchmark big-parallel' \
+  nix build '.#checks.x86_64-linux.vm-nspawn-smoke' --store local --no-write-lock-file -L
+```
+Client `--extra-experimental-features`/`--option` flags did NOT work (parse-order: the
+`auto-allocate-uids` *setting* is validated before the *feature* activates); `NIX_CONFIG` (file-style,
+correct order) does. The daemon path also fails (daemon ignores client feature overrides) — hence the
+permanent fix is the daemon config in `minimal.nix` + a rebuild.
 
 ## Task definitions (self-contained)
 
