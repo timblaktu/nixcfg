@@ -178,12 +178,42 @@ Structural / high-leverage (each kills several rows):
 | ID | Task | Kind | Status |
 |----|------|------|--------|
 | M0 | Order the SEQUENCED milestones + define near-term "done" | Interactive | TASK:COMPLETE 2026-08-20 — order = **M-A first**, then M-B/M-D |
-| M-A | Drive first Mac hardware bring-up (→ nixcfg-work 001 T7/T8b/T18b) | 1 · Mac (+ Linux prep) | TASK:IN_PROGRESS 2026-08-20 |
+| M-A | Drive first Mac hardware bring-up (→ nixcfg-work 001 T7/T8b/T18b) | 1 · Mac (+ Linux prep) | TASK:IN_PROGRESS 2026-08-20 — **Linux prep DONE + re-verified 2026-08-20**; Tim has the Mac in hand, hardware step now proceeds ON the Mac (browser) per RESUME-mac-nix-bringup.md |
 | M-B | Drive CI/delivery unification (→ nixcfg-work 004 T0–T5) | gated: infra/budget | TASK:PENDING |
 | M-C | **STANDING** docs & consumption workstream — always-on; fill ALL blocked time (see §STANDING WORKSTREAM) | continuous | STANDING (NOT a /next-task cursor row) |
 | M-D | IT/CrowdStrike compliance demo (→ nixcfg 026 T6) | Interactive: IT | TASK:PENDING |
 | H1 | Refresh DISTRIBUTION.md + SHARED-MODULES.md for the new image/darwin outputs | 1 · portable | TASK:PENDING |
 | H2 | Resolve plan-number collisions (nixcfg-work 002; note nixcfg 013 pair) | chore | TASK:PENDING |
+
+## Session log 2026-08-20 (Linux-prep re-verify + Mac-materials currency review)
+Tim reported the MacBook is now in hand and is taking the hardware step to the browser
+ON the Mac. This session (Linux) closed out the Linux-prep half and re-reviewed every
+in-tree material Tim will follow from the Mac, for currency (materials last touched
+2026-08-12, pin since bumped):
+- **Both darwin configs re-verified eval-green** against the current nixcfg pin (`main`
+  @ `4555c15`, 2026-08-18): `corp-darwin-dev-team` → `darwin-system-26.11.6a77112.drv`,
+  `pa163076mac` → real `.drv`. No regression from the plan-050 pin bump.
+- **Tim's path = `pa163076mac`** confirmed fully coherent: `username = "tim"` (no
+  local-username.nix needed), imports corp baseline + `mss-clamp` with `mssClamp.enable`,
+  casks vlc/spotify/bitwarden/chromium, `awscli.azureAuth` ENABLED (chromium shim),
+  `home-darwin`. Eval-green.
+- **Materials reviewed:** `bootstrap-darwin.sh`, `docs/darwin/RESUME-mac-nix-bringup.md`,
+  `docs/CORP-DARWIN-QUICKSTART.md` (all nixcfg-work, `feat/darwin-support`). All referenced
+  paths exist; branch + pin claims accurate. **One accuracy defect found + fixed** (nixcfg-work
+  commit `bb07290`): QUICKSTART claimed the `corp-darwin-dev-team` colleague baseline
+  auto-enables `mss-clamp` — it does NOT (imports only `system-default`); only `pa163076mac`
+  enables it. Corrected the doc; does not affect Tim's path.
+- **Open decision for Tim (not a blocker):** should the colleague `corp-darwin-dev-team`
+  baseline also import+enable `mss-clamp`? (Colleagues will hit the same VPN/hotspot MTU
+  black-hole. Left as Tim's config call; darwin variant is still `[HW-VERIFY]`.)
+- **M-C standing workstream:** did top P1 backlog item — module-count contradictions fixed
+  across all 4 public nixcfg docs to ground truth **57 (16/32/9)** + added missing catalog rows
+  (`home-wsl`/`home-darwin`/`jfrog-cli`) (nixcfg commit `93a163b`). Remaining M-C backlog
+  (image-outputs table, README host tables, learner on-ramp, etc.) untouched.
+- **Next concrete step is ON THE MAC:** run `bootstrap-darwin.sh --check` then activate
+  `pa163076mac` per RESUME/QUICKSTART; clear `[HW-VERIFY]` flags; mark nixcfg-work 001
+  T7/T8b/T18b. Linux sessions can only re-verify eval + do M-C docs (ENVIRONMENT_NOT_CAPABLE
+  for the hardware step).
 
 ## ACTIVE cursor — M-A (Mac/darwin bring-up first; Tim's order 2026-08-20)
 M0 is decided: **do M-A first**, then M-B/M-D. `/next-task` resumes on **M-A** (the only
