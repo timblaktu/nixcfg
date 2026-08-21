@@ -100,7 +100,7 @@ What this task covers (a collaborative working session over `docs/VMTEST-AUDIT.m
 and (c) the confirmed-or-revised P3-P6 roadmap. No code changes. P3 does not start until this is recorded
 and Tim has signed off.
 
-### P5a — Tier-0 eval-regression consolidation `TASK:PENDING` (dep P4 — COMPLETE)
+### P5a — Tier-0 eval-regression consolidation `TASK:COMPLETE 2026-08-21` (dep P4 — COMPLETE)
 Portable, **eval-only, no boot** — the low-risk half of the execution. Source of truth for every change:
 `docs/VMTEST-TARGET-DESIGN.md` §T0.1-T0.9. Edits `modules/flake-parts/tests.nix` only. Do it in this order,
 `nix flake check --no-build` after each group (idempotent: check-before-edit; a resumed run converges):
@@ -174,7 +174,7 @@ Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P2 | **Audit review & roadmap sign-off** — review findings + confirm/revise P3-P6 sequence | Interactive (gate) | TASK:COMPLETE 2026-08-21 — findings dispositioned, 2-tier priority + both-repos/CI-first framing settled, roadmap revised to P3-P7 (see "P2 review decisions") |
 | P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — nixcfg-work Tier-A audit in VMTEST-AUDIT.md; backend=aggressive-nspawn; renames=both; Tier-0=12-host collapse (add nixos-wsl-dev-team); eval-hm-module-*=consolidate (see "P3 decisions") |
 | P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-TARGET-DESIGN.md` (AGREED); Q1-Q4 signed off (see "P4 decisions") |
-| P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:PENDING (dep P4) ← **/next-task starts here** |
+| P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:COMPLETE 2026-08-21 — 106→60 checks (x86/aarch64 mirrored); flake check --no-build exit 0; 3 rewrites + 4 new/merged gates build+pass (see "P5a execution") |
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P4) |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
@@ -360,6 +360,40 @@ stacks→1, add `vm-wsl-dev-team-layers` for the WSL daily-driver layer stack in
 `vm-system-type-cli`), graphics (`vm-system-type-desktop`), real cross-node SSH (`vm-ssh-service`), and the
 shipped-image gate (`vm-dev-team-vm-smoketest`, re-exported into nixcfg-work CI). No coverage dropped
 silently — see the design doc's "Coverage-preservation ledger". P5 executes this; no code changed in P4.
+
+### P5a execution (2026-08-21) — DONE
+
+Implemented `docs/VMTEST-TARGET-DESIGN.md` §T0 in `modules/flake-parts/tests.nix` (single file, eval-only). Net
+check count **106 → 60** (x86_64 and aarch64 attrName sets verified mirrored). `nix flake check --no-build`
+exits 0; the 3 rewrites + 4 new/merged eval gates + the 2 new activation tests all `nix build` and pass
+(built explicitly since `--no-build` skips check bodies).
+
+- **Expanded `regression-test` (T0.1):** added `nixos-wsl-dev-team` stateVersion, `home.username` for all 4 HM
+  configs (parity with folded eval-hm-* checks), and folded `config-snapshot-validation`'s
+  `stateVersion == "24.11"` equality asserts for thinky-nixos/potato/nixos-wsl-minimal/mbp.
+- **New `eval-hm-modules` (T0.2):** one gate folding all 20 `eval-hm-module-*`. **New `eval-nixos-modules`
+  (T0.3):** one gate folding the 6 `eval-nixos-module-*` (per-layer `extraConfig` preserved verbatim).
+  Implemented via inlined `forceHmModuleEval` / `forceNixosModuleEval` helpers (`lib.mapAttrsToList` over a
+  module attrset; referencing each config's homeDirectory/stateVersion forces standalone eval).
+- **Renamed 8 `build-*-dryrun`** → `eval-thinky-nixos-toplevel`, `eval-nixos-wsl-minimal-toplevel`,
+  `eval-nixos-dev-team-toplevel`, `eval-nixos-wsl-dev-team-tarball`, `eval-thinky-nixos-tarball`,
+  `eval-images-dev-team`, `eval-images-ec2`, `eval-images-graviton` (T0.4). `hasProxmox`/`hasAmazon` asserts kept.
+- **Merged SSH-2223 triple (T0.5)** → `eval-wsl-settings-ssh-port`, keeping openssh-port==sshPort and
+  base-userName==wsl-defaultUser invariants (+ ssh-enabled / port-2223 / wsl-enabled / hostname guards).
+- **Deleted:** 12 standalone host/config evals, 20 `eval-hm-module-*`, 6 `eval-nixos-module-*`, and the 9 no-ops
+  (`flake-validation`, `validated-scripts-module`, `ssh-public-keys-registry`, `opencode-config-validation`,
+  `cross-module-home-manager`, `cross-module-sops-base`, `config-snapshot-validation`,
+  `unified-files-diagnostic-test`, `hybrid-files-module-test`). Removed the now-unused
+  `mkEvalTest`/`mkHmEvalTest`/`mkHmModuleEvalTest`/`mkNixosModuleEvalTest`/`snapshotBaseline` helpers (else
+  `lint-deadnix` fails).
+- **Rewrote to actually assert:** `tmux-picker-syntax` (now runs `bash -n` on the picker),
+  `module-base-integration` (asserts `systemDefault.userGroups` contains `wheel`, keeps `userName`),
+  `files-module-test` (builds an HM config using the files module's `staticFiles` path and asserts the generated
+  `.config/glow/glow.yml` `home.file` exists with expected content — exercises the real home.file generation
+  code). **Added `activate-hm-nixvim-minimal`** (T0.7, build-tier, widens the activation-build pattern).
+- **Follow-up (non-blocking):** docs under `docs/TESTING*.md`, `tests/README.md`, `docs/src/how-to/test.md` still
+  reference old check names (narrative only; P5a scope = tests.nix only). A comment in `vm-tests.nix:1252`
+  mentions `eval-hm-module-development-tools` (comment, not functional). Refresh in P6/doc pass.
 
 **P4 close-out verification (2026-08-21).** Before declaring P4 done, cross-checked the design against the
 live flake (`nix eval '.#checks.x86_64-linux' --apply builtins.attrNames` = 106): all 34 check names the
