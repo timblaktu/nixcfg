@@ -117,6 +117,67 @@ nspawn smoke run to prove the framework toggle end-to-end (pin the exact option 
 `nspawn-container` module exposes `virtualisation.systemd-nspawn.*` + builds `system.build.nspawn`;
 the per-test framework selector must be confirmed against this rev, do NOT guess).
 
+#### T2 addendum (2026-08-20, session 2) — API pinned + eligibility inventory
+
+**CRITICAL API CORRECTION (source-verified against the pinned rev, store path
+`/nix/store/3a2vdn5i7vd2wl654xs8nb52jf1v6cbh-source` = input `nixpkgs`):** nspawn is **NOT a
+per-node backend toggle**. The test framework (`nixos/lib/testing/nodes.nix`) exposes a *separate*
+top-level **`containers`** option (`lazyAttrsOf config.container.type`, whose base type is
+`baseNspawnOS` importing `modules/virtualisation/nspawn-container`) that lives *alongside* `nodes`
+(QEMU). `allMachines` = merge of both (name-collision-guarded). Wiring:
+- `nixos/lib/testing/driver.nix:19` — `enableNspawn = config.containers != {}` (auto-detected).
+- `nixos/lib/testing/run.nix:53-57` — requirement `uid-range` **defaults to true iff `containers`
+  is non-empty**; comment: "Containers use systemd-nspawn, which requires pid 0 inside of the
+  sandbox. `uid-range` enables that." (This is the `auto-allocate-uids`/`id-range` host need.)
+- `run.nix:167` — pulls in `hostPkgs.socat` for the nspawn SSH backdoor.
+- `driver-configuration.nix:70` — `start_script = lib.getExe value.system.build.nspawn`.
+
+⇒ **To move a test onto nspawn you relocate its machine from `nodes.<name>` to `containers.<name>`
+(infra-only — the Python `testScript` is UNCHANGED because machine names persist via `allMachines`).**
+This is a real per-test edit, not a single global flip; it is still low-effort and touches no test
+logic. The `nspawn-container` module's own options are `virtualisation.systemd-nspawn.*` and it
+builds `system.build.nspawn` (consumed by the driver above).
+
+**Second correction:** the test-driver `machine/` dir in THIS rev is *monolithic*
+(`__init__.py` + `ocr.py` + `qmp.py`), **not** the `BaseMachine/QemuMachine/NspawnMachine` file
+split the plan's "ground-truth" claimed. The backend is nonetheless present and fully wired
+(above), so "nspawn is available on the current pin" stands — only the *shape* of the refactor was
+described wrong.
+
+**Per-test eligibility inventory (21 `vm-*` checks).** Constraint: an nspawn container shares the
+host kernel — no initrd/bootloader/stage-1-systemd, no KVM, no kernel-module/boot semantics; only
+userspace systemd. The `pkgs.runCommand` eval/build checks in `tests.nix` are NOT test-driver VMs,
+so nspawn is irrelevant to them (they run as ordinary derivations).
+
+| vm test | Backend fit | Reason |
+|---|---|---|
+| vm-system-type-default | nspawn | userspace: users/locale/tz/zsh/pkgs |
+| vm-system-type-cli | nspawn | userspace services (sshd) + dev tools |
+| vm-ssh-service (2-node) | nspawn | sshd + cross-node key auth; nspawn nets via network.nix |
+| vm-ssh-management (2-node) | nspawn | SSH key deploy/recovery, userspace |
+| vm-sops-deployment | nspawn | SOPS CLI ops, userspace |
+| vm-sops-secrets | nspawn | sops-nix activation + /run/secrets + oneshot svc |
+| vm-hm-activation | nspawn | HM systemd user svc, git, zsh |
+| vm-shell-env | nspawn | zsh config |
+| vm-neovim | nspawn | nvim headless |
+| vm-tmux | nspawn | tmux userspace |
+| vm-git-advanced | nspawn | git config/tools |
+| vm-development-tools | nspawn | language toolchains |
+| vm-yazi | nspawn | HM module userspace |
+| vm-hm-module-isolation | nspawn | HM module eval-in-VM |
+| vm-hm-composition-pairs | nspawn | HM module pairs |
+| vm-full-cli-stack | nspawn | userspace CLI stack |
+| vm-dev-team-stack | nspawn | userspace stack (verify no boot asserts) |
+| vm-user-config | nspawn | user/account checks |
+| vm-boot-minimal | QEMU | *boot* semantics — a container never "boots" (no initrd/bootloader); keep to retain meaning |
+| vm-system-type-desktop | QEMU (verify) | GDM/display-manager + graphics(/run/opengl-driver) + bluetooth lean on udev/logind/hw; checks are mostly `systemctl cat` so *may* work in nspawn — verify empirically |
+| vm-dev-team-vm-smoketest | QEMU (verify) | name implies image/VM-boot smoke; confirm before moving |
+
+So ~18/21 are plausibly nspawn-eligible, 1 stays QEMU on principle (boot smoke), 2 need an
+empirical check. **Still-outstanding T2 items (deferred pending the T3-first re-sequencing below):**
+the one real nspawn smoke run on the WSL2 host, and the GHA + hsw-infra GitLab runner probes
+(likely `ENVIRONMENT_NOT_CAPABLE` from this session — neither runner class is reachable here).
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
