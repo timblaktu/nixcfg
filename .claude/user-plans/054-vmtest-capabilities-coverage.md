@@ -38,11 +38,37 @@ shipped-image smoketest, not nspawn. This shapes T1's design (below).
 | ID | Task | Kind | Status |
 |----|------|------|--------|
 | T0 | Decide working branch (main vs feat/vmtest-coverage) | Interactive | TASK:PENDING |
-| T1 | **Per-host smoke coverage** (the #3 pick) — design + implement | Interactive (design decision) | TASK:PENDING |
+| T1 | **Per-host smoke coverage** (the #3 pick) — design + implement | Interactive (design decision) | TASK:IN_PROGRESS 2026-08-20 — **Option C (Hybrid) chosen by Tim.** Container LAYER smoke for userspace hosts + QEMU/image smoke for boot/hw/WSL/image hosts. Classifying hosts → backends (see Findings T1). |
 | T2 | **Review + curate + migrate existing tests to nspawn** (the #1 pick) — see Tim's requirement below | Interactive (collaborative) | TASK:PENDING (Tim: do AFTER T1) |
 | T3 | nspawn → CI: configure a runner with the nspawn nix config + add container tests to the matrix | 1 · CI | TASK:PENDING |
 | T4 | Corp-host VMTest coverage in nixcfg-work (`corp-wsl-dev-team`, `pa161878-nixos`) | 1 · portable (nixcfg-work) | TASK:PENDING (soft-gated: needs nspawn config on its runner/host, or QEMU) |
 | T5 | Networking-topology tests (VLAN/partition/netem per `docs/TESTING-NSPAWN.md`) | advanced capability | TASK:PENDING |
+
+## Findings T1 — host classification (2026-08-20) → most per-host container smoke is REDUNDANT
+Classified the 10 NixOS hosts by their layer chain + nature. **Key insight: a host's *runtime
+userspace* is mostly defined by its LAYER, and the existing `vm-*` layer tests already cover those
+layers** — so a per-host container smoke for most hosts would just re-test `dev-team`/`system-cli`/
+`system-default`. The genuinely NEW coverage is where a host adds **unique services**, plus the
+boot/image/WSL hosts whose distinct value is *not* userspace.
+
+| Host | Distinct runtime content | Already covered by | T1 backend (Option C) |
+|---|---|---|---|
+| **nuc-apt-repo** | `aptly-repo` + `apt-cacher-ng` services (UNIQUE) | nothing | **container smoke (NEW — prime target)** |
+| nixos-dev-team | `dev-team` layer | `vm-dev-team-stack` | (redundant) — image build check covers proxmox |
+| nixos-dev-team-ec2 | dev-team + EC2 image | `vm-dev-team-stack` + image build | image build check; boot = QEMU/AMI |
+| nixos-dev-team-graviton | dev-team + Graviton image (aarch64) | dev-team layer + image build | image build check (aarch64) |
+| nixos-dev-team-vm | dev-team + qcow2 | `vm-dev-team-vm-smoketest` (exists) | Mac-VM smoketest (exists) |
+| nixos-wsl-dev-team | wsl-dev-team + WSL | `Test-WslImport.ps1` (shipped-image) | WSL shipped-image test |
+| nixos-wsl-minimal | minimal + WSL | `Test-WslImport.ps1` | WSL shipped-image test |
+| thinky-nixos | personal + WSL | (personal) | WSL image / skip |
+| potato | `system-default` (aarch64 SBC) | `vm-system-type-default` | (redundant) — HW = real SBC |
+| mbp | `system-cli` | `vm-system-type-cli` | (redundant) |
+
+**⇒ T1 focus refined:** (1) add a **`nuc-apt-repo` container smoke** (real new coverage: aptly +
+apt-cacher-ng); (2) confirm the image hosts are covered by their image-build checks + existing boot
+smoketests; (3) record the coverage table honestly (existing layer tests ARE the per-host coverage for
+the layer-only hosts — not a gap, just already covered). This avoids adding ~8 redundant tests and
+puts effort where coverage is actually missing.
 
 ## Task definitions
 
