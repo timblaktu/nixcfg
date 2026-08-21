@@ -498,14 +498,16 @@ payoff the whole plan targeted.
    the container in a cgroup ⇒ needs the `cgroups` experimental feature) + `auto-allocate-uids = true`
    + advertise `uid-range` (`extra-system-features = [ "uid-range" ]`, append-safe). `minimal.nix`
    NixOS block updated to all three; `nixos-dev-team` toplevel evals clean.
-2. **Test-assertion divergence (a real migration finding):** `vm-nspawn-smoke` first FAILED on
-   `wait_for_unit("sshd.service")` — **sshd.service is inactive under nspawn** although the QEMU twin
-   has it active. NOT socket-activation (`system-cli` sets `services.openssh.enable = true` with no
-   `startWhenNeeded`). Confirmed contributing factor: the nspawn-container module runs the guest with
-   **`--private-network`** (isolated netns), changing network-target ordering/service startup; the
-   *exact* mechanism was not fully isolated (honestly logged). Switched to an activation-agnostic
-   assertion (ssh host key generated). **Lesson: service-`wait_for_unit` assertions may need
-   container-aware equivalents; the SSH tests especially.**
+2. **Test-assertion divergence (a real migration finding — ROOT-CAUSED):** `vm-nspawn-smoke` first
+   FAILED on `wait_for_unit("sshd.service")`. Instrumented the container (`systemctl is-enabled
+   sshd.service` → `not-found`): **there is NO `sshd.service` in the container** — `sshd.socket` (from
+   **`systemd-ssh-generator`**, a systemd ≥256 feature in 26.05) is active+listening instead. So ssh
+   is **socket-activated** — NOT via NixOS `startWhenNeeded` (which `system-cli` leaves false), but the
+   systemd generator, manifesting only in the container. QEMU has a real running `sshd.service`. Also
+   corrected: the container **does** have framework networking (`eth1 192.168.1.1/24` via the driver's
+   `network.nix`) — my earlier "`--private-network`/loopback-only" guess was WRONG. Fixed the POC to
+   assert **`sshd.socket`** + host key. **Lesson: a `<svc>.service` unit may not even EXIST under
+   nspawn; assert the socket / an activation-agnostic artifact. The SSH tests especially.**
 
 **Config mechanism re-verified (closing an earlier inference gap):** the committed `minimal.nix` uses
 `extra-system-features = [ "uid-range" ]`, but the first green run used `system-features = kvm nixos-test
@@ -514,13 +516,23 @@ uid-range …` (full replace). Confirmed the *committed* mechanism actually work
 and `vm-nspawn-smoke` builds+passes. So the committed config is validated, not merely eval-clean.
 
 **Durable docs written:** the full VM-vs-container guide (when to use, host prereqs, write/migrate a
-container test, verified caveats, 21-test inventory, honesty ledger) is now in-tree at
-**`docs/TESTING-NSPAWN.md`** (cross-linked from `docs/TESTING.md`) — so the knowledge survives this
-plan's eventual archival. **Honest open items** (also in the doc's "Verified vs open" ledger): the green
-runs used `--store local` single-user root; the **daemon path after a real `nixos-rebuild switch` is
-unproven** (expected-equivalent, same nix.conf content); the running daemon config is confirmed
-UNCHANGED (`nix config show experimental-features` has no auto-allocate-uids/cgroups); `vm-nspawn-smoke`
-is registered but intentionally NOT in the CI matrix and unrun there.
+container test, verified caveats, **a networking capabilities & fidelity section** — `ip netns` +
+`--network-namespace-path` topology construction, VLAN/LAG/netem/partition notes, and fidelity limits
+like no-PHY/no-CLOCK_REALTIME/no-KVM — from Tim's nspawn networking research, 21-test inventory,
+honesty ledger) is now in-tree at **`docs/TESTING-NSPAWN.md`** (cross-linked from `docs/TESTING.md`).
+
+**DAEMON PATH PROVEN (last gap closed, 2026-08-20).** Tim added the 3 nix.settings to the running host
+`pa161878-nixos` (nixcfg-work, isolated from the 26.05 uplift — toplevel stayed on the OLD pin
+`331800d`, no kernel/systemd change) and ran `nixos-rebuild switch`. Then a normal **unprivileged**
+`nix build '.#checks.x86_64-linux.vm-nspawn-smoke' --rebuild` (no sudo / `--store local` / `NIX_CONFIG`)
+ran the container and PASSED (test script 4.33s). `/etc/nix/nix.conf` now carries
+`auto-allocate-uids = true` / `experimental-features = … auto-allocate-uids cgroups …` /
+`extra-system-features = uid-range`. ⇒ the fleet-wide config genuinely enables a normal `nix build` of
+nspawn tests (the real CI/user path), not just root single-user runs. **Remaining honest open item:**
+`vm-nspawn-smoke` is intentionally NOT in the CI matrix — a CI runner still needs the same config to
+build it. **Cleanup owed:** the nixcfg-work `pa161878-nixos` TEMP nix.settings block is STAGED (not
+committed) on `feat/darwin-support`; revert it (or leave until T8b bumps the pin, after which the base
+module supplies it fleet-wide).
 
 **Enablement invocation that worked (for repro/CI-runner setup), for the record:**
 ```
