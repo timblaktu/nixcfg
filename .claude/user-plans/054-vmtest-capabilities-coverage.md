@@ -100,8 +100,8 @@ and Tim has signed off.
 | P0 | Decide working branch | Interactive | TASK:COMPLETE 2026-08-20 — `feat/vmtest-refactor` (created from main) |
 | P1 | **Parallel test-suite audit** — inventory + feature/code coverage map (run as a multi-agent Workflow) | 1 · analysis (workflow) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-AUDIT.md` (all 106 checks + 65 coverage rows + gaps/redundancies/weak + adversarial verification) |
 | P2 | **Audit review & roadmap sign-off** — review findings + confirm/revise P3-P6 sequence | Interactive (gate) | TASK:COMPLETE 2026-08-21 — findings dispositioned, 2-tier priority + both-repos/CI-first framing settled, roadmap revised to P3-P7 (see "P2 review decisions") |
-| P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:IN_PROGRESS 2026-08-21 — nixcfg-work Tier-A audit groundwork prepared; interactive backend-fit review + Tier-0 list pending Tim |
-| P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:PENDING (dep P3) |
+| P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — nixcfg-work Tier-A audit in VMTEST-AUDIT.md; backend=aggressive-nspawn; renames=both; Tier-0=12-host collapse (add nixos-wsl-dev-team); eval-hm-module-*=consolidate (see "P3 decisions") |
+| P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:PENDING (dep P3) ← **/next-task starts here** |
 | P5 | Execute the refactor (conversions, new tests, deletions, renames, consolidations) | 1 · portable | TASK:PENDING (dep P4) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
@@ -213,3 +213,49 @@ interactive backend-fit review + the Tier-0 consolidation-list confirmation; P4 
 P5 executes (deletions/renames/consolidations/new Tier-1 tests); P6 wires CI on KVM runners both arches +
 nixcfg-work; **new P7** holds the deferred Tier-B backlog. Method section + progress table updated to match.
 No code changed in P2.
+
+### P3 decisions (2026-08-21) — Tim signed off
+
+**(a) nixcfg-work Tier-A audit — DONE** (durable artifact: new "nixcfg-work Tier-A audit" section appended
+to `docs/VMTEST-AUDIT.md`). Findings that drive P4/P5:
+- **nixcfg-work has ZERO test infrastructure** — no `checks` of its own; re-exports exactly one nixcfg
+  check (`vm-dev-team-vm-smoketest`, aarch64). Both Tier-A daily drivers are entirely unverified.
+- **`pa161878-nixos` (WSL, daily driver)** imports `wsl-dev-team -> wsl-enterprise -> system-cli + wsl`
+  + `monitoring` + `mss-clamp`. It is the ONLY real consumer of `monitoring` **and** `mss-clamp` — the two
+  modules the nixcfg audit flagged as zero-coverage "dead-until-wired." They are live-but-unguarded here.
+  Testability class = **eval + layer composition** (WSL cannot boot on KVM).
+- **`pa163076mac` (Darwin, "macbook", daily driver)** — HM `corp-dev-team + home-darwin + tim-corp-personal`.
+  Testability class = **eval + build-dryrun + shared-module-on-Linux-proxy** (macOS cannot boot on KVM).
+- **Correction to nixcfg audit:** `modules/lib/rbw.nix` (`n`/rbw) is consumed by BOTH daily drivers (WSL via
+  `awscli`, and Darwin), not darwin-only. Corp HM bundles (`corp-dev-team`, `tim-corp-personal`) are the
+  real Tier-A HM surface and are wholly untested.
+
+**(b) Backend policy = AGGRESSIVE nspawn migration.** Migrate boot-independent QEMU `node` tests to nspawn
+(~5-7x speedup); keep QEMU only for tests asserting genuine boot/kernel/hardware/systemd-target semantics.
+`vm-nspawn-smoke` stays the nspawn reference; its `sshd.socket`-not-`sshd.service` finding is the fidelity
+rule for what can move. P4 will tag each behavioral test node-vs-container with rationale. (This sharpens
+the P2 "nspawn is an opt-in speedup" into a default-to-nspawn-where-safe policy; QEMU remains first-class
+in CI for the boot tests.)
+
+**(c) Renames = APPLY BOTH sets in P5.** `build-*-dryrun` -> `eval-*-toplevel` (they force eval, never
+build); `ssh-service-configured` -> an eval-named check reflecting it is an option-value eval, not a
+service test (it also folds into the SSH-2223 consolidation).
+
+**(d) Tier-0 consolidation list — CONFIRMED.** Collapse these **12 host/config evals** into `regression-test`
+(the single Tier-0 eval-regression gate): the 7 already-forced NixOS host evals (`eval-thinky-nixos`,
+`eval-potato`, `eval-mbp`, `eval-nixos-wsl-minimal`, `eval-nixos-dev-team`, `eval-nixos-dev-team-ec2`,
+`eval-nixos-dev-team-graviton`), the 4 HM config evals (`eval-hm-thinky-nixos`, `eval-hm-thinky-ubuntu`,
+`eval-hm-mbp`, `eval-hm-nixvim-minimal`), PLUS `eval-nixos-wsl-dev-team` — which is NOT currently in
+regression-test's forced list, so P5 first ADDS `nixos-wsl-dev-team.config.system.stateVersion` (and
+`home.username` for HM parity) to regression-test's inherited attrs, THEN drops the standalone. This is
+pure eval batching (no runtime/WSL boot); zero coverage loss.
+
+**(e) eval-hm-module-* (18 isolation evals) = CONSOLIDATE into ONE multi-module eval gate.** Same coverage
+(every HM module forced to evaluate standalone — the property that catches breakage in modules no tested
+host enables, e.g. corp-only modules), far less boilerplate, matches the regression-test batching approach.
+Nix names the broken module on failure. Not dropped per-module.
+
+P3 outputs feed P4 (2-tier target design): Tier 0 = `regression-test` (12-host+HM batch) + the consolidated
+multi-module HM eval + the renamed `eval-*-toplevel` forcers; Tier 1 = behavioral node/container tests,
+default-to-nspawn-where-boot-independent, Tier-A hosts first (WSL/Darwin daily drivers get eval+layer+
+build-dryrun coverage since they can't QEMU-boot).
