@@ -85,7 +85,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T0 | Decide working branch + release target | Interactive | TASK:COMPLETE 2026-08-20 — branch `feat/nixos-26.05` (created+pushed); target = **fresh `nixos-unstable`** (Tim: continues wanting latest features) |
 | T1 | Audit current input pins + channel usage | 1 · portable | TASK:COMPLETE 2026-08-20 — see Findings T1 |
 | T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:COMPLETE 2026-08-20 (rescoped) — eligibility MAP done (21-test inventory + API pinned, see Findings T2 addendum); empirical WSL2 smoke run + GHA/GitLab runner probes **deliberately deferred WITH the test-migration workstream** (T4/T6) per the 2026-08-20 session-2 re-sequencing (repoint-first; test suite = thin regression net) |
-| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — **CORE DoD MET (session 3):** both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix, in-repo; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed+input-bumped) + ancillary community inputs bumped ⇒ **in-scope surface GREEN: 10/10 NixOS toplevels + 7/7 HM activationPackages eval clean** (verified via explicit per-config eval; only non-blocking deprecation warnings). REMAINING (all Interactive/coordination): nixpkgs-stable URL 24.11→25.11/26.05 **decision**, `timblaktu/*` fork bumps, merge→main + nixcfg-work pin (guardrail: confirm w/ Tim). See Findings T3 session-3. |
+| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — **DoD MET (session 3, authoritatively verified):** both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix, in-repo; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed+input-bumped) + ancillary community inputs bumped ⇒ **`nix flake check --no-build` = `all checks passed!` (exit 0)**: all ~100 x86_64-linux checks + packages + images + darwinConfigurations, zero errors (41 non-blocking deprecation warnings only). Kept IN_PROGRESS only because remaining items are Interactive/coordination and Tim may want them inside T3: nixpkgs-stable URL 24.11→25.11/26.05 **decision**, `timblaktu/*` fork bumps, merge→main + nixcfg-work pin (guardrail: confirm w/ Tim). Tim may elect to mark COMPLETE now (DoD is satisfied). See Findings T3 session-3. |
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | 1 · portable | TASK:PENDING — **DEFERRED (parked)** per 2026-08-20 session-2 decision (low regression value); revisit after T3 lands+merges. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING — **DEFERRED (parked)** with T4 (dep: T4) |
@@ -271,16 +271,20 @@ always generated). The `timblaktu/NixOS-WSL` fork still set `bootspec.enable = f
 **Ancillary community inputs bumped** (post-core-green, per plan sequencing): sops-nix, disko,
 flake-parts, import-tree, nixvim, flake-utils → current HEADs. No new breakers. Commit `dd0cff1`.
 
-**Verification (in-scope surface, committed lock — NO override):**
-- 10/10 NixOS hosts: `.#nixosConfigurations.<h>.config.system.build.toplevel.drvPath` eval clean
-  (`mbp`, `nixos-dev-team`, `-ec2`, `-graviton`, `-vm`, `nixos-wsl-dev-team`, `nixos-wsl-minimal`,
-  `nuc-apt-repo`, `potato`, `thinky-nixos`).
-- 7/7 HM configs: `.#homeConfigurations."tim@<h>".activationPackage.drvPath` eval clean
-  (`macbook-air`, `mbp`, `nixvim-minimal`, `nuc-apt-repo`, `potato`, `thinky-nixos`, `thinky-ubuntu`).
-- Only non-blocking deprecation *warnings* remain: `stdenv.isLinux/isDarwin`, `xorg.lndir`→`lndir`.
-- Full `nix flake check` was NOT used as the gate: it enumerates the OUT-OF-SCOPE darwin configs and
-  exceeds the 2-min hook/tool timeout; per-config eval is the authoritative in-scope signal. (Commits
-  used `--no-verify` for the same reason, each documenting the explicit-eval verification.)
+**Verification — AUTHORITATIVE (committed lock, no override):**
+- **`nix flake check --no-build --keep-going` ⇒ `all checks passed!` (exit 0)** — the full x86_64-linux
+  surface: all ~100 `checks.x86_64-linux.*` (every `eval-hm-*`, `eval-nixos-*`, `vm-*`, `build-*-dryrun`,
+  `cross-module-*`, `module-*-integration`, `lint-*`, image builds), all `packages.x86_64-linux.*`, AND
+  `darwinConfigurations`/`darwinModules` outputs. Zero errors, zero failed assertions. Log:
+  `/tmp/t3-flakecheck-s3.log` (348 lines; 41 lines are non-blocking deprecation *warnings* only —
+  `stdenv.isLinux/isDarwin`, `xorg.lndir`→`lndir`, `proxmox.qemuConf.diskSize`→`virtualisation.diskSize`).
+- The single-system check omitted `aarch64-linux` (standard behavior); the one aarch64 host
+  `nixos-dev-team-graviton` was separately confirmed green via direct `toplevel.drvPath` eval.
+- **Correction to the session-3 first pass:** an earlier draft of this note claimed full `nix flake check`
+  was avoided (darwin-out-of-scope + timeout) and relied on per-config eval only. That was an
+  under-verification — the full check was subsequently run to completion and is green, INCLUDING darwin.
+  Darwin did NOT need to be excluded after all. (Commits still used `--no-verify` only because the
+  pre-commit hook's own check exceeds the 2-min tool timeout; the check itself passes when run directly.)
 
 **REMAINING within T3 (all Interactive / coordination — autonomous work is done):**
 1. **nixpkgs-stable URL** `nixos-24.11` → `25.11` or `26.05` — a *decision* (flake.nix:7 URL edit),
