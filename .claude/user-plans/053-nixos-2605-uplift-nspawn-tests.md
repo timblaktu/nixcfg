@@ -84,11 +84,11 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 |----|------|------|--------|
 | T0 | Decide working branch + release target | Interactive | TASK:COMPLETE 2026-08-20 — branch `feat/nixos-26.05` (created+pushed); target = **fresh `nixos-unstable`** (Tim: continues wanting latest features) |
 | T1 | Audit current input pins + channel usage | 1 · portable | TASK:COMPLETE 2026-08-20 — see Findings T1 |
-| T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — WSL2 host confirmed nspawn-capable; test-eligibility + GHA/GitLab probes + empirical `nixosTest` run remain (now doable on current pin) |
-| T3 | (OPTIONAL hygiene) freshen nixpkgs/home-manager/nix-darwin pins; `nix flake check` green (all hosts) | 1 · portable | TASK:PENDING — no longer a prerequisite (nspawn already present); do for newer pkgs |
-| T4 | Enable nspawn backend on eligible tests (framework toggle + host `auto-allocate-uids`); measure speedup | 1 · portable | TASK:PENDING (dep: T2; **NOT** T3 — runs on current pin) |
-| T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING |
-| T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING (dep: T4) |
+| T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:COMPLETE 2026-08-20 (rescoped) — eligibility MAP done (21-test inventory + API pinned, see Findings T2 addendum); empirical WSL2 smoke run + GHA/GitLab runner probes **deliberately deferred WITH the test-migration workstream** (T4/T6) per the 2026-08-20 session-2 re-sequencing (repoint-first; test suite = thin regression net) |
+| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green (all 10 NixOS + 2 darwin hosts) | 1 · portable | TASK:PENDING (dep: T0, T1 — both COMPLETE) — this is the session-2-elevated top deliverable |
+| T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | 1 · portable | TASK:PENDING — **DEFERRED (parked)** per 2026-08-20 session-2 decision (low regression value); revisit after T3 lands+merges. Map ready in Findings T2 addendum. (dep: T2✓) |
+| T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
+| T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING — **DEFERRED (parked)** with T4 (dep: T4) |
 
 ## Findings (T1 + T2, 2026-08-20)
 
@@ -261,3 +261,14 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   the WSL2 dev host is nspawn-capable ⇒ **T3 bump is NOT a prerequisite; T4 can run on the current
   pin.** Corrected the earlier wrong "locked 2026-01-30 / bump-first" premise. Next: finish T2
   (eligibility map + a real nspawn `nixosTest` smoke run + CI-runner probes), then T4.
+- 2026-08-20 (session 2 — re-sequencing, Tim): **priority inverted.** Tim: the **flake-wide repoint
+  to fresh `nixos-unstable`** matters more than nspawn test migration; the test suite is a thin
+  regression net so its before/after value is low. Decisions: (1) target = **fresh nixos-unstable
+  HEAD** (confirms T0); (2) **defer ALL test migration** (T4+T6 parked). Actions taken this session:
+  reconciled the branch (the prior session's T0–T2 commit c07cbce had landed on `main`, one commit
+  ahead of `feat/nixos-26.05`; fast-forwarded feat to carry it), then **corrected the nspawn API**
+  (it's a separate `containers` attr, not a per-node flip; test-driver `machine/` is monolithic here
+  — see Findings T2 addendum), completed the 21-test eligibility map, and **promoted T3 (repoint) to
+  the active top task**; T2 marked COMPLETE-as-rescoped. Next: execute T3 — `nix flake update` the
+  core inputs on `feat/nixos-26.05`, `nix flake check --no-build`, triage+fix eval breakers across
+  all hosts (Mode-A judgment work), then merge→main + coordinate the nixcfg-work pin bump.
