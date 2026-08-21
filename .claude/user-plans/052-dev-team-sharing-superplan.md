@@ -268,16 +268,19 @@ WSL driver session. After closing nixcfg 053 T5 (system.nix = document-only), Ti
   splits**: T8a (merge feat→main) is SAFE — corp hosts pin a nixcfg *rev* via `flake.lock`, so a main
   merge doesn't move them; T8b (bump nixcfg-work pin) is the corp-blast-radius half.
 - **Actions this session (Tim chose "T8a merge now, then M-C docs"):**
-  - **T8a DONE (local):** fast-forwarded `main` to `feat/nixos-26.05` HEAD (`4e8264a`) — main is now
-    17 commits ahead of `origin/main` (`c07cbce`), unstranding 26.05 + T5/H2. **NOT pushed yet**
-    (awaiting Tim's push confirm). **T8b (nixcfg-work pin) remains deferred** to the M-A milestone.
+  - **T8a DONE + PUSHED:** fast-forwarded `main` to `feat/nixos-26.05` HEAD, added the M-C docs, and
+    **pushed to `origin/main`** (`c07cbce → b2dace8`, 18 commits) — 26.05 uplift + T5/H2 + image-outputs
+    docs now live on public `main`. Safe: corp hosts pin a nixcfg *rev*, so they don't move until the
+    deferred **T8b** (nixcfg-work `flake.lock` pin bump), which remains DEFERRED to the M-A milestone.
   - **M-C docs DONE:** added the "Prebuilt Image Outputs" section to `docs/DISTRIBUTION.md` (5
     `image-*` artifacts table + build commands + Apple-Silicon Mac-VM/UTM walkthrough), sourced from
     `packages.nix:39-57`; updated the intro "two→three primary output kinds". Closes the H1 image
     half.
-- **NEXT:** push unified `main` to origin (Tim confirm), or continue M-C backlog (darwin-export
-  rows, artifact-topology diagram, learner on-ramp). 052 M-A stays the sequenced-first milestone but
-  is ON-THE-MAC (ENVIRONMENT_NOT_CAPABLE here). T8b + T4/T6 remain deferred/parked.
+- **`main` PUSHED to origin** (Tim confirmed) — `origin/main` @ `b2dace8`. **NEXT:** continue M-C
+  backlog (darwin-export rows, artifact-topology diagram, learner on-ramp, README host-table fixes,
+  counts-SSOT lint), or un-park 053 T4 (nspawn) for the test-speed payoff. 052 M-A stays the
+  sequenced-first milestone but is ON-THE-MAC (ENVIRONMENT_NOT_CAPABLE here). T8b + T4/T6 remain
+  deferred/parked.
 
 ## ACTIVE cursor — M-A (Mac/darwin bring-up first; Tim's order 2026-08-20)
 M0 is decided: **do M-A first**, then M-B/M-D. `/next-task` resumes on **M-A** (the only
