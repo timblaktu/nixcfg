@@ -86,13 +86,15 @@ Each points at sub-plan tasks for detail.
 - **M-D — IT/CrowdStrike compliance.** The Falcon/IT demo (nixcfg **026** T6) that unlocks
   production security compliance on the shared WSL image. Human/IT-gated.
 - **M-E — NixOS 26.05 uplift + nspawn container test backend (→ nixcfg 053).** TOP-PRIORITY
-  **WSL-side** workstream, added 2026-08-20. Migrates the stale nixpkgs pin (currently
-  `nixos-unstable` @ 2026-01-30) to a 26.05-aligned target, then adopts the systemd-nspawn test
-  driver backend (nixpkgs #478109) so most integration tests run as fast/cheap containers instead
+  **WSL-side** workstream, added 2026-08-20. Adopts the systemd-nspawn test-driver backend
+  (nixpkgs #478109) so most integration tests run as fast/cheap containers instead
   of QEMU VMs — the ENABLER for cheaply validating all 10 NixOS + 2 Darwin hosts (feeds M-B CI
-  unification + general validation). Runs in PARALLEL with M-A: **M-A executes on the Mac (Tim,
-  browser); M-E is what the WSL driver session actively builds meanwhile.** Does not block M-A.
-  Detail owner = 053. Branch: `feat/nixos-26.05` (proposed, 053 T0).
+  unification + general validation). **Key T2 finding (2026-08-20): the current pin
+  (nixos-unstable 2026-05-31) ALREADY ships the nspawn backend and the WSL2 host is
+  nspawn-capable, so no input bump is needed to start; freshening pins (T3) is optional hygiene.**
+  Runs in PARALLEL with M-A: **M-A executes on the Mac (Tim, browser); M-E is what the WSL driver
+  session actively builds meanwhile.** Does not block M-A. Detail owner = 053. Branch:
+  `feat/nixos-26.05` (decided, 053 T0).
 
 ## STANDING WORKSTREAM — M-C: docs & consumption polish (always-on, parallel)
 **This is not a milestone that finishes; it is how the super-plan uses blocked time.**

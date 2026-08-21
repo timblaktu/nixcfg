@@ -25,9 +25,16 @@ Two NixOS **26.05 "Yarara"** capabilities are worth adopting in `nixcfg` *before
    channel-free), but potentially a **no-flakes consumption path** for teammates, and a reason
    to audit/kill any residual channel usage. Evaluate, don't assume adopt.
 
-**Prerequisite reality:** the repo is NOT on 26.05 yet. `flake.lock` pins primary `nixpkgs` to
-`nixos-unstable` **locked 2026-01-30** (~7 months stale, predates both features), a second
-`nixpkgs-unstable` at 2026-06-06, and `home-manager` on `master`. So an input uplift is step 1.
+**Prerequisite reality — CORRECTED 2026-08-20 after T1/T2 investigation:** the earlier
+"nixpkgs locked 2026-01-30 / bump-is-step-1" premise was WRONG (a bad metadata read).
+Ground truth: root `nixpkgs` = `nixos-unstable` @ rev `331800de5053`, **locked 2026-05-31**
+(only ~3 months stale). **Both nspawn PRs merged 2026-03-18/19**, and the pinned rev's tree
+**already contains** `nixos/modules/virtualisation/nspawn-container/` (+ `run-nspawn`) and the
+refactored `nixos/lib/test-driver/src/test_driver/machine/` module. **⇒ We already have the
+nspawn backend. No input bump is required to start using it.** This flips the plan's spine:
+- **T4 (enable nspawn) can proceed on the CURRENT pin** — it is no longer gated on T3.
+- **T3 (freshen the pin) is downgraded** from blocking prerequisite to optional hygiene
+  (still worth doing for newer pkgs, but off the nspawn critical path).
 
 ## How this fits the super-plan / priorities
 Tim's realization (2026-08-20): keep the **WSL session as the driver** while the **Mac work
@@ -75,13 +82,40 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 ## Progress tracking
 | ID | Task | Kind | Status |
 |----|------|------|--------|
-| T0 | Decide working branch + release target (26.05 stable vs fresh unstable) | Interactive | TASK:PENDING |
-| T1 | Audit current input pins + channel usage; write the uplift decision record | 1 · portable | TASK:PENDING |
-| T2 | nspawn feasibility map: per-test eligibility × per-runner (WSL2/GHA/GitLab) support | 1 · portable | TASK:PENDING |
-| T3 | Bump nixpkgs/home-manager/nix-darwin to the T0 target; get `nix flake check` green (all hosts) | 1 · portable | TASK:PENDING (dep: T0,T1) |
-| T4 | Enable nspawn backend on eligible tests (flip switch + host `auto-allocate-uids`); measure speedup | 1 · portable | TASK:PENDING (dep: T2,T3) |
-| T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
+| T0 | Decide working branch + release target | Interactive | TASK:COMPLETE 2026-08-20 — branch `feat/nixos-26.05` (created+pushed); target = **fresh `nixos-unstable`** (Tim: continues wanting latest features) |
+| T1 | Audit current input pins + channel usage | 1 · portable | TASK:COMPLETE 2026-08-20 — see Findings T1 |
+| T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — WSL2 host confirmed nspawn-capable; test-eligibility + GHA/GitLab probes + empirical `nixosTest` run remain (now doable on current pin) |
+| T3 | (OPTIONAL hygiene) freshen nixpkgs/home-manager/nix-darwin pins; `nix flake check` green (all hosts) | 1 · portable | TASK:PENDING — no longer a prerequisite (nspawn already present); do for newer pkgs |
+| T4 | Enable nspawn backend on eligible tests (framework toggle + host `auto-allocate-uids`); measure speedup | 1 · portable | TASK:PENDING (dep: T2; **NOT** T3 — runs on current pin) |
+| T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING (dep: T4) |
+
+## Findings (T1 + T2, 2026-08-20)
+
+### T1 — input audit + channel usage
+Root inputs (ref @ lock date): `nixpkgs` nixos-unstable **2026-05-31** (rev 331800de5053);
+`nixpkgs-unstable` 2026-06-06; `nixpkgs-stable` **nixos-24.11** 2025-06-30 (stale secondary,
+used for a few pkgs — candidate to bump to 25.11/26.05 in T3); `home-manager` master 2026-06-05;
+`darwin` (nix-darwin) 2026-06-06; plus pinned `nixpkgs-{docling,esp-dev}`, `sops-nix`, `nixvim`,
+`disko`, `flake-parts`, `import-tree`, `nixos-wsl`, `nix-writers`, `drawio-svg-sync`.
+**Residual channel usage** (repo is otherwise flake/channel-free for its own eval): (1)
+`pkgs/default.nix:2` `import <nixpkgs>` default arg — cosmetic smell; (2) `pkgs/nixvim-anywhere/
+lib/{nix,backup}.sh` — `nix-channel --add/--update` + `~/.nix-channels` mgmt, **by design** (a
+portable installer for NON-flake consumers); (3) **`modules/system/settings/wsl-enterprise/
+wsl-enterprise.nix:215`** — WSL image build runs `nix-channel --add … NixOS-WSL … nixos-wsl`
+inside the image ⇒ the one worth reviewing (does the shipped `.wsl` need that channel, or can it
+pin via flake?). None block a channel-free core.
+
+### T2 — feasibility (partial)
+**WSL2 dev host `pa161878-nixos` is nspawn-capable:** pid1 = systemd, `systemd-nspawn` present
+(systemd 260), userns on (`max_user_namespaces=112207`), cgroup v2, kernel 6.18-WSL2. The main
+"can WSL2 even nspawn?" risk is dispelled at the capability level. **Confirmed the backend is
+present in the current pin** (module + `run-nspawn` + refactored test-driver `machine/`). Still
+TODO in T2: (a) classify each existing test container-eligible vs must-stay-QEMU; (b) probe GHA +
+hsw-infra GitLab runners for nspawn/userns/`auto-allocate-uids`; (c) one real `runNixOSTest`-with-
+nspawn smoke run to prove the framework toggle end-to-end (pin the exact option name — the
+`nspawn-container` module exposes `virtualisation.systemd-nspawn.*` + builds `system.build.nspawn`;
+the per-test framework selector must be confirmed against this rev, do NOT guess).
 
 ## Task definitions (self-contained)
 
@@ -158,7 +192,11 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
 (human-attended); do not burndown.
 
 ## Session log
-- 2026-08-20: Authored. Research grounded via nixpkgs PRs #478109/#479968 + 26.05 release notes.
-  Confirmed repo is pre-26.05 (primary nixpkgs `nixos-unstable` locked 2026-01-30). Registered in
-  052 as M-E (top-priority WSL-side workstream, parallel to M-A on the Mac). T0 is the first
-  actionable step (branch + release-target decision — Interactive).
+- 2026-08-20 (authoring): grounded via nixpkgs PRs #478109/#479968 + 26.05 release notes.
+  Registered in 052 as M-E (top-priority WSL-side, parallel to M-A on the Mac).
+- 2026-08-20 (T0–T2): Tim decided branch `feat/nixos-26.05` + target fresh `nixos-unstable`
+  (T0 COMPLETE; branch created+pushed). T1 audit done. T2: **key discovery — the current pin
+  (nixos-unstable 2026-05-31) ALREADY ships the nspawn backend** (PRs merged 2026-03-18/19), and
+  the WSL2 dev host is nspawn-capable ⇒ **T3 bump is NOT a prerequisite; T4 can run on the current
+  pin.** Corrected the earlier wrong "locked 2026-01-30 / bump-first" premise. Next: finish T2
+  (eligibility map + a real nspawn `nixosTest` smoke run + CI-runner probes), then T4.
