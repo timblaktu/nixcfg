@@ -50,8 +50,9 @@ own machine, across BOTH delivery shapes:
 | 002 corp-wsl-distribution | nixcfg-work `archive/` | DONE — a `.wsl` was built, security-checked, imported, validated end-to-end |
 | 003 corp-wsl-ci-release | nixcfg-work `archive/` | SUPERSEDED — absorbed into 004 T4 (the WSL slice of the unified pipeline) |
 
-Numbering-collision note (housekeeping H2 below): nixcfg-work still has a second, unrelated
-`002-vte-eks-auth-scoping.md` (AWS EKS auth, DONE) colliding with the archived corp-wsl 002.
+Numbering-collision note (RESOLVED 2026-08-20, H2): the nixcfg-work `002-vte-eks-auth-scoping.md`
+(AWS EKS auth, DONE) that collided with the archived corp-wsl 002 has been moved to archive/
+(commit `e595bc7`); the active nixcfg-work set is now collision-free.
 
 ## Current shipped state (what already works today)
 - **Shared module library:** 47+ exports consumable via `github:timblaktu/nixcfg` (bundle or
@@ -179,9 +180,28 @@ Structural / high-leverage (each kills several rows):
 ## Cross-cutting housekeeping
 - **H1 — doc refresh:** `DISTRIBUTION.md`/`SHARED-MODULES.md` to cover Mac-VM qcow2, EC2/Graviton,
   darwin exports; reconcile the 47 vs 54 module count.
-- **H2 — numbering hygiene:** resolve the nixcfg-work `002` collision (archive the done
-  vte-eks `002`, or renumber); note nixcfg also has a `013-L1.0-*` pair distinct from the
-  archived `013-distributed-nix-binary-caching`.
+- **H2 — numbering hygiene (DONE 2026-08-20):** resolved the nixcfg-work `002` collision by
+  archiving the DONE `002-vte-eks-auth-scoping.md` (commit `e595bc7`; no open tasks, zero filename
+  references — safe move; matches the archived-dup precedent). Full audit findings:
+  - **nixcfg-work `002` (FIXED):** active vte-eks vs archived corp-wsl — the real functional
+    collision (a DONE plan in *active*). Now both live in archive/; active set = 001 (darwin) +
+    004 (CI), collision-free. Did NOT renumber (consistent with how nixcfg's 019/039 archived dups
+    are left as-is; the functional issue is a live file colliding, which archiving fixes).
+  - **nixcfg `013-L1.0-*` (NOT a collision — noted):** `013-L1.0-implementation-plan.md` +
+    `013-L1.0-status-printing-feature.md` are legitimate **sub-plans of** archived
+    `013-distributed-nix-binary-caching.md` (they name it as `Parent`). They use the `L1.0`
+    (Layer-1.0) child convention, not plan-number 013. They sit in *active* while parent 013 is
+    archived/DEFERRED (Mikrotik/Attic-cache, blocked on office hardware). Housekeeping option (not
+    done — deferred with their parent): archive the L1.0 pair alongside 013, or leave as
+    deferred-active. Left as-is; harmless.
+  - **nixcfg `040` (deferred, noted):** active `040-claude-memory-system-analysis.md` (an analysis
+    *doc*, no tasks — companion source material linked from active `041-claude-memory-system-fix.md`)
+    collides with archived `040-claude-code-permissions-optimization.md`. Left as-is: archiving it
+    now would break 041's relative link; it resolves naturally when 041 is archived (move both).
+  - **nixcfg `019`, `039` (harmless, noted):** each is an archived-only duplicate pair
+    (`019-dendritic-migration`/`019-dynamic-context-detection`;
+    `039-claude-browse-integration`/`039-mikrotik-skill-consolidation`). Both members archived, so
+    neither pollutes active/`next-task` searches. No action — this is the accepted precedent.
 - **H3 — private deployment-values overlay:** the shared modules are deliberately
   deployment-agnostic; real values live in nixcfg-work. Keep that boundary as more sharing lands.
 
@@ -195,7 +215,7 @@ Structural / high-leverage (each kills several rows):
 | M-D | IT/CrowdStrike compliance demo (→ nixcfg 026 T6) | Interactive: IT | TASK:PENDING |
 | M-E | **NixOS 26.05 uplift + nspawn test backend (→ nixcfg 053)** — TOP-PRIORITY WSL-side; parallel to M-A | 1 · portable (053) | TASK:IN_PROGRESS 2026-08-20 — sub-plan 053 authored; next = 053 T0 (Interactive: branch + release target) |
 | H1 | Refresh DISTRIBUTION.md + SHARED-MODULES.md for the new image/darwin outputs | 1 · portable | TASK:PENDING |
-| H2 | Resolve plan-number collisions (nixcfg-work 002; note nixcfg 013 pair) | chore | TASK:PENDING |
+| H2 | Resolve plan-number collisions (nixcfg-work 002; note nixcfg 013 pair) | chore | TASK:COMPLETE 2026-08-20 — nixcfg-work vte-eks `002` archived (commit `e595bc7`); active set now collision-free (001 darwin, 004 CI). nixcfg `013-L1.0` pair confirmed = legit children of archived 013 (not a collision). Two harmless archived-only dups noted (019, 039) + one deferred active dup (nixcfg `040`, resolves when 041 archives). See H2 findings below. |
 
 ## Session log 2026-08-20 (Linux-prep re-verify + Mac-materials currency review)
 Tim reported the MacBook is now in hand and is taking the hardware step to the browser
@@ -226,6 +246,20 @@ in-tree material Tim will follow from the Mac, for currency (materials last touc
   `pa163076mac` per RESUME/QUICKSTART; clear `[HW-VERIFY]` flags; mark nixcfg-work 001
   T7/T8b/T18b. Linux sessions can only re-verify eval + do M-C docs (ENVIRONMENT_NOT_CAPABLE
   for the hardware step).
+
+## Session log 2026-08-20 (H2 numbering hygiene closed)
+WSL driver session. After closing nixcfg 053 T5 (system.nix = document-only), Tim chose to close
+**H2** before reviewing H1 + M-E (053) together to resequence.
+- **H2 DONE:** archived the DONE nixcfg-work `002-vte-eks-auth-scoping.md` (commit `e595bc7`) →
+  active set collision-free (001 darwin, 004 CI). Audited every duplicate plan number across both
+  repos' active+archive sets (013, 019, 039, 040): only nixcfg-work 002 was a live/functional
+  collision; 013-L1.0 = legit children of archived 013; 040 = deferred (companion of active 041);
+  019/039 = harmless archived-only pairs. Full findings under H2 above.
+- **NEXT (Tim's stated plan):** review **H1** (DISTRIBUTION/SHARED-MODULES refresh for Mac-VM
+  qcow2 / EC2-Graviton / darwin exports — overlaps the M-C P1 backlog) **together with M-E/053's**
+  remaining items (T8 merge→main + pin; T4/T6 parked nspawn migration) and decide what to
+  combine/resequence. 053 core is COMPLETE + green; 052 M-A is the sequenced-first milestone but is
+  ON-THE-MAC (ENVIRONMENT_NOT_CAPABLE here).
 
 ## ACTIVE cursor — M-A (Mac/darwin bring-up first; Tim's order 2026-08-20)
 M0 is decided: **do M-A first**, then M-B/M-D. `/next-task` resumes on **M-A** (the only
