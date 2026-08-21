@@ -130,7 +130,7 @@ builtins.attrNames` shows: **GONE** = the 12 standalone evals + 20 `eval-hm-modu
 Net check count drops from 106 to ~59 (exact delta reconciled during execution; the named GONE/PRESENT lists
 are the real gate, not the absolute number). x86_64 and aarch64 attrName sets remain mirrored. Committed.
 
-### P5b — nspawn-fidelity spike `TASK:IN_PROGRESS` (dep P4 — COMPLETE; MUST precede P5c)
+### P5b — nspawn-fidelity spike `TASK:COMPLETE 2026-08-21` (dep P4 — COMPLETE; MUST precede P5c)
 "Verify before migrating." A short, throwaway-friendly proof that `mkContainerTest` (nspawn, 053 T6) can host
 the three semantics P5c wants to move off QEMU. Add temporary spike checks (may be removed/absorbed in P5c):
 (i) **HM activation** — a container that reaches `home-manager-<user>.service` and finds one generated
@@ -157,6 +157,13 @@ Backend per each test = the **P5b findings** (not the design doc's `N?` guesses)
    `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-sops-secrets`, `vm-compose-stack`); rewrite any
    `sshd.service` assert to the socket form. **Keep QEMU**: `vm-boot-minimal`, `vm-system-type-cli`,
    `vm-system-type-desktop`, `vm-nspawn-smoke`, `vm-ssh-service`, `vm-dev-team-vm-smoketest`.
+   **⚠ CORRECTED BY P5b FINDINGS (see "P5b spike findings"):** NixOS-integrated HM-activation tests
+   FAIL under nspawn (in-container nix-daemon cannot chown the shared `/nix/store`), so of the list above
+   ONLY `vm-sops-secrets` migrates to nspawn; **`vm-shell-env`, `vm-development-tools`, `vm-git-advanced`,
+   `vm-neovim`, `vm-tmux`, `vm-hm-activation`, `vm-hm-composition-pairs`, `vm-hm-module-isolation`,
+   `vm-user-config` STAY ON QEMU** (they reach `home-manager-<user>.service`). Any multi-node test that
+   DOES move to nspawn must use hostname-valid node names (no underscores). Do NOT attempt a store/daemon
+   workaround to force HM tests onto nspawn — that is out of scope.
 5. **Add `vm-wsl-dev-team-layers`** (nspawn): compose `system-cli + wsl-dev-team + wsl-enterprise` +
    `monitoring` + `mss-clamp` — first behavioral coverage of `monitoring`/`mss-clamp` (the Tier-A WSL stack).
 **DoD (checkable):** `nix flake check --no-build` exits 0. attrNames show: **GONE** = `vm-ssh-management`,
@@ -175,7 +182,7 @@ Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — nixcfg-work Tier-A audit in VMTEST-AUDIT.md; backend=aggressive-nspawn; renames=both; Tier-0=12-host collapse (add nixos-wsl-dev-team); eval-hm-module-*=consolidate (see "P3 decisions") |
 | P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-TARGET-DESIGN.md` (AGREED); Q1-Q4 signed off (see "P4 decisions") |
 | P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:COMPLETE 2026-08-21 — 106→60 checks (x86/aarch64 mirrored); flake check --no-build exit 0; 3 rewrites + 4 new/merged gates build+pass (see "P5a execution") |
-| P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:IN_PROGRESS (dep P4) — started 2026-08-21 on pa161878-nixos (KVM+nspawn present) |
+| P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (recorded daemon/store failure); 3 spike checks in vm-tests.nix (see "P5b spike findings") |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
@@ -404,3 +411,57 @@ P5b = nspawn-fidelity spike (verify HM-activation + sops-nix + multi-node isolat
 BEFORE migrating); P5c = Tier-1 behavioral refactor (dep P5b, backend map from the spike). P6 now deps
 P5a+P5c. P5a and P5b both depend only on P4 (actionable now); P5a is ordered first as the intended
 `/next-task` target, P5b must precede P5c.
+
+### P5b spike findings (2026-08-21) — nspawn fidelity, evidence-based backend map for P5c
+
+Ran on `pa161878-nixos` (KVM + `systemd-nspawn` present). This host's running system predates the 053-T6
+fleet-wide base-module switch, so the **nix-daemon does not yet advertise `uid-range`** — nspawn checks
+built via the documented ad-hoc root path (`sudo env NIX_CONFIG='… auto-allocate-uids cgroups / auto-
+allocate-uids = true / extra-system-features = uid-range' nix build … --store local --no-write-lock-file`).
+A `nixos-rebuild switch` on this host would enable the unprivileged daemon path. Three temporary spike
+checks were added to `modules/flake-parts/vm-tests.nix` (right after `vm-nspawn-smoke`); they are throwaway
+per the P5b def and will be removed/absorbed in P5c. All three **evaluate** clean (`--no-build`); check
+total 60 → 63.
+
+**Per-semantic verdicts (authoritative — override any `N?` guess in `docs/VMTEST-TARGET-DESIGN.md`):**
+
+1. **sops-nix `/run/secrets` activation → nspawn-OK ✅** (`spike-nspawn-sops`, build+pass, 4.27s). A
+   checked-in fixture age key + SOPS-encrypted YAML (the `vm-sops-secrets` fixtures) decrypt during
+   activation to `/run/secrets` with **exact mode/owner preserved** (`database_password` 0400 root:root,
+   `api_key` 0440 tim:users), correct plaintext (`supersecret123`), and ownership enforcement holds
+   (non-root read of the root-only secret is denied). **P5c decision: MIGRATE `vm-sops-secrets` to nspawn**
+   (resolves design-doc Q1 — the fidelity verification the migration was gated on passed). Minor note: `su -`
+   prints "Authentication service cannot retrieve authentication info (Ignored)" in the container but still
+   drops privileges enough for the perms check — cosmetic, not a fidelity gap.
+
+2. **Multi-node isolation via `start_all` → nspawn-OK ✅** (`spike-nspawn-multinode`, build+pass, 4.23s).
+   Two containers boot in parallel, each sees its own hostname, and filesystem state is isolated (a file
+   created on one is absent on the other). **BUT a hard constraint surfaced:** container/node names become
+   the `systemd-nspawn --machine=` name, which **MUST be a valid hostname — underscores are REJECTED**
+   (`Invalid machine name: node_a` → the machine never comes up → `systemd-nspawn process exited
+   unexpectedly`). QEMU node names tolerate underscores, so this **bites on migration**. **P5c action:**
+   any multi-node test moved to nspawn MUST rename underscore node names to hostname-valid forms (hyphens
+   OK) — affects `vm-hm-composition-pairs` (`pair_nvim_tmux`, `pair_git_nvim`, …) and
+   `vm-hm-module-isolation` (`node_podman`, …). (Those two ALSO hit finding #3 below, so they stay QEMU
+   regardless — but the rule applies to any future multi-node nspawn test, e.g. `vm-wsl-dev-team-layers`.)
+
+3. **NixOS-integrated HM activation → MUST-STAY-QEMU ❌** (`spike-nspawn-hm-activation`, RECORDED FAILURE;
+   the identical-module QEMU twin `vm-hm-activation` passes). Root cause: the container shares the host
+   `/nix/store` **read-only**, so the in-container **nix-daemon aborts at startup** — `changing ownership of
+   path "/nix/store": Operation not permitted` — and `home-manager-<user>.service`'s profile registration
+   (`nix-env --set`, which round-trips through that daemon) then dies with `cannot open connection to remote
+   store 'daemon': Connection reset by peer`, leaving the unit **failed**. This is the single most
+   consequential finding: it **overrides the design doc's aggressive-nspawn assumption for the whole HM
+   family.** **P5c decision: KEEP ON QEMU** every NixOS-integrated HM-activation test — `vm-hm-activation`,
+   `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`, `vm-user-config`,
+   `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-yazi`'s fold target — anything that reaches
+   `home-manager-<user>.service`. Migrating them would require a dedicated in-container store/daemon config
+   (candidate future work: prevent the in-container daemon from touching the store root, or register the HM
+   profile without a daemon round-trip) — **out of scope for P5c**; do not attempt a workaround there.
+
+**Net effect on P5c backend map:** sops → nspawn (✅ new); pure-userspace/service tests without HM
+activation remain nspawn candidates (e.g. `vm-system-type-default`, and the already-proven
+`vm-nspawn-smoke` twin of `vm-system-type-cli`); **all HM-activation tests stay QEMU** (❌ reverses the
+design-doc default); multi-node nspawn tests must use hostname-valid node names. `vm-compose-stack` and
+`vm-wsl-dev-team-layers`: if either composes HM user config that activates, it inherits finding #3 → QEMU;
+otherwise nspawn-eligible (decide per final module set in P5c).

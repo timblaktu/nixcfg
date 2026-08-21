@@ -335,6 +335,199 @@ in
           '';
         };
 
+        # ===================================================================
+        # P5b NSPAWN-FIDELITY SPIKE (plan 054) — TEMPORARY, may be removed or
+        # absorbed in P5c. Proves mkContainerTest (nspawn) can host the three
+        # semantics P5c wants to migrate off QEMU: (i) HM activation, (ii)
+        # sops-nix /run/secrets activation, (iii) multi-node isolation via
+        # start_all. Each is a container clone of an existing QEMU test's core
+        # assertions, so a pass = that semantic is nspawn-safe. See plan 054
+        # "P5b spike findings".
+        # ===================================================================
+
+        # (i) HM activation under nspawn — clone of vm-hm-activation's core:
+        # reach home-manager-<user>.service and find one generated home.file
+        # (git's XDG config) with the expected content.
+        #
+        # NSPAWN FIDELITY FINDING (P5b, 2026-08-21): *** RECORDED FAILURE ***
+        # This check FAILS TO BUILD under nspawn (it PASSES under its QEMU twin
+        # vm-hm-activation with the identical modules). Root cause: the container
+        # shares the host /nix/store read-only, so the in-container nix-daemon
+        # aborts on startup — `changing ownership of path "/nix/store": Operation
+        # not permitted` — and home-manager-<user>.service's profile registration
+        # (`nix-env --set` via the daemon) then dies with `cannot open connection
+        # to remote store 'daemon': Connection reset by peer`, leaving the unit
+        # "failed". CONSEQUENCE for P5c: NixOS-integrated HM-activation tests
+        # (vm-hm-activation, vm-shell-env, vm-neovim, vm-tmux, vm-git-advanced,
+        # vm-hm-composition-pairs, vm-hm-module-isolation, ...) MUST STAY ON QEMU
+        # unless a dedicated in-container store/daemon config is developed (future
+        # work, not this spike). Kept as a reproducible failure per the DoD's
+        # "+ evidence" requirement; excluded from CI (all nspawn checks are).
+        spike-nspawn-hm-activation = mkContainerTest {
+          name = "spike-nspawn-hm-activation";
+          description = "P5b spike (i): Home Manager activation on the nspawn backend";
+          modules = [
+            self.modules.nixos.system-default
+            inputs.home-manager.nixosModules.home-manager
+          ];
+          extraConfig = {
+            systemDefault.userName = testUsername;
+            systemDefault.wheelNeedsPassword = false;
+
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = { inherit inputs; };
+              users.${testUsername} = { config, pkgs, lib, ... }: {
+                imports = [
+                  self.modules.homeManager.home-minimal
+                  self.modules.homeManager.git
+                ];
+                homeMinimal = {
+                  username = testUsername;
+                  homeDirectory = testHomeDir;
+                };
+                targets.genericLinux.enable = lib.mkForce false;
+              };
+            };
+          };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # HM activation service reached under nspawn?
+            machine.wait_for_unit("home-manager-${testUsername}.service")
+
+            # One generated home.file exists with expected content (git XDG config).
+            machine.succeed("test -f /home/${testUsername}/.config/git/config")
+            machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
+            machine.succeed("su - ${testUsername} -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
+          '';
+        };
+
+        # (ii) sops-nix activation under nspawn — clone of vm-sops-secrets' core:
+        # a checked-in fixture secret decrypted to /run/secrets with the expected
+        # mode/owner. Uses the same fixture path (tests/fixtures/sops/).
+        spike-nspawn-sops =
+          let
+            testSecretsFile = ../../tests/fixtures/sops/test-secrets.yaml;
+            testAgeKeyFile = ../../tests/fixtures/sops/test-age-key.txt;
+          in
+          pkgs.testers.runNixOSTest {
+            name = "vm-spike-nspawn-sops";
+            containers.machine = { config, pkgs, lib, ... }: {
+              imports = [
+                self.modules.nixos.system-default
+                inputs.sops-nix.nixosModules.sops
+                self.modules.nixos.secrets-management
+              ];
+
+              systemDefault.userName = testUsername;
+              systemDefault.wheelNeedsPassword = false;
+              networking.firewall.enable = false;
+
+              secretsManagement = {
+                enable = true;
+                sops = {
+                  ageKeyFile = "/var/lib/sops-nix/key.txt";
+                  generateHostKeys = false;
+                };
+              };
+
+              # Deploy the fixture age key before sops-nix's setupSecrets runs.
+              system.activationScripts.deployTestAgeKey.text = ''
+                mkdir -p /var/lib/sops-nix
+                cp ${testAgeKeyFile} /var/lib/sops-nix/key.txt
+                chmod 600 /var/lib/sops-nix/key.txt
+              '';
+
+              sops.defaultSopsFile = testSecretsFile;
+              sops.age.sshKeyPaths = lib.mkForce [ ];
+
+              sops.secrets."database_password" = {
+                mode = "0400";
+                owner = "root";
+                group = "root";
+              };
+              sops.secrets."api_key" = {
+                mode = "0440";
+                owner = testUsername;
+                group = "users";
+              };
+            };
+
+            testScript = ''
+              machine.wait_for_unit("multi-user.target")
+
+              # sops-nix activation ran → /run/secrets populated.
+              machine.succeed("test -d /run/secrets")
+              machine.succeed("test -f /run/secrets/database_password")
+              machine.succeed("test -f /run/secrets/api_key")
+
+              # Content decrypted correctly.
+              db_pass = machine.succeed("cat /run/secrets/database_password").strip()
+              assert db_pass == "supersecret123", f"Expected 'supersecret123', got '{db_pass}'"
+
+              # Expected mode/owner preserved under nspawn.
+              perms = machine.succeed("stat -c %a /run/secrets/database_password").strip()
+              assert perms == "400", f"database_password: expected mode 400, got {perms}"
+              owner = machine.succeed("stat -c %U:%G /run/secrets/database_password").strip()
+              assert owner == "root:root", f"database_password: expected root:root, got {owner}"
+
+              perms = machine.succeed("stat -c %a /run/secrets/api_key").strip()
+              assert perms == "440", f"api_key: expected mode 440, got {perms}"
+              owner = machine.succeed("stat -c %U:%G /run/secrets/api_key").strip()
+              assert owner == "${testUsername}:users", f"api_key: expected ${testUsername}:users, got {owner}"
+
+              # Ownership enforcement: non-root cannot read the root-only secret.
+              machine.fail("su - ${testUsername} -c 'cat /run/secrets/database_password'")
+            '';
+          };
+
+        # (iii) multi-node isolation under nspawn — two containers via start_all
+        # (stand-in for vm-hm-composition-pairs / vm-hm-module-isolation). Proves
+        # two containers boot in parallel and stay isolated (distinct hostnames,
+        # a file written on one is absent on the other).
+        #
+        # NSPAWN FIDELITY FINDING (P5b, 2026-08-21): container/node names become
+        # the systemd-nspawn `--machine=` name, which MUST be a valid hostname —
+        # so UNDERSCORES ARE REJECTED ("Invalid machine name: node_a"). QEMU node
+        # names tolerate underscores, so this bites on migration: existing
+        # multi-node tests (vm-hm-composition-pairs' `pair_nvim_tmux`,
+        # vm-hm-module-isolation's `node_podman`, etc.) MUST be renamed to
+        # hostname-valid forms (hyphens OK) when moved to nspawn. Spike uses
+        # `nodea`/`nodeb` to demonstrate the working path.
+        spike-nspawn-multinode = pkgs.testers.runNixOSTest {
+          name = "vm-spike-nspawn-multinode";
+          containers =
+            let
+              node = { config, pkgs, lib, ... }: {
+                imports = [ self.modules.nixos.system-cli ];
+                networking.firewall.enable = false;
+                systemDefault.userName = testUsername;
+              };
+            in
+            {
+              nodea = node;
+              nodeb = node;
+            };
+          testScript = ''
+            start_all()
+
+            for node in [nodea, nodeb]:
+                node.wait_for_unit("multi-user.target")
+                node.succeed("id ${testUsername}")
+
+            # Distinct machines: each sees its own hostname.
+            nodea.succeed("hostname | grep -q nodea")
+            nodeb.succeed("hostname | grep -q nodeb")
+
+            # Filesystem isolation: a file created on nodea is not visible on nodeb.
+            nodea.succeed("touch /run/only-on-a")
+            nodea.succeed("test -f /run/only-on-a")
+            nodeb.fail("test -f /run/only-on-a")
+          '';
+        };
+
         # === VM FEATURE TESTS (T3) ===
 
         # SSH service test: multi-node test verifying sshd configuration,
