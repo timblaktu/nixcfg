@@ -89,7 +89,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | **Interactive (parked)** | TASK:PENDING — **PARKED**: do NOT auto-execute. Un-parking is a Tim decision (`USER_INPUT_REQUIRED`) — deferred per 2026-08-20 session-2 (low regression value); revisit after T8 merge. Marked Interactive so `/next-task` stops-and-asks instead of running the migration. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | **Interactive (parked)** | TASK:PENDING — **PARKED** with T4: do NOT auto-execute; un-parking is a Tim decision (`USER_INPUT_REQUIRED`). (dep: T4) |
-| T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:IN_PROGRESS 2026-08-20 (session 5) — split out of T3 (user-owned repos; bump-last with coordination per CLAUDE.md). Not a T3-DoD blocker. |
+| T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:COMPLETE 2026-08-20 (session 5) — **all 3 fork inputs already at their tracked-branch HEADs (locked rev == remote HEAD); no `flake.lock` bump possible/needed.** `nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, unchanged lock, docling resolves to 2.47.1). Two upstream-edit follow-ups NOTED (not silently skipped) — see Findings T7. |
 | T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:PENDING — split out of T3; DEFERRED by Tim (session 4). Cross-repo blast radius (corp hosts consume nixcfg `main`); guardrail: confirm w/ Tim before executing. |
 
 ## Findings (T1 + T2, 2026-08-20)
@@ -318,6 +318,37 @@ bump only needed to lock+eval cleanly.
 `nixos-dev-team-graviton` `toplevel.drvPath` evaluated clean separately. Log:
 `/tmp/t3-stable-bump-check.log`.
 
+### T7 — bump `timblaktu/*` forks (2026-08-20, session 5)
+
+**Finding: nothing to bump.** All three remaining user-owned fork inputs are already pinned at the
+tip of their tracked branch — `git ls-remote` HEAD == the locked rev in `flake.lock` for each:
+
+| input | branch | locked rev | remote HEAD | lock date | state |
+|---|---|---|---|---|---|
+| `nixpkgs-docling` | `docling-parse-fix` | `1aa4686` | `1aa4686` | 2025-12-08 | at HEAD |
+| `nixpkgs-esp-dev` | `c5` | `f920201` | `f920201` | 2025-05-27 | at HEAD |
+| `drawio-svg-sync` | HEAD (default) | `c38e7f7` | `c38e7f7` | 2026-02-02 | at HEAD |
+
+So `nix flake update <input>` would be a no-op for all three — there is no newer commit on any
+branch to move to. Verified `nix flake check --no-build --keep-going` = **`all checks passed!`**
+(unchanged committed lock; `overlays/default.nix` docling extraction still resolves —
+`python3.13-docling-2.47.1.drv`). T7's DoD ("chosen forks bumped OR any fork needing an upstream
+edit noted") is met by the note-and-verify path since no bump exists.
+
+**Upstream-edit follow-ups NOTED (out of T7's bump scope — each is an Interactive coordination/
+removal task, not a `flake.lock` bump):**
+1. **`nixpkgs-docling` is a stale full-nixpkgs fork (Dec 2025, ~8 mo behind the freshly-bumped root
+   nixpkgs 2026-08-19).** It is carried *only* to extract the `docling` package
+   (`overlays/default.nix:9-22`, isolated `import`), and it still evals clean. The `flake.nix:10`
+   comment says it is "Temporary: Only for docling-parse until PR #184 merges upstream." Two possible
+   cleanups, both bigger than a bump and needing Tim's call: (a) **drop the input** if upstream
+   nixpkgs `docling`/`docling-parse` now works (check whether PR #184 merged), or (b) **rebase the
+   `docling-parse-fix` branch onto current nixpkgs** if the fork is still needed. Deferred — not a
+   26.05-uplift blocker (docling builds today).
+2. **`nixpkgs-esp-dev` branch `c5` is old (May 2025)** but at HEAD and green; the esp-idf overlay it
+   provides is unaffected by the root bump. Rebasing `c5` onto newer nixpkgs-esp-dev upstream is a
+   separate fork-maintenance task, not required here.
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
@@ -449,3 +480,10 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   evals clean. **T3 marked COMPLETE.** Split the two remaining coordination items into **T7**
   (`timblaktu/*` fork bumps) and **T8** (merge->main + nixcfg-work pin, deferred). See Findings T3
   session-4.
+- 2026-08-20 (session 5 — T7 CLOSED, no-op bump): Tim (via /next-task) chose T7. Found all three
+  remaining fork inputs (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) already pinned at
+  their tracked-branch HEADs (locked rev == `git ls-remote` HEAD) ⇒ **no `flake.lock` bump exists to
+  make.** Re-verified `nix flake check --no-build --keep-going` = all checks passed (unchanged lock).
+  Noted two out-of-scope upstream follow-ups (docling stale-fork: drop-if-PR#184-merged or rebase;
+  esp-dev `c5` rebase) — both Interactive, deferred. **T7 marked COMPLETE.** Remaining: T5 (system.nix
+  eval), T8 (merge→main + pin, deferred), T4/T6 (parked nspawn migration). See Findings T7.
