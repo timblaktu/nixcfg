@@ -4,6 +4,11 @@
 
 This repository uses Nix-native testing integrated directly into the flake configuration. All tests are defined as flake checks and can be run using standard Nix commands.
 
+> **Faster integration tests:** most VM-based integration tests can run on the **systemd-nspawn
+> container backend** (NixOS 26.05) instead of QEMU — ~5-7× faster boot, far less RAM. See
+> [TESTING-NSPAWN.md](TESTING-NSPAWN.md) for when to use it, the host prerequisites, and how to
+> write or migrate a container test (with the real VM-vs-container caveats).
+
 ## Benefits Over Script-Based Testing
 
 1. **No External Dependencies**: Tests run in pure Nix environments
