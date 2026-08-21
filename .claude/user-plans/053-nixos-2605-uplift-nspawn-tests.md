@@ -90,7 +90,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:COMPLETE 2026-08-20 (session 6) — **DOCUMENT-ONLY** (Tim's call). `system.nix` solves a problem nixcfg doesn't have (already flake-based + channel-free; teammates already get a zero-Nix path via the `.wsl` image). Added a one-paragraph note to `docs/DISTRIBUTION.md`. See Findings T5. |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | **Interactive (parked)** | TASK:PENDING — **PARKED** with T4: do NOT auto-execute; un-parking is a Tim decision (`USER_INPUT_REQUIRED`). (dep: T4) |
 | T7 | Bump remaining `timblaktu/*` forks (`nixpkgs-docling`, `nixpkgs-esp-dev`, `drawio-svg-sync`) | Interactive · coordination | TASK:COMPLETE 2026-08-20 (session 5) — **all 3 fork inputs already at their tracked-branch HEADs (locked rev == remote HEAD); no `flake.lock` bump possible/needed.** `nix flake check --no-build --keep-going` = `all checks passed!` (0 errors, unchanged lock, docling resolves to 2.47.1). Two upstream-edit follow-ups NOTED (not silently skipped) — see Findings T7. |
-| T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:PENDING — split out of T3; DEFERRED by Tim (session 4). Cross-repo blast radius (corp hosts consume nixcfg `main`); guardrail: confirm w/ Tim before executing. |
+| T8 | Merge `feat/nixos-26.05`→`main` + coordinate nixcfg-work `flake.lock` pin bump | Interactive · coordination | TASK:IN_PROGRESS 2026-08-20 (session 6) — **split T8a/T8b**. **T8a (merge feat→main): DONE locally** — clean fast-forward, `main` @ `4e8264a` = feat HEAD, 17 ahead of `origin/main`; NOT pushed yet (Tim push-confirm pending). **T8b (nixcfg-work `flake.lock` pin bump): DEFERRED** to the darwin M-A milestone (the corp-blast-radius half; corp hosts pin a rev so T8a alone doesn't move them). |
 
 ## Findings (T1 + T2, 2026-08-20)
 
@@ -535,5 +535,9 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   a zero-Nix path via the `.wsl` image; no `${nixcfg}/nixos` entry point exists to hook). Added a
   one-paragraph "A Note on `system.nix`" subsection to `docs/DISTRIBUTION.md` (upstream option for
   teammates' OWN non-flake configs, NOT a nixcfg consumption path). No core change. **T5 marked
-  COMPLETE.** Remaining: T8 (merge→main + pin, deferred by Tim), T4/T6 (parked nspawn migration —
-  un-parking is a Tim decision). See Findings T5.
+  COMPLETE.** See Findings T5. Then Tim closed super-plan **H2** (numbering hygiene) and reviewed
+  H1+M-E together, choosing **"T8a merge now, then M-C docs":** **T8a DONE locally** (fast-forwarded
+  `main` to `feat/nixos-26.05` HEAD `4e8264a`; 17 ahead of `origin/main`; not pushed yet) — **T8b
+  (nixcfg-work pin) stays DEFERRED**; then landed the H1/M-C image-outputs docs on `main`
+  (DISTRIBUTION "Prebuilt Image Outputs" section). Remaining: push `main` (Tim confirm), M-C backlog,
+  T4/T6 parked nspawn. See super-plan 052 session log 2026-08-20.

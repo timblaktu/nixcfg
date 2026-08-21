@@ -6,13 +6,16 @@ images and reusable Nix modules for team consumption.
 ## What This Project Produces
 
 nixcfg is a Nix flake that defines NixOS system configurations, Home Manager user
-environments, and Darwin (macOS) setups. For team distribution, it produces two
-primary outputs:
+environments, and Darwin (macOS) setups. For team distribution, it produces three
+primary output kinds:
 
 1. **Pre-built WSL tarballs** — Ready-to-import `.wsl` images for Windows users
    who want a turnkey NixOS development environment.
 2. **Reusable Nix modules** — 57 exported modules (16 NixOS, 32 Home Manager, 9 Darwin)
    that teams can compose into their own configurations via flake input.
+3. **Platform image artifacts** — Proxmox VMA, EC2 AMIs (x86_64 + aarch64 Graviton), and an
+   Apple-Silicon Mac-VM `qcow2`, all built from the same `dev-team` NixOS config. See
+   [Prebuilt Image Outputs](#prebuilt-image-outputs) for build commands and consumption paths.
 
 ## Layer Architecture
 
@@ -184,6 +187,59 @@ machines**, not a nixcfg consumption path: nixcfg's modules are exported through
 Teammates who prefer to avoid flakes should use **Option A** (the pre-built `.wsl` image, zero Nix
 knowledge required); `system.nix` is only relevant if you are hand-rolling a non-flake NixOS
 config of your own and want to reference upstream nixpkgs without `nix-channel`.
+
+## Prebuilt Image Outputs
+
+Beyond the `.wsl` tarball, the flake exports **five** distributable image artifacts as short
+convenience aliases (`packages.<system>.image-*`), so you don't have to type the long
+`nixosConfigurations.<host>.config.system.build.*` paths. Each builds from a dedicated host
+config and targets a specific platform:
+
+| Artifact | Build attr | Arch (build host) | `result/` contents | Consumed by |
+|----------|-----------|-------------------|--------------------|-------------|
+| Proxmox VMA | `image-proxmox-dev-team` | x86_64-linux | `vzdump-qemu-*.vma.zst` | Proxmox VE restore |
+| EC2 AMI (x86_64) | `image-ec2-dev-team` | x86_64-linux | `*.img` (raw) | AWS AMI import (coldsnap) |
+| WSL tarball builder | `image-wsl-dev-team` | x86_64-linux | `bin/nixos-wsl-tarball-builder` | run it -> `.wsl` (see below) |
+| EC2 AMI (aarch64 Graviton) | `image-ec2-dev-team-graviton` | aarch64-linux | `*.img` (raw) | AWS Graviton AMI import |
+| **Mac-VM qcow2** | `image-vm-dev-team` | aarch64-linux | `nixos.qcow2` (UEFI, ext4, auto-resize) | Apple-Silicon UTM/QEMU |
+
+Source of truth: `modules/flake-parts/packages.nix` (aliases) building the
+`nixos-dev-team{,-ec2,-graviton,-vm}` and `nixos-wsl-dev-team` host configs in
+`modules/flake-parts/nixos-configurations.nix`.
+
+```bash
+# x86_64-linux artifacts (build on an x86_64 Linux host):
+nix build '.#image-proxmox-dev-team'      # -> result/vzdump-qemu-*.vma.zst
+nix build '.#image-ec2-dev-team'          # -> result/*.img
+nix build '.#image-wsl-dev-team'          # -> result/bin/nixos-wsl-tarball-builder
+sudo ./result/bin/nixos-wsl-tarball-builder nixos.wsl   # then: wsl --import
+
+# aarch64-linux artifacts (build on aarch64: a Graviton runner or Apple-Silicon Linux VM;
+# nixcfg-work CI already builds+publishes the qcow2 on its aarch64 Graviton runner):
+nix build '.#image-ec2-dev-team-graviton' # -> result/*.img
+nix build '.#image-vm-dev-team'           # -> result/nixos.qcow2
+```
+
+Note the single quotes around `.#...` — zsh would otherwise glob-expand the `#`.
+
+### Mac-VM (Apple Silicon / UTM) walkthrough
+
+The `image-vm-dev-team` output is an aarch64 NixOS `qcow2` for running the dev-team NixOS
+environment as a guest on an Apple-Silicon Mac (native aarch64 virtualisation, no emulation):
+
+1. **Build the qcow2 on an aarch64-linux builder** (a Graviton runner, an Apple-Silicon Linux
+   VM, or pull the CI-published artifact from nixcfg-work's pipeline):
+   `nix build '.#image-vm-dev-team'` -> `result/nixos.qcow2`.
+2. **Copy `nixos.qcow2` to the Mac** (`result/` is a read-only store symlink -- copy the
+   dereferenced file, e.g. `cp -L result/nixos.qcow2 ~/nixos.qcow2`).
+3. **Create a UTM VM:** New -> Virtualize -> Linux; under "Boot Image / existing disk" import
+   `nixos.qcow2`; keep the default UEFI (the image is a UEFI/ext4 disk that auto-resizes to the
+   virtual disk on first boot).
+4. **Boot and personalise:** log in as the generic `dev` user and run the same
+   `setup-username` / Home Manager steps used for the WSL image.
+
+This is the Apple-Silicon counterpart to the WSL `.wsl` image and the EC2/Graviton AMIs -- one
+shared NixOS `dev-team` config, delivered per platform.
 
 ## Import Script
 
