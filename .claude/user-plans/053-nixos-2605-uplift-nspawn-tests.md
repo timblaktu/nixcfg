@@ -464,6 +464,21 @@ is registered as a check but intentionally NOT in the CI matrix and cannot build
 prereq — `nix flake check --no-build` (the green gate) evals it fine; do NOT add it to CI until
 `auto-allocate-uids` lands.
 
+**ENABLEMENT DONE (Tim: fleet-wide) — commit `405cf9d`.** Added to the NixOS block of the shared
+base module `modules/system/types/1-minimal/minimal.nix`:
+`experimental-features = [ … "auto-allocate-uids" ]` + `auto-allocate-uids = lib.mkDefault true`
+(Darwin + HM blocks intentionally untouched — no systemd-nspawn there). **Eval-verified:**
+`nixos-dev-team` toplevel drvPath evaluates clean (`nixos-system-nixos-dev-team-26.11…`). 
+**To go from "config written" → "green container run" still needs a host REBUILD** (root/
+long-running ⇒ ENVIRONMENT_NOT_CAPABLE from this session):
+- **Any in-repo NixOS host:** `sudo nixos-rebuild switch --flake '.#<host>'` then
+  `nix build '.#checks.x86_64-linux.vm-nspawn-smoke'` → first green run + speedup vs the QEMU twin
+  `vm-system-type-cli`.
+- **The WSL2 dev host `pa161878-nixos` (where the POC ran):** it is managed by **nixcfg-work**, which
+  pins nixcfg `main`. So it picks up `405cf9d` only via a **nixcfg-work `flake.lock` pin bump** (=
+  the deferred **T8b** coordination) + rebuild — OR a one-off manual rebuild against nixcfg `main`
+  (`--override-input nixcfg …`). This couples T6's final demonstration to the T8b pin story.
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
@@ -626,4 +641,7 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   system feature (needs daemon `auto-allocate-uids`; client override rejected ⇒ root/NixOS-config
   change). **nspawn backend proven functional on the current pin; one fleet-scope host-config
   decision (auto-allocate-uids) is all that's left to run containers.** Chose "POC only, then
-  reassess". See Findings T6.
+  reassess", then chose **fleet-wide** enablement: added `auto-allocate-uids` to the NixOS base
+  module `minimal.nix` (commit `405cf9d`), eval-verified (`nixos-dev-team` toplevel clean). Only a
+  host rebuild remains for a green container run (root/long-running ⇒ not here; for the WSL2 dev host
+  it couples with the T8b nixcfg-work pin). See Findings T6.
