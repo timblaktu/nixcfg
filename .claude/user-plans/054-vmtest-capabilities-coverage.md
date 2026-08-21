@@ -23,13 +23,24 @@ Per-host smoke and QEMU→nspawn migration are *outcomes* of the analysis, not t
   or corrects the findings (gaps / redundancies / weak / backend-fit), and signs off on (or revises) the
   roadmap and sequence of P3-P6 BEFORE any per-test work begins. This is a deliberate checkpoint: the
   audit's conclusions and the assumed downstream plan are not treated as settled until Tim agrees.
-- **P3 Assessment:** per test — value (real / redundant / weak / obsolete), correct backend
-  (node vs container vs eval-only / drop), overlaps to merge. "Nothing is sacred."
-- **P4 Target design:** the redesigned suite — keep/merge/rewrite/drop/add, with a backend assignment
-  and a feature-coverage rationale. Agreed with Tim before execution.
-- **P5 Execute:** implement the target (incl. nspawn conversions, new tests for real gaps, deletions).
-- **P6 CI + nixcfg-work:** wire the redesigned suite into CI (matrix + nspawn runner config) and carry
-  the cohesive approach into nixcfg-work's corp hosts.
+- **P3 Assessment + backend deep-dive + nixcfg-work Tier-A audit (Interactive):** (a) EXTEND the audit
+  into `nixcfg-work` Tier-A hosts (`pa161878-nixos`, macbook) — P1 covered nixcfg only, but the daily
+  drivers live in nixcfg-work; (b) the deferred **interactive backend-fit review** (per-test node vs
+  container vs eval-only/drop) that encodes **per-host testability classes** (darwin = eval+build+shared-
+  module-on-Linux-proxy; WSL = eval+layer; bare Linux = full QEMU boot on KVM); (c) confirm the exact
+  Tier-0 consolidation list (which `eval-*` collapse into `regression-test`, keeping `eval-nixos-wsl-dev-team`).
+  "Nothing is sacred."
+- **P4 Target design (Interactive):** the redesigned **2-tier** suite — Tier 0 (consolidated eval-regression
+  gate) + Tier 1 (behavioral node/container VMTests), Tier-A hosts first — keep/merge/rewrite/drop/add with
+  backend assignment + rationale. Bakes in the already-decided deletions/renames. Agreed with Tim before execution.
+- **P5 Execute:** implement the target — delete the 2 mocks + unsalvageable weak no-ops; rename
+  `build-*-dryrun`→`eval-*-toplevel`; consolidate `eval-*`→`regression-test`; merge the SSH-2223 triple;
+  write new Tier-1 behavioral tests for Tier-A hosts.
+- **P6 CI + nixcfg-work:** wire the redesigned suite onto the KVM runners (both arches; QEMU node tests are
+  first-class in CI, nspawn an opt-in speedup) and carry the cohesive approach into nixcfg-work's corp hosts.
+- **P7 Backlog (deferred):** `nuc-apt-repo` (aptly-repo + apt-cacher-ng), `mss-clamp`, enterprise/
+  wsl-enterprise layers, `jfrog-cli`/`monitoring`, darwin sample hosts, and a real (non-mock)
+  rbw→SSH-key-deploy secrets-management test.
 
 ## Task definitions
 
@@ -60,7 +71,7 @@ table + the feature-coverage map + flagged gaps/redundancies/weak-tests; `nix ev
 are recorded so the audit is reproducible. No test is judged in isolation without noting the
 module/feature it maps to.
 
-### P2 — Audit review & roadmap sign-off `TASK:PENDING` (Interactive gate — dep P1) ← **/next-task starts here**
+### P2 — Audit review & roadmap sign-off `TASK:COMPLETE 2026-08-21` (Interactive gate — dep P1)
 **Interactive.** Injected at Tim's request (2026-08-21): before any per-test assessment, Tim wants to
 review the audit and confirm he is happy with the findings and the assumed sequence of downstream tasks.
 `/next-task` on this task yields USER_INPUT_REQUIRED — it must be run interactively.
@@ -88,11 +99,12 @@ and Tim has signed off.
 |----|------|------|--------|
 | P0 | Decide working branch | Interactive | TASK:COMPLETE 2026-08-20 — `feat/vmtest-refactor` (created from main) |
 | P1 | **Parallel test-suite audit** — inventory + feature/code coverage map (run as a multi-agent Workflow) | 1 · analysis (workflow) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-AUDIT.md` (all 106 checks + 65 coverage rows + gaps/redundancies/weak + adversarial verification) |
-| P2 | **Audit review & roadmap sign-off** — review findings + confirm/revise P3-P6 sequence | Interactive (gate) | TASK:PENDING (dep P1) ← **/next-task starts here** |
-| P3 | Per-test assessment — value + correct backend + overlaps (nothing sacred) | Interactive (collaborative) | TASK:PENDING (dep P2) |
-| P4 | Target suite design — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:PENDING (dep P3) |
-| P5 | Execute the refactor (conversions, new tests, deletions) | 1 · portable | TASK:PENDING (dep P4) |
-| P6 | CI wiring + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5) |
+| P2 | **Audit review & roadmap sign-off** — review findings + confirm/revise P3-P6 sequence | Interactive (gate) | TASK:COMPLETE 2026-08-21 — findings dispositioned, 2-tier priority + both-repos/CI-first framing settled, roadmap revised to P3-P7 (see "P2 review decisions") |
+| P3 | Assessment + interactive backend-fit review + **nixcfg-work Tier-A host audit** (nothing sacred) | Interactive (collaborative) | TASK:PENDING (dep P2) ← **/next-task starts here** |
+| P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:PENDING (dep P3) |
+| P5 | Execute the refactor (conversions, new tests, deletions, renames, consolidations) | 1 · portable | TASK:PENDING (dep P4) |
+| P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5) |
+| P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 
 ## Inputs already gathered this session (feed P1-P4)
 - **Backend capability (053 T6, DONE):** `mkVmTest` (QEMU) + `mkContainerTest` (nspawn, proven,
@@ -155,3 +167,49 @@ tests CAN be dropped/rewritten — but only with a recorded rationale (P4/P5), n
       eval not a service test; `vm-nspawn-smoke` is the one intentional nspawn twin; aptly/apt-cacher-ng
       want real nspawn/QEMU. Next: **P2 (Interactive gate, injected 2026-08-21 at Tim's request)** —
       review these findings + confirm/revise the P3-P6 roadmap before per-test assessment (P3) begins.
+
+### P2 review decisions (2026-08-21) — Tim signed off
+
+**(a) Audit findings — accepted / amended.** Walked all four analysis sections one-by-one:
+- **Gaps:** accepted as accurate, but RE-PRIORITIZED. The Tier-B gaps (`nuc-apt-repo`, `mss-clamp`,
+  enterprise/wsl-enterprise, `jfrog-cli`/`monitoring`, darwin samples) are parked as backlog (P7). The
+  `nuc-apt-repo` "highest-value target" call from P1 is OVERRIDDEN — that host was never really used.
+  The active gap is now "Tier-A shipped/daily-driver hosts lack *behavioral* coverage."
+- **Redundancies:** accepted. Confirmed by reading the code that the two mock/real pairs mock our
+  modules rather than exercise them (`vm-ssh-management` comment literally "simulate ... without importing
+  them" + mock `rbw` + never completes a real login; `vm-sops-deployment` hand-drives sops/age CLIs,
+  never imports `secrets-management`). DECISION: **drop both mocks** (`vm-ssh-management`,
+  `vm-sops-deployment`, and their `tests/integration/*.nix`), keep the real twins (`vm-ssh-service`,
+  `vm-sops-secrets`). Also merge the SSH-2223 triple; drop `eval-*` dominated by `*-dryrun`.
+- **Weak/trivial:** accepted. Delete or rewrite-to-assert the no-ops (`flake-validation`,
+  `validated-scripts-module`, `ssh-public-keys-registry`, `files-module-test`,
+  `opencode-config-validation`); fix `tmux-picker-syntax` to actually run `bash -n`. Recorded rationale each.
+- **Backend-fit:** accepted the renames in principle (`build-*-dryrun`→`eval-*-toplevel`; rename
+  `ssh-service-configured` to reflect it is an eval; keep `vm-nspawn-smoke` as the nspawn reference), but
+  Tim wants a **dedicated interactive backend-fit review** — MOVED into P3.
+
+**(b) Framing decisions settled.**
+1. **"Nothing is sacred" still fully in effect** — deletions/rewrites allowed with recorded rationale.
+2. **Scope = BOTH repos (nixcfg + nixcfg-work), CI-first.** The suites will run on existing nix-capable,
+   **KVM-enabled runners on both arches** → QEMU `nodes` tests are first-class in CI (not just local);
+   nspawn is an opt-in speedup, not a CI necessity.
+3. **eval-* = "nix checks, not tests" (Tim's framing).** Collapse the ~12 redundant `eval-*`/`eval-hm-*`
+   into `regression-test` as a **Tier-0 eval-regression gate** (preserve `eval-nixos-wsl-dev-team`, which
+   `regression-test` does NOT currently force). The "VMTest suite" refactor targets the **behavioral**
+   (node/container) tier.
+4. **2-tier host priority (only two tiers).**
+   - **Tier A (do first):** daily drivers `pa161878-nixos` + macbook (BOTH in nixcfg-work) + ALL dev-team
+     image hosts (`nixos-dev-team`/`-ec2`/`-graviton`/`-vm`) + ALL WSL images (`nixos-wsl-dev-team`/
+     `-minimal`) + the dev-team shared images.
+   - **Tier B:** thinky-nixos, `mbp`, `potato`, `nuc-apt-repo`, enterprise layers, darwin sample hosts.
+5. **Per-host testability classes** (VMTests boot Linux NixOS only): darwin macbook = eval + build-dryrun
+   + shared-module-on-Linux-proxy (macOS can't run on KVM Linux runners); WSL hosts = eval + layer
+   composition; bare Linux hosts = full QEMU boot on KVM.
+6. **Structural consequence:** P1 audited nixcfg only; the Tier-A daily drivers live in `nixcfg-work`,
+   which was NOT audited → P3 must extend the audit there.
+
+**(c) Roadmap — confirmed/revised (P3-P7).** P3 gains the nixcfg-work Tier-A audit + the deferred
+interactive backend-fit review + the Tier-0 consolidation-list confirmation; P4 designs the 2-tier suite;
+P5 executes (deletions/renames/consolidations/new Tier-1 tests); P6 wires CI on KVM runners both arches +
+nixcfg-work; **new P7** holds the deferred Tier-B backlog. Method section + progress table updated to match.
+No code changed in P2.
