@@ -500,10 +500,27 @@ payoff the whole plan targeted.
    NixOS block updated to all three; `nixos-dev-team` toplevel evals clean.
 2. **Test-assertion divergence (a real migration finding):** `vm-nspawn-smoke` first FAILED on
    `wait_for_unit("sshd.service")` — **sshd.service is inactive under nspawn** although the QEMU twin
-   has it active (VM-vs-container service-activation difference; `system-cli` sets
-   `services.openssh.enable = true` with no `startWhenNeeded`, so this is nspawn-specific). Switched to
-   an activation-agnostic assertion (ssh host key generated). **Lesson for migrating the 18 candidates:
-   service-`wait_for_unit` assertions may need container-aware equivalents; the SSH tests especially.**
+   has it active. NOT socket-activation (`system-cli` sets `services.openssh.enable = true` with no
+   `startWhenNeeded`). Confirmed contributing factor: the nspawn-container module runs the guest with
+   **`--private-network`** (isolated netns), changing network-target ordering/service startup; the
+   *exact* mechanism was not fully isolated (honestly logged). Switched to an activation-agnostic
+   assertion (ssh host key generated). **Lesson: service-`wait_for_unit` assertions may need
+   container-aware equivalents; the SSH tests especially.**
+
+**Config mechanism re-verified (closing an earlier inference gap):** the committed `minimal.nix` uses
+`extra-system-features = [ "uid-range" ]`, but the first green run used `system-features = kvm nixos-test
+uid-range …` (full replace). Confirmed the *committed* mechanism actually works: with
+`extra-system-features = uid-range`, `nix config show system-features` = `… kvm nixos-test uid-range`
+and `vm-nspawn-smoke` builds+passes. So the committed config is validated, not merely eval-clean.
+
+**Durable docs written:** the full VM-vs-container guide (when to use, host prereqs, write/migrate a
+container test, verified caveats, 21-test inventory, honesty ledger) is now in-tree at
+**`docs/TESTING-NSPAWN.md`** (cross-linked from `docs/TESTING.md`) — so the knowledge survives this
+plan's eventual archival. **Honest open items** (also in the doc's "Verified vs open" ledger): the green
+runs used `--store local` single-user root; the **daemon path after a real `nixos-rebuild switch` is
+unproven** (expected-equivalent, same nix.conf content); the running daemon config is confirmed
+UNCHANGED (`nix config show experimental-features` has no auto-allocate-uids/cgroups); `vm-nspawn-smoke`
+is registered but intentionally NOT in the CI matrix and unrun there.
 
 **Enablement invocation that worked (for repro/CI-runner setup), for the record:**
 ```
