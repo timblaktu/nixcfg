@@ -38,6 +38,7 @@ own machine, across BOTH delivery shapes:
 | **026** team-sharing-refactoring | nixcfg | made the repo a shareable library + CrowdStrike module | DONE **except T6** (IT/Falcon demo — human/IT-gated) |
 | **001** darwin-support | nixcfg-work | shared `corp-darwin-dev-team` nix-darwin config | Advanced WIP: **eval-green, NEVER activated on real Apple Silicon**; remaining tasks all hardware/Interactive/parked |
 | **004** machine-image-ci-release | nixcfg-work | one GitLab pipeline for every distributable artifact | Active WIP: qcow2 build+publish already live; darwin-cache + macOS runner + metal-KVM gate not stood up; 5 T0 decisions open |
+| **053** nixos-2605-uplift-nspawn-tests | nixcfg | 26.05 input uplift + systemd-nspawn container test backend → cheap/fast test coverage across all hosts | NEW 2026-08-20 (= milestone **M-E**). Top-priority WSL-side workstream; T0 (branch + release target) is Interactive/next |
 
 ### CLOSED — context only (do NOT resurface in "what's active" searches)
 | Plan | Repo | Why closed |
@@ -84,6 +85,14 @@ Each points at sub-plan tasks for detail.
   CONTINUOUSLY in parallel; not ordered against A/B/D.
 - **M-D — IT/CrowdStrike compliance.** The Falcon/IT demo (nixcfg **026** T6) that unlocks
   production security compliance on the shared WSL image. Human/IT-gated.
+- **M-E — NixOS 26.05 uplift + nspawn container test backend (→ nixcfg 053).** TOP-PRIORITY
+  **WSL-side** workstream, added 2026-08-20. Migrates the stale nixpkgs pin (currently
+  `nixos-unstable` @ 2026-01-30) to a 26.05-aligned target, then adopts the systemd-nspawn test
+  driver backend (nixpkgs #478109) so most integration tests run as fast/cheap containers instead
+  of QEMU VMs — the ENABLER for cheaply validating all 10 NixOS + 2 Darwin hosts (feeds M-B CI
+  unification + general validation). Runs in PARALLEL with M-A: **M-A executes on the Mac (Tim,
+  browser); M-E is what the WSL driver session actively builds meanwhile.** Does not block M-A.
+  Detail owner = 053. Branch: `feat/nixos-26.05` (proposed, 053 T0).
 
 ## STANDING WORKSTREAM — M-C: docs & consumption polish (always-on, parallel)
 **This is not a milestone that finishes; it is how the super-plan uses blocked time.**
@@ -182,6 +191,7 @@ Structural / high-leverage (each kills several rows):
 | M-B | Drive CI/delivery unification (→ nixcfg-work 004 T0–T5) | gated: infra/budget | TASK:PENDING |
 | M-C | **STANDING** docs & consumption workstream — always-on; fill ALL blocked time (see §STANDING WORKSTREAM) | continuous | STANDING (NOT a /next-task cursor row) |
 | M-D | IT/CrowdStrike compliance demo (→ nixcfg 026 T6) | Interactive: IT | TASK:PENDING |
+| M-E | **NixOS 26.05 uplift + nspawn test backend (→ nixcfg 053)** — TOP-PRIORITY WSL-side; parallel to M-A | 1 · portable (053) | TASK:IN_PROGRESS 2026-08-20 — sub-plan 053 authored; next = 053 T0 (Interactive: branch + release target) |
 | H1 | Refresh DISTRIBUTION.md + SHARED-MODULES.md for the new image/darwin outputs | 1 · portable | TASK:PENDING |
 | H2 | Resolve plan-number collisions (nixcfg-work 002; note nixcfg 013 pair) | chore | TASK:PENDING |
 
@@ -239,6 +249,28 @@ dead-end:
    M-C backlog item (see §STANDING WORKSTREAM); never idle-wait on a long op.
 3. Do NOT put corporate detail in this file (see PUBLIC-SAFETY CONSTRAINT). Corporate work is
    tracked in nixcfg-work's plans; this file only rolls up status + sequences milestones.
+
+## Branch strategy (decided 2026-08-20)
+Darwin test/dev phase uses **symmetric feature branches** in both repos (Tim's choice):
+- **nixcfg-work:** all darwin work on `feat/darwin-support` (unchanged; never `main` there —
+  main is the shared personal+team base). Pins nixcfg.
+- **nixcfg:** future darwin **code** lands on **`feat/darwin-support`** (created off `main`
+  2026-08-20, pushed as a marker). During hardware testing, pin nixcfg-work to
+  `github:timblaktu/nixcfg/feat/darwin-support`; **merge → `main` + re-pin at the milestone**
+  ("MacBook boots a nix-darwin config that runs Claude natively"). No darwin *code* changed yet
+  this phase, so the pin bump waits until the first darwin code commit lands on the branch.
+- **Trunk stays on main:** the super-plan file, public M-C docs, and the 053 sub-plan file live
+  on `main` (trunk-wide; needed for `/next-task` resumption + consumers).
+- **053 (26.05) is a SEPARATE branch** `feat/nixos-26.05` (repo-wide migration, orthogonal to
+  darwin) — confirm in 053 T0.
+
+## Resumability note (2026-08-20)
+Plan files (`052`, `053`, nixcfg-work `001`) are **git-tracked** → they travel on clone. The
+per-worktree `.claude/HANDOFF.md` + `.claude/active-plan` are **gitignored** → they do NOT travel,
+so a *native* Claude session on the Mac won't auto-rehydrate via the SessionStart hook; the
+self-contained plan files are the source of truth there. Model: **WSL session = driver** (holds
+live context, edits both trees, runs M-E); **Mac = M-A hardware** via claude.ai browser + the
+RESUME doc, until nix-darwin gives the Mac native `claude-code`.
 
 ## Guardrails
 Serialize nix. No AI attribution. Coordinating plan = human-attended (Mode A); NOT
