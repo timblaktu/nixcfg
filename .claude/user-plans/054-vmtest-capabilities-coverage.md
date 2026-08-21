@@ -29,7 +29,7 @@ Per-host smoke and QEMU→nspawn migration are *outcomes* of the analysis, not t
 
 ## Task definitions
 
-### P1 — Parallel test-suite audit `TASK:IN_PROGRESS` (run as a multi-agent Workflow — Tim opted in)
+### P1 — Parallel test-suite audit `TASK:COMPLETE 2026-08-21` (run as a multi-agent Workflow — Tim opted in)
 **Execute this as a `Workflow` (multi-agent), not inline.** Tim has explicitly authorized the parallel
 audit; the whole-suite scope (100+ checks across both repos, cross-referenced against ~57 modules)
 is exactly the decompose-and-cover-in-parallel case.
@@ -60,7 +60,7 @@ module/feature it maps to.
 | ID | Task | Kind | Status |
 |----|------|------|--------|
 | P0 | Decide working branch | Interactive | TASK:COMPLETE 2026-08-20 — `feat/vmtest-refactor` (created from main) |
-| P1 | **Parallel test-suite audit** — inventory + feature/code coverage map (run as a multi-agent Workflow) | 1 · analysis (workflow) | TASK:PENDING ← **/next-task starts here** |
+| P1 | **Parallel test-suite audit** — inventory + feature/code coverage map (run as a multi-agent Workflow) | 1 · analysis (workflow) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-AUDIT.md` (all 106 checks + 65 coverage rows + gaps/redundancies/weak + adversarial verification) |
 | P2 | Per-test assessment — value + correct backend + overlaps (nothing sacred) | Interactive (collaborative) | TASK:PENDING (dep P1) |
 | P3 | Target suite design — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:PENDING (dep P2) |
 | P4 | Execute the refactor (conversions, new tests, deletions) | 1 · portable | TASK:PENDING (dep P3) |
@@ -107,3 +107,22 @@ tests CAN be dropped/rewritten — but only with a recorded rationale (P3/P4), n
   `feat/vmtest-refactor` (P0 COMPLETE); folded inventory + coverage-map into a single **P1
   parallel-audit Workflow task** (first PENDING → `/next-task` starts there); renumbered P2-P5. Next
   session: `/next-task` runs the P1 audit workflow → produces `docs/VMTEST-AUDIT.md`.
+- 2026-08-21 (P1 DONE): ran the audit as a 25-agent Workflow (9 check-family + 2 module-walk fan-out →
+  synthesize → 12 adversarial verifiers → finalize). Produced **`docs/VMTEST-AUDIT.md`**: all 106 checks
+  inventoried (backend/asserts/modules/depth/weakness), 65-row feature-coverage map, plus derived Gaps,
+  Redundancies, Weak-tests, and Backend-fit sections + a Verification-notes table (9 confirmed, 3 partial,
+  0 refuted — partials corrected in-place). Discovery reproducible: nixcfg = 106 checks (mirrored x86_64/
+  aarch64); nixcfg-work = 1 re-exported check. **Headline findings feeding P2/P3:**
+  (a) **Real gap:** `nuc-apt-repo` host + its unique `aptly-repo`/`apt-cacher-ng` services = ZERO coverage
+      (highest-value new-test target); also `jfrog-cli`/`monitoring`/`mss-clamp` wired-but-untested,
+      darwin outputs untested, dev-shells never built, auth-helpers + many program modules eval-only.
+  (b) **Redundancy:** ~12 `eval-*`/`eval-hm-*` checks largely subsumed by `regression-test` + the
+      `*-dryrun` toplevel forcers + `config-snapshot-validation` (but `eval-nixos-wsl-dev-team` is NOT in
+      regression-test — don't drop it blindly); triple SSH-port-2223 asserts; mock-vs-real pairs
+      (`vm-ssh-management`↔`vm-ssh-service`, `vm-sops-deployment`↔`vm-sops-secrets`); `vm-yazi`↔isolation.
+  (c) **Weak/tautological:** `flake-validation`, `validated-scripts-module`, `ssh-public-keys-registry`,
+      `files-module-test`, `unified-files-diagnostic-test`, `opencode-config-validation`, `tmux-picker-syntax`,
+      `cross-module-sops-base`, `module-base-integration` — echo/touch or self-referential asserts.
+  (d) **Backend-fit:** `build-*-dryrun` are eval-forcers misnamed `build-*`; `ssh-service-configured` is an
+      eval not a service test; `vm-nspawn-smoke` is the one intentional nspawn twin; aptly/apt-cacher-ng
+      want real nspawn/QEMU. Next: P2 (Interactive) — per-test keep/merge/rewrite/drop using this audit.
