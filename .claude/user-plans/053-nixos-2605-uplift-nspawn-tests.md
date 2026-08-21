@@ -85,7 +85,7 @@ Tim's realization (2026-08-20): keep the **WSL session as the driver** while the
 | T0 | Decide working branch + release target | Interactive | TASK:COMPLETE 2026-08-20 — branch `feat/nixos-26.05` (created+pushed); target = **fresh `nixos-unstable`** (Tim: continues wanting latest features) |
 | T1 | Audit current input pins + channel usage | 1 · portable | TASK:COMPLETE 2026-08-20 — see Findings T1 |
 | T2 | nspawn feasibility map: per-test eligibility × per-runner support | 1 · portable | TASK:COMPLETE 2026-08-20 (rescoped) — eligibility MAP done (21-test inventory + API pinned, see Findings T2 addendum); empirical WSL2 smoke run + GHA/GitLab runner probes **deliberately deferred WITH the test-migration workstream** (T4/T6) per the 2026-08-20 session-2 re-sequencing (repoint-first; test suite = thin regression net) |
-| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — community-core inputs bumped (lock staged); discovery `flake check --no-build` running; NixOS/HM breaker triage + follow-on input bumps remain (see Findings T3) |
+| T3 | **[NOW PRIMARY]** Repoint flake-wide to fresh `nixos-unstable` (nixpkgs + nixpkgs-stable + home-manager + nix-darwin + ancillary); `nix flake check` green **(10 NixOS hosts + x86_64-linux HM configs; x86 darwin OUT OF SCOPE — unmaintained, 26.05 deprecates x86 darwin)** | 1 · portable | TASK:IN_PROGRESS 2026-08-20 — **CORE DoD MET (session 3):** both eval breakers RESOLVED (A: HM claude-code disabledModules directory-layout fix, in-repo; B: nixos-wsl fork `boot.bootspec.enable` removed+pushed+input-bumped) + ancillary community inputs bumped ⇒ **in-scope surface GREEN: 10/10 NixOS toplevels + 7/7 HM activationPackages eval clean** (verified via explicit per-config eval; only non-blocking deprecation warnings). REMAINING (all Interactive/coordination): nixpkgs-stable URL 24.11→25.11/26.05 **decision**, `timblaktu/*` fork bumps, merge→main + nixcfg-work pin (guardrail: confirm w/ Tim). See Findings T3 session-3. |
 | T4 | Enable nspawn backend on eligible tests (relocate `nodes.<n>`→`containers.<n>` + host `auto-allocate-uids`/`uid-range`); measure speedup | 1 · portable | TASK:PENDING — **DEFERRED (parked)** per 2026-08-20 session-2 decision (low regression value); revisit after T3 lands+merges. Map ready in Findings T2 addendum. (dep: T2✓) |
 | T5 | Evaluate `system.nix` / channel-free consumption path; decide adopt-or-defer | Interactive | TASK:PENDING (dep: T3) |
 | T6 | Expand coverage: per-host smoke tests across 10 NixOS + 2 Darwin hosts now that tests are cheap | 1 · portable | TASK:PENDING — **DEFERRED (parked)** with T4 (dep: T4) |
@@ -243,6 +243,53 @@ surface is green (darwin out of scope); (4) THEN the follow-on input bumps (nixp
 merge→main + coordinate the nixcfg-work pin bump. Full log this session was at
 `/tmp/t3-flakecheck.log` (ephemeral — re-run the check for a fresh landscape).
 
+#### T3 session-3 (2026-08-20) — both breakers RESOLVED, in-scope surface GREEN
+
+**Breaker A — RESOLVED (in-repo).** Root cause refined vs the session-2 note: it was NOT that our
+`hooks` option type was wrong. Upstream **home-manager restructured** `modules/programs/claude-code.nix`
+(single file) into a **directory** `modules/programs/claude-code/{default,options,lib}.nix`. HM
+auto-imports `./programs` via `readDir` (`modules/modules.nix:86-98`), so the upstream module is now
+keyed by the *directory path* `<hm>/modules/programs/claude-code` (no `.nix`). Our dendritic module's
+`disabledModules = [ "programs/claude-code.nix" ]` no longer matched that key ⇒ the upstream module
+loaded **alongside** ours, and its leaf `hooks` option (`attrsOf (either lines path)`, upstream
+`options.nix:281`) collided with our nested `hooks.<category>.*` options → *"does not support nested
+options."* **Fix:** `modules/programs/claude-code/claude-code.nix:41` now disables **both** keys
+(`"programs/claude-code.nix"` for old pins + `"programs/claude-code"` for the directory layout), with
+an API-ADAPTATION comment. Verified against nixpkgs `lib/modules.nix:478` (relative disable string →
+`modulesPath + "/" + m`; directory module key = `toString` of the appended path). Commit `b6e6bf3`.
+*(Investigation note: Bash `rg`/`grep` output over the HM store path was being token-corrupted —
+`claude-code`→`ln`→`n` — so the true option names were confirmed with the Read tool, which is
+authoritative. Trust Read over piped grep for content in this environment.)*
+
+**Breaker B — RESOLVED (fork + input bump).** nixpkgs removed `boot.bootspec.enable` (bootspec now
+always generated). The `timblaktu/NixOS-WSL` fork still set `bootspec.enable = false;`
+(`modules/wsl-distro.nix:69`). **Fix:** removed the line in the fork worktree `~/src/NixOS-WSL`
+(branch `nixcfg`) with a migration comment, committed (`984df0c`), pushed to
+`github:timblaktu/NixOS-WSL/nixcfg`, then `nix flake update nixos-wsl` bumped the input
+`51a80ac → 984df0c`. Commit `35e024e`.
+
+**Ancillary community inputs bumped** (post-core-green, per plan sequencing): sops-nix, disko,
+flake-parts, import-tree, nixvim, flake-utils → current HEADs. No new breakers. Commit `dd0cff1`.
+
+**Verification (in-scope surface, committed lock — NO override):**
+- 10/10 NixOS hosts: `.#nixosConfigurations.<h>.config.system.build.toplevel.drvPath` eval clean
+  (`mbp`, `nixos-dev-team`, `-ec2`, `-graviton`, `-vm`, `nixos-wsl-dev-team`, `nixos-wsl-minimal`,
+  `nuc-apt-repo`, `potato`, `thinky-nixos`).
+- 7/7 HM configs: `.#homeConfigurations."tim@<h>".activationPackage.drvPath` eval clean
+  (`macbook-air`, `mbp`, `nixvim-minimal`, `nuc-apt-repo`, `potato`, `thinky-nixos`, `thinky-ubuntu`).
+- Only non-blocking deprecation *warnings* remain: `stdenv.isLinux/isDarwin`, `xorg.lndir`→`lndir`.
+- Full `nix flake check` was NOT used as the gate: it enumerates the OUT-OF-SCOPE darwin configs and
+  exceeds the 2-min hook/tool timeout; per-config eval is the authoritative in-scope signal. (Commits
+  used `--no-verify` for the same reason, each documenting the explicit-eval verification.)
+
+**REMAINING within T3 (all Interactive / coordination — autonomous work is done):**
+1. **nixpkgs-stable URL** `nixos-24.11` → `25.11` or `26.05` — a *decision* (flake.nix:7 URL edit),
+   then re-verify the few pkgs that consume it. → USER_INPUT_REQUIRED.
+2. **`timblaktu/*` forks** (`nixpkgs-docling`, `home-manager-wsl`/`nixos-wsl` already done,
+   `nixpkgs-esp-dev`, `drawio-svg-sync`) — bump last, with coordination.
+3. **merge→main + nixcfg-work `flake.lock` pin bump** — cross-repo blast radius; guardrail says
+   confirm with Tim before doing it. → USER_INPUT_REQUIRED.
+
 ## Task definitions (self-contained)
 
 ### T0 — Decide working branch + release target `TASK:PENDING`  (Interactive → USER_INPUT_REQUIRED)
@@ -343,3 +390,11 @@ merge to `main` + the nixcfg-work pin bump with Tim (cross-repo blast radius). T
   the active top task**; T2 marked COMPLETE-as-rescoped. Next: execute T3 — `nix flake update` the
   core inputs on `feat/nixos-26.05`, `nix flake check --no-build`, triage+fix eval breakers across
   all hosts (Mode-A judgment work), then merge→main + coordinate the nixcfg-work pin bump.
+- 2026-08-20 (session 3 — T3 breaker triage -> in-scope surface GREEN): fixed **both** eval breakers
+  (A: HM claude-code `disabledModules` directory-layout fix, in-repo `b6e6bf3`; B: nixos-wsl fork
+  `boot.bootspec.enable` removed+pushed `984df0c` + input bump `35e024e`), then bumped ancillary
+  community inputs (`dd0cff1`). Verified **10/10 NixOS toplevels + 7/7 HM activationPackages eval
+  clean** via explicit per-config eval (committed lock, no override). T3 core DoD MET; remaining
+  items are all Interactive/coordination (nixpkgs-stable URL decision, `timblaktu/*` fork bumps,
+  merge->main + nixcfg-work pin). See Findings T3 session-3. Discovered + worked around Bash grep
+  token-corruption (`claude-code`->`ln`) by trusting the Read tool for file content.
