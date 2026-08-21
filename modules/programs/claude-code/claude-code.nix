@@ -38,7 +38,22 @@
       {
         # Disable upstream home-manager claude-code module to avoid conflicts
         # Our enhanced module provides: multi-account, categorized hooks, statusline, MCP, WSL integration
-        disabledModules = [ "programs/claude-code.nix" ];
+        #
+        # API-ADAPTATION (home-manager 2026-08-19, plan 053 T3): upstream restructured
+        # `modules/programs/claude-code.nix` (single file) into a directory
+        # `modules/programs/claude-code/{default,options,lib}.nix`. HM auto-imports
+        # `./programs` via `readDir`, so the module is now keyed by the directory path
+        # `<hm>/modules/programs/claude-code` (no `.nix`), and the old disable string
+        # `"programs/claude-code.nix"` no longer matched -> the upstream module loaded
+        # alongside ours. Its leaf `hooks` option (attrsOf (either lines path)) then
+        # collided with our nested `hooks.<category>.*` options ("type ... does not
+        # support nested options"), breaking every HM config that enables claude-code.
+        # We disable BOTH keys so the module stays correct across HM revisions.
+        # Remove the `.nix` entry once all consumed HM pins ship the directory layout.
+        disabledModules = [
+          "programs/claude-code.nix" # pre-2026-08-19 single-file layout
+          "programs/claude-code" # 2026-08-19+ directory layout
+        ];
 
         imports = [
           ./_hm/mcp-servers.nix
