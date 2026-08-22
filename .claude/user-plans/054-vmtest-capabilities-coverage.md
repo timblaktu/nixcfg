@@ -227,28 +227,45 @@ Backend per each test = the **P5b findings** (not the design doc's `N?` guesses)
 3. **Merge** `vm-full-cli-stack` + `vm-dev-team-stack` → one parameterized `vm-compose-stack` (param =
    `system-cli` layer vs real `nixos-dev-team` host module with grub/disk forced off, `/`=tmpfs); union of
    asserts runs per parameterization.
-4. **Migrate to nspawn** every test P5b proved safe (candidates: `vm-system-type-default`, `vm-user-config`,
-   `vm-shell-env`, `vm-development-tools`, `vm-git-advanced`, `vm-neovim`, `vm-tmux`, `vm-hm-activation`,
-   `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-sops-secrets`, `vm-compose-stack`); rewrite any
-   `sshd.service` assert to the socket form. **Keep QEMU**: `vm-boot-minimal`, `vm-system-type-cli`,
-   `vm-system-type-desktop`, `vm-nspawn-smoke`, `vm-ssh-service`, `vm-dev-team-vm-smoketest`.
-   **⚠ CORRECTED BY P5b FINDINGS (see "P5b spike findings"):** NixOS-integrated HM-activation tests
-   FAIL under nspawn (in-container nix-daemon cannot chown the shared `/nix/store`). MIGRATE to nspawn only
-   the HM-FREE tests: `vm-sops-secrets` (sops proven), `vm-system-type-default`, `vm-user-config` (both
-   import only `system-default`, no HM). **STAY ON QEMU** (they wait on `home-manager-<user>.service`):
-   `vm-shell-env`, `vm-development-tools`, `vm-git-advanced`, `vm-neovim`, `vm-tmux`, `vm-hm-activation`,
-   `vm-hm-composition-pairs`, `vm-hm-module-isolation`, and the merged `vm-compose-stack`. (Verified by
-   grepping each test's `testScript` for a `home-manager-<user>.service` wait.) Any multi-node test that
-   DOES move to nspawn must use hostname-valid node names (no underscores). Do NOT attempt a store/daemon
-   workaround to force HM tests onto nspawn — that is out of scope.
+4. **Migrate to nspawn** every boot-independent test. **⚠ SUPERSEDED BY R2 (see "R2 spike findings" +
+   `docs/nix-store-model-and-vmtest-backends.md` §8f) — Tim's decision 2026-08-21: MIGRATE THE HM FAMILY
+   TO NSPAWN TOO.** P5b concluded HM tests must stay QEMU (in-container daemon can't chown the shared
+   `/nix/store`); R2 probe 3b (`spike-r2-hm-roskip`) **refuted that** — full `home-manager-<user>.service`
+   reaches `active` on a READ-ONLY store with a test-level recipe: `nix.settings.build-users-group = ""`
+   (skip the LocalStore chown) + a daemon-free `nix-store --load-db` oneshot of the HM generation's
+   `closureInfo` (`config.home-manager.users.<user>.home.activationPackage`), ordered before
+   `home-manager-<user>.service`; no writable store, no overlay, no upstream change.
+   - **4a. Add an nspawn HM helper.** Introduce a `mkContainerTest`/`mkHmModuleTest` nspawn variant (or
+     extend `mkContainerTest`) that bakes in the R2 recipe: `build-users-group=""` + the generic
+     `register-nix-paths` load-db oneshot (closureInfo derived from the config's HM activationPackage).
+     `spike-r2-hm-roskip` is the reference implementation — lift its `systemd.services` block into the helper.
+   - **4b. MIGRATE to nspawn (HM-free, already P5b-proven):** `vm-sops-secrets`, `vm-system-type-default`,
+     `vm-user-config`. Rewrite any `sshd.service` assert to the `sshd.socket` form (per `vm-nspawn-smoke`).
+   - **4c. MIGRATE to nspawn (HM family, via the 4a helper — NEW per R2):** `vm-hm-activation`,
+     `vm-shell-env`, `vm-development-tools`, `vm-git-advanced`, `vm-neovim`, `vm-tmux`,
+     `vm-hm-composition-pairs`, `vm-hm-module-isolation`, and the merged `vm-compose-stack`. Each must
+     build+pass under the sudo-root nspawn path before being declared migrated (do NOT assume — the closures
+     are larger than the git-only spike; verify per test). Multi-node HM tests (`vm-hm-composition-pairs`,
+     `vm-hm-module-isolation`) MUST rename underscore node names to hostname-valid forms (P5b finding #2).
+   - **Keep QEMU** (genuine boot/kernel/graphics/real-network/image semantics): `vm-boot-minimal`,
+     `vm-system-type-cli`, `vm-system-type-desktop`, `vm-nspawn-smoke` (nspawn reference), `vm-ssh-service`
+     (real cross-node ssh), `vm-dev-team-vm-smoketest` (shipped-image gate).
+   - **Fallback:** if a specific HM test won't pass under the 4a helper (e.g. an activation step that does a
+     real store write beyond `nix-env --set`), leave THAT test on QEMU with a recorded reason — do not block
+     the whole migration on one straggler.
 5. **Add `vm-wsl-dev-team-layers`** (nspawn): compose `system-cli + wsl-dev-team + wsl-enterprise` +
    `monitoring` + `mss-clamp` — first behavioral coverage of `monitoring`/`mss-clamp` (the Tier-A WSL stack).
+6. **Remove the throwaway spikes** once their semantics are absorbed: the 3 P5b spikes
+   (`spike-nspawn-hm-activation`, `spike-nspawn-sops`, `spike-nspawn-multinode`) and the retained R2
+   `spike-r2-hm-roskip` (its recipe now lives in the 4a helper). Keep `vm-nspawn-smoke` (the permanent
+   nspawn reference).
 **DoD (checkable):** `nix flake check --no-build` exits 0. attrNames show: **GONE** = `vm-ssh-management`,
-`vm-sops-deployment`, `vm-yazi`, `vm-full-cli-stack`, `vm-dev-team-stack`; **PRESENT** = `vm-compose-stack`,
-`vm-wsl-dev-team-layers`. The two `tests/integration/*.nix` files no longer exist. The retained-QEMU set is
-unchanged. Representative build-verify (heavy full-suite VM builds are CI/P6, not this DoD): `nix build
-'.#checks.x86_64-linux.vm-nspawn-smoke'` passes AND at least one newly-migrated nspawn test builds+passes.
-Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
+`vm-sops-deployment`, `vm-yazi`, `vm-full-cli-stack`, `vm-dev-team-stack` (and the absorbed spikes);
+**PRESENT** = `vm-compose-stack`, `vm-wsl-dev-team-layers`. The two `tests/integration/*.nix` files no longer
+exist. The retained-QEMU set (above) is unchanged. Representative build-verify (heavy full-suite VM builds
+are CI/P6, not this DoD): `nix build '.#checks.x86_64-linux.vm-nspawn-smoke'` passes AND at least one
+newly-migrated nspawn HM test (e.g. `vm-hm-activation`) builds+passes on the nspawn backend. Committed.
+Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 
 ## Progress tracking
 | ID | Task | Kind | Status |
@@ -624,10 +641,11 @@ Durable artifact: new **§8 "Prior art & upstream path (R1)"** in `docs/nix-stor
 ### R2 spike findings (2026-08-21) — writable-store spike, evidence for the §8d verdicts
 
 Ran on `pa161878-nixos` (KVM + `systemd-nspawn`; daemon still lacks `uid-range`, so nspawn checks built
-via the §10 ad-hoc sudo-root path). Four throwaway checks added after the P5b spikes in
+via the §10 ad-hoc sudo-root path). Four throwaway checks were added after the P5b spikes in
 `modules/flake-parts/vm-tests.nix` (`spike-r2-overlay`, `spike-r2-roskip`, `spike-r2-hm-roskip`,
-`spike-r2-hm-overlay-live`); check total 63 → 67, eval clean. Docs fully revised in
-`docs/nix-store-model-and-vmtest-backends.md`. **HEADLINE (stronger than R2 was scoped to find): Home
+`spike-r2-hm-overlay-live`); after recording results, three were **pruned** (Tim's call) leaving only
+`spike-r2-hm-roskip` as the canonical proof (check total 63 → 67 → **64**). Full `nix flake check
+--no-build` passes. Docs fully revised in `docs/nix-store-model-and-vmtest-backends.md`. **HEADLINE (stronger than R2 was scoped to find): Home
 Manager activation RUNS ON NSPAWN TODAY with a test-level config (`build-users-group=""` + a daemon-free
 `load-db` of the HM closure) — NO writable store, NO overlay, NO upstream change. This OVERTURNS P5b's
 "HM must stay QEMU" and means P5c's HM-family backend map should be reconsidered (flagged for Tim below).**
@@ -699,14 +717,15 @@ private. Direction #1 (live overlay) confirmed **blocked** — and, given probe 
 **Consequences.** (a) `docs/…backends.md` fully revised: §7 thesis banner (SUPERSEDED), §8d rows #1
 (blocked+moot) / #3 (full HM confirmed), §8e recommendation (primary = a LOCAL `mkContainerTest` recipe,
 NO upstream needed; upstream = optional polish; direction #1 dropped), new §8f 5-probe results table +
-overturn bottom line. (b) The five R2/P5b throwaway spike checks are excluded from CI (all nspawn checks
-are) and can be removed/absorbed in P5c. (c) **P5c RECONSIDERATION (flagged for Tim — NOT auto-applied):**
-P5b/P4 routed the whole HM-activation family to QEMU on the belief nspawn can't host HM. Probe 3b refutes
-that. A `mkContainerTest` variant (or `mkHmModuleTest` on the nspawn backend) that sets
-`build-users-group=""` + a generic `load-db` oneshot (closureInfo from
-`config.home-manager.users.<user>.home.activationPackage`) could migrate the HM family to nspawn (~5-7×
-faster): `vm-hm-activation`, `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`,
-`vm-development-tools`, `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-compose-stack`. This is a
-P5c backend-map change and a design call — Tim decides whether to fold it into P5c before P5c executes.
-R2 leaves P5c's plan text unchanged pending that decision. (d) Any upstream nixpkgs PR (the `writableStore`-
-analog) is now OPTIONAL convenience, not a prerequisite — out of scope for plan 054.
+overturn bottom line. (b) The R2 spike checks are throwaway/CI-excluded; three were pruned after recording
+(see intro), keeping `spike-r2-hm-roskip` as the canonical proof + seed for the P5c HM helper. The 3 P5b
+spikes remain until P5c absorbs them. (c) **P5c DECISION TAKEN (Tim, 2026-08-21): ADOPT HM-on-nspawn.**
+P5b/P4 had routed the whole HM-activation family to QEMU on the belief nspawn can't host HM; probe 3b
+refuted it, so **P5c's plan text has been UPDATED** (step 4 rewritten): add a `mkContainerTest`/
+`mkHmModuleTest` nspawn variant carrying the R2 recipe (`build-users-group=""` + generic `load-db` oneshot
+from `config.home-manager.users.<user>.home.activationPackage`), and migrate the HM family to nspawn
+(`vm-hm-activation`, `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`,
+`vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-compose-stack`) — each verified per-test, with a
+per-test QEMU fallback if a straggler won't pass. `spike-r2-hm-roskip` is the reference implementation.
+(d) Any upstream nixpkgs PR (the `writableStore`-analog) is now OPTIONAL convenience, not a prerequisite —
+out of scope for plan 054.

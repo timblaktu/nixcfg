@@ -407,6 +407,11 @@ The R2 spike turned the §8d verdicts from "on-paper" into evidence. Five throwa
 (`modules/flake-parts/vm-tests.nix`, after the P5b spikes), built via the §10 ad-hoc sudo-root path
 (daemon still lacks `uid-range`). Full write-up in plan 054's "R2 spike findings".
 
+> **Cleanup (2026-08-21):** after recording these results, the four superseded checks (`spike-r2-overlay`,
+> `spike-r2-roskip`, `spike-r2-hm-overlay-live`, and probe 2b) were **pruned** from `vm-tests.nix`, keeping
+> only **`spike-r2-hm-roskip`** (probe 3b) as the canonical, reproducible proof and the seed for the P5c
+> HM-on-nspawn migration. The table below preserves all five probes' findings for the record.
+
 | Probe | Direction | Check | Result |
 |---|---|---|---|
 | 1 | Clan.lol prior-art (primary source) | — (read `~/src/clan-core`) | **CORRECTS R1's claim** — clan-core's writable store is **driver-side**, not in-container (see §8b). |

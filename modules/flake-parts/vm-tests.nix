@@ -554,139 +554,31 @@ in
         };
 
         # ===================================================================
-        # R2 WRITABLE-STORE SPIKE (plan 054) — TEMPORARY, may be removed or
-        # absorbed once conclusions are recorded. Turns the three §8d
-        # fix-direction verdicts in docs/nix-store-model-and-vmtest-backends.md
-        # from "viable-on-paper / needs-probe" into evidence. Builds via the
-        # ad-hoc sudo-root path (this host's daemon lacks `uid-range`; see §10).
-        # These do NOT change P5c's backend map (HM tests stay QEMU regardless);
-        # they determine whether a future upstream writableStore-for-nspawn
-        # contribution is worth pursuing. See plan 054 "R2 spike findings".
+        # R2 WRITABLE-STORE SPIKE (plan 054) — TEMPORARY canonical proof. Builds
+        # via the ad-hoc sudo-root path (this host's daemon lacks `uid-range`; see
+        # §10). The R2 spike ran FIVE probes (see plan 054 "R2 spike findings" +
+        # docs/nix-store-model-and-vmtest-backends.md §8f); four have been PRUNED
+        # after their conclusions were recorded, keeping only the one below:
+        #   - spike-r2-overlay / spike-r2-hm-overlay-live (dir #1 in-namespace
+        #     overlay): the mechanism works at a side path, but overlaying the LIVE
+        #     /nix/store breaks all exec even done early + --make-rprivate → dir #1
+        #     BLOCKED and MOOT. Removed.
+        #   - spike-r2-roskip (bare `nix-env --set` under dir #3): subsumed by the
+        #     full-HM proof below. Removed.
+        # ★ KEY R2 RESULT (retained): dir #3 drives FULL Home Manager activation on
+        # nspawn with a READ-ONLY store — no writable store, no overlay, NO upstream
+        # change. This OVERTURNS the P5b "HM must stay QEMU" conclusion.
         # ===================================================================
 
-        # (R2 probe 2) Direction #1 — in-namespace overlay MECHANISM check.
-        #
-        # BACKGROUND (recorded 2026-08-21): the first cut of this probe mounted the
-        # overlay directly ONTO the live /nix/store as a mid-boot oneshot (before
-        # home-manager-<user>.service). That CORRUPTED THE RUNNING SYSTEM — every
-        # subsequent exec died with `Failed to spawn executor: No such file or
-        # directory` and the driver's `nsenter: failed to execute /bin/sh: No such
-        # file or directory` — because you cannot swap /nix/store out from under a
-        # PID1 (and all running processes) that are already running binaries from it.
-        # QEMU's writableStore avoids this by declaring the overlay as a
-        # `fileSystems."/nix/store".overlay` entry mounted in EARLY BOOT, before
-        # anything execs from the store — machinery the nspawn backend has no hook
-        # for (R1 §8a: "no post-spawn mount hook exists today").
-        #
-        # So this probe instead isolates the *mechanism* question that a future
-        # upstream backend would rely on: CAN a process inside the nspawn container
-        # (inside the Nix build sandbox, with the container's own CAP_SYS_ADMIN)
-        # mount an overlayfs over a read-only lower store AT ALL, and is the result
-        # readable + writable? A pass = the overlay mechanism is available in-sandbox
-        # (only the *placement*, i.e. mounting it before PID1, needs upstream work);
-        # a fail = the sandbox blocks overlayfs even in-namespace (harder blocker).
-        # Mounted at a SIDE path (/mnt/rwstore), never over the live /nix/store.
-        spike-r2-overlay = pkgs.testers.runNixOSTest {
-          name = "vm-spike-r2-overlay";
-          containers.machine = { config, pkgs, lib, ... }: {
-            imports = [ self.modules.nixos.system-default ];
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-            networking.firewall.enable = false;
-            environment.systemPackages = [ pkgs.util-linux ];
-          };
-          testScript = ''
-            machine.wait_for_unit("multi-user.target")
-
-            # Build the overlay at a SIDE path so we never break the live store.
-            machine.succeed("mkdir -p /mnt/ro /mnt/rw/upper /mnt/rw/work /mnt/merged")
-            machine.succeed("mount --bind /nix/store /mnt/ro")
-            machine.succeed("mount -t tmpfs tmpfs /mnt/rw")
-            machine.succeed("mkdir -p /mnt/rw/upper /mnt/rw/work")
-
-            print("=== attempt in-namespace overlay mount ===")
-            r = machine.execute(
-                "mount -t overlay overlay "
-                "-o lowerdir=/mnt/ro,upperdir=/mnt/rw/upper,workdir=/mnt/rw/work "
-                "/mnt/merged 2>&1"
-            )
-            print(f"overlay mount rc={r[0]}\n{r[1]}")
-            print(machine.execute("findmnt -no FSTYPE,TARGET /mnt/merged || true")[1])
-
-            # DoD: (a) overlay mounts, (b) lower content visible, (c) upper writable.
-            machine.succeed("mountpoint -q /mnt/merged")
-            # A known store path (util-linux itself) must be visible via the lower.
-            machine.succeed("test -e /mnt/merged/${builtins.baseNameOf pkgs.util-linux}")
-            # The union must be writable (writes land in the tmpfs upper).
-            machine.succeed("touch /mnt/merged/r2-overlay-writable-probe")
-            machine.succeed("test -f /mnt/rw/upper/r2-overlay-writable-probe")
-            print("=== overlay mechanism: MOUNTED + READABLE + WRITABLE ===")
-          '';
-        };
-
-        # (R2 probe 3) Direction #3 — LocalStore RO-skip: empty build-users-group
-        # (skips the multi-user chown block per §8c) + the container's own writable
-        # /nix/var (db + profiles), store dir left READ-ONLY (no overlay). Registers a
-        # small closure (pkgs.hello) daemon-free, then runs a bare `nix-env --set` to
-        # see whether a profile write completes with a RO store + writable /nix/var —
-        # i.e. whether the chown-skip alone suffices without making the store writable.
-        spike-r2-roskip = pkgs.testers.runNixOSTest {
-          name = "vm-spike-r2-roskip";
-          containers.machine = { config, pkgs, lib, ... }:
-            let
-              regInfo = pkgs.closureInfo { rootPaths = [ pkgs.hello ]; };
-            in
-            {
-              imports = [ self.modules.nixos.system-default ];
-              systemDefault.userName = testUsername;
-              systemDefault.wheelNeedsPassword = false;
-              networking.firewall.enable = false;
-
-              # Skip the LocalStore multi-user chown on /nix/store (§8c lever 2)
-              # WITHOUT the DB-immutability side-effect that read-only=true carries.
-              nix.settings.build-users-group = "";
-
-              # Make the registration file + probe target available in-container.
-              environment.etc."r2-reginfo".source = "${regInfo}/registration";
-              environment.systemPackages = [ pkgs.hello ];
-            };
-          testScript = ''
-            machine.wait_for_unit("multi-user.target")
-
-            # Store dir must be read-only (the whole point of direction #3).
-            print("=== /nix/store writability ===")
-            print(machine.execute("test -w /nix/store && echo WRITABLE || echo READ-ONLY")[1])
-            print(machine.execute("findmnt -no OPTIONS /nix/store || true")[1])
-
-            # /nix/var must be writable (db + profiles live there).
-            machine.succeed("test -w /nix/var/nix")
-
-            # Register the closure daemon-free (direct LocalStore; RO store, chown skipped).
-            print("=== load-db (NIX_REMOTE= direct LocalStore) ===")
-            r = machine.execute("NIX_REMOTE= nix-store --load-db < /etc/r2-reginfo 2>&1")
-            print(f"load-db rc={r[0]}\n{r[1]}")
-
-            # The bare probe: point a profile at an already-built, now-registered path.
-            print("=== nix-env --set ===")
-            r = machine.execute(
-                "NIX_REMOTE= nix-env -p /nix/var/nix/profiles/r2-test --set ${pkgs.hello} 2>&1"
-            )
-            print(f"nix-env rc={r[0]}\n{r[1]}")
-
-            # DoD assertion: the profile write completed with a RO store.
-            machine.succeed("test -L /nix/var/nix/profiles/r2-test")
-            machine.succeed("/nix/var/nix/profiles/r2-test/bin/hello --version")
-          '';
-        };
-
-        # (R2 probe 3b) Direction #3 END-TO-END — does the chown-skip route drive a
-        # FULL home-manager-<user>.service to `active`, not just a bare nix-env --set?
-        # Same as the P5b spike-nspawn-hm-activation FAILURE reproducer, but adds the
-        # two direction-#3 levers: `build-users-group = ""` (skip the LocalStore chown,
-        # §8c) + a daemon-free `nix-store --load-db` of the HM closure (so the db agrees
-        # the generation is valid), store left READ-ONLY, /nix/var writable. If HM
-        # reaches active, direction #3 is confirmed sufficient for real HM activation —
-        # promoting §8f probe 3 from "core op proven" to "full HM proven".
+        # (R2 probe 3b) Direction #3 END-TO-END — the chown-skip route drives a
+        # FULL home-manager-<user>.service to `active`. Same modules as the P5b
+        # spike-nspawn-hm-activation FAILURE reproducer, plus the two direction-#3
+        # levers: `build-users-group = ""` (skip the LocalStore chown, §8c) + a
+        # daemon-free `nix-store --load-db` of the HM closure (so the db agrees the
+        # generation is valid), store left READ-ONLY, /nix/var writable. RESULT
+        # (build+pass, 2026-08-21): HM activation reaches `active (exited)` status=0
+        # — confirming nspawn CAN host the HM family via this recipe. This is the
+        # seed for the P5c HM-on-nspawn migration (Tim's decision, 2026-08-21).
         spike-r2-hm-roskip = pkgs.testers.runNixOSTest {
           name = "vm-spike-r2-hm-roskip";
           containers.machine = { config, pkgs, lib, ... }:
@@ -752,93 +644,6 @@ in
             print(machine.execute("systemctl status home-manager-${testUsername}.service --no-pager -l || true")[1])
 
             # DoD: full HM activation reaches active under the chown-skip route.
-            machine.wait_for_unit("home-manager-${testUsername}.service")
-            machine.succeed("test -f /home/${testUsername}/.config/git/config")
-            machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
-          '';
-        };
-
-        # (R2 probe 2b) Direction #1 END-TO-END — retry the LIVE /nix/store overlay,
-        # but corrected. The first cut (see spike-r2-overlay comment) crashed the system;
-        # the likely cause was systemd-nspawn's SHARED mount propagation making the
-        # overlay recurse onto its own RO lower bind (an empty merged view → ENOENT for
-        # every exec), NOT a fundamental "can't remount the live store" wall. This probe
-        # runs EARLY (before sysinit.target, DefaultDependencies=false), sets propagation
-        # PRIVATE first, then overlays /nix/store in-namespace and loads the HM closure db,
-        # then drives full HM. If it reaches active, direction #1 is viable in-container
-        # TODAY (no upstream early-boot hook needed) — overturning §8f's "placement blocked".
-        # If it still fails, that confirms the placement wall with stronger evidence.
-        spike-r2-hm-overlay-live = pkgs.testers.runNixOSTest {
-          name = "vm-spike-r2-hm-overlay-live";
-          containers.machine = { config, pkgs, lib, ... }:
-            let
-              hmGen = config.home-manager.users.${testUsername}.home.activationPackage;
-              regInfo = pkgs.closureInfo { rootPaths = [ hmGen ]; };
-            in
-            {
-              imports = [
-                self.modules.nixos.system-default
-                inputs.home-manager.nixosModules.home-manager
-              ];
-              systemDefault.userName = testUsername;
-              systemDefault.wheelNeedsPassword = false;
-              networking.firewall.enable = false;
-
-              home-manager = {
-                useGlobalPkgs = true;
-                useUserPackages = true;
-                extraSpecialArgs = { inherit inputs; };
-                users.${testUsername} = { config, pkgs, lib, ... }: {
-                  imports = [
-                    self.modules.homeManager.home-minimal
-                    self.modules.homeManager.git
-                  ];
-                  homeMinimal = {
-                    username = testUsername;
-                    homeDirectory = testHomeDir;
-                  };
-                  targets.genericLinux.enable = lib.mkForce false;
-                };
-              };
-
-              systemd.services.r2-live-overlay = {
-                description = "R2 probe2b: early private-propagation overlay on live /nix/store + load-db";
-                wantedBy = [ "sysinit.target" ];
-                before = [ "sysinit.target" "home-manager-${testUsername}.service" ];
-                unitConfig.DefaultDependencies = false;
-                path = [ pkgs.util-linux pkgs.nix pkgs.coreutils ];
-                serviceConfig = {
-                  Type = "oneshot";
-                  RemainAfterExit = true;
-                };
-                script = ''
-                  set -eux
-                  # Stop the overlay from propagating back onto its own RO lower bind.
-                  mount --make-rprivate /
-                  mkdir -p /nix/.ro-store /nix/.rw
-                  mount --bind /nix/store /nix/.ro-store
-                  mount --make-private /nix/.ro-store
-                  mount -t tmpfs tmpfs /nix/.rw
-                  mkdir -p /nix/.rw/upper /nix/.rw/work
-                  mount -t overlay overlay \
-                    -o lowerdir=/nix/.ro-store,upperdir=/nix/.rw/upper,workdir=/nix/.rw/work \
-                    /nix/store
-                  nix-store --load-db < ${regInfo}/registration
-                '';
-              };
-            };
-          testScript = ''
-            machine.wait_for_unit("multi-user.target")
-
-            print("=== store writability (expect WRITABLE if overlay held) ===")
-            print(machine.execute("test -w /nix/store && echo WRITABLE || echo READ-ONLY")[1])
-            print(machine.execute("findmnt -no FSTYPE,TARGET /nix/store || true")[1])
-            print("=== r2-live-overlay.service ===")
-            print(machine.execute("systemctl status r2-live-overlay.service --no-pager -l || true")[1])
-            print("=== HM service ===")
-            print(machine.execute("systemctl status home-manager-${testUsername}.service --no-pager -l || true")[1])
-
-            # DoD: live-overlay route drives full HM activation to active.
             machine.wait_for_unit("home-manager-${testUsername}.service")
             machine.succeed("test -f /home/${testUsername}/.config/git/config")
             machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
