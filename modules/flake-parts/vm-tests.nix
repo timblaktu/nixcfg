@@ -553,6 +553,132 @@ in
           '';
         };
 
+        # ===================================================================
+        # R2 WRITABLE-STORE SPIKE (plan 054) — TEMPORARY, may be removed or
+        # absorbed once conclusions are recorded. Turns the three §8d
+        # fix-direction verdicts in docs/nix-store-model-and-vmtest-backends.md
+        # from "viable-on-paper / needs-probe" into evidence. Builds via the
+        # ad-hoc sudo-root path (this host's daemon lacks `uid-range`; see §10).
+        # These do NOT change P5c's backend map (HM tests stay QEMU regardless);
+        # they determine whether a future upstream writableStore-for-nspawn
+        # contribution is worth pursuing. See plan 054 "R2 spike findings".
+        # ===================================================================
+
+        # (R2 probe 2) Direction #1 — in-namespace overlay MECHANISM check.
+        #
+        # BACKGROUND (recorded 2026-08-21): the first cut of this probe mounted the
+        # overlay directly ONTO the live /nix/store as a mid-boot oneshot (before
+        # home-manager-<user>.service). That CORRUPTED THE RUNNING SYSTEM — every
+        # subsequent exec died with `Failed to spawn executor: No such file or
+        # directory` and the driver's `nsenter: failed to execute /bin/sh: No such
+        # file or directory` — because you cannot swap /nix/store out from under a
+        # PID1 (and all running processes) that are already running binaries from it.
+        # QEMU's writableStore avoids this by declaring the overlay as a
+        # `fileSystems."/nix/store".overlay` entry mounted in EARLY BOOT, before
+        # anything execs from the store — machinery the nspawn backend has no hook
+        # for (R1 §8a: "no post-spawn mount hook exists today").
+        #
+        # So this probe instead isolates the *mechanism* question that a future
+        # upstream backend would rely on: CAN a process inside the nspawn container
+        # (inside the Nix build sandbox, with the container's own CAP_SYS_ADMIN)
+        # mount an overlayfs over a read-only lower store AT ALL, and is the result
+        # readable + writable? A pass = the overlay mechanism is available in-sandbox
+        # (only the *placement*, i.e. mounting it before PID1, needs upstream work);
+        # a fail = the sandbox blocks overlayfs even in-namespace (harder blocker).
+        # Mounted at a SIDE path (/mnt/rwstore), never over the live /nix/store.
+        spike-r2-overlay = pkgs.testers.runNixOSTest {
+          name = "vm-spike-r2-overlay";
+          containers.machine = { config, pkgs, lib, ... }: {
+            imports = [ self.modules.nixos.system-default ];
+            systemDefault.userName = testUsername;
+            systemDefault.wheelNeedsPassword = false;
+            networking.firewall.enable = false;
+            environment.systemPackages = [ pkgs.util-linux ];
+          };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # Build the overlay at a SIDE path so we never break the live store.
+            machine.succeed("mkdir -p /mnt/ro /mnt/rw/upper /mnt/rw/work /mnt/merged")
+            machine.succeed("mount --bind /nix/store /mnt/ro")
+            machine.succeed("mount -t tmpfs tmpfs /mnt/rw")
+            machine.succeed("mkdir -p /mnt/rw/upper /mnt/rw/work")
+
+            print("=== attempt in-namespace overlay mount ===")
+            r = machine.execute(
+                "mount -t overlay overlay "
+                "-o lowerdir=/mnt/ro,upperdir=/mnt/rw/upper,workdir=/mnt/rw/work "
+                "/mnt/merged 2>&1"
+            )
+            print(f"overlay mount rc={r[0]}\n{r[1]}")
+            print(machine.execute("findmnt -no FSTYPE,TARGET /mnt/merged || true")[1])
+
+            # DoD: (a) overlay mounts, (b) lower content visible, (c) upper writable.
+            machine.succeed("mountpoint -q /mnt/merged")
+            # A known store path (util-linux itself) must be visible via the lower.
+            machine.succeed("test -e /mnt/merged/${builtins.baseNameOf pkgs.util-linux}")
+            # The union must be writable (writes land in the tmpfs upper).
+            machine.succeed("touch /mnt/merged/r2-overlay-writable-probe")
+            machine.succeed("test -f /mnt/rw/upper/r2-overlay-writable-probe")
+            print("=== overlay mechanism: MOUNTED + READABLE + WRITABLE ===")
+          '';
+        };
+
+        # (R2 probe 3) Direction #3 — LocalStore RO-skip: empty build-users-group
+        # (skips the multi-user chown block per §8c) + the container's own writable
+        # /nix/var (db + profiles), store dir left READ-ONLY (no overlay). Registers a
+        # small closure (pkgs.hello) daemon-free, then runs a bare `nix-env --set` to
+        # see whether a profile write completes with a RO store + writable /nix/var —
+        # i.e. whether the chown-skip alone suffices without making the store writable.
+        spike-r2-roskip = pkgs.testers.runNixOSTest {
+          name = "vm-spike-r2-roskip";
+          containers.machine = { config, pkgs, lib, ... }:
+            let
+              regInfo = pkgs.closureInfo { rootPaths = [ pkgs.hello ]; };
+            in
+            {
+              imports = [ self.modules.nixos.system-default ];
+              systemDefault.userName = testUsername;
+              systemDefault.wheelNeedsPassword = false;
+              networking.firewall.enable = false;
+
+              # Skip the LocalStore multi-user chown on /nix/store (§8c lever 2)
+              # WITHOUT the DB-immutability side-effect that read-only=true carries.
+              nix.settings.build-users-group = "";
+
+              # Make the registration file + probe target available in-container.
+              environment.etc."r2-reginfo".source = "${regInfo}/registration";
+              environment.systemPackages = [ pkgs.hello ];
+            };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            # Store dir must be read-only (the whole point of direction #3).
+            print("=== /nix/store writability ===")
+            print(machine.execute("test -w /nix/store && echo WRITABLE || echo READ-ONLY")[1])
+            print(machine.execute("findmnt -no OPTIONS /nix/store || true")[1])
+
+            # /nix/var must be writable (db + profiles live there).
+            machine.succeed("test -w /nix/var/nix")
+
+            # Register the closure daemon-free (direct LocalStore; RO store, chown skipped).
+            print("=== load-db (NIX_REMOTE= direct LocalStore) ===")
+            r = machine.execute("NIX_REMOTE= nix-store --load-db < /etc/r2-reginfo 2>&1")
+            print(f"load-db rc={r[0]}\n{r[1]}")
+
+            # The bare probe: point a profile at an already-built, now-registered path.
+            print("=== nix-env --set ===")
+            r = machine.execute(
+                "NIX_REMOTE= nix-env -p /nix/var/nix/profiles/r2-test --set ${pkgs.hello} 2>&1"
+            )
+            print(f"nix-env rc={r[0]}\n{r[1]}")
+
+            # DoD assertion: the profile write completed with a RO store.
+            machine.succeed("test -L /nix/var/nix/profiles/r2-test")
+            machine.succeed("/nix/var/nix/profiles/r2-test/bin/hello --version")
+          '';
+        };
+
         # === VM FEATURE TESTS (T3) ===
 
         # SSH service test: multi-node test verifying sshd configuration,

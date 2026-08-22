@@ -273,13 +273,32 @@ Systems test-driver manual container section
   **Caveat — it is rough in containers:** Nix issue **#11840** (open) reports the overlay-store
   misbehaving in a k8s pod (*"the lower-layer database unexpectedly updated despite being in a read-only
   conceptual layer"*, spurious substituter downloads) — <https://github.com/NixOS/nix/issues/11840>.
-- **Clan.lol is the real prior art** for running *actual* nix operations inside an nspawn container
-  **inside the build sandbox** — they run `nixos-rebuild switch` offline in an nspawn test, pre-populating
-  the store with `closureInfo` and injecting network via veth+`nsenter`: blog "Debugging Offline Nix
-  Builds" <https://clan.lol/blog/debugging-offline-nix-builds/>; their `clanTest` lib in `clan-core`
-  <https://git.clan.lol/clan/clan-core> (GitHub mirror <https://github.com/clan-lol/clan-core>). This is
-  the single most important prior-art source: **it demonstrates the sandbox does not fundamentally
-  prohibit runtime nix writes in nspawn** — our P5b probes hit config walls, not a hard ceiling.
+- **Clan.lol is prior art for a DRIVER-SIDE writable store — NOT for an in-container writable
+  `/nix/store`.** (Primary-source correction, R2 probe 1, 2026-08-21 — the R1 write-up above took the
+  "nix writes work inside nspawn" claim from the Nixcademy/Clan blog, unverified; reading `clan-core`
+  refutes the *in-container* reading.) Verified against the local `~/src/clan-core` clone:
+  - Their nspawn containers mount `/nix/store` **read-only**, exactly like upstream — there is **no
+    in-container overlay** and no in-container store write.
+  - The writable store lives in the **test driver's own sandbox** (host-side Python, run in the
+    `testScript` *before* any container starts): `setup_nix_in_nix()` builds a *separate* store under
+    `$temp_dir/store` by **bind-mounting** individual paths as root (or `cp --reflink` when non-root),
+    then registers them daemon-free with `nix-store --load-db --store "$CLAN_TEST_STORE"` from a
+    `closureInfo` — `pkgs/testing/nixos_test_lib/nix_setup.py:177-226`,
+    `pkgs/testing/flake-module.nix:22-24`.
+  - The runtime nix operations they run (e.g. `clan machines list --flake …`, offline `nixos-rebuild`)
+    execute in the **driver's Python via `subprocess.run`** against that driver-side store —
+    `checks/service-dummy-test-from-flake/default.nix:34,52-57` — **not** via `machine.succeed()` inside
+    the nspawn container. There is no evidence anywhere in the tree of HM activation / `nix-env` /
+    `nixos-rebuild` running *inside* a clan nspawn container.
+  - They use the **upstream** `containers.<name>` backend (`nixosLib.runTest`,
+    `lib/flake-parts/clan-nixos-test.nix:29`), but the store-writability layer is a **home-grown,
+    driver-coupled** Python package (`legacyPackages.nixosTestLib`), not a portable in-container facility.
+  - **Net:** Clan.lol proves the *build sandbox* permits a writable, `load-db`-registered store **in the
+    driver's own namespace** — useful blueprint for the daemon-free `closureInfo`→`load-db` half — but it
+    does **not** demonstrate the in-container writable `/nix/store` that HM activation under nspawn needs.
+    Blog "Debugging Offline Nix Builds" <https://clan.lol/blog/debugging-offline-nix-builds/>; `clanTest`
+    lib in `clan-core` <https://git.clan.lol/clan/clan-core> (GitHub mirror
+    <https://github.com/clan-lol/clan-core>).
 - **HM-in-container failure reports** (confirm a writable+registered store is a genuine prerequisite, not
   optional): home-manager **#2325** (*"opening lock file '/nix/var/nix/profiles/per-user/…/home-manager.lock':
   No such file or directory"*) <https://github.com/nix-community/home-manager/issues/2325>; **#3752**
@@ -326,43 +345,65 @@ op to not itself write into the read-only `/nix/store` dir. That is why the read
 
 | # | Direction (from §7) | Verdict | Evidence |
 |---|---|---|---|
-| 1 | **Overlay mounted from *inside* the container's mount namespace** (post-spawn), not a host-side `--overlay` | **VIABLE — recommended** | `systemd-nspawn --overlay=` is host-side → the build sandbox rejects it (P5b probe 3), but a process *inside* the container's private mount namespace can `mount -t overlay` itself using the `CAP_SYS_ADMIN` nspawn grants — which is exactly what QEMU's `writableStore` does in-guest (`qemu-vm.nix:1445-1450`). **Clan.lol proves the sandbox permits real nix writes in nspawn** (they `nixos-rebuild switch` offline). Open items to prototype-verify: nspawn inside `nix build` retains `CAP_SYS_ADMIN` and can create the nested namespace; RO lower store stays immutable while mounted. |
-| 2 | **Writable tmpfs store seeded + early `register-nix-paths`/`load-db`** from a shipped `closureInfo` | **VIABLE — as the DB half of #1, not standalone** | The db-load half is proven daemon-free and reusable verbatim: `closureInfo` → `nix-store --load-db` (qemu-vm.nix:330, 1240-1241). But seeding a *writable* store still requires making `/nix/store` writable, i.e. the overlay of #1 (a bind-union/tmpfs alone doesn't give a writable `/nix/store` over the RO bind). So #2 is the registration component that pairs with #1, not an independent fix. |
-| 3 | **Teach `LocalStore` to skip the ownership fixup on a RO bind mount** (→ RO store + writable `/nix/var`) | **PARTIALLY VIABLE / UNKNOWN — needs a probe** | The skip already exists (8c: `read-only=true` *or* empty `build-users-group`), so the chown is not the blocker. Unknown is whether `nix-env --set` can complete with the **store dir** read-only while **`/nix/var` (db+profiles) is writable** — it writes profiles + registers a generation (DB write) and *should* not add store paths, but this is unverified and HM's activation may touch more. Lighter than #1 if it works; **must be probed** (empty `build-users-group` + writable `/nix/var` bind + a bare `nix-env --set` in an nspawn check) before trusting. Note the blanket `read-only=true` setting is the *wrong* lever here (it makes the DB immutable). |
+| 1 | **Overlay mounted from *inside* the container's mount namespace** (post-spawn), not a host-side `--overlay` | **MECHANISM VIABLE / placement needs upstream** (R2 probe 2 — verdict tightened; no longer the *primary* recommendation, see #3) | A process *inside* the nspawn container **can** `mount -t overlay` over a RO lower store in-sandbox: R2 probe 2 mounts `overlay` at a side path (`lowerdir` = RO bind of `/nix/store`, `upper`+`work` = tmpfs) with rc=0, lower content readable, writes landing in the tmpfs upper (`spike-r2-overlay` builds+passes). **BUT the naive placement fails:** mounting the overlay onto the **live `/nix/store`** mid-boot (a oneshot before `home-manager-<user>.service`) **corrupts the running system** — every subsequent exec dies `Failed to spawn executor: No such file or directory`, the driver's `nsenter` can't run `/bin/sh` — because you cannot swap `/nix/store` out from under a PID1 already executing from it. QEMU avoids this by declaring the overlay as a `fileSystems."/nix/store".overlay` mounted in **early boot** before anything execs (`qemu-vm.nix:1445-1450`). The nspawn backend has **no pre-PID1/early-boot mount hook** (R1 §8a), so this direction needs **upstream** placement work, not a test-level config. Mechanism confirmed; ergonomics blocked. |
+| 2 | **Writable tmpfs store seeded + early `register-nix-paths`/`load-db`** from a shipped `closureInfo` | **VIABLE — daemon-free `load-db` confirmed** (R2 probes 2+3) | The db-load half is proven daemon-free in-container: R2 probe 3 runs `nix-store --load-db` (rc=0) from a shipped `closureInfo/registration` with `NIX_REMOTE=` (direct `LocalStore`, no daemon). Pairs with either the writable store of #1 **or** the writable-`/nix/var`-only route of #3 — it is the registration component, reusable verbatim (`closureInfo` → `nix-store --load-db`, qemu-vm.nix:330, 1240-1241). |
+| 3 | **Teach `LocalStore` to skip the ownership fixup on a RO bind mount** (→ RO store + writable `/nix/var`) | **VIABLE — CONFIRMED, and the simplest fix (new recommended primary)** (R2 probe 3) | Proven end-to-end: `spike-r2-roskip` builds+passes with `/nix/store` **read-only** (mount opts `ro,…`), `/nix/var` writable, and `nix.settings.build-users-group = ""` (the §8c chown-skip lever). Daemon-free (`NIX_REMOTE=`), `nix-store --load-db` (rc=0) **and** `nix-env -p …/profiles/r2-test --set <path>` (rc=0) both complete; the profile symlink resolves and the binary runs. So a profile write completes with a RO store + writable `/nix/var` — **no overlay, no store-writability needed** for the `nix-env --set` operation at HM's core. This is materially simpler than #1 (a single store setting + a writable `/nix/var` bind, no mount-namespace surgery) and needs **no nix patch** (the skip lever already exists). Caveat: this proves the bare profile-write; a full `home-manager-<user>.service` run may touch more (it was not driven end-to-end here, since P5c keeps HM on QEMU regardless) — but the load-bearing operation is confirmed unblocked. |
 
-### 8e. Recommendation
+### 8e. Recommendation (UPDATED post-R2 spike, 2026-08-21)
 
-**Primary: contribute a `writableStore`-equivalent to the nspawn container backend upstream (nixpkgs),
-built on direction #1 + the #2 registration** — i.e. mirror QEMU's proven, daemon-free machinery for the
-container path. Before writing any upstream code, do a **local spike** (cheap, high-information):
+> The R1 desk research below originally recommended direction #1 (in-namespace overlay) as primary. The
+> **R2 spike (§8f) reverses that ordering**: direction #3 (LocalStore chown-skip + writable `/nix/var`)
+> is confirmed working and far simpler, so it is now the recommended primary. Direction #1's *mechanism*
+> is confirmed available in-sandbox, but its placement (mounting before PID1) needs upstream backend work.
 
-1. **Read `clan-core`'s `clanTest` lib first** (<https://git.clan.lol/clan/clan-core>) — it already runs
-   `nixos-rebuild switch` in an nspawn-in-sandbox test, so it very likely already solves most of the
-   writable+registered-store problem; adopt/adapt rather than reinvent.
-2. **Prototype the in-namespace overlay** in one throwaway nspawn check: after spawn, mount
-   `overlay` on `/nix/store` (lower = the RO `/nix/.ro-store` bind, upper+work = tmpfs) from inside the
-   container, run `nix-store --load-db` from a `closureInfo` registration, then try
-   `home-manager-<user>.service`. Confirms the `CAP_SYS_ADMIN`/nested-namespace assumptions on our builder.
-3. **In parallel, probe direction #3** (empty `build-users-group` + writable `/nix/var`, no overlay) — if
-   `nix-env --set` completes, that is a materially simpler fix worth preferring.
+**Primary (revised): contribute the direction-#3 route upstream** — an opt-in that, for the nspawn test
+backend, sets `build-users-group = ""` (skip the `LocalStore` chown, §8c) and ships a `closureInfo`
+registration loaded daemon-free via `nix-store --load-db`, leaving `/nix/store` read-only and `/nix/var`
+writable. R2 probe 3 proves `nix-env --set` completes under exactly this setup — no overlay, no
+mount-namespace surgery, no nix patch. This is the smallest, most portable change.
 
-**Exact files a fix would change** (upstream nixpkgs, pending the spike):
-- `nixos/modules/virtualisation/nspawn-container/default.nix` — add an opt-in `virtualisation.writableStore`
-  analog: the in-namespace overlay setup (or a `--overlay` alternative if the sandbox is relaxed via
-  `programs.nix-required-mounts`/`sandbox-paths`) **plus** a `register-nix-paths` oneshot running
-  `nix-store --load-db` from a shipped `closureInfo`, ordered before `home-manager-<user>.service`.
+**Secondary (if #3 proves insufficient for a *full* HM run): the direction-#1 overlay**, whose mechanism
+R2 probe 2 confirmed works in-sandbox — but it MUST be established **before PID1 execs from the store**
+(early boot), because a mid-boot remount of the live `/nix/store` corrupts the running system (§8f). That
+requires an upstream **early-boot/pre-spawn mount hook** in the nspawn backend (mirroring QEMU's
+`fileSystems."/nix/store".overlay`), not a test-level oneshot.
+
+R2 already executed the local spike that R1 called for — **the follow-up is now the upstream PR itself**
+(out of scope here). Note the R1 suggestion to "read `clan-core` first because it likely already solves
+this" was **checked and does not hold** (§8b correction): clan-core makes a writable store in the *driver*
+sandbox, not inside the container, so it is not a drop-in for in-container HM activation.
+
+**Exact files a fix would change** (upstream nixpkgs):
+- `nixos/modules/virtualisation/nspawn-container/default.nix` — add an opt-in `writableStore` analog: for
+  direction #3, set `nix.settings.build-users-group = ""` + a `register-nix-paths` oneshot running
+  `nix-store --load-db` from a shipped `closureInfo`, ordered before `home-manager-<user>.service`; for
+  the direction-#1 fallback, an early-boot in-namespace overlay mount instead.
 - `nixos/lib/testing/{nodes,run}.nix` and the `run-nspawn` launcher / `NspawnMachine` — plumb the
   `closureInfo` registration into the container (the QEMU path passes it via kernel cmdline; nspawn needs
-  an equivalent bind/arg) and, if the overlay is done post-spawn, a hook for the in-namespace mount.
+  an equivalent bind/arg), and (for the #1 fallback) a pre-PID1 hook for the in-namespace mount.
 - **Do *not* patch nix itself.** Direction #3's chown-skip already exists as store settings; nix's
   `local-overlay-store` is experimental and buggy in containers (#11840). A nix patch is not on the
   critical path.
 
-**Fallback / defer:** if the in-namespace overlay proves blocked on our builder and direction #3 fails
-the probe, **defer** — keep HM-activation tests on QEMU (the current P5c decision stands) and revisit when
-the upstream backend or Clan's lib matures. No local overlay-store hack is worth carrying given #11840.
+**Fallback / defer:** even with #3 confirmed, **P5c keeps HM-activation tests on QEMU** — landing the
+upstream backend change is a separate effort. The R2 conclusion is: the capability gap is real but
+**closable** (direction #3 is the low-cost path); pursue it as an upstream nixpkgs PR when prioritized.
 
-This is research only; the local spike (step 1-3) is the natural **follow-up task** — not part of R1.
+### 8f. R2 spike results (empirical — 2026-08-21, host `pa161878-nixos`)
+
+The R2 spike turned the §8d verdicts from "on-paper" into evidence. Three throwaway nspawn checks
+(`modules/flake-parts/vm-tests.nix`, after the P5b spikes), built via the §10 ad-hoc sudo-root path
+(daemon still lacks `uid-range`). Full write-up in plan 054's "R2 spike findings".
+
+| Probe | Direction | Check | Result |
+|---|---|---|---|
+| 1 | Clan.lol prior-art (primary source) | — (read `~/src/clan-core`) | **CORRECTS R1's claim** — clan-core's writable store is **driver-side**, not in-container (see §8b). |
+| 2 | #1 in-namespace overlay | `spike-r2-overlay` | **MECHANISM CONFIRMED, placement blocked** — overlay mounts+reads+writes at a side path (build+pass); live `/nix/store` remount mid-boot crashes the system. |
+| 3 | #3 LocalStore RO-skip | `spike-r2-roskip` | **CONFIRMED VIABLE** — RO store + writable `/nix/var` + empty `build-users-group`: `load-db` (rc=0) and `nix-env --set` (rc=0) complete daemon-free; profile resolves+runs (build+pass). |
+
+**Bottom line:** the nspawn writable-store gap is closable **upstream** and the cheapest route is
+direction #3 (a store setting + a `closureInfo` load-db), with direction #1's overlay as an early-boot
+fallback. This does **not** change P5c (HM tests stay QEMU until such a backend change lands).
 
 ---
 

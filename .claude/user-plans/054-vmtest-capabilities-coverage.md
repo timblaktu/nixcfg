@@ -185,7 +185,7 @@ and/or the nix source). No code change required — this is research; any implem
 Pure desk research (web + reading local `~/src` clones); host-agnostic → never ENVIRONMENT_NOT_CAPABLE.
 Prefer local clones (`~/src/nixpkgs`, `~/src/home-manager`) per LOCAL-FIRST research; web/GitHub for issues/PRs.
 
-### R2 — Writable-store spike for nspawn (implement R1's recommendation) `TASK:IN_PROGRESS` (dep R1 — COMPLETE; do BEFORE P5c)
+### R2 — Writable-store spike for nspawn (implement R1's recommendation) `TASK:COMPLETE 2026-08-21` (dep R1 — COMPLETE; do BEFORE P5c)
 **Builder task (KVM/nspawn-capable host required — `pa161878-nixos`; incapable host → ENVIRONMENT_NOT_CAPABLE).**
 Executes the concrete follow-up from R1's recommendation (`docs/nix-store-model-and-vmtest-backends.md` §8e):
 turn the three fix-direction verdicts from "viable-on-paper / needs-probe" into evidence. Throwaway spike
@@ -261,7 +261,7 @@ Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:COMPLETE 2026-08-21 — 106→60 checks (x86/aarch64 mirrored); flake check --no-build exit 0; 3 rewrites + 4 new/merged gates build+pass (see "P5a execution") |
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (writable-store gap, 3 probes; see "P5b spike findings" + `docs/nix-store-model-and-vmtest-backends.md`) |
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
-| R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:IN_PROGRESS 2026-08-21 (dep R1 — COMPLETE; on KVM/nspawn host pa161878-nixos) |
+| R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim (driver-side, not in-container); probe2 overlay mechanism-OK/placement-blocked; probe3 LocalStore RO-skip CONFIRMED VIABLE (simplest fix); gap is closable upstream, P5c unchanged (see "R2 spike findings") |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
@@ -620,3 +620,69 @@ Durable artifact: new **§8 "Prior art & upstream path (R1)"** in `docs/nix-stor
   (overlay + `register-nix-paths` oneshot), `nixos/lib/testing/{nodes,run}.nix` + `run-nspawn`/`NspawnMachine`
   (plumb the `closureInfo`). **Do NOT patch nix.** Fallback = defer, HM tests stay QEMU (P5c unchanged).
   The spike is the natural follow-up task (not part of R1).
+
+### R2 spike findings (2026-08-21) — writable-store spike, evidence for the §8d verdicts
+
+Ran on `pa161878-nixos` (KVM + `systemd-nspawn`; daemon still lacks `uid-range`, so nspawn checks built
+via the §10 ad-hoc sudo-root path). Two throwaway checks added after the P5b spikes in
+`modules/flake-parts/vm-tests.nix` (`spike-r2-overlay`, `spike-r2-roskip`); check total 63 → 65, eval
+clean. Docs updated: `docs/nix-store-model-and-vmtest-backends.md` §8b (Clan.lol correction), §8d (table
+verdicts #1/#2/#3), §8e (recommendation reversed), new §8f (empirical results table). **Headline: the
+nspawn writable-store gap is real but CLOSABLE upstream — and the cheapest route is direction #3, NOT the
+overlay R1 recommended. P5c is UNCHANGED (HM tests stay QEMU until a backend change lands).**
+
+**Probe 1 — clan-core `clanTest`, primary source → CORRECTS R1's claim.** Cloned `~/src/clan-core`
+(GitHub mirror) and read the test lib. R1 (from a blog, unverified) claimed "Clan.lol proves nix writes
+work in nspawn-in-sandbox," underpinning §8d #1's "VIABLE". **The primary source refutes the in-container
+reading:**
+- Their nspawn containers mount `/nix/store` **read-only** like upstream — **no in-container overlay**,
+  no in-container store write.
+- The writable store lives in the **test driver's own sandbox** (host-side Python, run in `testScript`
+  *before* containers start): `setup_nix_in_nix()` builds a *separate* `$temp_dir/store` by bind-mounting
+  paths as root (or `cp --reflink` non-root) then `nix-store --load-db --store "$CLAN_TEST_STORE"` from a
+  `closureInfo` — `pkgs/testing/nixos_test_lib/nix_setup.py:177-226`, `pkgs/testing/flake-module.nix:22-24`.
+- Runtime nix ops (`clan machines list --flake …`, offline `nixos-rebuild`) run in the **driver's Python
+  via `subprocess.run`** against that driver-side store — `checks/service-dummy-test-from-flake/default.nix:34,52-57`
+  — **not** via `machine.succeed()` inside the container. No HM/`nix-env`/`nixos-rebuild` runs *inside* a
+  clan nspawn container anywhere in the tree.
+- They use the **upstream** `containers.<name>` backend (`nixosLib.runTest`,
+  `lib/flake-parts/clan-nixos-test.nix:29`), but the store-writability layer is a **home-grown,
+  driver-coupled** Python package (`legacyPackages.nixosTestLib`), not a portable in-container facility.
+- **Verdict:** Clan is prior art for a *driver-side* writable + `load-db`-registered store (a useful
+  blueprint for the daemon-free registration half), NOT for the in-container writable `/nix/store` HM
+  activation needs. §8b corrected to primary-source citations.
+
+**Probe 2 — direction #1 (in-namespace overlay): MECHANISM CONFIRMED, naive placement BLOCKED**
+(`spike-r2-overlay`, builds+passes after refinement). First cut mounted the overlay directly onto the
+**live `/nix/store`** as a mid-boot oneshot (before `home-manager-<user>.service`): it **corrupted the
+running system** — every exec died `Failed to spawn executor: No such file or directory`, driver
+`nsenter: failed to execute /bin/sh: No such file or directory`, systemd collapsed, HM never reached.
+Root cause: you cannot swap `/nix/store` out from under a PID1 already executing binaries from it (QEMU
+avoids this by declaring the overlay as an early-boot `fileSystems."/nix/store".overlay`, mounted before
+anything execs; the nspawn backend has no pre-PID1 hook — R1 §8a). Refined the probe to isolate the
+*mechanism* at a SIDE path: a process inside the container **can** `mount -t overlay` over a RO lower
+store in-sandbox (rc=0), lower content is readable through the union (verified a known store path),
+and writes land in the tmpfs upper. **Verdict:** the overlay mechanism is available in-sandbox; only the
+*placement* (before PID1) is blocked and needs an upstream early-boot mount hook. Direction #1 demoted
+from "recommended" to the secondary/fallback route.
+
+**Probe 3 — direction #3 (LocalStore RO-skip): CONFIRMED VIABLE, and the simplest fix** (`spike-r2-roskip`,
+builds+passes). Setup: `/nix/store` left **read-only** (mount opts `ro,…`, asserted), `/nix/var`
+writable (container's own root), `nix.settings.build-users-group = ""` (the §8c chown-skip lever, no
+DB-immutability side-effect). Daemon-free (`NIX_REMOTE=`): `nix-store --load-db` from a shipped
+`closureInfo` (rc=0) **and** `nix-env -p /nix/var/nix/profiles/r2-test --set <pkgs.hello>` (rc=0) both
+complete; the profile symlink resolves and the binary runs. So a profile write — the load-bearing op at
+HM's core (`nix-env --set`) — completes with a RO store + writable `/nix/var`, **no overlay, no
+store-writability, no nix patch**. Materially simpler than #1. Caveat: this proves the bare profile-write;
+a full `home-manager-<user>.service` was not driven end-to-end (P5c keeps HM on QEMU regardless), but the
+operation that P5b saw fail is confirmed unblocked by this route. **New recommended primary direction.**
+
+**Consequences.** (a) `docs/…backends.md` §8e recommendation reversed: primary = direction #3 (chown-skip
++ `closureInfo` load-db, `/nix/store` RO, `/nix/var` RW); secondary = direction #1 overlay needing an
+upstream early-boot hook; do NOT patch nix. Exact upstream files unchanged from R1's list
+(`nixos/modules/virtualisation/nspawn-container/default.nix`, `nixos/lib/testing/{nodes,run}.nix` +
+`run-nspawn`/`NspawnMachine`). (b) The two R2 spike checks are throwaway (like P5b's); they can be removed
+or absorbed once this is settled — kept for now as reproducible evidence, excluded from CI (all nspawn
+checks are). (c) **P5c backend map is UNCHANGED** — HM-activation tests stay QEMU; R2 only establishes
+that a future upstream contribution is worthwhile and identifies the cheapest path. If pursued, the
+follow-up is the upstream nixpkgs PR itself (out of scope for plan 054).
