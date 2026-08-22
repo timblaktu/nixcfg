@@ -1028,24 +1028,38 @@ argument set) — so overriding the single top-level attribute propagates throug
 GitHub's auto-generated `/archive/v3.10.5.tar.gz` drifted; the currently-served content hashes to
 `sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=` (the CI "got" value).
 
+**Three upstream facets, all in nlohmann_json 3.10.5 — attempting the heavy local build surfaced two the
+light gate had masked.** The hash-drift was only the first blocker. Because CI (and the light gate) failed
+at the *fetch* stage, two further "old package on new toolchain" failures were hidden until the corrected
+source actually reached configure/compile:
+1. **FOD hash drift** (as filed): specified `…6R6AJnI=` vs got `…GguJNbk=`. Fix = pin `src` to the
+   currently-served content hash.
+2. **CMake 4.x removed `cmake_minimum_required(VERSION < 3.5)` support**, which nlohmann_json 3.10.5's
+   CMakeLists.txt still declares → configurePhase aborts ("Compatibility with CMake < 3.5 has been
+   removed"). Fix = `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` (CMake's own escape hatch).
+3. **nlohmann_json's own unit test `unit-allocator.cpp` fails to compile under GCC 14** (stricter libstdc++
+   `allocator_traits<A>::rebind_alloc` static assertion). Header-only lib → tests not needed for the
+   arrow-cpp/onnxruntime build dep. Fix = `doCheck = false` (also flips the package's `JSON_BuildTests` to
+   OFF so the broken tests never compile).
+
 **Fix (scoped overlay, lowest blast radius) — `overlays/default.nix`.** Added an `overlays = [ … ]` list to
 the *isolated* `pkgsDocling = import inputs.nixpkgs-docling { … }` instantiation only (NOT the main pkgs set,
-NOT a nixpkgs-pin bump). The overlay does `nlohmann_json = prevDocling.nlohmann_json.overrideAttrs (old: {
-src = prevDocling.fetchFromGitHub { owner="nlohmann"; repo="json"; rev="v${old.version}";
-hash="…gCA3A9ShM5icSF0xyGguJNbk="; }; })`. Fully commented with WORKAROUND + migration path (drop when the
-fork/pin ships a corrected hash). Blast radius = docling packages only; the main pkgs set is untouched.
+NOT a nixpkgs-pin bump). One `nlohmann_json.overrideAttrs` carries all three fixes (corrected `src` hash +
+`cmakeFlags += -DCMAKE_POLICY_VERSION_MINIMUM=3.5` + `doCheck = false`). Overriding the single top-level
+attribute propagates through the whole docling closure (arrow-cpp/onnxruntime/docling-parse all consume it
+via `callPackage`). Fully commented with WORKAROUND + migration path. Blast radius = docling packages only.
 
 **Light gate — MET.**
-- `nix flake check --no-build` → **"all checks passed!"** (exit 0). docling evaluates cleanly to
-  `/nix/store/hdvy1yhxbl554agdg98c4sjmsrw6vy79-python3.13-docling-2.47.1.drv`.
-- The corrected `nlohmann_json` source FOD **builds** with the new hash →
-  `/nix/store/2798d8qmh11gzr39lpc4ffy74iv3b329-source`. Notably it is **substitutable from
-  cache.nixos.org**, which independently confirms the new hash is the canonical content hash (the fork's
-  stale hash simply pointed at a nonexistent path — that is why the old memory saw it as "not in cache").
+- `nix flake check --no-build` → **"all checks passed!"** (exit 0), twice (after hash fix, and after the
+  cmake/doCheck additions). docling evaluates cleanly to `python3.13-docling-2.47.1.drv`.
+- Corrected `nlohmann_json` **source FOD builds** → `/nix/store/2798d8…-source` (also substitutable from
+  cache.nixos.org — independently confirms the new hash is canonical; the fork's stale hash simply pointed
+  at a nonexistent path, which is why the old memory saw it as "not in cache").
+- **Compiled `nlohmann_json` package builds** with all three fixes →
+  `/nix/store/mjip5k6s55qzj1cdjxkg2qpff4ya45xi-nlohmann_json-3.10.5` (configure passes, no test-compile
+  failure).
 
-**Full gate — attempted locally (build-heavy path).** `nix build --dry-run '.#checks.x86_64-linux.build-docling'`
-= 25 derivations to build (incl. arrow-cpp-20.0.0 + onnxruntime-1.22.2 — the fork-rev C++ closure, not in
-cache) + 611 paths (1.8 GiB) fetched. Kicked off the real `nix build '.#checks.x86_64-linux.build-docling'`
-on this host (27G RAM, long builds permitted). [RESULT-PLACEHOLDER — see closing note.] If the local heavy
-build does not complete in-session, the DoD explicitly permits deferring the full gate to CI (nightly
-`build-docling` job) — NOT a blocking failure; the light gate + cache-confirmed hash already prove the fix.
+**Full gate — heavy local build in progress.** `nix build --dry-run` = 25 drvs to build (incl.
+arrow-cpp-20.0.0 + onnxruntime-1.22.2, the fork-rev C++ closure, not in cache) + 611 paths (1.8 GiB)
+fetched. Running the real `nix build '.#checks.x86_64-linux.build-docling'` on this host (27G RAM, long
+builds permitted). [RESULT — see closing note below once the arrow-cpp/onnxruntime compile finishes.]
