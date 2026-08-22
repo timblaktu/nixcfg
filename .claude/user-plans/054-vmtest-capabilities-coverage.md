@@ -267,6 +267,38 @@ are CI/P6, not this DoD): `nix build '.#checks.x86_64-linux.vm-nspawn-smoke'` pa
 newly-migrated nspawn HM test (e.g. `vm-hm-activation`) builds+passes on the nspawn backend. Committed.
 Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 
+### P9 — Package-health: fix `build-docling` (upstream FOD hash-drift) `TASK:PENDING` (dep P6 — COMPLETE)
+**Autonomous builder task.** Split from P7 (Tim, 2026-08-22) as the clean, well-formed next autonomous
+target. Surfaced by P6 CI nightly dispatch run 32600536292: the `build-docling` check fails with a
+fixed-output-derivation hash mismatch on `https://github.com/nlohmann/json/archive/v3.10.5.tar.gz`
+(`specified sha256-DTsZrdB9GcaNkx7ZKxcJwp3pCVXCDlnoRHwn6R6AJnI=` vs `got
+sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=`). `nlohmann_json 3.10.5` is a TRANSITIVE dep
+(arrow-cpp → onnxruntime → docling-parse → docling). The drift is GitHub's auto-generated archive tarball
+no longer matching nixpkgs's pinned hash; confirmed env-independent (output absent locally AND not in
+cache.nixos.org). See memory `docling-nlohmann-fod-hash-drift` + plan §"P6 CI-verification session".
+
+**Approach (investigate first, then pick the lower-blast-radius fix):**
+1. Locate exactly where `build-docling`'s closure pulls `nlohmann_json 3.10.5` (likely `arrow-cpp`'s
+   vendored/fetched nlohmann_json, or an `onnxruntime` dep). `nix why-depends` / `nix-store --query
+   --tree` on the failing drv.
+2. **Preferred fix = a scoped overlay** overriding just that nlohmann_json source's hash to the observed
+   value (or switching it to `fetchFromGitHub` with an explicit rev + `hash`), in the repo's overlay layer
+   (`pkgs/` or `modules/**` overlay). Do NOT globally bump the nixpkgs pin unless the overlay proves
+   infeasible (wide blast radius — that would be a separate, Tim-gated decision).
+3. Keep the change minimal and commented (WORKAROUND: upstream GitHub-tarball drift; migration path = drop
+   when the nixpkgs pin ships a corrected hash).
+
+**DoD (checkable, two tiers):**
+- **Light/local gate:** `nix flake check --no-build` exits 0 (overlay eval-clean) AND the corrected
+  nlohmann_json source FOD builds — `nix build` of that specific source derivation succeeds with the new
+  hash (fetches the tarball only, no heavy closure).
+- **Full gate (CI or capable builder):** `nix build '.#checks.x86_64-linux.build-docling'` succeeds, OR
+  the nightly `build-docling` CI job goes green. The full docling closure (arrow-cpp + onnxruntime) is
+  build-heavy → on a host that cannot build it, verify the light gate locally and defer the full build to
+  CI (record that in the task note); this is NOT a blocking failure. If the host lacks nix entirely →
+  ENVIRONMENT_NOT_CAPABLE. Idempotent: if `build-docling` already builds (upstream fixed / overlay present),
+  the task is a no-op → COMPLETE.
+
 ## Progress tracking
 | ID | Task | Kind | Status |
 |----|------|------|--------|
@@ -280,8 +312,9 @@ Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
 | R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim; probe2/2b overlay-on-live-store BLOCKED+moot; **probe3b: FULL HM activation CONFIRMED on nspawn via `build-users-group=""`+`load-db`, RO store, NO writable store / NO upstream** — overturns P5b "HM must stay QEMU"; **P5c HM-family backend map flagged for Tim's reconsideration** (see "R2 spike findings") |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); **11 nspawn / 8 QEMU**; flake check --no-build exit 0; **all 11 nspawn + all 3 changed/new QEMU tests individually build+pass** (Tim asked for full verification; the 5 unchanged retained-QEMU tests also re-verified); 3 recorded QEMU fallbacks (vm-compose-stack, vm-wsl-dev-team-layers, vm-user-config); fixed 2 latent pre-existing bugs surfaced by building (stale `git core.pager` assert; yazi.toml invalid for pinned yazi → logged P7) (see "P5c execution" + "P5c verification addendum") |
-| P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup + **prove it green in actual GitHub CI** | 1 · CI | TASK:COMPLETE 2026-08-22 — CI GREEN on GitHub. Both first-run failure classes root-caused + fixed: (1) pre-existing lint debt (fmt/statix/deadnix/ps1-BOM, commit 1c33202); (2) aarch64 nspawn = spurious `kvm` requiredSystemFeature, fixed via `requiredFeatures.kvm=false` on all 5 container sites (commit d437cd6). **Per-PR run 32599938257 = success (61 jobs, 0 fail)**: nspawn green on BOTH x86_64+aarch64, QEMU(7) green, lint(5)+checks(26)+eval green. **Nightly dispatch 32600536292 = 69/70**: compose-stack + 5/6 pkgs + both tarballs green; sole failure `build-docling` = UPSTREAM FOD hash-drift (nlohmann_json v3.10.5 GitHub tarball, transitive via arrow-cpp/onnxruntime), env-independent + non-gating → recorded as P7 package-health debt. nixcfg-work SPLIT to P8 (see "P6 CI-verification session") |
-| P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) + **package-health: `build-docling` fails on upstream FOD hash-drift (nlohmann_json v3.10.5 GitHub tarball, transitive via arrow-cpp/onnxruntime) — fix needs an nlohmann_json src-hash overlay or nixpkgs pin bump; nightly-only, non-gating (surfaced by P6 CI run 32600536292)** | 1 · deferred | TASK:PENDING (dep P4) |
+| P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup + **prove it green in actual GitHub CI** | 1 · CI | TASK:COMPLETE 2026-08-22 — CI GREEN on GitHub. Both first-run failure classes root-caused + fixed: (1) pre-existing lint debt (fmt/statix/deadnix/ps1-BOM, commit 1c33202); (2) aarch64 nspawn = spurious `kvm` requiredSystemFeature, fixed via `requiredFeatures.kvm=false` on all 5 container sites (commit d437cd6). **Per-PR run 32599938257 = success (61 jobs, 0 fail)**: nspawn green on BOTH x86_64+aarch64, QEMU(7) green, lint(5)+checks(26)+eval green. **Nightly dispatch 32600536292 = 69/70**: compose-stack + 5/6 pkgs + both tarballs green; sole failure `build-docling` = UPSTREAM FOD hash-drift (nlohmann_json v3.10.5 GitHub tarball, transitive via arrow-cpp/onnxruntime), env-independent + non-gating → recorded as P9 package-health task (split from P7 per Tim). nixcfg-work SPLIT to P8 (see "P6 CI-verification session") |
+| P9 | **Package-health: fix `build-docling`** — upstream FOD hash-drift on nlohmann_json v3.10.5 GitHub tarball (transitive via arrow-cpp/onnxruntime); apply an nlohmann_json src-hash overlay (or nixpkgs pin bump); nightly-only, non-gating | 1 · builder (package fix) | TASK:PENDING (dep P6 — COMPLETE; split from P7 per Tim 2026-08-22) |
+| P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 | P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6; split from P6 per Tim 2026-08-22) |
 
 ## Inputs already gathered this session (feed P1-P4)
@@ -914,7 +947,7 @@ CI-wiring defect and NOT a runner-resource issue. Confirmed env-independent: the
 from the local store AND not substitutable from cache.nixos.org → docling can't build fresh anywhere until the
 upstream pin is fixed. Non-gating (nightly-only; docling never ran per-PR in the old CI either). **Narrowing +
 rationale (DoD item 4):** left the job in the nightly matrix RED (an honest true signal that docling is
-upstream-broken — NOT masked with continue-on-error) and filed it as P7 package-health debt. P6's CI wiring is
+upstream-broken — NOT masked with continue-on-error) and filed it as the P9 package-health task (split from P7). P6's CI wiring is
 correct and proven green; the docling red is unrelated upstream drift.
 
 **P6 COMPLETE (2026-08-22).** All four DoD items met: (1) workflow runs on GitHub; (2) per-PR jobs green
