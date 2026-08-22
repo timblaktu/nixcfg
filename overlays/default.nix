@@ -9,6 +9,29 @@ let
   pkgsDocling = import inputs.nixpkgs-docling {
     inherit (prev) system;
     config.allowUnfree = true;
+    overlays = [
+      # WORKAROUND (2026-08-22, plan 054 P9): upstream GitHub-tarball hash drift.
+      # GitHub's auto-generated /archive/v3.10.5.tar.gz for nlohmann/json is not
+      # byte-stable, so the fork's pinned FOD hash no longer matches what codeload
+      # serves (specified sha256-DTsZrdB9GcaNkx7ZKxcJwp3pCVXCDlnoRHwn6R6AJnI= vs got
+      # sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=). nlohmann_json 3.10.5 is a
+      # transitive dep (arrow-cpp -> onnxruntime -> docling-parse -> docling), so this
+      # breaks build-docling fresh. Overriding the single top-level nlohmann_json src
+      # hash propagates to the whole docling closure (all three consume it via
+      # callPackage). Scoped to pkgsDocling only - no blast radius on the main pkgs set.
+      # Migration path: drop this overlay once the nixpkgs-docling fork (or its pinned
+      # nixpkgs rev) ships a corrected nlohmann_json hash.
+      (_finalDocling: prevDocling: {
+        nlohmann_json = prevDocling.nlohmann_json.overrideAttrs (old: {
+          src = prevDocling.fetchFromGitHub {
+            owner = "nlohmann";
+            repo = "json";
+            rev = "v${old.version}";
+            hash = "sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=";
+          };
+        });
+      })
+    ];
   };
 
 in

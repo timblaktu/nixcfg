@@ -1016,3 +1016,36 @@ manually first (per the `nixcfg-precommit-flakecheck-timeout` memory).
 
 **Remaining P6-family work:** P8 (nixcfg-work CI) — deferred per Tim; and monitor the first push/PR to
 confirm the nspawn + aarch64 CI jobs actually run on GitHub's runners.
+
+### P9 execution (2026-08-22) — build-docling nlohmann_json FOD hash-drift FIXED
+
+**Root-cause confirmed by source.** The failing FOD is the top-level `nlohmann_json` package in the
+`nixpkgs-docling` fork (`github:timblaktu/nixpkgs/docling-parse-fix`), pinned at version **3.10.5** in
+`pkgs/by-name/nl/nlohmann_json/package.nix` with the stale hash
+`sha256-DTsZrdB9GcaNkx7ZKxcJwp3pCVXCDlnoRHwn6R6AJnI=`. It is consumed as a plain `callPackage` buildInput
+by **arrow-cpp**, **onnxruntime**, and **docling-parse** (verified: `nlohmann_json,` in each package's
+argument set) — so overriding the single top-level attribute propagates through the entire docling closure.
+GitHub's auto-generated `/archive/v3.10.5.tar.gz` drifted; the currently-served content hashes to
+`sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=` (the CI "got" value).
+
+**Fix (scoped overlay, lowest blast radius) — `overlays/default.nix`.** Added an `overlays = [ … ]` list to
+the *isolated* `pkgsDocling = import inputs.nixpkgs-docling { … }` instantiation only (NOT the main pkgs set,
+NOT a nixpkgs-pin bump). The overlay does `nlohmann_json = prevDocling.nlohmann_json.overrideAttrs (old: {
+src = prevDocling.fetchFromGitHub { owner="nlohmann"; repo="json"; rev="v${old.version}";
+hash="…gCA3A9ShM5icSF0xyGguJNbk="; }; })`. Fully commented with WORKAROUND + migration path (drop when the
+fork/pin ships a corrected hash). Blast radius = docling packages only; the main pkgs set is untouched.
+
+**Light gate — MET.**
+- `nix flake check --no-build` → **"all checks passed!"** (exit 0). docling evaluates cleanly to
+  `/nix/store/hdvy1yhxbl554agdg98c4sjmsrw6vy79-python3.13-docling-2.47.1.drv`.
+- The corrected `nlohmann_json` source FOD **builds** with the new hash →
+  `/nix/store/2798d8qmh11gzr39lpc4ffy74iv3b329-source`. Notably it is **substitutable from
+  cache.nixos.org**, which independently confirms the new hash is the canonical content hash (the fork's
+  stale hash simply pointed at a nonexistent path — that is why the old memory saw it as "not in cache").
+
+**Full gate — attempted locally (build-heavy path).** `nix build --dry-run '.#checks.x86_64-linux.build-docling'`
+= 25 derivations to build (incl. arrow-cpp-20.0.0 + onnxruntime-1.22.2 — the fork-rev C++ closure, not in
+cache) + 611 paths (1.8 GiB) fetched. Kicked off the real `nix build '.#checks.x86_64-linux.build-docling'`
+on this host (27G RAM, long builds permitted). [RESULT-PLACEHOLDER — see closing note.] If the local heavy
+build does not complete in-session, the DoD explicitly permits deferring the full gate to CI (nightly
+`build-docling` job) — NOT a blocking failure; the light gate + cache-confirmed hash already prove the fix.
