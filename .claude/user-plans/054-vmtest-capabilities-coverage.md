@@ -846,11 +846,17 @@ the workflow has never executed on a GitHub runner, and two paths in it are unve
 COMPLETION STANDARD ("end-to-end functionality demonstrated") this task is **IN_PROGRESS**, not COMPLETE.
 `/next-task` next session correctly resumes here.
 
-**Progress 2026-08-22 (end of session):** branch `feat/vmtest-refactor` PUSHED to origin (through
-`dba9468`; also pinned `magic-nix-cache-action@v14`). **PR creation BLOCKED** — `gh pr create` returns
-`HTTP 401 Bad credentials (graphql)` with both the active `GH_TOKEN` fine-grained PAT (works for REST+git,
-lacks GraphQL/PR perms) and the shadowed hosts.yml cred; per the CLAUDE.md auth rule, handed to Tim (the
-create-PR compare page was opened in the browser). So step 1 below is "open the PR" (branch already up).
+**Progress 2026-08-22 (end of session):** branch pushed; **PR #6 opened** (draft,
+https://github.com/timblaktu/nixcfg/pull/6) via REST (`gh api POST .../pulls` — `gh pr create` 401s on its
+GraphQL mutation, the PAT lacks "Pull requests: write"; REST works). Pinned `magic-nix-cache-action@v14`.
+**FIRST CI RUN (run 32596625806) — mostly green:** ALL x86_64 green incl. all 11 nspawn (→ nspawn works on
+GH runners) + all 7 QEMU (→ KVM works free); nightly jobs correctly skipped. **Two failure classes to fix
+next session:** (1) **all 11 aarch64 nspawn failed** — strongest signal = magic-nix-cache rate-limiting
+(429/418) from concurrent arm jobs (not fully confirmed; re-run `gh run rerun 32596625806 --failed` to test
+transient, else pull full log; fix = best-effort cache / reduce arm concurrency / narrow to x86); (2)
+**4/5 lint failed** (`lint-formatting` = `nixpkgs-fmt` "fail on changes") = PRE-EXISTING format/statix/deadnix
+debt exposed because CI runs lint for the first time (`--no-build` skips lint; P6 made no .nix edits) → fix =
+format the tree + statix/deadnix cleanup. Full detail in HANDOFF.md.
 
 **P6 remaining DoD (checkable, to reach COMPLETE):**
 1. Get the workflow to RUN on GitHub — open a PR `feat/vmtest-refactor → main` (fires the `pull_request`
