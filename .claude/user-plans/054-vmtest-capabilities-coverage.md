@@ -218,7 +218,7 @@ primary-source citation. If viable, R2's conclusion feeds a potential upstream n
 Needs KVM/nspawn builder (nspawn checks build via the ad-hoc sudo-root path per §10 until this host's daemon
 advertises `uid-range`); on an incapable host → ENVIRONMENT_NOT_CAPABLE (leave PENDING).
 
-### P5c — Tier-1 behavioral refactor `TASK:PENDING` (dep P5b)
+### P5c — Tier-1 behavioral refactor `TASK:IN_PROGRESS` (dep P5b)
 Edits `modules/flake-parts/vm-tests.nix` + deletes `tests/integration/{ssh-management,sops-deployment}.nix`.
 Backend per each test = the **P5b findings** (not the design doc's `N?` guesses). Steps (idempotent):
 1. **Delete** `vm-ssh-management` + `vm-sops-deployment` and their two `tests/integration/*.nix` files.
@@ -279,7 +279,7 @@ Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (writable-store gap, 3 probes; see "P5b spike findings" + `docs/nix-store-model-and-vmtest-backends.md`) |
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
 | R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim; probe2/2b overlay-on-live-store BLOCKED+moot; **probe3b: FULL HM activation CONFIRMED on nspawn via `build-users-group=""`+`load-db`, RO store, NO writable store / NO upstream** — overturns P5b "HM must stay QEMU"; **P5c HM-family backend map flagged for Tim's reconsideration** (see "R2 spike findings") |
-| P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
+| P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:IN_PROGRESS (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 
