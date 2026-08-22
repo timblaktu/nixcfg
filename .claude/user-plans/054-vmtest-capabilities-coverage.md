@@ -261,7 +261,7 @@ Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:COMPLETE 2026-08-21 — 106→60 checks (x86/aarch64 mirrored); flake check --no-build exit 0; 3 rewrites + 4 new/merged gates build+pass (see "P5a execution") |
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (writable-store gap, 3 probes; see "P5b spike findings" + `docs/nix-store-model-and-vmtest-backends.md`) |
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
-| R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim (driver-side, not in-container); probe2 overlay mechanism-OK/placement-blocked; probe3 LocalStore RO-skip CONFIRMED VIABLE (simplest fix); gap is closable upstream, P5c unchanged (see "R2 spike findings") |
+| R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim; probe2/2b overlay-on-live-store BLOCKED+moot; **probe3b: FULL HM activation CONFIRMED on nspawn via `build-users-group=""`+`load-db`, RO store, NO writable store / NO upstream** — overturns P5b "HM must stay QEMU"; **P5c HM-family backend map flagged for Tim's reconsideration** (see "R2 spike findings") |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
@@ -624,12 +624,13 @@ Durable artifact: new **§8 "Prior art & upstream path (R1)"** in `docs/nix-stor
 ### R2 spike findings (2026-08-21) — writable-store spike, evidence for the §8d verdicts
 
 Ran on `pa161878-nixos` (KVM + `systemd-nspawn`; daemon still lacks `uid-range`, so nspawn checks built
-via the §10 ad-hoc sudo-root path). Two throwaway checks added after the P5b spikes in
-`modules/flake-parts/vm-tests.nix` (`spike-r2-overlay`, `spike-r2-roskip`); check total 63 → 65, eval
-clean. Docs updated: `docs/nix-store-model-and-vmtest-backends.md` §8b (Clan.lol correction), §8d (table
-verdicts #1/#2/#3), §8e (recommendation reversed), new §8f (empirical results table). **Headline: the
-nspawn writable-store gap is real but CLOSABLE upstream — and the cheapest route is direction #3, NOT the
-overlay R1 recommended. P5c is UNCHANGED (HM tests stay QEMU until a backend change lands).**
+via the §10 ad-hoc sudo-root path). Four throwaway checks added after the P5b spikes in
+`modules/flake-parts/vm-tests.nix` (`spike-r2-overlay`, `spike-r2-roskip`, `spike-r2-hm-roskip`,
+`spike-r2-hm-overlay-live`); check total 63 → 67, eval clean. Docs fully revised in
+`docs/nix-store-model-and-vmtest-backends.md`. **HEADLINE (stronger than R2 was scoped to find): Home
+Manager activation RUNS ON NSPAWN TODAY with a test-level config (`build-users-group=""` + a daemon-free
+`load-db` of the HM closure) — NO writable store, NO overlay, NO upstream change. This OVERTURNS P5b's
+"HM must stay QEMU" and means P5c's HM-family backend map should be reconsidered (flagged for Tim below).**
 
 **Probe 1 — clan-core `clanTest`, primary source → CORRECTS R1's claim.** Cloned `~/src/clan-core`
 (GitHub mirror) and read the test lib. R1 (from a blog, unverified) claimed "Clan.lol proves nix writes
@@ -666,23 +667,46 @@ and writes land in the tmpfs upper. **Verdict:** the overlay mechanism is availa
 *placement* (before PID1) is blocked and needs an upstream early-boot mount hook. Direction #1 demoted
 from "recommended" to the secondary/fallback route.
 
-**Probe 3 — direction #3 (LocalStore RO-skip): CONFIRMED VIABLE, and the simplest fix** (`spike-r2-roskip`,
+**Probe 3 — direction #3 (LocalStore RO-skip), core op: CONFIRMED VIABLE** (`spike-r2-roskip`,
 builds+passes). Setup: `/nix/store` left **read-only** (mount opts `ro,…`, asserted), `/nix/var`
-writable (container's own root), `nix.settings.build-users-group = ""` (the §8c chown-skip lever, no
-DB-immutability side-effect). Daemon-free (`NIX_REMOTE=`): `nix-store --load-db` from a shipped
-`closureInfo` (rc=0) **and** `nix-env -p /nix/var/nix/profiles/r2-test --set <pkgs.hello>` (rc=0) both
-complete; the profile symlink resolves and the binary runs. So a profile write — the load-bearing op at
-HM's core (`nix-env --set`) — completes with a RO store + writable `/nix/var`, **no overlay, no
-store-writability, no nix patch**. Materially simpler than #1. Caveat: this proves the bare profile-write;
-a full `home-manager-<user>.service` was not driven end-to-end (P5c keeps HM on QEMU regardless), but the
-operation that P5b saw fail is confirmed unblocked by this route. **New recommended primary direction.**
+writable, `nix.settings.build-users-group = ""` (the §8c chown-skip lever). Daemon-free (`NIX_REMOTE=`):
+`nix-store --load-db` from a shipped `closureInfo` (rc=0) **and** `nix-env -p …/profiles/r2-test --set
+<pkgs.hello>` (rc=0) both complete; the profile symlink resolves and the binary runs. The load-bearing op
+at HM's core (`nix-env --set`) completes with a RO store + writable `/nix/var`, **no overlay, no
+store-writability, no nix patch**.
 
-**Consequences.** (a) `docs/…backends.md` §8e recommendation reversed: primary = direction #3 (chown-skip
-+ `closureInfo` load-db, `/nix/store` RO, `/nix/var` RW); secondary = direction #1 overlay needing an
-upstream early-boot hook; do NOT patch nix. Exact upstream files unchanged from R1's list
-(`nixos/modules/virtualisation/nspawn-container/default.nix`, `nixos/lib/testing/{nodes,run}.nix` +
-`run-nspawn`/`NspawnMachine`). (b) The two R2 spike checks are throwaway (like P5b's); they can be removed
-or absorbed once this is settled — kept for now as reproducible evidence, excluded from CI (all nspawn
-checks are). (c) **P5c backend map is UNCHANGED** — HM-activation tests stay QEMU; R2 only establishes
-that a future upstream contribution is worthwhile and identifies the cheapest path. If pursued, the
-follow-up is the upstream nixpkgs PR itself (out of scope for plan 054).
+**★ Probe 3b — direction #3 driven to FULL HM activation: CONFIRMED (the headline result)** (`spike-r2-hm-roskip`,
+builds+passes; output path realised = pass). Same modules as the P5b FAILURE reproducer
+(`spike-nspawn-hm-activation`: system-default + home-manager + git), plus the two direction-#3 levers:
+`build-users-group = ""` and a `register-nix-paths` oneshot running daemon-free `nix-store --load-db` of
+the HM generation's `closureInfo`, ordered before HM. Result: `home-manager-<user>.service` reaches
+**`active (exited)` status=0/SUCCESS** with the store **READ-ONLY**; all activation steps ran
+(writeBoundary/installPackages/linkGeneration/home-file-links) and the generated `~/.config/git/config`
+has the expected `user.name`/`user.email`. **This OVERTURNS P5b's "HM must stay QEMU" and R1's "fixable
+only upstream":** HM activation never needed a *writable store* — the P5b failure was purely (1) the
+`LocalStore` chown on the RO store (cleared by `build-users-group=""`) + (2) the unregistered generation
+in the container db (cleared by `load-db`). `nix-env --set` writes only the profile under the writable
+`/nix/var`, never the RO store. **No writable store, no overlay, no upstream change — a test-level config.**
+
+**Probe 2b — direction #1 overlay on the LIVE store, driven to full HM: BLOCKED (recorded failure)**
+(`spike-r2-hm-overlay-live`, build fails). Retried the live `/nix/store` overlay but *corrected*: EARLY
+(`before sysinit.target`, `DefaultDependencies=false`) + `mount --make-rprivate /` to kill the propagation
+recursion hypothesised as probe 2's cause. It STILL broke exec (`nsenter: failed to execute /bin/sh`,
+`wait_for_unit("multi-user.target")` rc=127). So the mid-boot corruption is **not** a propagation
+artifact — you cannot swap the in-use `/nix/store` from within the running container, even early and
+private. Direction #1 (live overlay) confirmed **blocked** — and, given probe 3b, **moot**.
+
+**Consequences.** (a) `docs/…backends.md` fully revised: §7 thesis banner (SUPERSEDED), §8d rows #1
+(blocked+moot) / #3 (full HM confirmed), §8e recommendation (primary = a LOCAL `mkContainerTest` recipe,
+NO upstream needed; upstream = optional polish; direction #1 dropped), new §8f 5-probe results table +
+overturn bottom line. (b) The five R2/P5b throwaway spike checks are excluded from CI (all nspawn checks
+are) and can be removed/absorbed in P5c. (c) **P5c RECONSIDERATION (flagged for Tim — NOT auto-applied):**
+P5b/P4 routed the whole HM-activation family to QEMU on the belief nspawn can't host HM. Probe 3b refutes
+that. A `mkContainerTest` variant (or `mkHmModuleTest` on the nspawn backend) that sets
+`build-users-group=""` + a generic `load-db` oneshot (closureInfo from
+`config.home-manager.users.<user>.home.activationPackage`) could migrate the HM family to nspawn (~5-7×
+faster): `vm-hm-activation`, `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`,
+`vm-development-tools`, `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-compose-stack`. This is a
+P5c backend-map change and a design call — Tim decides whether to fold it into P5c before P5c executes.
+R2 leaves P5c's plan text unchanged pending that decision. (d) Any upstream nixpkgs PR (the `writableStore`-
+analog) is now OPTIONAL convenience, not a prerequisite — out of scope for plan 054.

@@ -679,6 +679,172 @@ in
           '';
         };
 
+        # (R2 probe 3b) Direction #3 END-TO-END — does the chown-skip route drive a
+        # FULL home-manager-<user>.service to `active`, not just a bare nix-env --set?
+        # Same as the P5b spike-nspawn-hm-activation FAILURE reproducer, but adds the
+        # two direction-#3 levers: `build-users-group = ""` (skip the LocalStore chown,
+        # §8c) + a daemon-free `nix-store --load-db` of the HM closure (so the db agrees
+        # the generation is valid), store left READ-ONLY, /nix/var writable. If HM
+        # reaches active, direction #3 is confirmed sufficient for real HM activation —
+        # promoting §8f probe 3 from "core op proven" to "full HM proven".
+        spike-r2-hm-roskip = pkgs.testers.runNixOSTest {
+          name = "vm-spike-r2-hm-roskip";
+          containers.machine = { config, pkgs, lib, ... }:
+            let
+              hmGen = config.home-manager.users.${testUsername}.home.activationPackage;
+              regInfo = pkgs.closureInfo { rootPaths = [ hmGen ]; };
+            in
+            {
+              imports = [
+                self.modules.nixos.system-default
+                inputs.home-manager.nixosModules.home-manager
+              ];
+              systemDefault.userName = testUsername;
+              systemDefault.wheelNeedsPassword = false;
+              networking.firewall.enable = false;
+
+              # Direction #3 lever: skip the LocalStore chown without DB-immutability.
+              nix.settings.build-users-group = "";
+
+              home-manager = {
+                useGlobalPkgs = true;
+                useUserPackages = true;
+                extraSpecialArgs = { inherit inputs; };
+                users.${testUsername} = { config, pkgs, lib, ... }: {
+                  imports = [
+                    self.modules.homeManager.home-minimal
+                    self.modules.homeManager.git
+                  ];
+                  homeMinimal = {
+                    username = testUsername;
+                    homeDirectory = testHomeDir;
+                  };
+                  targets.genericLinux.enable = lib.mkForce false;
+                };
+              };
+
+              # Register the HM closure daemon-free BEFORE HM activation, so the db
+              # knows the generation path is valid (RO store, writable /nix/var db).
+              systemd.services.r2-register-hm-closure = {
+                description = "R2 probe3b: daemon-free load-db of the HM closure (dir #3)";
+                wantedBy = [ "multi-user.target" ];
+                before = [ "home-manager-${testUsername}.service" ];
+                path = [ pkgs.nix ];
+                environment.NIX_REMOTE = "";
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                };
+                script = ''
+                  set -eux
+                  nix-store --load-db < ${regInfo}/registration
+                '';
+              };
+            };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            print("=== store writability (expect READ-ONLY) ===")
+            print(machine.execute("test -w /nix/store && echo WRITABLE || echo READ-ONLY")[1])
+            print("=== r2-register-hm-closure.service ===")
+            print(machine.execute("systemctl status r2-register-hm-closure.service --no-pager -l || true")[1])
+            print("=== HM service ===")
+            print(machine.execute("systemctl status home-manager-${testUsername}.service --no-pager -l || true")[1])
+
+            # DoD: full HM activation reaches active under the chown-skip route.
+            machine.wait_for_unit("home-manager-${testUsername}.service")
+            machine.succeed("test -f /home/${testUsername}/.config/git/config")
+            machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
+          '';
+        };
+
+        # (R2 probe 2b) Direction #1 END-TO-END — retry the LIVE /nix/store overlay,
+        # but corrected. The first cut (see spike-r2-overlay comment) crashed the system;
+        # the likely cause was systemd-nspawn's SHARED mount propagation making the
+        # overlay recurse onto its own RO lower bind (an empty merged view → ENOENT for
+        # every exec), NOT a fundamental "can't remount the live store" wall. This probe
+        # runs EARLY (before sysinit.target, DefaultDependencies=false), sets propagation
+        # PRIVATE first, then overlays /nix/store in-namespace and loads the HM closure db,
+        # then drives full HM. If it reaches active, direction #1 is viable in-container
+        # TODAY (no upstream early-boot hook needed) — overturning §8f's "placement blocked".
+        # If it still fails, that confirms the placement wall with stronger evidence.
+        spike-r2-hm-overlay-live = pkgs.testers.runNixOSTest {
+          name = "vm-spike-r2-hm-overlay-live";
+          containers.machine = { config, pkgs, lib, ... }:
+            let
+              hmGen = config.home-manager.users.${testUsername}.home.activationPackage;
+              regInfo = pkgs.closureInfo { rootPaths = [ hmGen ]; };
+            in
+            {
+              imports = [
+                self.modules.nixos.system-default
+                inputs.home-manager.nixosModules.home-manager
+              ];
+              systemDefault.userName = testUsername;
+              systemDefault.wheelNeedsPassword = false;
+              networking.firewall.enable = false;
+
+              home-manager = {
+                useGlobalPkgs = true;
+                useUserPackages = true;
+                extraSpecialArgs = { inherit inputs; };
+                users.${testUsername} = { config, pkgs, lib, ... }: {
+                  imports = [
+                    self.modules.homeManager.home-minimal
+                    self.modules.homeManager.git
+                  ];
+                  homeMinimal = {
+                    username = testUsername;
+                    homeDirectory = testHomeDir;
+                  };
+                  targets.genericLinux.enable = lib.mkForce false;
+                };
+              };
+
+              systemd.services.r2-live-overlay = {
+                description = "R2 probe2b: early private-propagation overlay on live /nix/store + load-db";
+                wantedBy = [ "sysinit.target" ];
+                before = [ "sysinit.target" "home-manager-${testUsername}.service" ];
+                unitConfig.DefaultDependencies = false;
+                path = [ pkgs.util-linux pkgs.nix pkgs.coreutils ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                };
+                script = ''
+                  set -eux
+                  # Stop the overlay from propagating back onto its own RO lower bind.
+                  mount --make-rprivate /
+                  mkdir -p /nix/.ro-store /nix/.rw
+                  mount --bind /nix/store /nix/.ro-store
+                  mount --make-private /nix/.ro-store
+                  mount -t tmpfs tmpfs /nix/.rw
+                  mkdir -p /nix/.rw/upper /nix/.rw/work
+                  mount -t overlay overlay \
+                    -o lowerdir=/nix/.ro-store,upperdir=/nix/.rw/upper,workdir=/nix/.rw/work \
+                    /nix/store
+                  nix-store --load-db < ${regInfo}/registration
+                '';
+              };
+            };
+          testScript = ''
+            machine.wait_for_unit("multi-user.target")
+
+            print("=== store writability (expect WRITABLE if overlay held) ===")
+            print(machine.execute("test -w /nix/store && echo WRITABLE || echo READ-ONLY")[1])
+            print(machine.execute("findmnt -no FSTYPE,TARGET /nix/store || true")[1])
+            print("=== r2-live-overlay.service ===")
+            print(machine.execute("systemctl status r2-live-overlay.service --no-pager -l || true")[1])
+            print("=== HM service ===")
+            print(machine.execute("systemctl status home-manager-${testUsername}.service --no-pager -l || true")[1])
+
+            # DoD: live-overlay route drives full HM activation to active.
+            machine.wait_for_unit("home-manager-${testUsername}.service")
+            machine.succeed("test -f /home/${testUsername}/.config/git/config")
+            machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
+          '';
+        };
+
         # === VM FEATURE TESTS (T3) ===
 
         # SSH service test: multi-node test verifying sshd configuration,

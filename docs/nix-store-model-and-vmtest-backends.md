@@ -182,6 +182,13 @@ these mounts, because it shares the host kernel and lives inside the sandbox.
 
 ## 7. Conclusion: the missing capability is "writableStore for the nspawn backend"
 
+> **⚠ SUPERSEDED by the R2 spike (§8f probe 3b, 2026-08-21).** This section's thesis — "HM activation needs
+> a writable store, so it must stay on QEMU until an upstream `writableStore`-for-nspawn lands" — is
+> **wrong**. HM activation runs on nspawn **today** with a RO store and a test-level config (empty
+> `build-users-group` to skip the chown + a daemon-free `nix-store --load-db` of the HM closure); no
+> writable store and no upstream change are required. The text below is kept for the P5b reasoning trail;
+> read §8f for the corrected conclusion.
+
 This is **not** a hardcoded-broken framework, and **not** a misconfiguration on our part. It is a
 genuine **capability gap**: the nspawn *test* backend has no equivalent of QEMU's
 `virtualisation.writableStore`. Until it grows one, any test that performs a runtime nix operation
@@ -345,65 +352,85 @@ op to not itself write into the read-only `/nix/store` dir. That is why the read
 
 | # | Direction (from §7) | Verdict | Evidence |
 |---|---|---|---|
-| 1 | **Overlay mounted from *inside* the container's mount namespace** (post-spawn), not a host-side `--overlay` | **MECHANISM VIABLE / placement needs upstream** (R2 probe 2 — verdict tightened; no longer the *primary* recommendation, see #3) | A process *inside* the nspawn container **can** `mount -t overlay` over a RO lower store in-sandbox: R2 probe 2 mounts `overlay` at a side path (`lowerdir` = RO bind of `/nix/store`, `upper`+`work` = tmpfs) with rc=0, lower content readable, writes landing in the tmpfs upper (`spike-r2-overlay` builds+passes). **BUT the naive placement fails:** mounting the overlay onto the **live `/nix/store`** mid-boot (a oneshot before `home-manager-<user>.service`) **corrupts the running system** — every subsequent exec dies `Failed to spawn executor: No such file or directory`, the driver's `nsenter` can't run `/bin/sh` — because you cannot swap `/nix/store` out from under a PID1 already executing from it. QEMU avoids this by declaring the overlay as a `fileSystems."/nix/store".overlay` mounted in **early boot** before anything execs (`qemu-vm.nix:1445-1450`). The nspawn backend has **no pre-PID1/early-boot mount hook** (R1 §8a), so this direction needs **upstream** placement work, not a test-level config. Mechanism confirmed; ergonomics blocked. |
+| 1 | **Overlay mounted from *inside* the container's mount namespace** (post-spawn), not a host-side `--overlay` | **BLOCKED for the live store — and MOOT** (superseded by #3) | A process *inside* the nspawn container **can** `mount -t overlay` over a RO lower store in-sandbox: R2 probe 2 mounts `overlay` at a **side path** with rc=0, readable + writable (`spike-r2-overlay` builds+passes). **But applying it to the live `/nix/store` fails, even done right:** R2 probe 2b (`spike-r2-hm-overlay-live`) runs the overlay EARLY (`before sysinit.target`) with `--make-rprivate` propagation and STILL corrupts exec (`nsenter: failed to execute /bin/sh`, `wait_for_unit` rc=127) — so the earlier failure was **not** a propagation artifact; you cannot swap the in-use `/nix/store` from within the running container. QEMU only gets away with it via an initrd overlay before PID1 (`qemu-vm.nix:1445-1450`), which nspawn has no equivalent of. **Moot regardless:** direction #3 (below) makes HM activation work with **no overlay at all**, so this route is not worth pursuing. |
 | 2 | **Writable tmpfs store seeded + early `register-nix-paths`/`load-db`** from a shipped `closureInfo` | **VIABLE — daemon-free `load-db` confirmed** (R2 probes 2+3) | The db-load half is proven daemon-free in-container: R2 probe 3 runs `nix-store --load-db` (rc=0) from a shipped `closureInfo/registration` with `NIX_REMOTE=` (direct `LocalStore`, no daemon). Pairs with either the writable store of #1 **or** the writable-`/nix/var`-only route of #3 — it is the registration component, reusable verbatim (`closureInfo` → `nix-store --load-db`, qemu-vm.nix:330, 1240-1241). |
-| 3 | **Teach `LocalStore` to skip the ownership fixup on a RO bind mount** (→ RO store + writable `/nix/var`) | **VIABLE — CONFIRMED, and the simplest fix (new recommended primary)** (R2 probe 3) | Proven end-to-end: `spike-r2-roskip` builds+passes with `/nix/store` **read-only** (mount opts `ro,…`), `/nix/var` writable, and `nix.settings.build-users-group = ""` (the §8c chown-skip lever). Daemon-free (`NIX_REMOTE=`), `nix-store --load-db` (rc=0) **and** `nix-env -p …/profiles/r2-test --set <path>` (rc=0) both complete; the profile symlink resolves and the binary runs. So a profile write completes with a RO store + writable `/nix/var` — **no overlay, no store-writability needed** for the `nix-env --set` operation at HM's core. This is materially simpler than #1 (a single store setting + a writable `/nix/var` bind, no mount-namespace surgery) and needs **no nix patch** (the skip lever already exists). Caveat: this proves the bare profile-write; a full `home-manager-<user>.service` run may touch more (it was not driven end-to-end here, since P5c keeps HM on QEMU regardless) — but the load-bearing operation is confirmed unblocked. |
+| 3 | **Teach `LocalStore` to skip the ownership fixup on a RO bind mount** (→ RO store + writable `/nix/var`) | **VIABLE — CONFIRMED, and the simplest fix (new recommended primary)** (R2 probe 3) | Proven end-to-end: `spike-r2-roskip` builds+passes with `/nix/store` **read-only** (mount opts `ro,…`), `/nix/var` writable, and `nix.settings.build-users-group = ""` (the §8c chown-skip lever). Daemon-free (`NIX_REMOTE=`), `nix-store --load-db` (rc=0) **and** `nix-env -p …/profiles/r2-test --set <path>` (rc=0) both complete; the profile symlink resolves and the binary runs. So a profile write completes with a RO store + writable `/nix/var` — **no overlay, no store-writability needed** for the `nix-env --set` operation at HM's core. This is materially simpler than #1 (a single store setting + a writable `/nix/var` bind, no mount-namespace surgery) and needs **no nix patch** (the skip lever already exists). **Full HM activation now CONFIRMED end-to-end** (R2 probe 3b, `spike-r2-hm-roskip`, build+pass): with `build-users-group=""` + a `load-db` of the HM closure, `home-manager-<user>.service` reaches `active` status=0/SUCCESS on a read-only store — no overlay, no writable store, no upstream change. Not just the simplest route, the complete one for HM tests. |
 
 ### 8e. Recommendation (UPDATED post-R2 spike, 2026-08-21)
 
-> The R1 desk research below originally recommended direction #1 (in-namespace overlay) as primary. The
-> **R2 spike (§8f) reverses that ordering**: direction #3 (LocalStore chown-skip + writable `/nix/var`)
-> is confirmed working and far simpler, so it is now the recommended primary. Direction #1's *mechanism*
-> is confirmed available in-sandbox, but its placement (mounting before PID1) needs upstream backend work.
+> The R1 desk research below originally recommended direction #1 (in-namespace overlay) as primary and
+> framed the fix as an *upstream* contribution. The **R2 spike (§8f) overturns both**: direction #3
+> (chown-skip + daemon-free `load-db`, RO store, writable `/nix/var`) not only works but drives **full HM
+> activation** under nspawn — and it needs **no upstream change and no writable store**, only a test-level
+> config. Direction #1's overlay is blocked for the live store (probe 2b) and moot (probe 3b).
 
-**Primary (revised): contribute the direction-#3 route upstream** — an opt-in that, for the nspawn test
-backend, sets `build-users-group = ""` (skip the `LocalStore` chown, §8c) and ships a `closureInfo`
-registration loaded daemon-free via `nix-store --load-db`, leaving `/nix/store` read-only and `/nix/var`
-writable. R2 probe 3 proves `nix-env --set` completes under exactly this setup — no overlay, no
-mount-namespace surgery, no nix patch. This is the smallest, most portable change.
+**Primary (revised) — a LOCAL `mkContainerTest` change, no upstream needed.** To host HM (or any
+`nix-env --set`) tests on nspawn, the container just needs: (a) `nix.settings.build-users-group = ""`
+(skip the `LocalStore` chown, §8c), and (b) a `register-nix-paths` oneshot running `nix-store --load-db`
+from a `closureInfo` of the relevant closure (the HM generation:
+`config.home-manager.users.<user>.home.activationPackage`), ordered before `home-manager-<user>.service`,
+with `/nix/store` left read-only and `/nix/var` writable. R2 probe 3b (`spike-r2-hm-roskip`) proves this
+reaches `home-manager-<user>.service` = `active` status=0. This can be baked into a `mkContainerTest`
+variant in `modules/flake-parts/vm-tests.nix` **today** — see the P5c reconsideration in plan 054.
 
-**Secondary (if #3 proves insufficient for a *full* HM run): the direction-#1 overlay**, whose mechanism
-R2 probe 2 confirmed works in-sandbox — but it MUST be established **before PID1 execs from the store**
-(early boot), because a mid-boot remount of the live `/nix/store` corrupts the running system (§8f). That
-requires an upstream **early-boot/pre-spawn mount hook** in the nspawn backend (mirroring QEMU's
-`fileSystems."/nix/store".overlay`), not a test-level oneshot.
+**Optional upstream polish (nice-to-have, not required):** the same two levers could be offered as an
+opt-in `writableStore`-analog on the nspawn backend (`nixos/modules/virtualisation/nspawn-container/
+default.nix` + the `closureInfo` plumbing in `nixos/lib/testing/`) so every consumer gets it without
+hand-rolling the oneshot. But since the local recipe already works, an upstream PR is convenience, not a
+prerequisite. **Do not** pursue direction #1's overlay (blocked + moot) and **do not** patch nix.
 
-R2 already executed the local spike that R1 called for — **the follow-up is now the upstream PR itself**
-(out of scope here). Note the R1 suggestion to "read `clan-core` first because it likely already solves
-this" was **checked and does not hold** (§8b correction): clan-core makes a writable store in the *driver*
-sandbox, not inside the container, so it is not a drop-in for in-container HM activation.
+Note the R1 suggestion to "read `clan-core` first because it likely already solves this" was **checked and
+does not hold** (§8b correction): clan-core makes a writable store in the *driver* sandbox, not inside the
+container, so it is not a drop-in for in-container HM activation — but that turned out not to matter, since
+HM activation needs no in-container writable store at all (probe 3b).
 
 **Exact files a fix would change** (upstream nixpkgs):
 - `nixos/modules/virtualisation/nspawn-container/default.nix` — add an opt-in `writableStore` analog: for
   direction #3, set `nix.settings.build-users-group = ""` + a `register-nix-paths` oneshot running
-  `nix-store --load-db` from a shipped `closureInfo`, ordered before `home-manager-<user>.service`; for
-  the direction-#1 fallback, an early-boot in-namespace overlay mount instead.
+  `nix-store --load-db` from a shipped `closureInfo`, ordered before `home-manager-<user>.service`.
 - `nixos/lib/testing/{nodes,run}.nix` and the `run-nspawn` launcher / `NspawnMachine` — plumb the
   `closureInfo` registration into the container (the QEMU path passes it via kernel cmdline; nspawn needs
-  an equivalent bind/arg), and (for the #1 fallback) a pre-PID1 hook for the in-namespace mount.
+  an equivalent bind/arg).
 - **Do *not* patch nix itself.** Direction #3's chown-skip already exists as store settings; nix's
   `local-overlay-store` is experimental and buggy in containers (#11840). A nix patch is not on the
   critical path.
 
-**Fallback / defer:** even with #3 confirmed, **P5c keeps HM-activation tests on QEMU** — landing the
-upstream backend change is a separate effort. The R2 conclusion is: the capability gap is real but
-**closable** (direction #3 is the low-cost path); pursue it as an upstream nixpkgs PR when prioritized.
+**Status vs P5c:** the plan currently still lists the HM family as QEMU-only (from P5b, before probe 3b).
+That assumption is now falsified — HM tests *can* run on nspawn via the local recipe above. Whether P5c
+adopts it is a **design decision flagged for Tim** (plan 054 "R2 spike findings" → "P5c reconsideration"),
+not something R2 changes unilaterally. The R2 conclusion: the capability gap is real but **closable
+locally, today** (direction #3), with an upstream PR as optional convenience.
 
 ### 8f. R2 spike results (empirical — 2026-08-21, host `pa161878-nixos`)
 
-The R2 spike turned the §8d verdicts from "on-paper" into evidence. Three throwaway nspawn checks
+The R2 spike turned the §8d verdicts from "on-paper" into evidence. Five throwaway nspawn checks
 (`modules/flake-parts/vm-tests.nix`, after the P5b spikes), built via the §10 ad-hoc sudo-root path
 (daemon still lacks `uid-range`). Full write-up in plan 054's "R2 spike findings".
 
 | Probe | Direction | Check | Result |
 |---|---|---|---|
 | 1 | Clan.lol prior-art (primary source) | — (read `~/src/clan-core`) | **CORRECTS R1's claim** — clan-core's writable store is **driver-side**, not in-container (see §8b). |
-| 2 | #1 in-namespace overlay | `spike-r2-overlay` | **MECHANISM CONFIRMED, placement blocked** — overlay mounts+reads+writes at a side path (build+pass); live `/nix/store` remount mid-boot crashes the system. |
-| 3 | #3 LocalStore RO-skip | `spike-r2-roskip` | **CONFIRMED VIABLE** — RO store + writable `/nix/var` + empty `build-users-group`: `load-db` (rc=0) and `nix-env --set` (rc=0) complete daemon-free; profile resolves+runs (build+pass). |
+| 2 | #1 in-namespace overlay (mechanism) | `spike-r2-overlay` | **MECHANISM CONFIRMED at a side path** (build+pass) — a process in the container can `mount -t overlay` over a RO lower store, readable + writable. |
+| 2b | #1 overlay on the LIVE `/nix/store` + full HM | `spike-r2-hm-overlay-live` | **BLOCKED (recorded failure)** — even an EARLY (`before sysinit.target`), `--make-rprivate` overlay onto the live `/nix/store` breaks all exec (`nsenter: failed to execute /bin/sh`, `wait_for_unit` rc=127). The propagation-artifact hypothesis is **refuted**; you cannot swap the in-use `/nix/store` from within the running container. |
+| 3 | #3 LocalStore RO-skip (core op) | `spike-r2-roskip` | **CONFIRMED VIABLE** — RO store + writable `/nix/var` + empty `build-users-group`: `load-db` (rc=0) and `nix-env --set` (rc=0) complete daemon-free; profile resolves+runs (build+pass). |
+| 3b | #3 driven to FULL HM activation | `spike-r2-hm-roskip` | **★ CONFIRMED — full HM activation succeeds under nspawn with a RO store ★** `home-manager-<user>.service` reaches `active (exited)` status=0/SUCCESS; the generated git config exists with the expected content. NO overlay, NO writable store — just `build-users-group=""` + a daemon-free `load-db` of the HM closure (build+pass). |
 
-**Bottom line:** the nspawn writable-store gap is closable **upstream** and the cheapest route is
-direction #3 (a store setting + a `closureInfo` load-db), with direction #1's overlay as an early-boot
-fallback. This does **not** change P5c (HM tests stay QEMU until such a backend change lands).
+**Bottom line — this OVERTURNS the §5-§7 thesis and P5b's "HM must stay QEMU":** Home Manager activation
+does **not** actually need a *writable store* under nspawn. The P5b failure was the `LocalStore` chown on
+the RO store abort (§5), and probe 3b shows both blockers clear with a **test-level config, no upstream
+change and no writable store**: (a) `nix.settings.build-users-group = ""` skips the chown (§8c lever 2),
+(b) a `register-nix-paths` oneshot runs `nix-store --load-db` from a `closureInfo` of the HM generation so
+the db agrees the generation is valid, (c) `nix-env --set` (HM's core op) then writes only the profile
+under the writable `/nix/var` — never the RO store. The "writableStore-for-nspawn" contribution R1
+scoped is therefore **not required** for HM tests. Direction #1's overlay is both **blocked for the live
+store** (probe 2b) **and now moot** (probe 3b makes it unnecessary).
+
+**P5c implication (FLAGGED FOR DECISION, not auto-applied):** P5b/P4 put the entire HM-activation family
+on QEMU on the belief that nspawn cannot host HM. Probe 3b refutes that belief. A `mkContainerTest`
+variant that sets `build-users-group=""` + a generic `load-db` oneshot (closureInfo derived from
+`config.home-manager.users.<user>.home.activationPackage`) could host the HM family on nspawn (~5-7×
+faster). This is a P5c backend-map change and a design call for Tim — see plan 054 "R2 spike findings"
+→ "P5c reconsideration". R2 does not change P5c unilaterally.
 
 ---
 
