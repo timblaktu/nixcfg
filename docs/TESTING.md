@@ -123,11 +123,9 @@ tests/
 │   └── sops-nix.nix          - Advanced SOPS operations
 │
 ├── Integration Tests (VM-Based)
-│   ├── ssh-management.nix    - Full SSH key management pipeline
-│   ├── sops-deployment.nix   - SOPS-NiX deployment scenarios
-│   └── bitwarden-mock.nix    - Mock Bitwarden service
+│   └── test-secrets/         - SOPS fixtures (behavioral VM tests: modules/flake-parts/vm-tests.nix)
 │
-└── flake-modules/tests.nix   - Test orchestration & runners
+└── modules/flake-parts/tests.nix   - Test orchestration & runners
 ```
 
 ### Test Categories

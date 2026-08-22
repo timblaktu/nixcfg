@@ -69,9 +69,7 @@ tests/
 │       ├── test-age-key.txt               # Static age keypair (test only)
 │       └── test-secrets.yaml              # SOPS-encrypted test secrets
 └── integration/
-    ├── ssh-management.nix                 # Multi-node SSH key management VM test
-    ├── sops-deployment.nix                # SOPS secret deployment VM test
-    └── bitwarden-mock.nix                 # Mock Bitwarden service for testing
+    └── test-secrets/                      # SOPS fixtures (VM tests: modules/flake-parts/vm-tests.nix)
 
 modules/flake-parts/
 ├── tests.nix                              # T0/T0.5/T1: eval, lint, build checks
