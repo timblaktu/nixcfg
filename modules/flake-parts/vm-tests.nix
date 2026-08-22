@@ -357,9 +357,12 @@ in
         # not permitted` — and home-manager-<user>.service's profile registration
         # (`nix-env --set` via the daemon) then dies with `cannot open connection
         # to remote store 'daemon': Connection reset by peer`, leaving the unit
-        # "failed". CONSEQUENCE for P5c: NixOS-integrated HM-activation tests
-        # (vm-hm-activation, vm-shell-env, vm-neovim, vm-tmux, vm-git-advanced,
-        # vm-hm-composition-pairs, vm-hm-module-isolation, ...) MUST STAY ON QEMU.
+        # "failed". CONSEQUENCE for P5c: every test that waits on
+        # home-manager-<user>.service MUST STAY ON QEMU (vm-hm-activation,
+        # vm-shell-env, vm-neovim, vm-tmux, vm-git-advanced, vm-development-tools,
+        # vm-hm-composition-pairs, vm-hm-module-isolation, vm-compose-stack). The
+        # HM-FREE tests (vm-system-type-default, vm-user-config, vm-sops-secrets)
+        # still migrate to nspawn.
         #
         # ALT-CONFIG PROBE (Tim-requested, 2026-08-21): tried the canonical
         # nixos-containers pattern — disable the in-container daemon

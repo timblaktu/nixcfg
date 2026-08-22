@@ -158,10 +158,12 @@ Backend per each test = the **P5b findings** (not the design doc's `N?` guesses)
    `sshd.service` assert to the socket form. **Keep QEMU**: `vm-boot-minimal`, `vm-system-type-cli`,
    `vm-system-type-desktop`, `vm-nspawn-smoke`, `vm-ssh-service`, `vm-dev-team-vm-smoketest`.
    **⚠ CORRECTED BY P5b FINDINGS (see "P5b spike findings"):** NixOS-integrated HM-activation tests
-   FAIL under nspawn (in-container nix-daemon cannot chown the shared `/nix/store`), so of the list above
-   ONLY `vm-sops-secrets` migrates to nspawn; **`vm-shell-env`, `vm-development-tools`, `vm-git-advanced`,
-   `vm-neovim`, `vm-tmux`, `vm-hm-activation`, `vm-hm-composition-pairs`, `vm-hm-module-isolation`,
-   `vm-user-config` STAY ON QEMU** (they reach `home-manager-<user>.service`). Any multi-node test that
+   FAIL under nspawn (in-container nix-daemon cannot chown the shared `/nix/store`). MIGRATE to nspawn only
+   the HM-FREE tests: `vm-sops-secrets` (sops proven), `vm-system-type-default`, `vm-user-config` (both
+   import only `system-default`, no HM). **STAY ON QEMU** (they wait on `home-manager-<user>.service`):
+   `vm-shell-env`, `vm-development-tools`, `vm-git-advanced`, `vm-neovim`, `vm-tmux`, `vm-hm-activation`,
+   `vm-hm-composition-pairs`, `vm-hm-module-isolation`, and the merged `vm-compose-stack`. (Verified by
+   grepping each test's `testScript` for a `home-manager-<user>.service` wait.) Any multi-node test that
    DOES move to nspawn must use hostname-valid node names (no underscores). Do NOT attempt a store/daemon
    workaround to force HM tests onto nspawn — that is out of scope.
 5. **Add `vm-wsl-dev-team-layers`** (nspawn): compose `system-cli + wsl-dev-team + wsl-enterprise` +
@@ -452,8 +454,9 @@ total 60 → 63.
    (`nix-env --set`, which round-trips through that daemon) then dies with `cannot open connection to remote
    store 'daemon': Connection reset by peer`, leaving the unit **failed**. This is the single most
    consequential finding: it **overrides the design doc's aggressive-nspawn assumption for the whole HM
-   family.** **P5c decision: KEEP ON QEMU** every NixOS-integrated HM-activation test — `vm-hm-activation`,
-   `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`, `vm-user-config`,
+   family** (it also flips FIVE tests the design doc wrongly marked `N`/migrate — see below). **P5c
+   decision: KEEP ON QEMU** every NixOS-integrated HM-activation test — `vm-hm-activation`,
+   `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`,
    `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-yazi`'s fold target — anything that reaches
    `home-manager-<user>.service`.
 
@@ -476,9 +479,21 @@ total 60 → 63.
    into the `spike-nspawn-hm-activation` code comment; the throwaway v2 experiment check was removed (kept
    only the v1 baseline reproducer, per Tim). **Do not attempt this workaround in P5c** — out of scope.
 
-**Net effect on P5c backend map:** sops → nspawn (✅ new); pure-userspace/service tests without HM
-activation remain nspawn candidates (e.g. `vm-system-type-default`, and the already-proven
-`vm-nspawn-smoke` twin of `vm-system-type-cli`); **all HM-activation tests stay QEMU** (❌ reverses the
-design-doc default); multi-node nspawn tests must use hostname-valid node names. `vm-compose-stack` and
-`vm-wsl-dev-team-layers`: if either composes HM user config that activates, it inherits finding #3 → QEMU;
-otherwise nspawn-eligible (decide per final module set in P5c).
+**Net effect on P5c backend map (verified per-test by grepping each `testScript` for a
+`home-manager-<user>.service` wait):**
+- **MIGRATE to nspawn (HM-free):** `vm-sops-secrets` (sops proven ✅ new), `vm-system-type-default`,
+  `vm-user-config` (both import only `system-default`, no HM), plus `vm-nspawn-smoke` (already nspawn) and
+  the new `vm-wsl-dev-team-layers` (NixOS-layer compose, no HM user activation — confirm final module set).
+- **STAY QEMU — HM activation (❌ reverses design-doc default AND flips 5 tests the doc marked `N`):**
+  `vm-shell-env`, `vm-development-tools`, `vm-git-advanced`, `vm-neovim`, `vm-tmux` (the 5 wrongly-`N`),
+  plus `vm-hm-activation`, `vm-hm-composition-pairs`, `vm-hm-module-isolation`, and the merged
+  `vm-compose-stack` (its asserts need HM-generated content).
+- **STAY QEMU — other:** `vm-boot-minimal` (boot), `vm-system-type-cli` (sshd.service twin),
+  `vm-system-type-desktop` (graphics), `vm-ssh-service` (real cross-node ssh), `vm-dev-team-vm-smoketest`
+  (image gate).
+- Roughly a **5-migrate / 12-stay-QEMU** split — the big nspawn speedup lives in Tier 0, not Tier 1.
+- Multi-node nspawn tests must use hostname-valid node names (no underscores).
+
+**Docs updated with these findings (2026-08-21):** `docs/TESTING-NSPAWN.md` (Constraints & caveats + honesty
+ledger + migration inventory), `docs/VMTEST-TARGET-DESIGN.md` (Tier-1 backend table corrected, Net effect,
+Q1 result). The design doc's per-test `N`/`N?` guesses are now superseded by this empirical map.

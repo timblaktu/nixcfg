@@ -120,25 +120,35 @@ exercised behaviorally by `vm-dev-team-stack`.
 Backend column: **Q**=stays QEMU (boot/kernel/hardware/real-net/service semantics), **N**=migrate to
 nspawn (boot-independent), **N?**=migrate but verify in P5 (activation/systemd nuance).
 
+> **⚠ RESOLVED + CORRECTED by P5b spike (2026-08-21).** The "Final" column below now reflects the
+> **empirical** P5b findings (`docs/TESTING-NSPAWN.md` "Constraints & caveats"; plan 054 "P5b spike
+> findings"), which override the earlier N/N? guesses. **Key correction:** NixOS-integrated **Home Manager
+> activation FAILS under nspawn** (the in-container nix-daemon can't operate on the read-only shared
+> store; unfixable in-config because the build sandbox hides the host db/daemon). Therefore **every test
+> that waits on `home-manager-<user>.service` stays QEMU** — this flips FIVE rows the draft wrongly marked
+> `N` (`vm-shell-env`, `vm-development-tools`, `vm-git-advanced`, `vm-neovim`, `vm-tmux`) as well as the
+> three `N?` HM rows. Only genuinely HM-free userspace tests migrate. sops-nix activation and multi-node
+> `start_all` were proven nspawn-safe (the latter needs hostname-valid node names — no underscores).
+
 ### Keep, migrate backend per policy
 
-| Test | Today | Target | Why |
+| Test | Today | Final (P5b) | Why |
 |---|---|---|---|
 | `vm-boot-minimal` | Q | **Q** | the one genuine minimal-boot reference gate |
-| `vm-system-type-default` | Q | **N** | user/wheel/locale/timezone/shell/pkgs — all userspace |
+| `vm-system-type-default` | Q | **N** | user/wheel/locale/timezone/shell/pkgs — all userspace, no HM activation |
 | `vm-system-type-cli` | Q | **Q** | QEMU twin of `vm-nspawn-smoke`; waits `sshd.service` |
 | `vm-system-type-desktop` | Q | **Q** | X/display-manager/GPU/fonts — graphics semantics |
 | `vm-nspawn-smoke` | N | **N** | the nspawn reference; keep unchanged |
-| `vm-user-config` | Q | **N** | passwordless sudo/groups/env plumbing — userspace |
-| `vm-shell-env` | Q | **N** | zsh login shell/aliases/.zshrc — userspace |
-| `vm-development-tools` | Q | **N** | toolchain presence + negative kubectl assert — userspace |
-| `vm-git-advanced` | Q | **N** | git config values + functional git — userspace |
-| `vm-neovim` | Q | **N** | nvim headless/plugins/treesitter — userspace |
-| `vm-tmux` | Q | **N** | tmux server lifecycle/options — userspace |
-| `vm-hm-activation` | Q | **N?** | HM `home-manager-$user.service` activation path — verify nspawn hosts the unit |
-| `vm-hm-composition-pairs` | Q | **N?** | 4 nodes × HM pairs — verify nspawn multi-container |
-| `vm-hm-module-isolation` | Q | **N?** | 8 nodes × single HM module — verify nspawn multi-container |
-| `vm-sops-secrets` | Q | **N?** (Q1: migrate, verify P5) | sops-nix activation + secret perms + permission-boundary; P5 verifies nspawn hosts the sops-nix activation path before the move is committed — if fidelity fails, it stays QEMU |
+| `vm-user-config` | Q | **N** | passwordless sudo/groups/env plumbing — userspace, no HM (imports only `system-default`) |
+| `vm-shell-env` | Q | **Q** ⚠flipped from N | waits on `home-manager-<user>.service` → HM activation fails under nspawn (P5b) |
+| `vm-development-tools` | Q | **Q** ⚠flipped from N | waits on `home-manager-<user>.service` → HM activation fails under nspawn (P5b) |
+| `vm-git-advanced` | Q | **Q** ⚠flipped from N | waits on `home-manager-<user>.service` → HM activation fails under nspawn (P5b) |
+| `vm-neovim` | Q | **Q** ⚠flipped from N | waits on `home-manager-<user>.service` → HM activation fails under nspawn (P5b) |
+| `vm-tmux` | Q | **Q** ⚠flipped from N | waits on `home-manager-<user>.service` → HM activation fails under nspawn (P5b) |
+| `vm-hm-activation` | Q | **Q** (was N?) | HM activation is the whole point — proven to fail under nspawn (P5b) |
+| `vm-hm-composition-pairs` | Q | **Q** (was N?) | 4× HM activation nodes — fail under nspawn (P5b); would also need underscore-free node names |
+| `vm-hm-module-isolation` | Q | **Q** (was N?) | 8× HM activation nodes — fail under nspawn (P5b); would also need underscore-free node names |
+| `vm-sops-secrets` | Q | **N** ✅ (Q1 confirmed) | sops-nix `/run/secrets` activation proven nspawn-safe (P5b `spike-nspawn-sops`): mode/owner/content preserved |
 | `vm-ssh-service` | Q | **Q** | real two-node key auth + hardened `sshd.service` + cross-node network |
 | `vm-dev-team-vm-smoketest` | Q | **Q** | shipped-image regression gate, `sshd.service`; re-exported into nixcfg-work CI |
 
@@ -149,7 +159,7 @@ nspawn (boot-independent), **N?**=migrate but verify in P5 (activation/systemd n
 | `vm-ssh-management` | **DELETE** + `tests/integration/ssh-management.nix` | mock rbw + inline openssh; real path is `vm-ssh-service` (P2) |
 | `vm-sops-deployment` | **DELETE** + `tests/integration/sops-deployment.nix` | hand-driven sops/age CLI; real path is `vm-sops-secrets` (P2) |
 | `vm-yazi` | **MERGE→drop** (Q2) | redundant with `node_yazi` in `vm-hm-module-isolation`; fold its `init.lua`+`keymap.toml` asserts there, then delete |
-| `vm-full-cli-stack` + `vm-dev-team-stack` | **MERGE→one** (Q2) | collapse into one parameterized compose test `vm-compose-stack` with a param selecting `system-cli` layer vs real `nixos-dev-team` host module; the union of asserts (incl. `files`, `podman`, no-conflict compose, delta/alias/toolchain checks) runs per parameterization. Backend: **N?** (HM-activation compose — verify nspawn) except the `sshd.service` assert on the dev-team parameterization uses the socket form |
+| `vm-full-cli-stack` + `vm-dev-team-stack` | **MERGE→one** (Q2) | collapse into one parameterized compose test `vm-compose-stack` with a param selecting `system-cli` layer vs real `nixos-dev-team` host module; the union of asserts (incl. `files`, `podman`, no-conflict compose, delta/alias/toolchain checks) runs per parameterization. Backend (P5b): **Q** — the compose asserts HM-generated content, so it waits on `home-manager-<user>.service`, which fails under nspawn; keep on QEMU |
 
 ### Add (Tier-1 behavioral for Tier-A hosts — the active gap)
 The P2/P3 active gap is "Tier-A shipped/daily-driver hosts lack *behavioral* coverage." Daily drivers can't
@@ -184,12 +194,19 @@ a proven no-op:
   `eval-nixos-modules`, merged wsl-settings eval) + 8 renamed toplevel/tarball/image forcers + kept
   builds/lints; ~7 weak checks deleted, 3 rewritten-to-assert.
 - Tier 1: 22 `vm-*` → **17** — drop 2 mocks (`vm-ssh-management`, `vm-sops-deployment`) + `vm-yazi` + merge
-  the 2 stacks into 1 (`vm-compose-stack`), + 1 new `vm-wsl-dev-team-layers`. Majority migrated QEMU→nspawn
-  (~5-7× faster); QEMU retained only for boot/graphics/real-ssh/image gates.
+  the 2 stacks into 1 (`vm-compose-stack`), + 1 new `vm-wsl-dev-team-layers`.
+  **Backend split CORRECTED by P5b:** only the HM-free tests migrate to nspawn — `vm-system-type-default`,
+  `vm-user-config`, `vm-sops-secrets`, `vm-nspawn-smoke` (already), and the new `vm-wsl-dev-team-layers`
+  (NixOS-layer compose, no HM user activation). Everything that activates Home Manager (`vm-hm-*`, the
+  merged `vm-compose-stack`, and the five draft-`N` tests `vm-shell-env`/`vm-development-tools`/
+  `vm-git-advanced`/`vm-neovim`/`vm-tmux`) **stays QEMU**, alongside boot/graphics/real-ssh/image gates. So
+  the earlier "majority migrate" expectation is wrong — it's roughly a 5-migrate / 12-stay-QEMU split. The
+  ~5-7× nspawn speedup therefore applies to a minority of Tier-1 tests; the big win stays in Tier 0.
 
 ## Decisions resolved (Tim, 2026-08-21)
 - **Q1 — sops on nspawn:** **MIGRATE** `vm-sops-secrets` to nspawn, verify the sops-nix activation-path
   fidelity in P5; fall back to QEMU only if that verification fails.
+  → **P5b RESULT: verification PASSED** — sops-nix activation is nspawn-safe, migration confirmed.
 - **Q2 — compose-test consolidation:** **drop `vm-yazi`** (fold into isolation) AND **merge**
   `vm-full-cli-stack` + `vm-dev-team-stack` into one parameterized `vm-compose-stack`.
 - **Q3 — weak-test disposition:** delete the no-ops + 2/3 files-family; **salvage one** real files-module
