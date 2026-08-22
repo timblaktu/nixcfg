@@ -871,6 +871,43 @@ format the tree + statix/deadnix cleanup. Full detail in HANDOFF.md.
    `build-*` package builds incl. heavy ML closures — may need timeout/disk tuning; the real tarball builds).
 4. Only when the run is green (or the fixes/narrowing are committed with recorded rationale) → mark COMPLETE.
 
+### P6 CI-verification session (2026-08-22 cont.) — BOTH failure classes FIXED, per-PR CI GREEN
+
+Resumed P6 after the first run (32596625806) surfaced two failure classes. Both diagnosed to root cause,
+fixed, and verified green on GitHub. **DoD items 1+2 now MET.**
+
+**Fix 1 — pre-existing lint debt (commit `1c33202`).** CI ran lint for the first time (`--no-build` skips
+check bodies) and exposed real debt: `nixpkgs-fmt` (reformat `modules/lib/nix-guarded.nix`); `statix`
+11 warnings (inherit-from / empty-pattern→`_` / useless-parens across awscli, claude-code, github-auth,
+neovim, opencode, aptly-repo, darwin, tmux-cmd-state, powerbook, statusline); `deadnix` 2 unused let
+bindings (`awscli hasRoleArn`, `github-auth bwConfig`); `ps1` UTF-8 BOM added to the one tracked
+`windows-vpn-dns/fix-dns.ps1`. Applied via `statix fix` + `deadnix --edit` + `nixpkgs-fmt`; `nix flake
+check --no-build` still exit 0. All 5 lint jobs pass in CI.
+
+**Fix 2 — aarch64 nspawn (commit `d437cd6`). ROOT CAUSE CORRECTED.** The 11 arm nspawn jobs did NOT fail
+from magic-nix-cache rate-limiting (the prior log-skim hypothesis) — the 418/429 cache lines were
+incidental noise. The real error was at *scheduling*: `Cannot build container-test-run-...drv: missing
+system features / Required: {kvm,nixos-test,uid-range} / Available: {…,nixos-test,uid-range}`. The nspawn
+container test derivation inherited `kvm` in `requiredSystemFeatures` because the NixOS test framework
+defaults `requiredFeatures.kvm` to `isLinux` (nixpkgs `nixos/lib/testing/run.nix`), but arm64 GitHub
+runners have NO `/dev/kvm`. The nspawn backend never launches QEMU → kvm is unused at runtime. Fix = set
+`requiredFeatures.kvm = false` on all 5 container/`runNixOSTest` sites (mkContainerTest, mkHmContainerTest,
+vm-sops-secrets, vm-hm-module-isolation, vm-hm-composition-pairs). Verified via `nix derivation show`: all
+**11 nspawn checks** now declare `requiredSystemFeatures = "nixos-test uid-range"` (no kvm); the **8 QEMU
+checks** correctly retain `kvm nixos-test`. Framework-supported (run.nix option doc: "Can be disabled to
+allow emulated execution"), reproducible everywhere — no CI-specific feature-advertising workaround.
+
+**Per-PR CI GREEN — run 32599938257 (pull_request, 2026-08-22):** `success`. 61 jobs passed, 0 failed,
+3 nightly-gated correctly skipped. Proves the two highest-risk unknowns POSITIVE: **nspawn runs inside the
+GH runner sandbox on BOTH x86_64 AND aarch64** (all 22 vmtest-nspawn green), and **QEMU/KVM is free** on
+public `ubuntu-latest` (all 7 vmtest-qemu green). lint(5) + checks(26) + eval all green.
+
+**DoD item 3 IN FLIGHT:** `workflow_dispatch` run **32600536292** triggered (2026-08-22) to exercise the
+nightly-gated heavy jobs (vm-compose-stack QEMU; 6 `build-*` package builds incl. heavy ML closures;
+2 real WSL tarball builds) + all per-PR jobs. Watch: `gh run view 32600536292`. If a heavy package build
+fails on runner disk/timeout limits, per DoD item 4 the fix is to record the constraint + keep it
+nightly-only (they never ran per-PR in the old CI either) — do NOT block the per-PR-green result on it.
+
 Scope decided with Tim (interactive): VMTests run **every push/PR**; **arch = both** (subject to the
 runner-support finding below); **nixcfg-work DEFERRED** → split to new task P8. Four commits on
 `feat/vmtest-refactor`: `f40ed53` (IN_PROGRESS), `e027a99` (CI + orphan), `164fe48` (doc pass),
