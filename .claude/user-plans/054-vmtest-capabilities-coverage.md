@@ -143,7 +143,7 @@ subsection to this plan's Session log stating, per semantic, nspawn-OK vs must-s
 Those findings become P5c's authoritative backend map (overriding any `N?` guess in the design doc). Needs a
 KVM/nspawn-capable builder (present on `pa161878-nixos`); on an incapable host → ENVIRONMENT_NOT_CAPABLE.
 
-### R1 — Upstream research: `writableStore` for the nspawn test backend `TASK:PENDING` (dep P5b — COMPLETE; TOP PRIORITY, do FIRST next session)
+### R1 — Upstream research: `writableStore` for the nspawn test backend `TASK:COMPLETE 2026-08-21` (dep P5b — COMPLETE)
 **Autonomous research task (NOT Interactive).** Expands directly on the P5b finding that Home Manager
 activation (and any runtime nix operation) cannot run under the systemd-nspawn NixOS-test backend because
 that backend has **no equivalent of QEMU's `virtualisation.writableStore`**, and every hand-rolled
@@ -227,7 +227,7 @@ Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P4 | Target suite design (2-tier) — keep/merge/rewrite/drop/add + backend + rationale | Interactive (collaborative) | TASK:COMPLETE 2026-08-21 — `docs/VMTEST-TARGET-DESIGN.md` (AGREED); Q1-Q4 signed off (see "P4 decisions") |
 | P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:COMPLETE 2026-08-21 — 106→60 checks (x86/aarch64 mirrored); flake check --no-build exit 0; 3 rewrites + 4 new/merged gates build+pass (see "P5a execution") |
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (writable-store gap, 3 probes; see "P5b spike findings" + `docs/nix-store-model-and-vmtest-backends.md`) |
-| R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) — **TOP PRIORITY, next session** | 1 · research (host-agnostic) | TASK:PENDING (dep P5b — COMPLETE; actionable now) |
+| R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
@@ -550,3 +550,39 @@ total 60 → 63.
 **Docs updated with these findings (2026-08-21):** `docs/TESTING-NSPAWN.md` (Constraints & caveats + honesty
 ledger + migration inventory), `docs/VMTEST-TARGET-DESIGN.md` (Tier-1 backend table corrected, Net effect,
 Q1 result). The design doc's per-test `N`/`N?` guesses are now superseded by this empirical map.
+
+### R1 findings (2026-08-21) — prior art & upstream path for nspawn writableStore
+
+Durable artifact: new **§8 "Prior art & upstream path (R1)"** in `docs/nix-store-model-and-vmtest-backends.md`
+(trailing sections renumbered 8→9, 9→10). Pure desk research (LOCAL-FIRST: `~/src/nix` HEAD `2f28dd9`,
+`~/src/nixpkgs-upstream` `58702cd2`; web/GitHub for PRs/issues). Headlines:
+
+- **(a) Backend history.** nspawn test backend = nixpkgs **PR #470248** (jfly, merged 2026-01-20, inits the
+  `nspawn-container` profile, credits **Clan.lol**) + **PR #478109** (kmein, merged 2026-03-18, wires
+  `containers.<name>` into `nixos/lib/testing/`) + docs **PR #479968**; origin issue **#350899** (Atemu,
+  closed). **No RFC, no `writableStore` TODO.** Read-only store is a deliberate design property; the only
+  trace of considering a write-path is kmein's *"overlay a minimum root fs … another layer of namespacing?
+  … don't know if it's worth the effort"* (#478109). Specialisations are hard-disallowed (SUID wrappers
+  banned in nspawn-in-sandbox). No post-spawn mount hook exists in the driver today (commands enter via
+  `nsenter`).
+- **(b) `LocalStore` chown — CONFIRMED + skip flag EXISTS.** Throw site = `src/libstore/local-store.cc:173`
+  (`chown(realStoreDir,…)`) via the throwing wrapper `nix::chown` at `src/libutil/unix/file-system.cc:294`.
+  Guard: `isRootUser() && buildUsersGroup != "" && !readOnly`. **Two skip levers:** (1) `read-only=true`
+  store setting (`local-store.hh:106`) skips the chown **but** also opens the DB immutable → blocks the
+  writes HM needs; (2) empty `build-users-group` skips the chown block **without** DB-immutability (the
+  cleaner lever). So the chown is not a hard wall — but skipping it only clears the *first* barrier.
+- **(c) Feasibility of the three §7 directions.** #1 **overlay-from-inside the container namespace** =
+  VIABLE / recommended (mirrors QEMU's in-guest overlay `qemu-vm.nix:1445-1450`; sandbox rejects only the
+  *host-side* `--overlay`; **Clan.lol proves real nix writes work in nspawn-in-sandbox** by running
+  `nixos-rebuild switch` offline). #2 **seeded tmpfs + `load-db`** = VIABLE but only as the DB-registration
+  half of #1 (daemon-free `closureInfo`→`nix-store --load-db`, `qemu-vm.nix:330,1240`), not standalone. #3
+  **LocalStore RO-skip** = PARTIALLY VIABLE / needs-probe (chown-skip exists per (b); unknown if `nix-env
+  --set` completes with RO store dir + writable `/nix/var`). Also found nix's experimental
+  `local-overlay-store` (daemonless writable-over-RO) but it's buggy in containers (nix issue **#11840**).
+- **(d) Recommendation.** Contribute a `writableStore`-equivalent to the **nspawn backend upstream**
+  (direction #1 + #2), but **first do a local spike**: read `clan-core`'s `clanTest` lib (likely already
+  solves it), prototype the in-namespace overlay + `load-db` in one throwaway nspawn check, and in parallel
+  probe direction #3. Files a fix would touch: `nixos/modules/virtualisation/nspawn-container/default.nix`
+  (overlay + `register-nix-paths` oneshot), `nixos/lib/testing/{nodes,run}.nix` + `run-nspawn`/`NspawnMachine`
+  (plumb the `closureInfo`). **Do NOT patch nix.** Fallback = defer, HM tests stay QEMU (P5c unchanged).
+  The spike is the natural follow-up task (not part of R1).
