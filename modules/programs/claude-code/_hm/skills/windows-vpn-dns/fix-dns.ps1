@@ -1,4 +1,4 @@
-# fix-dns.ps1 - Fix the Windows VPN split-tunnel DNS race (GlobalProtect / PANGP).
+﻿# fix-dns.ps1 - Fix the Windows VPN split-tunnel DNS race (GlobalProtect / PANGP).
 #
 # Disables Windows "smart multi-homed name resolution" so lookups go to interfaces
 # in metric order (VPN first) instead of racing every resolver in parallel - which

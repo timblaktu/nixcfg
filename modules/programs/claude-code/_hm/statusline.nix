@@ -639,7 +639,7 @@ in
       statusLine = {
         type = "command";
         command = "claude-statusline-${cfg.style}";
-        padding = cfg.padding;
+        inherit (cfg) padding;
       } // optionalAttrs (cfg.refreshInterval != null) {
         inherit (cfg) refreshInterval;
       };

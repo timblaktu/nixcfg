@@ -903,7 +903,7 @@
           };
 
           settingsExtra = mkOption {
-            type = (pkgs.formats.json { }).type;
+            inherit ((pkgs.formats.json { })) type;
             default = { };
             example = { spinnerTipsEnabled = false; };
             description = ''

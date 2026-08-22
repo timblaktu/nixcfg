@@ -18,7 +18,7 @@
 # imported here - that belongs to the corp host in nixcfg-work.
 #
 # Deploy: darwin-rebuild switch --flake '.#powerbook'
-{ ... }:
+_:
 {
   flake.modules.darwin.powerbook = { lib, inputs, ... }:
     let
