@@ -364,19 +364,30 @@ in
         # HM-FREE tests (vm-system-type-default, vm-user-config, vm-sops-secrets)
         # still migrate to nspawn.
         #
-        # ALT-CONFIG PROBE (Tim-requested, 2026-08-21): tried the canonical
-        # nixos-containers pattern — disable the in-container daemon
-        # (`nix.enable = false`) and share the host nix db read-only
-        # (`--bind-ro=/nix/var/nix/db`) so local-mode `nix-env --set` could
-        # validate the prebuilt HM generation. It failed EARLIER: the container
-        # never starts — `Failed to clone /nix/var/nix/db: No such file or
-        # directory`, because the NixOS test runs inside the Nix BUILD SANDBOX,
-        # which deliberately excludes /nix/var/nix/db and the daemon socket.
-        # Sharing them would need builder-global `extra-sandbox-paths` changes
-        # that break test hermeticity/reproducibility. So HM activation is NOT
-        # nspawn-viable in the test framework via any in-config lever — confirming
-        # must-stay-QEMU. Kept as a reproducible failure per the DoD's
-        # "+ evidence" requirement; excluded from CI (all nspawn checks are).
+        # WHY IT CAN'T BE FIXED IN-CONFIG — the real blocker is a WRITABLE nix
+        # store, and all three routes to one are blocked by the Nix BUILD SANDBOX
+        # the test runs inside (three probes, Tim-requested, 2026-08-21):
+        #   1. Borrow the host daemon/db (what real nixos-containers do,
+        #      NIX_REMOTE=daemon): `--bind-ro=/nix/var/nix/db` → container won't
+        #      start, `Failed to clone /nix/var/nix/db: No such file or directory`
+        #      (the sandbox hides the host db + daemon socket).
+        #   2. Register the db daemon-free like QEMU's `virtualisation.writableStore`
+        #      does (`nix-store --load-db`, qemu-vm.nix:1202): the load-db step ALSO
+        #      dies on `changing ownership of path "/nix/store": Operation not
+        #      permitted` — proving the wall is nix's LocalStore (EVERY store op
+        #      chowns the store on open), not the daemon.
+        #   3. Make the store writable via a systemd-nspawn overlay
+        #      (`--overlay=/nix/store:…:/nix/store`, the direct analog of QEMU's
+        #      writableStore): systemd-nspawn fails at spawn — the sandbox blocks
+        #      the overlayfs mount.
+        # QEMU tests dodge all of this because `virtualisation.writableStore` layers
+        # a writable overlay INSIDE the guest kernel + loads the path-registration
+        # db — machinery that (a) is QEMU-only (`virtualisation.*`) and (b) runs in
+        # the guest, not the build sandbox. The nspawn test backend has no
+        # equivalent yet. So HM activation is NOT nspawn-viable via test-level
+        # config — it needs UPSTREAM support (a writableStore-for-containers in the
+        # nspawn backend), confirming must-stay-QEMU. Kept as a reproducible failure
+        # per the DoD's "+ evidence"; excluded from CI (all nspawn checks are).
         spike-nspawn-hm-activation = mkContainerTest {
           name = "spike-nspawn-hm-activation";
           description = "P5b spike (i): Home Manager activation on the nspawn backend";
@@ -417,7 +428,6 @@ in
             machine.succeed("su - ${testUsername} -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
           '';
         };
-
 
         # (ii) sops-nix activation under nspawn — clone of vm-sops-secrets' core:
         # a checked-in fixture secret decrypted to /run/secrets with the expected

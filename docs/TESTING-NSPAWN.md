@@ -151,26 +151,33 @@ These are real differences observed while migrating, not theory:
   cannot *build* a container test (it fails with "missing system features: uid-range"). Under
   `nix flake check --no-build` the check still **evaluates** fine — the requirement bites only at
   build time. Keep container tests out of a CI matrix until that runner is configured.
-- **Anything that needs the in-container nix-daemon does NOT work — this rules out Home Manager
-  activation (ROOT-CAUSED at the sandbox layer, plan 054 P5b, VERIFIED).** The container base module
-  bind-mounts the host store **read-only** (`--bind-ro=/nix/store:/nix/store`,
-  `nixos/modules/virtualisation/nspawn-container/default.nix`) and gives the container its own **empty**
-  `/nix/var/nix/db`. So the in-container `nix-daemon` aborts at startup — `changing ownership of path
-  "/nix/store": Operation not permitted` — and any client that talks to it dies with `cannot open
-  connection to remote store 'daemon': Connection reset by peer`. **Home Manager activation hits this
-  head-on:** `home-manager-<user>.service` runs `nix-env -p …/profiles/per-user/<user>/home-manager
-  --set <generation>` to register the generation, which round-trips through that dead daemon, so the
-  unit reaches state **failed**. The identical config PASSES under QEMU (real writable own store).
-  **The canonical `nixos-containers` escape hatch does not apply here:** those containers work by
-  proxying to the *host* daemon (`NIX_REMOTE=daemon`, see `nixos/modules/virtualisation/
-  container-config.nix`), but the NixOS test runs **inside the Nix build sandbox**, which deliberately
-  excludes both `/nix/var/nix/db` and the host daemon socket — attempting to bind them in fails before
-  the container even starts (`Failed to clone /nix/var/nix/db: No such file or directory`). Exposing
-  them would need builder-global `extra-sandbox-paths` surgery that breaks test hermeticity. **Lesson:
-  keep every NixOS-integrated Home Manager *activation* test on QEMU** (anything that waits on
-  `home-manager-<user>.service`). Container tests can still exercise *userspace* that HM produced only
-  if the generation is realised without an activation-time daemon round-trip — in practice, assert
-  HM-generated files/packages via a QEMU node, not nspawn.
+- **Any test that performs a nix *store operation* at runtime does NOT work — this rules out Home
+  Manager activation (ROOT-CAUSED across THREE probes, plan 054 P5b, VERIFIED).** The nub: the container
+  base module bind-mounts the host store **read-only** (`--bind-ro=/nix/store:/nix/store`,
+  `nixos/modules/virtualisation/nspawn-container/default.nix`), and nix's `LocalStore` **chowns the store
+  on open for every write/registration op** — which fails on a read-only mount (`changing ownership of
+  path "/nix/store": Operation not permitted`). Home Manager activation trips this because
+  `home-manager-<user>.service` runs `nix-env --set <generation>` (a genuine runtime nix write) to
+  register the new generation. The identical config PASSES under QEMU. **Why QEMU is fine and the fix
+  can't be done from test config:** QEMU test VMs set `virtualisation.writableStore`, which layers a
+  **writable overlay** over the read-only store *inside the guest kernel* AND loads the closure's
+  path-registration into the db (`register-nix-paths`, `nixos/modules/virtualisation/qemu-vm.nix`).
+  That machinery is (a) **QEMU-only** (`virtualisation.*` doesn't apply to containers) and (b) runs in
+  the guest, not the build sandbox. Every route to reproduce it for an nspawn container is blocked by the
+  **Nix build sandbox the test runs inside**:
+  1. *Borrow the host daemon/db* (what real `nixos-containers` do via `NIX_REMOTE=daemon`,
+     `container-config.nix`): `--bind-ro=/nix/var/nix/db` → container won't start, `Failed to clone
+     /nix/var/nix/db: No such file or directory` (sandbox hides the host db + daemon socket).
+  2. *Register the db daemon-free* (`nix-store --load-db`, the writableStore trick): the load-db step
+     **also** dies on the read-only-store chown — proving the wall is `LocalStore`, not the daemon.
+  3. *Make the store writable via a systemd-nspawn `--overlay`* (the direct analog of writableStore):
+     systemd-nspawn fails at spawn — the sandbox blocks the overlayfs mount.
+  So this is **not** a hardcoded-broken framework and **not** just our config — it's a genuine
+  **capability gap in the nspawn *test* backend** (no writableStore equivalent), fixable only upstream.
+  **Lesson: keep every NixOS-integrated Home Manager *activation* test on QEMU** (anything that waits on
+  `home-manager-<user>.service`). A container can still assert HM-*produced* files/packages if the
+  generation is realised without a runtime nix op — but our HM tests all wait on the activation service,
+  so they stay QEMU.
 - **Container/node names must be VALID HOSTNAMES — no underscores (VERIFIED, plan 054 P5b).** A
   `containers.<name>` / `nodes.<name>` key becomes the `systemd-nspawn --machine=<name>` name, which
   must be a valid hostname. Underscores are rejected: the run prints `Invalid machine name: node_a`,
@@ -278,9 +285,11 @@ be QEMU-only.)*
 - **Multi-node `start_all` works under nspawn** (plan 054 P5b `spike-nspawn-multinode`, build+pass) —
   **provided node names are valid hostnames** (underscores are rejected).
 - **Home Manager activation does NOT work under nspawn** (plan 054 P5b `spike-nspawn-hm-activation`,
-  recorded failure + alt-config probe): root-caused to the in-container nix-daemon vs read-only shared
-  store, and confirmed unfixable in-config because the build sandbox excludes the host db/daemon. See
-  the HM caveat under "Constraints & caveats". HM-activation tests stay QEMU.
+  recorded failure + THREE alt-config probes): root-caused to nix's `LocalStore` chowning the read-only
+  shared store on every store op, and confirmed unfixable from test config — all three routes to a
+  writable/registered store (borrow host db, daemon-free `load-db`, `--overlay`) are blocked by the Nix
+  build sandbox. QEMU works only via `virtualisation.writableStore`, which the nspawn *test* backend has
+  no equivalent for (upstream gap). See the HM caveat under "Constraints & caveats". HM tests stay QEMU.
 
 **Not yet verified / open:**
 - `vm-nspawn-smoke` is registered as a check but intentionally **not** in the CI matrix; it has not

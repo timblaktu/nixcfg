@@ -460,24 +460,32 @@ total 60 → 63.
    `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-yazi`'s fold target — anything that reaches
    `home-manager-<user>.service`.
 
-   **ALT-CONFIG PROBE (Tim-requested — "try one legitimate lever before committing HM→QEMU"):** tried the
-   canonical `nixos-containers` pattern that makes nix work in a shared-store container — disable the
-   in-container daemon (`nix.enable = lib.mkForce false`, + force off the cascading `nix.gc.automatic` /
-   `nix.optimise.automatic` assertions) and bind the **host** nix db read-only into the container
-   (`virtualisation.systemd-nspawn.options = [ "--bind-ro=/nix/var/nix/db:/nix/var/nix/db" ]`) so local-mode
-   `nix-env --set` could validate the prebuilt HM generation and write only the profile symlink to the
-   container's writable `/nix/var`. **Result: FAILED EARLIER** — the container never starts:
-   `Failed to clone /nix/var/nix/db: No such file or directory`. Root cause is one level deeper than the
-   container config: the NixOS test runs **inside the Nix build sandbox**, which deliberately excludes
-   `/nix/var/nix/db` and the nix daemon socket. Nixos-containers work because they proxy to the **host**
-   daemon (`NIX_REMOTE=daemon`, comment "Use the host's nix-daemon" in `container-config.nix`) — but the test
-   nspawn backend runs its own daemon against a `--bind-ro=/nix/store` store with an empty db, and the
-   sandbox blocks any path to the host's db/daemon. Making HM activation work would need builder-global
-   `extra-sandbox-paths` surgery that **breaks test hermeticity/reproducibility** (the test would depend on
-   host db state) — a fundamentally different mechanism, not a config toggle. **Conclusion stands and is now
-   evidence-backed at the sandbox layer: HM-activation tests must stay QEMU.** The probe's evidence is folded
-   into the `spike-nspawn-hm-activation` code comment; the throwaway v2 experiment check was removed (kept
-   only the v1 baseline reproducer, per Tim). **Do not attempt this workaround in P5c** — out of scope.
+   **ALT-CONFIG PROBES (Tim-requested — "is it truly impossible or did we give up too soon?"). THREE probes,
+   all failed, each identifying a deeper wall — the real blocker is a WRITABLE nix store, and every route to
+   one is blocked by the Nix build sandbox the test runs inside:**
+   - **Probe 1 — borrow the host daemon/db** (what real `nixos-containers` do via `NIX_REMOTE=daemon`, comment
+     "Use the host's nix-daemon" in `container-config.nix`): `nix.enable=false` + `--bind-ro=/nix/var/nix/db`.
+     **Failed at spawn:** `Failed to clone /nix/var/nix/db: No such file or directory` — the sandbox hides the
+     host db + daemon socket. Binding them in would need builder-global `extra-sandbox-paths` surgery that
+     breaks test hermeticity.
+   - **Probe 2 — register the db daemon-free** like QEMU's `virtualisation.writableStore` does
+     (`register-nix-paths` oneshot running `nix-store --load-db` from a `closureInfo` registration, ordered
+     before the HM service; upstream comment `qemu-vm.nix:1202` says load-db needs no daemon). **The load-db
+     step itself died** on `changing ownership of path "/nix/store": Operation not permitted` — proving the
+     wall is **nix's `LocalStore`** (which chowns the store on open for ANY store op), NOT the daemon. So even
+     a daemon-free db write is blocked by the read-only store.
+   - **Probe 3 — make the store writable** via a systemd-nspawn overlay
+     (`--overlay=/nix/store:/tmp/upper:/nix/store`, the direct analog of `writableStore`). **systemd-nspawn
+     failed at spawn** — the sandbox blocks the overlayfs mount.
+   **Synthesis (corrects the earlier "just the daemon" framing):** QEMU tests run runtime nix fine because
+   `virtualisation.writableStore` layers a writable overlay INSIDE the guest kernel + loads the path-registration
+   db — machinery that is (a) QEMU-only (`virtualisation.*`) and (b) runs in the guest, not the build sandbox.
+   The nspawn *test* backend has **no writableStore equivalent**, and the sandbox blocks all three hand-rolled
+   substitutes. So this is neither hardcoded-broken nor a config mistake on our part — it's a genuine
+   **capability gap in the nspawn test backend**, fixable only **upstream** (add writableStore-for-containers).
+   **Conclusion: HM-activation tests must stay QEMU.** All three probes were removed (kept only the v1 baseline
+   reproducer, per Tim); evidence folded into the `spike-nspawn-hm-activation` code comment + `docs/TESTING-NSPAWN.md`.
+   **Do not attempt this in P5c** — it's upstream work, tracked as a P7 backlog idea if we ever want it.
 
 **Net effect on P5c backend map (verified per-test by grepping each `testScript` for a
 `home-manager-<user>.service` wait):**
