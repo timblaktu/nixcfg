@@ -1059,7 +1059,19 @@ via `callPackage`). Fully commented with WORKAROUND + migration path. Blast radi
   `/nix/store/mjip5k6s55qzj1cdjxkg2qpff4ya45xi-nlohmann_json-3.10.5` (configure passes, no test-compile
   failure).
 
-**Full gate — heavy local build in progress.** `nix build --dry-run` = 25 drvs to build (incl.
-arrow-cpp-20.0.0 + onnxruntime-1.22.2, the fork-rev C++ closure, not in cache) + 611 paths (1.8 GiB)
-fetched. Running the real `nix build '.#checks.x86_64-linux.build-docling'` on this host (27G RAM, long
-builds permitted). [RESULT — see closing note below once the arrow-cpp/onnxruntime compile finishes.]
+**Full gate — heavy local build in progress (session checkpoint 2026-08-22).** `nix build --dry-run` = 25
+drvs to build (incl. arrow-cpp-20.0.0 + onnxruntime-1.22.2, the fork-rev C++ closure, not in cache) + 611
+paths (1.8 GiB) fetched. Running the real `nix build '.#checks.x86_64-linux.build-docling'` on this host
+(27G RAM, long builds permitted). **Progress at checkpoint:** nlohmann_json-3.10.5 built successfully (all 3
+fixes active) → the closure advanced PAST every previously-failing point; now deep in the heavy
+`onnxruntime-1.22.2` + `google-cloud-cpp-2.38.0` compile (36-44 `cc1plus`, load ~50, healthy). No errors.
+The three fixes are already independently build-proven at the package level (source FOD + compiled
+nlohmann_json both build); the remaining closure is ordinary heavy C++ with no docling-specific risk left.
+
+**STATUS: P9 stays IN_PROGRESS pending the full-closure build's exit-0.** To finish next session (or when the
+background build `b31i3xl3u` notifies): check `build-docling.buildlog` for `BUILD_EXIT=0` and a printed
+docling store path → then flip P9 to `TASK:COMPLETE 2026-08-22`. If the local build was interrupted by
+session exit, either re-run `nix build '.#checks.x86_64-linux.build-docling'` (nlohmann/arrow already cached
+locally, so it resumes fast) OR accept the CI path — push `feat/vmtest-refactor` and dispatch the nightly;
+the DoD's full gate is satisfied by `build-docling` going green in nightly CI. The fix is proven correct;
+only the green-build confirmation remains.
