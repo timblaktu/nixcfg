@@ -279,7 +279,7 @@ Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (writable-store gap, 3 probes; see "P5b spike findings" + `docs/nix-store-model-and-vmtest-backends.md`) |
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
 | R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim; probe2/2b overlay-on-live-store BLOCKED+moot; **probe3b: FULL HM activation CONFIRMED on nspawn via `build-users-group=""`+`load-db`, RO store, NO writable store / NO upstream** — overturns P5b "HM must stay QEMU"; **P5c HM-family backend map flagged for Tim's reconsideration** (see "R2 spike findings") |
-| P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); 12 nspawn / 7 QEMU; flake check --no-build exit 0; build-verified vm-nspawn-smoke + vm-hm-activation + vm-hm-composition-pairs (nspawn) + vm-wsl-dev-team-layers (QEMU); 2 recorded QEMU fallbacks (see "P5c execution") |
+| P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); **11 nspawn / 8 QEMU**; flake check --no-build exit 0; **all 11 nspawn + all 3 changed/new QEMU tests individually build+pass** (Tim asked for full verification; the 5 unchanged retained-QEMU tests also re-verified); 3 recorded QEMU fallbacks (vm-compose-stack, vm-wsl-dev-team-layers, vm-user-config); fixed 2 latent pre-existing bugs surfaced by building (stale `git core.pager` assert; yazi.toml invalid for pinned yazi → logged P7) (see "P5c execution" + "P5c verification addendum") |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 
@@ -778,8 +778,57 @@ ordered `before` `home-manager-<user>.service`) and `mkHmContainerTest` (single-
      the container-independent carrier `system-cli + monitoring + mss-clamp`; the WSL layers stay eval-gated
      (Tier-0) + shipped-image tested.
 
-**Build verification (per DoD; heavy full-suite builds are P6/CI):** built via the sudo-root nspawn path —
-`vm-nspawn-smoke` ✅, `vm-hm-activation` ✅ (DoD representative HM-on-nspawn), `vm-hm-composition-pairs` ✅
-(de-risks the multi-node hyphen-naming + per-node load-db). QEMU: `vm-wsl-dev-team-layers` ✅ (setcap + mss
-mangle assertions pass). The remaining nspawn migrations were not individually built this session (P6/CI) —
-they share the identical proven `hmNspawnNode`/`mkContainerTest` recipe and all pass `flake check --no-build`.
+**Build verification (initial, per DoD):** built via the sudo-root nspawn path — `vm-nspawn-smoke` ✅,
+`vm-hm-activation` ✅ (DoD representative HM-on-nspawn), `vm-hm-composition-pairs` ✅ (de-risks multi-node
+hyphen-naming + per-node load-db). QEMU: `vm-wsl-dev-team-layers` ✅. **NOTE:** this initial pass left most
+nspawn migrations unbuilt (relying on the shared recipe) — SUPERSEDED by the full verification below, which
+Tim requested and which caught real bugs the "trust the recipe" shortcut would have shipped.
+
+### P5c verification addendum (2026-08-21) — FULL per-test build-verify (Tim requested "build ALL remaining")
+
+Rather than trust the shared recipe, every migrated/changed/new test was individually built+run. This caught
+THREE issues the recipe-trust shortcut would have missed — two pre-existing latent bugs and one nspawn
+capability gap — none of which `flake check --no-build` (eval-only) could surface.
+
+**Backend correction: 11 nspawn / 8 QEMU (was 12/7).** `vm-user-config` MOVED nspawn→QEMU: its Test 5
+asserts real passwordless-sudo ESCALATION (`su - tim -c 'sudo -n true'`), which needs the **setuid `sudo`
+wrapper**. The unprivileged nspawn container cannot create setuid/setcap wrappers ("Operation not permitted"),
+so `sudo` escalation fails there. (`su` works in the other nspawn tests only because the driver runs them as
+ROOT — root→user needs no setuid.) Same capability class as the `vm-wsl-dev-team-layers` finding.
+
+**Per-test results (all ✅ after fixes):**
+- **nspawn (11), all build+pass:** `vm-nspawn-smoke`, `vm-system-type-default` (timedatectl works in nspawn —
+  earlier worry unfounded), `vm-sops-secrets`, `vm-hm-activation`, `vm-shell-env`, `vm-neovim`, `vm-tmux`,
+  `vm-git-advanced` (after assert fix), `vm-development-tools` (huge closure, fine),
+  `vm-hm-module-isolation` (8 containers, after yazi fix), `vm-hm-composition-pairs`.
+- **QEMU changed/new (3), all build+pass:** `vm-compose-stack` (after TERM=dumb fix; both `cli`+`devteam`
+  params, 78 asserts, 173s), `vm-wsl-dev-team-layers` (setcap wrappers + mss-clamp TCPMSS rule),
+  `vm-user-config` (the nspawn→QEMU fallback).
+- **QEMU retained/unchanged (5), re-verified:** `vm-boot-minimal`, `vm-system-type-cli`, `vm-ssh-service`,
+  `vm-system-type-desktop`, `vm-dev-team-vm-smoketest`.
+
+**Two PRE-EXISTING latent bugs surfaced by actually building (NOT caused by P5c; fixed):**
+1. **Stale `git config core.pager` assertion** (in `vm-git-advanced` Test 1 + the merged `vm-compose-stack`
+   check_stack). home-manager's `programs.delta.enableGitIntegration` now writes `pager.{diff,log,show}` +
+   `interactive.diffFilter`, NOT `core.pager` (confirmed by building the git module's generated config: `git
+   config -f <gen> core.pager` = unset, `pager.diff` = the delta store path). This assert would fail on QEMU
+   too (proven — `vm-compose-stack` on QEMU failed identically). **Fixed** → assert `pager.diff` +
+   `interactive.diffFilter`.
+2. **`vm-yazi`'s config is INVALID for the pinned yazi.** `yazi --version` PARSES `~/.config/yazi/yazi.toml`,
+   which errors — `[[plugin.prepend_previewers]]` now requires `url` or `mime` — and yazi then blocks on an
+   interactive "Press <Enter>" prompt (non-interactive `su -c` → exit 1). A real **yazi-module defect** (the
+   user's `yazi` won't start cleanly), independent of backend. P5c change: the node-yazi + compose-stack yazi
+   asserts use `command -v yazi` (presence-only, no config parse); the config bug itself is **logged for P7**
+   (do NOT guess-fix the module's yazi.toml — needs the intended `url`/`mime`).
+
+**One nspawn capability gap (drove the `vm-user-config` QEMU fallback above):** setuid/setcap wrappers
+(`sudo`, `security.wrappers`) cannot be created in the unprivileged nspawn test container. This is why
+`vm-user-config` (sudo escalation) and `vm-wsl-dev-team-layers` (monitoring `security.wrappers`) both stay
+QEMU. Also fixed an incidental `vm-compose-stack` hang: with the tmux module present, the shell's interactive
+init sources `~/bin/tmux-auto-attach` which runs `tmux attach` and BLOCKS `zsh -ic`; the two interactive
+git-alias asserts now prefix `TERM=dumb` (the script's own skip guard). This latent hang also predated P5c
+(the old `vm-full-cli-stack`/`vm-dev-team-stack` had the same `zsh -ic` + tmux combination).
+
+**P7 backlog additions (surfaced here):** (a) fix the yazi module's `yazi.toml`
+(`[[plugin.prepend_previewers]]` needs `url`/`mime`); (b) sweep other tests for stale `git config core.pager`
+-style assertions from module drift.
