@@ -108,6 +108,14 @@ in
         pkgs.testers.runNixOSTest {
           name = "vm-${name}";
 
+          # nspawn container backend never launches QEMU, so /dev/kvm is not
+          # used at runtime. The framework defaults requiredFeatures.kvm to
+          # isLinux (adds `kvm` to requiredSystemFeatures); disable it so these
+          # tests declare their REAL requirements and run on KVM-less builders
+          # (e.g. GitHub's aarch64 runners, which have no /dev/kvm). See
+          # nixpkgs nixos/lib/testing/run.nix requiredFeatures.kvm.
+          requiredFeatures.kvm = false;
+
           containers = if containers != null then containers else {
             machine = { config, pkgs, ... }: {
               imports = modules;
@@ -234,6 +242,8 @@ in
         }:
         pkgs.testers.runNixOSTest {
           name = "vm-${name}";
+          # nspawn backend: no QEMU, no /dev/kvm at runtime (see mkContainerTest).
+          requiredFeatures.kvm = false;
           containers.machine = hmNspawnNode { inherit hmModules hmConfig extraNixosModules; };
           inherit testScript;
         };
@@ -639,6 +649,9 @@ in
           in
           pkgs.testers.runNixOSTest {
             name = "vm-sops-secrets";
+
+            # nspawn backend: no QEMU, no /dev/kvm at runtime (see mkContainerTest).
+            requiredFeatures.kvm = false;
 
             # nspawn: sops-nix /run/secrets activation proven nspawn-safe by the
             # P5b spike-nspawn-sops (exact mode/owner preserved). Migrated P5c.
@@ -1327,6 +1340,9 @@ in
           pkgs.testers.runNixOSTest {
             name = "vm-hm-module-isolation";
 
+            # nspawn backend: no QEMU, no /dev/kvm at runtime (see mkContainerTest).
+            requiredFeatures.kvm = false;
+
             containers = {
               node-tmux = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.tmux ];
@@ -1418,6 +1434,9 @@ in
         vm-hm-composition-pairs =
           pkgs.testers.runNixOSTest {
             name = "vm-hm-composition-pairs";
+
+            # nspawn backend: no QEMU, no /dev/kvm at runtime (see mkContainerTest).
+            requiredFeatures.kvm = false;
 
             containers = {
               # Pair 1: neovim + tmux (vim-tmux-navigator integration)
