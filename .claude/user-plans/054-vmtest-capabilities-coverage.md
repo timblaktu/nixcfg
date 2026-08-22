@@ -846,6 +846,12 @@ the workflow has never executed on a GitHub runner, and two paths in it are unve
 COMPLETION STANDARD ("end-to-end functionality demonstrated") this task is **IN_PROGRESS**, not COMPLETE.
 `/next-task` next session correctly resumes here.
 
+**Progress 2026-08-22 (end of session):** branch `feat/vmtest-refactor` PUSHED to origin (through
+`dba9468`; also pinned `magic-nix-cache-action@v14`). **PR creation BLOCKED** — `gh pr create` returns
+`HTTP 401 Bad credentials (graphql)` with both the active `GH_TOKEN` fine-grained PAT (works for REST+git,
+lacks GraphQL/PR perms) and the shadowed hosts.yml cred; per the CLAUDE.md auth rule, handed to Tim (the
+create-PR compare page was opened in the browser). So step 1 below is "open the PR" (branch already up).
+
 **P6 remaining DoD (checkable, to reach COMPLETE):**
 1. Get the workflow to RUN on GitHub — open a PR `feat/vmtest-refactor → main` (fires the `pull_request`
    per-PR jobs) and/or `workflow_dispatch` (needed to also exercise the nightly-gated jobs: compose-stack,
