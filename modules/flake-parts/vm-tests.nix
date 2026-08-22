@@ -359,9 +359,20 @@ in
         # to remote store 'daemon': Connection reset by peer`, leaving the unit
         # "failed". CONSEQUENCE for P5c: NixOS-integrated HM-activation tests
         # (vm-hm-activation, vm-shell-env, vm-neovim, vm-tmux, vm-git-advanced,
-        # vm-hm-composition-pairs, vm-hm-module-isolation, ...) MUST STAY ON QEMU
-        # unless a dedicated in-container store/daemon config is developed (future
-        # work, not this spike). Kept as a reproducible failure per the DoD's
+        # vm-hm-composition-pairs, vm-hm-module-isolation, ...) MUST STAY ON QEMU.
+        #
+        # ALT-CONFIG PROBE (Tim-requested, 2026-08-21): tried the canonical
+        # nixos-containers pattern — disable the in-container daemon
+        # (`nix.enable = false`) and share the host nix db read-only
+        # (`--bind-ro=/nix/var/nix/db`) so local-mode `nix-env --set` could
+        # validate the prebuilt HM generation. It failed EARLIER: the container
+        # never starts — `Failed to clone /nix/var/nix/db: No such file or
+        # directory`, because the NixOS test runs inside the Nix BUILD SANDBOX,
+        # which deliberately excludes /nix/var/nix/db and the daemon socket.
+        # Sharing them would need builder-global `extra-sandbox-paths` changes
+        # that break test hermeticity/reproducibility. So HM activation is NOT
+        # nspawn-viable in the test framework via any in-config lever — confirming
+        # must-stay-QEMU. Kept as a reproducible failure per the DoD's
         # "+ evidence" requirement; excluded from CI (all nspawn checks are).
         spike-nspawn-hm-activation = mkContainerTest {
           name = "spike-nspawn-hm-activation";
@@ -403,6 +414,7 @@ in
             machine.succeed("su - ${testUsername} -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
           '';
         };
+
 
         # (ii) sops-nix activation under nspawn — clone of vm-sops-secrets' core:
         # a checked-in fixture secret decrypted to /run/secrets with the expected

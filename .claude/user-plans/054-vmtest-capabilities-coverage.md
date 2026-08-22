@@ -455,9 +455,26 @@ total 60 → 63.
    family.** **P5c decision: KEEP ON QEMU** every NixOS-integrated HM-activation test — `vm-hm-activation`,
    `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`, `vm-user-config`,
    `vm-hm-composition-pairs`, `vm-hm-module-isolation`, `vm-yazi`'s fold target — anything that reaches
-   `home-manager-<user>.service`. Migrating them would require a dedicated in-container store/daemon config
-   (candidate future work: prevent the in-container daemon from touching the store root, or register the HM
-   profile without a daemon round-trip) — **out of scope for P5c**; do not attempt a workaround there.
+   `home-manager-<user>.service`.
+
+   **ALT-CONFIG PROBE (Tim-requested — "try one legitimate lever before committing HM→QEMU"):** tried the
+   canonical `nixos-containers` pattern that makes nix work in a shared-store container — disable the
+   in-container daemon (`nix.enable = lib.mkForce false`, + force off the cascading `nix.gc.automatic` /
+   `nix.optimise.automatic` assertions) and bind the **host** nix db read-only into the container
+   (`virtualisation.systemd-nspawn.options = [ "--bind-ro=/nix/var/nix/db:/nix/var/nix/db" ]`) so local-mode
+   `nix-env --set` could validate the prebuilt HM generation and write only the profile symlink to the
+   container's writable `/nix/var`. **Result: FAILED EARLIER** — the container never starts:
+   `Failed to clone /nix/var/nix/db: No such file or directory`. Root cause is one level deeper than the
+   container config: the NixOS test runs **inside the Nix build sandbox**, which deliberately excludes
+   `/nix/var/nix/db` and the nix daemon socket. Nixos-containers work because they proxy to the **host**
+   daemon (`NIX_REMOTE=daemon`, comment "Use the host's nix-daemon" in `container-config.nix`) — but the test
+   nspawn backend runs its own daemon against a `--bind-ro=/nix/store` store with an empty db, and the
+   sandbox blocks any path to the host's db/daemon. Making HM activation work would need builder-global
+   `extra-sandbox-paths` surgery that **breaks test hermeticity/reproducibility** (the test would depend on
+   host db state) — a fundamentally different mechanism, not a config toggle. **Conclusion stands and is now
+   evidence-backed at the sandbox layer: HM-activation tests must stay QEMU.** The probe's evidence is folded
+   into the `spike-nspawn-hm-activation` code comment; the throwaway v2 experiment check was removed (kept
+   only the v1 baseline reproducer, per Tim). **Do not attempt this workaround in P5c** — out of scope.
 
 **Net effect on P5c backend map:** sops → nspawn (✅ new); pure-userspace/service tests without HM
 activation remain nspawn candidates (e.g. `vm-system-type-default`, and the already-proven
