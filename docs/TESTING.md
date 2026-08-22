@@ -31,15 +31,14 @@ nix flake check --keep-going
 
 ### Run Specific Test Categories
 ```bash
-# Unit tests only
-nix build '.#checks.x86_64-linux.sops-simple-test' -L
-nix build '.#checks.x86_64-linux.ssh-simple-test' -L
+# Tier-0 eval-regression gate (fast, no boot)
+nix build '.#checks.x86_64-linux.regression-test' -L
 
-# Integration tests only (requires KVM)
-nix run '.#apps.x86_64-linux.test-integration'
+# A fast behavioral VMTest (nspawn; no KVM)
+nix build '.#checks.x86_64-linux.vm-nspawn-smoke' -L
 
-# Quick regression check
-nix run '.#apps.x86_64-linux.regression-test'
+# A QEMU behavioral VMTest (requires KVM)
+nix build '.#checks.x86_64-linux.vm-boot-minimal' -L
 ```
 
 ## GitHub Actions Local Validation
@@ -130,84 +129,63 @@ tests/
 
 ### Test Categories
 
-#### 1. Configuration Evaluation Tests
-- **Purpose**: Ensure all host configurations can be evaluated without errors
-- **Tests**: `eval-thinky-nixos`, `eval-potato`, `eval-nixos-wsl-minimal`, `eval-mbp`
-- **What they catch**: Syntax errors, missing modules, undefined options
+> The suite was redesigned into two tiers in plan 054. The authoritative live
+> list is `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`.
 
-#### 2. Module Integration Tests
-- **Purpose**: Verify that custom modules integrate correctly
-- **Tests**: `module-base-integration`, `module-wsl-common-integration`
-- **What they catch**: Module conflicts, option collisions, dependency issues
-
-#### 3. Service Configuration Tests
-- **Purpose**: Ensure critical services are properly configured
-- **Tests**: `ssh-service-configured`, `user-tim-configured`
-- **What they catch**: Service misconfigurations, missing users/groups
-
-#### 4. Unit Tests
-Fast tests that validate individual components:
+#### Tier 0 - Eval-regression gates (fast, no boot)
+- **Purpose**: Force host/HM/module configs to evaluate; catch syntax errors,
+  missing modules, undefined options, stateVersion/username drift.
+- **Checks**: `regression-test` (consolidated host + HM gate), `eval-hm-modules`
+  (all HM modules), `eval-nixos-modules` (all NixOS layers),
+  `eval-wsl-settings-ssh-port`, and the `eval-*-toplevel` / `eval-*-tarball` /
+  `eval-images-*` forcers.
 
 ```bash
-# SOPS encryption/decryption
-nix build '.#checks.x86_64-linux.sops-simple-test' -L
-
-# SSH key management
-nix build '.#checks.x86_64-linux.ssh-simple-test' -L
-
-# Configuration evaluation
-nix build '.#checks.x86_64-linux.eval-thinky-nixos' -L
+nix build '.#checks.x86_64-linux.regression-test' -L
+nix build '.#checks.x86_64-linux.eval-hm-modules' -L
+nix build '.#checks.x86_64-linux.eval-nixos-modules' -L
+nix build '.#checks.x86_64-linux.eval-thinky-nixos-toplevel' -L
 ```
 
-#### 5. Integration Tests
-VM-based tests that validate complete system functionality:
-
+#### Lint
 ```bash
-# SSH service integration
-nix build '.#checks.x86_64-linux.ssh-integration-test' -L
-
-# SOPS deployment integration  
-nix build '.#checks.x86_64-linux.sops-integration-test' -L
-
-# Run all integration tests
-nix run '.#apps.x86_64-linux.test-integration'
+nix build '.#checks.x86_64-linux.lint-formatting' -L
+nix build '.#checks.x86_64-linux.lint-statix' -L
+nix build '.#checks.x86_64-linux.lint-deadnix' -L
 ```
 
-#### 6. Security Tests
-Validate security configurations and secrets management:
+#### Module / integration / security checks
+- **Checks**: `module-base-integration`, `module-binfmt-integration`,
+  `files-module-test`, `user-configured`, `wsl-dev-team-setup-username-user`,
+  `tmux-picker-syntax`, `opencode-json-syntax`, `opencode-mcp-structure`, and the
+  `skill-injection-*` prompt-injection guards.
 
 ```bash
-# GitHub Actions security checks (if enabled)
-nix build '.#checks.x86_64-linux.github-actions' -L
-
-# SOPS encryption validation
-nix build '.#checks.x86_64-linux.sops-simple-test' -L
-
-# SSH public keys registry
-nix build '.#checks.x86_64-linux.ssh-public-keys-registry' -L
+nix build '.#checks.x86_64-linux.module-base-integration' -L
+nix build '.#checks.x86_64-linux.user-configured' -L
+nix build '.#checks.x86_64-linux.skill-injection-awscli' -L
 ```
 
-#### 7. Build Tests
-Ensure configurations can be built:
+#### Tier 1 - Behavioral VMTests
+Real machine tests. Boot-independent ones run on the fast systemd-nspawn
+container backend (no KVM; x86_64 AND aarch64); boot/kernel/graphics/real-network
+ones stay on QEMU (x86_64 KVM). See [TESTING-NSPAWN.md](TESTING-NSPAWN.md).
 
 ```bash
-# Dry-run builds (configuration evaluation)
-nix build '.#checks.x86_64-linux.build-thinky-nixos-dryrun' -L
-nix build '.#checks.x86_64-linux.build-nixos-wsl-minimal-dryrun' -L
+# nspawn (fast, ~10-20s)
+nix build '.#checks.x86_64-linux.vm-nspawn-smoke' -L
+nix build '.#checks.x86_64-linux.vm-hm-activation' -L
+nix build '.#checks.x86_64-linux.vm-sops-secrets' -L
+
+# QEMU (requires KVM)
+nix build '.#checks.x86_64-linux.vm-boot-minimal' -L
+nix build '.#checks.x86_64-linux.vm-compose-stack' -L
 ```
 
-#### 8. Cross-Module Tests
-Verify module interactions and dependencies:
-
+#### Package / activation builds
 ```bash
-# WSL and base module interaction
-nix build '.#checks.x86_64-linux.cross-module-wsl-base' -L
-
-# SOPS and base module integration
-nix build '.#checks.x86_64-linux.cross-module-sops-base' -L
-
-# Home Manager integration
-nix build '.#checks.x86_64-linux.cross-module-home-manager' -L
+nix build '.#checks.x86_64-linux.activate-hm-nixvim-minimal' -L
+nix build '.#checks.x86_64-linux.build-docling' -L
 ```
 
 ## Test Apps
@@ -282,7 +260,7 @@ For integration tests, you can interact with the test VM:
 
 ```bash
 # Build the test but don't run it
-nix build '.#checks.x86_64-linux.ssh-integration-test' --keep-failed
+nix build '.#checks.x86_64-linux.vm-ssh-service' --keep-failed
 
 # Find the test driver script
 ls -la /tmp/nix-build-*/
@@ -479,8 +457,8 @@ nix build '.#checks.x86_64-linux.test-name' \
 nix build '.#checks.x86_64-linux.test-name' --dry-run
 
 # Skip expensive tests during development
-# Run only unit tests
-for test in ssh-simple-test sops-simple-test; do
+# Run only the fast Tier-0 + nspawn checks
+for test in regression-test vm-nspawn-smoke vm-hm-activation; do
   nix build ".#checks.x86_64-linux.$test" -L
 done
 ```
@@ -498,36 +476,17 @@ The old script-based testing has been replaced with integrated Nix tests. All fu
 
 ## Feature Coverage Matrix
 
-### Core Modules Coverage
-
-| Module | Unit Tests | Integration Tests | Coverage % | Status |
-|--------|------------|-------------------|------------|--------|
-| **SSH Public Keys Registry** | ✅ ssh-public-keys-registry | ✅ ssh-management.nix | 95% | ✅ Complete |
-| **Bootstrap SSH Keys** | ✅ ssh-simple-test | ✅ ssh-management.nix | 90% | ✅ Complete |
-| **SOPS-NiX Integration** | ✅ sops-simple-test, sops-nix | ✅ sops-deployment.nix | 95% | ✅ Complete |
-| **Base Module** | ✅ module-base-integration | ✅ All integration tests | 100% | ✅ Complete |
-| **WSL Common Module** | ✅ module-wsl-common-integration | ✅ All integration tests | 100% | ✅ Complete |
-
-### Security-Critical Paths
-
-| Security Feature | Test Coverage | Test Type | Status |
-|------------------|---------------|-----------|--------|
-| SSH Key Format Validation | ✅ Tested | Unit | ✅ Pass |
-| Key Storage Permissions | ✅ Tested | Integration | ✅ Pass |
-| SOPS Encryption/Decryption | ✅ Tested | Both | ✅ Pass |
-| Age Key Management | ✅ Tested | Integration | ✅ Pass |
-| Authorized Keys Distribution | ✅ Tested | Integration | ✅ Pass |
-| Secret Permissions (0400) | ✅ Tested | Integration | ✅ Pass |
-| User/Group Ownership | ✅ Tested | Unit | ✅ Pass |
-
-### Configuration Tests
-
-| Configuration | Evaluation Test | Build Test | Integration Test | Status |
-|---------------|-----------------|------------|------------------|--------|
-| thinky-nixos | ✅ eval-thinky-nixos | ✅ build-thinky-nixos-dryrun | ✅ All | ✅ Complete |
-| potato | ✅ eval-potato | ❌ None | ❌ None | ⚠️ Basic only |
-| nixos-wsl-minimal | ✅ eval-nixos-wsl-minimal | ✅ build-nixos-wsl-minimal-dryrun | ✅ Partial | ✅ Good |
-| mbp | ✅ eval-mbp | ❌ None | ❌ None | ⚠️ Basic only |
+> **Superseded by plan 054.** The pre-054 coverage matrix that lived here
+> referenced checks and integration files (`ssh-management.nix`,
+> `sops-deployment.nix`, `eval-thinky-nixos`, `build-*-dryrun`, …) that have since
+> been deleted, renamed, or consolidated. For the current, authoritative
+> feature/code-coverage map see **[`VMTEST-AUDIT.md`](VMTEST-AUDIT.md)** (per-module
+> covering tests + depth) and the target design in
+> **[`VMTEST-TARGET-DESIGN.md`](VMTEST-TARGET-DESIGN.md)**. The live check set is:
+>
+> ```bash
+> nix eval '.#checks.x86_64-linux' --apply builtins.attrNames
+> ```
 
 ## Windows-Side WSL Import Testing
 

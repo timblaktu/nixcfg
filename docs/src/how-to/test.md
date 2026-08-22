@@ -13,15 +13,14 @@ nix flake check --keep-going
 
 ### Run Specific Test Categories
 ```bash
-# Unit tests only
-nix build '.#checks.x86_64-linux.sops-simple-test' -L
-nix build '.#checks.x86_64-linux.ssh-simple-test' -L
+# Tier-0 eval-regression gate (fast, no boot)
+nix build '.#checks.x86_64-linux.regression-test' -L
 
-# Integration tests only (requires KVM)
-nix run '.#apps.x86_64-linux.test-integration'
+# A fast behavioral VMTest (nspawn; no KVM)
+nix build '.#checks.x86_64-linux.vm-nspawn-smoke' -L
 
-# Quick regression check
-nix run '.#apps.x86_64-linux.regression-test'
+# A QEMU behavioral VMTest (requires KVM)
+nix build '.#checks.x86_64-linux.vm-boot-minimal' -L
 ```
 
 ## GitHub Actions Local Validation
@@ -99,70 +98,67 @@ nix flake check
 
 ## Test Categories
 
-### 1. Unit Tests
-Fast tests that validate individual components:
+The suite is 2-tier (redesigned in plan 054). The authoritative live list is always:
 
 ```bash
-# SOPS encryption/decryption
-nix build '.#checks.x86_64-linux.sops-simple-test' -L
-
-# SSH key management
-nix build '.#checks.x86_64-linux.ssh-simple-test' -L
-
-# Configuration evaluation
-nix build '.#checks.x86_64-linux.eval-thinky-nixos' -L
-nix build '.#checks.x86_64-linux.eval-potato' -L
+nix eval '.#checks.x86_64-linux' --apply builtins.attrNames
 ```
 
-### 2. Integration Tests
-VM-based tests that validate complete system functionality:
+### Tier 0 - Eval-regression gates (fast, no boot)
+Batched evaluation checks that force host/module configs to evaluate:
 
 ```bash
-# SSH service integration
-nix build '.#checks.x86_64-linux.ssh-integration-test' -L
+# Consolidated host + HM stateVersion/username regression gate
+nix build '.#checks.x86_64-linux.regression-test' -L
 
-# SOPS deployment integration  
-nix build '.#checks.x86_64-linux.sops-integration-test' -L
+# All HM modules / all NixOS layer modules forced to evaluate standalone
+nix build '.#checks.x86_64-linux.eval-hm-modules' -L
+nix build '.#checks.x86_64-linux.eval-nixos-modules' -L
 
-# Run all integration tests
-nix run '.#apps.x86_64-linux.test-integration'
+# Toplevel / tarball / image eval forcers
+nix build '.#checks.x86_64-linux.eval-thinky-nixos-toplevel' -L
+nix build '.#checks.x86_64-linux.eval-nixos-wsl-dev-team-tarball' -L
+nix build '.#checks.x86_64-linux.eval-images-dev-team' -L
 ```
 
-### 3. Module Tests
-Tests for specific NixOS modules:
-
+### Lint
 ```bash
-# Base module integration
+nix build '.#checks.x86_64-linux.lint-formatting' -L
+nix build '.#checks.x86_64-linux.lint-statix' -L
+nix build '.#checks.x86_64-linux.lint-deadnix' -L
+```
+
+### Module / integration checks
+```bash
 nix build '.#checks.x86_64-linux.module-base-integration' -L
-
-# WSL module integration
-nix build '.#checks.x86_64-linux.module-wsl-common-integration' -L
-
-# Cross-module integration
-nix build '.#checks.x86_64-linux.cross-module-wsl-base' -L
+nix build '.#checks.x86_64-linux.module-binfmt-integration' -L
+nix build '.#checks.x86_64-linux.files-module-test' -L
+nix build '.#checks.x86_64-linux.user-configured' -L
 ```
 
-### 4. Security Tests
-Validate security configurations and secrets management:
+### Tier 1 - Behavioral VMTests
+Real machine tests. Boot-independent ones run on the fast systemd-nspawn
+container backend; boot/kernel/graphics ones stay on QEMU (see
+[TESTING-NSPAWN](../../TESTING-NSPAWN.md)).
 
 ```bash
-# GitHub Actions security checks (if enabled)
-nix build '.#checks.x86_64-linux.github-actions' -L
+# nspawn (fast, ~10-20s; no KVM; runs on x86_64 AND aarch64)
+nix build '.#checks.x86_64-linux.vm-nspawn-smoke' -L
+nix build '.#checks.x86_64-linux.vm-hm-activation' -L
+nix build '.#checks.x86_64-linux.vm-sops-secrets' -L
 
-# SOPS encryption validation
-nix build '.#checks.x86_64-linux.sops-simple-test' -L
-
-# SSH public keys registry
-nix build '.#checks.x86_64-linux.ssh-public-keys-registry' -L
+# QEMU (need /dev/kvm; x86_64)
+nix build '.#checks.x86_64-linux.vm-boot-minimal' -L
+nix build '.#checks.x86_64-linux.vm-compose-stack' -L
 ```
 
-### 5. Build Tests
-Ensure configurations can be built:
+nspawn checks need the builder to advertise the `uid-range` system feature
+(`auto-allocate-uids`); see [TESTING-NSPAWN](../../TESTING-NSPAWN.md) for host setup.
 
+### Package / activation builds
 ```bash
-# Dry-run builds (configuration evaluation)
-nix build '.#checks.x86_64-linux.build-thinky-nixos-dryrun' -L
-nix build '.#checks.x86_64-linux.build-nixos-wsl-minimal-dryrun' -L
+nix build '.#checks.x86_64-linux.activate-hm-nixvim-minimal' -L
+nix build '.#checks.x86_64-linux.build-docling' -L
 ```
 
 ## Git Integration
@@ -232,7 +228,7 @@ sudo usermod -a -G kvm $USER
 #### Integration Tests Timeout
 ```bash
 # Increase timeout for slow systems
-nix build '.#checks.x86_64-linux.ssh-integration-test' --timeout 600
+nix build '.#checks.x86_64-linux.vm-ssh-service' --timeout 600
 ```
 
 #### GitHub Actions Dependencies Missing
@@ -256,10 +252,10 @@ rm -rf ~/.cache/nixos-test/
 ### Debug Mode
 ```bash
 # Run tests with detailed output
-nix build '.#checks.x86_64-linux.ssh-integration-test' -L --show-trace
+nix build '.#checks.x86_64-linux.vm-ssh-service' -L --show-trace
 
 # Enable debug logging for VM tests
-NIX_DEBUG=1 nix build '.#checks.x86_64-linux.ssh-integration-test' -L
+NIX_DEBUG=1 nix build '.#checks.x86_64-linux.vm-ssh-service' -L
 ```
 
 ### Performance Optimization

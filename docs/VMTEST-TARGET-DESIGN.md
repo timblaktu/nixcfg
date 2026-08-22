@@ -1,5 +1,14 @@
 # VMTest Suite Target Design (plan 054 P4)
 
+> **AS-BUILT NOTE (2026-08-22, P6).** This is the *forward design* as agreed at P4. Two things drifted
+> during execution and are recorded elsewhere as the source of truth for the *as-built* suite:
+> (1) the per-check `N`/`N?` backend guesses below were superseded first by the P5b spike, then the P4
+> "migrate all HM to nspawn" default was itself overturned by R2 (HM DOES run on nspawn). The **as-built
+> backend split is 11 nspawn / 8 QEMU** — see the plan's "P5c execution" + "R2 spike findings" and
+> [`TESTING-NSPAWN.md`](TESTING-NSPAWN.md). (2) Some check names here are pre-execution; the authoritative
+> live list is `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`. This doc is kept as the
+> design record, not a current-state reference.
+
 Status: **AGREED 2026-08-21** — Tim signed off on the four open decisions (Q1-Q4, resolved inline below and
 recorded in the plan's "P4 decisions" log). This is the target the P5 execution implements. No code changes
 happen in P4; P5 executes this table.

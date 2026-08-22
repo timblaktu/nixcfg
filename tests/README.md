@@ -27,10 +27,10 @@ but execute during full `nix flake check`.
 # Eval-only (fast, no builds, no KVM required)
 nix flake check --no-build
 
-# Run a specific check
-nix build '.#checks.x86_64-linux.eval-thinky-nixos'
+# Run the Tier-0 eval-regression gate
+nix build '.#checks.x86_64-linux.regression-test'
 
-# Run a specific VM test (requires KVM)
+# Run a QEMU VM test (requires KVM)
 nix build '.#checks.x86_64-linux.vm-boot-minimal' -L
 
 # Run lint checks only
@@ -38,18 +38,18 @@ nix build '.#checks.x86_64-linux.lint-formatting'
 nix build '.#checks.x86_64-linux.lint-statix'
 nix build '.#checks.x86_64-linux.lint-deadnix'
 
-# Run module isolation eval tests
-nix build '.#checks.x86_64-linux.eval-hm-module-shell'
-nix build '.#checks.x86_64-linux.eval-nixos-module-system-cli'
+# Run the consolidated module isolation eval gates
+nix build '.#checks.x86_64-linux.eval-hm-modules'
+nix build '.#checks.x86_64-linux.eval-nixos-modules'
 
-# Run module isolation VM test (all 8 HM modules in parallel)
+# Run module isolation VM test (all 8 HM modules in parallel, nspawn)
 nix build '.#checks.x86_64-linux.vm-hm-module-isolation' -L
 
-# Run composition pair tests
+# Run composition pair tests (nspawn)
 nix build '.#checks.x86_64-linux.vm-hm-composition-pairs' -L
 
-# Run full CLI stack integration test
-nix build '.#checks.x86_64-linux.vm-full-cli-stack' -L
+# Run the full compose-stack integration test (QEMU)
+nix build '.#checks.x86_64-linux.vm-compose-stack' -L
 
 # Run everything (eval + lint + build + VM tests)
 nix flake check
@@ -114,16 +114,20 @@ Parameters:
 - `memory` -- VM memory in MB (default: 1024)
 - `extraConfig` -- Additional NixOS config merged into the machine node
 
-### mkHmModuleTest helper
+### mkHmContainerTest helper
 
-`vm-tests.nix` provides `mkHmModuleTest` for testing Home Manager modules
-in VMs. It provides `system-default` + `home-manager` + `home-minimal`
-automatically; the caller only specifies which HM modules to test and what
-to assert:
+`vm-tests.nix` provides `mkHmContainerTest` for testing Home Manager modules on
+the fast **systemd-nspawn** backend (the nspawn analog of the former QEMU
+`mkHmModuleTest`, removed in plan 054 P5c). It provides `system-default` +
+`home-manager` + `home-minimal` automatically via the `hmNspawnNode` recipe -
+which bakes in the R2 HM-on-nspawn config (`build-users-group = ""` + a
+daemon-free `nix-store --load-db` of the HM closure) so full HM activation runs
+on a read-only store with no KVM. The caller only specifies which HM modules to
+test and what to assert:
 
 ```nix
-mkHmModuleTest {
-  name = "yazi";                                     # check name: vm-yazi
+mkHmContainerTest {
+  name = "example";                                  # check name: vm-example
   hmModules = [ self.modules.homeManager.yazi ];     # HM modules to test
   testScript = ''
     machine.wait_for_unit("multi-user.target")
@@ -136,128 +140,96 @@ mkHmModuleTest {
 Parameters:
 
 - `name` -- Becomes `vm-${name}` in the checks attrset
+- `description` -- Human-readable description (default: derived from `name`)
 - `hmModules` -- List of HM modules (from `self.modules.homeManager.*`)
-- `testScript` -- Python test script
-- `memory` -- VM memory in MB (default: 2048)
+- `testScript` -- Python test script (nixos-test-driver syntax)
 - `extraNixosModules` -- Additional NixOS modules (default: [])
 - `hmConfig` -- Additional attrs merged into the HM user config (default: {})
 
-### Module isolation eval helpers (tests.nix)
+See [TESTING-NSPAWN.md](../docs/TESTING-NSPAWN.md) for the nspawn host
+prerequisites (the `uid-range` system feature via `auto-allocate-uids`).
 
-- `mkHmModuleEvalTest name module { extraImports?, extraConfig? }` --
-  Proves a Home Manager module evaluates standalone with only `home-minimal`.
-  Uses `home-manager.lib.homeManagerConfiguration` with test user settings.
-- `mkNixosModuleEvalTest name module { extraConfig? }` --
-  Proves a NixOS module evaluates standalone via `lib.nixosSystem`.
+### Consolidated eval gates (tests.nix)
 
-### Other helpers in tests.nix
+Plan 054 P5a replaced the former per-module/per-host eval helpers
+(`mkHmModuleEvalTest`, `mkNixosModuleEvalTest`, `mkEvalTest`, `mkHmEvalTest`,
+`mkModuleTest`) with a few **batched** gates:
 
-- `mkEvalTest name hostName` -- Eval test for a NixOS configuration
-- `mkHmEvalTest name configName` -- Eval test for a Home Manager configuration
-- `mkModuleTest { name, description, hostName, attributes, checks }` --
-  Module integration test with custom attribute checks
+- `regression-test` -- consolidated host + HM stateVersion/username regression gate
+  (folds the former 12 standalone `eval-*` host/config evals).
+- `eval-hm-modules` -- forces ALL HM modules to evaluate standalone (folds the
+  former 20 `eval-hm-module-*`); via an inlined `forceHmModuleEval` over the
+  module attrset.
+- `eval-nixos-modules` -- forces ALL NixOS layer modules to evaluate standalone
+  (folds the former 6 `eval-nixos-module-*`); via an inlined `forceNixosModuleEval`.
 
 VM tests compose from **dendritic modules** (`self.modules.nixos.*`,
 `self.modules.homeManager.*`) rather than importing full host configs.
-This avoids WSL/hardware dependencies that cannot run in QEMU.
+This avoids WSL/hardware dependencies that cannot run in a test backend.
 
-## Check Inventory (86 total)
+## Check Inventory (57 total, x86_64/aarch64 mirrored)
 
-### T0: Eval Tests
+The authoritative live list is
+`nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`.
 
-**NixOS configurations** (5):
-`eval-thinky-nixos`, `eval-potato`,
-`eval-nixos-wsl-minimal`, `eval-mbp`
+### Tier 0 - Eval-regression gates (12)
 
-**Home Manager configurations** (5, x86_64-linux only):
-`eval-hm-thinky-nixos`, `eval-hm-thinky-ubuntu`,
-`eval-hm-mbp`, `eval-hm-nixvim-minimal`
+**Batched gates** (4): `regression-test`, `eval-hm-modules`, `eval-nixos-modules`,
+`eval-wsl-settings-ssh-port`.
 
-Skipped: `tim@potato` (aarch64-linux), `tim@macbook-air` (aarch64-darwin)
+**Toplevel / tarball / image eval forcers** (8, renamed from `build-*-dryrun`):
+`eval-thinky-nixos-toplevel`, `eval-nixos-wsl-minimal-toplevel`,
+`eval-nixos-dev-team-toplevel`, `eval-thinky-nixos-tarball`,
+`eval-nixos-wsl-dev-team-tarball`, `eval-images-dev-team`, `eval-images-ec2`,
+`eval-images-graviton`.
 
-**HM module isolation eval tests** (20):
-Each proves a single HM module evaluates standalone with only `home-minimal`.
-`eval-hm-module-shell`, `eval-hm-module-git`, `eval-hm-module-tmux`,
-`eval-hm-module-neovim`, `eval-hm-module-development-tools`,
-`eval-hm-module-yazi`, `eval-hm-module-shell-utils`,
-`eval-hm-module-files`, `eval-hm-module-podman`,
-`eval-hm-module-terminal`, `eval-hm-module-secrets-management`,
-`eval-hm-module-claude-code`, `eval-hm-module-opencode`,
-`eval-hm-module-github-auth`, `eval-hm-module-gitlab-auth`,
-`eval-hm-module-git-auth-helpers`, `eval-hm-module-esp-idf`,
-`eval-hm-module-windows-terminal`, `eval-hm-module-onedrive`,
-`eval-hm-module-system-tools`
+### Lint (5)
 
-**NixOS module isolation eval tests** (6):
-Each proves a NixOS module evaluates standalone.
-`eval-nixos-module-system-minimal`, `eval-nixos-module-system-default`,
-`eval-nixos-module-system-cli`, `eval-nixos-module-system-desktop`,
-`eval-nixos-module-secrets-management`, `eval-nixos-module-wsl`
+`lint-formatting` (`nixpkgs-fmt --check`), `lint-statix`, `lint-deadnix`,
+`lint-ps1-encoding`, `lint-version`.
 
-**Module integration** (9):
-`module-base-integration`, `module-wsl-settings-integration`,
-`ssh-service-configured`, `user-tim-configured`,
-`config-snapshot-validation`, `cross-module-wsl-base`,
-`cross-module-sops-base`, `cross-module-home-manager`,
-`ssh-public-keys-registry`
+### Module / integration / config checks (12)
 
-**Build evaluation** (2, force toplevel derivation eval without building):
-`build-thinky-nixos-dryrun`, `build-nixos-wsl-minimal-dryrun`
+`module-base-integration`, `module-binfmt-integration`, `files-module-test`,
+`tmux-picker-syntax`, `user-configured`, `wsl-dev-team-setup-username-user`,
+`opencode-json-syntax`, `opencode-mcp-structure`, and the `skill-injection-*`
+prompt-injection guards (`awscli`, `glab`, `negative`, `pulumi`).
 
-**Other eval tests** (10):
-`flake-validation`, `validated-scripts-module`,
-`unified-files-diagnostic-test`, `files-module-test`,
-`hybrid-files-module-test`, `tmux-picker-syntax`,
-`opencode-config-validation`, `opencode-json-syntax`,
-`opencode-mcp-structure`, `regression-test`
+### Package / activation builds (8) + CI meta (1)
 
-### T0.5: Lint Checks (3)
+**Activation builds** (2): `activate-hm-nixvim-minimal`, `activate-hm-thinky-nixos`.
+**Package builds** (6): `build-docling`, `build-marker-pdf`, `build-markitdown`,
+`build-nixvim-anywhere`, `build-termux-claude-scripts`, `build-tomd`.
+**CI meta** (1): `github-actions` (local `act` runner; not run in CI).
 
-- `lint-formatting` -- `nixpkgs-fmt --check` on all `.nix` files
-- `lint-statix` -- `statix check` for Nix anti-patterns
-- `lint-deadnix` -- `deadnix --no-lambda-pattern-names --no-underscore --fail`
-  for dead code detection
+### Tier 1 - Behavioral VMTests (19)
 
-### T1: Build Tests (7)
+Boot-independent tests run on the **systemd-nspawn** backend (fast, no KVM, run on
+BOTH x86_64 and aarch64); boot/kernel/graphics/real-network/image tests stay on
+**QEMU** (x86_64 KVM). See [../docs/TESTING-NSPAWN.md](../docs/TESTING-NSPAWN.md).
 
-**Package builds** (6):
-`build-marker-pdf`, `build-markitdown`, `build-tomd`,
-`build-nixvim-anywhere`, `build-docling`, `build-termux-claude-scripts`
+**nspawn** (11):
+- `vm-nspawn-smoke` -- nspawn reference; system-cli userspace smoke
+- `vm-system-type-default` -- user creation, locale, timezone, zsh
+- `vm-sops-secrets` -- sops-nix decryption, permissions, service access
+- `vm-hm-activation` -- Home Manager activates, generates configs
+- `vm-shell-env` -- zsh config, aliases, plugins, session variables
+- `vm-neovim` -- config loading, treesitter, plugins, LSP, checkhealth
+- `vm-tmux` -- server lifecycle, plugins, sessions, helper scripts
+- `vm-git-advanced` -- delta, aliases, merge tools, hooks
+- `vm-development-tools` -- Rust, Node, Python, Go, Claude utils
+- `vm-hm-module-isolation` -- each HM module activated alone (parallel nodes; folds the former `vm-yazi`)
+- `vm-hm-composition-pairs` -- module pairs testing integration points
 
-**CI** (1):
-`github-actions`
-
-### T2: VM Boot Tests (4)
-
-- `vm-boot-minimal` -- Minimal NixOS boots, `nix --version` works
-- `vm-system-type-default` -- User creation, locale, timezone, zsh
+**QEMU** (8):
+- `vm-boot-minimal` -- minimal NixOS boots, `nix --version` works
 - `vm-system-type-cli` -- SSH daemon, dev tools, neovim, tmux
 - `vm-system-type-desktop` -- GNOME, PipeWire, Bluetooth, CUPS, fonts
-
-### T3: VM Feature Tests (15)
-
-**Service and security tests**:
-- `vm-ssh-management` -- Multi-node SSH key management pipeline
-- `vm-sops-deployment` -- SOPS CLI encryption/decryption operations
-- `vm-ssh-service` -- Multi-node SSH: key auth, password rejection
-- `vm-user-config` -- User setup, groups, sudo, nix trusted-users
-- `vm-sops-secrets` -- sops-nix decryption, permissions, service access
-
-**Home Manager activation and shell**:
-- `vm-hm-activation` -- Home Manager activates, generates configs
-- `vm-shell-env` -- Zsh config, aliases, plugins, session variables
-
-**Module-specific feature tests**:
-- `vm-neovim` -- Config loading, treesitter, plugins, LSP, checkhealth
-- `vm-tmux` -- Server lifecycle, plugins, sessions, helper scripts
-- `vm-git-advanced` -- Delta, aliases, LFS, merge tools, hooks
-- `vm-development-tools` -- Rust, Node, Python, Go, C/C++, Claude utils
-- `vm-yazi` -- Config generation, custom init.lua
-
-**Module isolation and composition** (dendritic pattern validation):
-- `vm-hm-module-isolation` -- 8 HM modules each activated alone (parallel nodes)
-- `vm-hm-composition-pairs` -- 4 module pairs testing integration points
-- `vm-full-cli-stack` -- All 9 VM-safe HM modules + system-cli together
+- `vm-ssh-service` -- multi-node SSH: key auth, password rejection
+- `vm-user-config` -- user setup, groups, passwordless sudo escalation
+- `vm-wsl-dev-team-layers` -- monitoring (`security.wrappers`) + `mss-clamp`
+- `vm-dev-team-vm-smoketest` -- shipped dev-team image smoketest
+- `vm-compose-stack` -- full HM stack over system-cli + real nixos-dev-team host module (nightly in CI)
 
 ## Module Coverage Matrix
 
@@ -305,33 +277,19 @@ Parenthesized entries explain why VM testing is not applicable.
 
 ## Adding a New Test
 
-### New eval test
+### New host / config eval
 
-Add to `modules/flake-parts/tests.nix`:
+Extend the batched `regression-test` gate in `modules/flake-parts/tests.nix` -
+add the new config's `system.stateVersion` (or HM `home.username`) to its
+inherited attrs. There is no per-host `mkEvalTest` anymore.
 
-```nix
-my-new-eval-test = mkEvalTest "my-host" "my-host";
-```
+### New module isolation eval
 
-### New module isolation eval test
-
-Add to `modules/flake-parts/tests.nix`:
-
-```nix
-# HM module — proves it evaluates with only home-minimal
-eval-hm-module-my-module = mkHmModuleEvalTest "my-module"
-  self.modules.homeManager.my-module
-  { };
-
-# NixOS module — proves it evaluates standalone
-eval-nixos-module-my-module = mkNixosModuleEvalTest "my-module"
-  self.modules.nixos.my-module
-  {
-    extraConfig = {
-      # Add any required options here
-    };
-  };
-```
+Module isolation is batched: adding a module to `self.modules.homeManager.*` or
+`self.modules.nixos.*` makes it automatically covered by `eval-hm-modules` /
+`eval-nixos-modules` (they map over the whole module attrset). If a NixOS layer
+needs extra options to evaluate standalone, add them to that gate's per-module
+`extraConfig` in `tests.nix`. No new per-module check is needed.
 
 ### New HM module VM test (using mkHmModuleTest)
 
@@ -444,8 +402,9 @@ Module pairs with known integration points are tested together:
 | git + shell | Git aliases in zsh |
 | shell + tmux | $TMUX env var, zsh inside tmux |
 
-The `vm-full-cli-stack` test combines all 9 VM-safe HM modules with
-`system-cli` to prove the full composition is conflict-free.
+The `vm-compose-stack` test combines all 9 VM-safe HM modules with both
+`system-cli` and the real `nixos-dev-team` host module to prove the full
+composition is conflict-free (QEMU; runs nightly in CI).
 
 ### Multi-node tests
 
