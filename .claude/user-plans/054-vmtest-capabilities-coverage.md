@@ -185,6 +185,39 @@ and/or the nix source). No code change required — this is research; any implem
 Pure desk research (web + reading local `~/src` clones); host-agnostic → never ENVIRONMENT_NOT_CAPABLE.
 Prefer local clones (`~/src/nixpkgs`, `~/src/home-manager`) per LOCAL-FIRST research; web/GitHub for issues/PRs.
 
+### R2 — Writable-store spike for nspawn (implement R1's recommendation) `TASK:PENDING` (dep R1 — COMPLETE; do BEFORE P5c)
+**Builder task (KVM/nspawn-capable host required — `pa161878-nixos`; incapable host → ENVIRONMENT_NOT_CAPABLE).**
+Executes the concrete follow-up from R1's recommendation (`docs/nix-store-model-and-vmtest-backends.md` §8e):
+turn the three fix-direction verdicts from "viable-on-paper / needs-probe" into evidence. Throwaway spike
+checks (like P5b's), added after `vm-nspawn-smoke` in `modules/flake-parts/vm-tests.nix`; may be removed/absorbed
+once conclusions are recorded. This does **NOT** change P5c's backend map (HM tests stay QEMU regardless) — it
+determines whether a future upstream `writableStore`-for-nspawn contribution is worth pursuing.
+
+**Three probes (each idempotent; record per-probe result):**
+1. **Read `clan-core`'s `clanTest` lib FIRST** (`~/src` clone if present, else clone `https://git.clan.lol/clan/clan-core`
+   or GitHub mirror `clan-lol/clan-core`). Extract *primary-source* answers (R1 took this from a blog, unverified):
+   does their nspawn-in-sandbox test make `/nix/store` **writable** (how — overlay? tmpfs?), and how do they
+   **register** the closure (`closureInfo` + `nix-store --load-db`?). Record file:line citations. This confirms or
+   refutes the R1 "Clan.lol proves nix writes work in nspawn-in-sandbox" claim that underpins the §8d #1 "VIABLE" verdict.
+2. **Prototype the in-namespace overlay (direction #1).** A throwaway nspawn check that, post-spawn, mounts
+   `overlay` on `/nix/store` from *inside* the container (lower = the RO `/nix/store` bind, upper+work = tmpfs)
+   using the container's own `CAP_SYS_ADMIN`, runs `nix-store --load-db` from a `closureInfo` registration, then
+   reaches `home-manager-<user>.service`. Record: HM activation `active` vs. specific failure (and at which step —
+   overlay mount / load-db / nix-env --set).
+3. **Probe direction #3 (LocalStore RO-skip).** A throwaway nspawn check with **empty `build-users-group`** +
+   a **writable `/nix/var`** (db+profiles), store dir left RO (no overlay); run a bare `nix-env -p <profile> --set <path>`
+   (or minimal HM). Record whether it completes — i.e. whether RO-store + writable-`/nix/var` + chown-skip suffices
+   for the profile write, without making the store writable.
+
+**DoD (checkable):** each of the 3 probes either **builds+passes** under `nix build '.#checks.<sys>.<probe>'`
+(→ that route confirmed viable) **or** produces a recorded, specific failure. Append an **"R2 spike findings"**
+subsection to this plan's Session log (per-probe verdict + evidence), AND update `docs/nix-store-model-and-vmtest-backends.md`
+§8d — moving directions #1 and #3 from "VIABLE (needs prototype)" / "PARTIALLY VIABLE (needs-probe)" to a
+confirmed **viable / blocked** verdict with the probe evidence, and correcting §8b's Clan.lol claim to a
+primary-source citation. If viable, R2's conclusion feeds a potential upstream nixpkgs PR (out of scope here).
+Needs KVM/nspawn builder (nspawn checks build via the ad-hoc sudo-root path per §10 until this host's daemon
+advertises `uid-range`); on an incapable host → ENVIRONMENT_NOT_CAPABLE (leave PENDING).
+
 ### P5c — Tier-1 behavioral refactor `TASK:PENDING` (dep P5b)
 Edits `modules/flake-parts/vm-tests.nix` + deletes `tests/integration/{ssh-management,sops-deployment}.nix`.
 Backend per each test = the **P5b findings** (not the design doc's `N?` guesses). Steps (idempotent):
@@ -228,6 +261,7 @@ Committed. Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P5a | Tier-0 eval-regression consolidation (batch evals, renames, no-op deletions, 3 rewrites) | 1 · portable (eval-only) | TASK:COMPLETE 2026-08-21 — 106→60 checks (x86/aarch64 mirrored); flake check --no-build exit 0; 3 rewrites + 4 new/merged gates build+pass (see "P5a execution") |
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (writable-store gap, 3 probes; see "P5b spike findings" + `docs/nix-store-model-and-vmtest-backends.md`) |
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
+| R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:PENDING (dep R1 — COMPLETE; needs KVM/nspawn host) |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:PENDING (dep P5b) |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
