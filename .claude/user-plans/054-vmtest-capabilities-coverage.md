@@ -280,8 +280,9 @@ Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
 | R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim; probe2/2b overlay-on-live-store BLOCKED+moot; **probe3b: FULL HM activation CONFIRMED on nspawn via `build-users-group=""`+`load-db`, RO store, NO writable store / NO upstream** — overturns P5b "HM must stay QEMU"; **P5c HM-family backend map flagged for Tim's reconsideration** (see "R2 spike findings") |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); **11 nspawn / 8 QEMU**; flake check --no-build exit 0; **all 11 nspawn + all 3 changed/new QEMU tests individually build+pass** (Tim asked for full verification; the 5 unchanged retained-QEMU tests also re-verified); 3 recorded QEMU fallbacks (vm-compose-stack, vm-wsl-dev-team-layers, vm-user-config); fixed 2 latent pre-existing bugs surfaced by building (stale `git core.pager` assert; yazi.toml invalid for pinned yazi → logged P7) (see "P5c execution" + "P5c verification addendum") |
-| P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:IN_PROGRESS 2026-08-22 — decisions: VMTests every-push (trigger 1-or-2 pending run-time characterization); arch=BOTH x86_64+aarch64; nixcfg-work DEFERRED to follow-up; KVM confirmed free+working on public-repo standard runners (see "P6 execution") |
+| P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup | 1 · CI | TASK:COMPLETE 2026-08-22 — ci.yml rewritten to the 57-check suite (was broken: ~40 dead names); per-PR = lint+checks+nspawn(x86+arm)+QEMU(7); nightly = compose-stack+pkgs+tarballs; validated (all 56 refs live, actionlint clean, flake check passes); user-facing test docs refreshed; orphan bitwarden-mock removed. nixcfg-work SPLIT to P8. GH-runner execution self-validates on first push (nspawn + arm paths unverified until then) (see "P6 execution") |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
+| P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6; split from P6 per Tim 2026-08-22) |
 
 ## Inputs already gathered this session (feed P1-P4)
 - **Backend capability (053 T6, DONE):** `mkVmTest` (QEMU) + `mkContainerTest` (nspawn, proven,
@@ -836,3 +837,64 @@ git-alias asserts now prefix `TERM=dumb` (the script's own skip guard). This lat
 **P7 backlog additions (surfaced here):** (a) ~~fix the yazi module's `yazi.toml`~~ — DONE 2026-08-21 (the
 `name`→`url` previewer fix, see above); (b) sweep other tests for stale `git config core.pager`-style
 assertions from module drift (delta was one; there may be others hidden behind eval-only checks).
+
+### P6 execution (2026-08-22) — nixcfg public CI + doc pass — DONE
+
+Scope decided with Tim (interactive): VMTests run **every push/PR**; **arch = both** (subject to the
+runner-support finding below); **nixcfg-work DEFERRED** → split to new task P8. Three commits on
+`feat/vmtest-refactor`: `f40ed53` (IN_PROGRESS), `e027a99` (CI + orphan), `164fe48` (doc pass).
+
+**Runner research (the CI feasibility gate — Tim asked me to verify before committing to a design):**
+- **KVM on GitHub-hosted runners:** available on the **standard free `ubuntu-latest`** for
+  **public repos** (GitHub enabled HW accel 2023-02-23; the Nix ecosystem runs `nixosTest` there for
+  free). Our `ci.yml` already uses `cachix/install-nix-action@v31`, which **auto-enables KVM** — no extra
+  setup for the QEMU jobs. Public-repo standard runners = **unlimited free minutes** (only *larger*
+  runners bill on public repos, and we use none). Sources: Determinate Systems "KVM on GitHub Actions",
+  cachix/install-nix-action (`enable_kvm`), NixOS Discourse #36199.
+- **aarch64 runners:** `ubuntu-24.04-arm` is **free + GA for public repos** (2025-08-07, 4 vCPU) BUT
+  has **NO `/dev/kvm`** (open req: actions/partner-runner-images#147, runner-images#14062). So QEMU-KVM
+  can't run on arm. **Resolution:** the **11 nspawn tests need no KVM → they run on BOTH x86_64 and
+  aarch64** (free dual-arch behavioral coverage); the **8 QEMU tests stay x86_64-only**. This is the
+  honest shape of "both arches."
+
+**Run-time characterization (measured on `pa161878-nixos`, warm cache; drove the trigger decision):**
+QEMU (KVM): vm-boot-minimal 53s · vm-system-type-cli 54s · vm-wsl-dev-team-layers 54s · vm-user-config
+60s · vm-ssh-service 63s · vm-dev-team-vm-smoketest 69s · vm-system-type-desktop 70s · **vm-compose-stack
+354s** (the one tall pole — 2 params, ~80 asserts). nspawn (no KVM): test scripts ~5-6s, total warm
+~10-20s each (isolation ~30-54s for 8 containers; development-tools closure-build-dominated). As parallel
+CI matrices: nspawn wall-time ~1min, QEMU ~6min (gated entirely by compose-stack).
+**Trigger decision (Tim, option 1):** per-PR = everything EXCEPT `vm-compose-stack`; **nightly + dispatch**
+= `vm-compose-stack` (+ the heavy custom pkg builds + real WSL tarball builds, which the old CI also never
+ran per-PR). Rationale: every module compose-stack integrates already has a fast per-PR test; compose-stack
+uniquely covers whole-stack composition on the real `nixos-dev-team` host module (rarer regression class).
+
+**ci.yml rewrite (`.github/workflows/ci.yml`).** The old matrix referenced ~40 checks deleted/renamed by
+P5a/P5c → CI was broken against this branch. Rewrote to the current **57 checks** (all 56 referenced verified
+live; `github-actions` act-runner intentionally excluded). Jobs: `eval` (metadata + both-arch attrNames),
+`lint` (5), `checks` (26: tier-0 eval gates + integration/opencode/skill/activate), `vmtest-nspawn`
+(11 × {x86_64, aarch64}, `extra_nix_config` = auto-allocate-uids + uid-range, no KVM), `vmtest-qemu`
+(7, x86_64 KVM). Nightly+dispatch-gated: `vmtest-compose-stack`, `pkgs` (6 build-*), `tarball-build`
+(real WSL tarballs). **Validated:** actionlint clean; `nix flake check --no-build` passes; every referenced
+check exists in the live suite. **NOT yet validated:** actual execution on GitHub runners (self-validates on
+first push) — specifically the **nspawn backend on GH runners** and the **aarch64 arm-runner** paths are
+untested until then; if either fails, that's a follow-up fix (the checks themselves all build+pass locally).
+
+**Orphan resolved.** Deleted `tests/integration/bitwarden-mock.nix` (a mock wired into no check; the real
+rbw→SSH test is the P7 backlog item) and fixed the now-stale `integration/` file-tree listings in TESTS.md,
+docs/TESTING.md, tests/README.md (they still listed the P5c-deleted ssh-management/sops-deployment mocks).
+
+**Doc pass.** `docs/src/how-to/test.md` + `docs/TESTING.md`: rewrote Test Categories + Quick Start command
+examples to the 2-tier suite, fixed debugging refs, replaced the stale Feature Coverage Matrix with a pointer
+to VMTEST-AUDIT.md + the live attrNames. `tests/README.md`: rewrote the Check Inventory (86→57), the removed
+eval helpers (→ batched `eval-hm-modules`/`eval-nixos-modules`), the `mkHmModuleTest`→nspawn
+`mkHmContainerTest` helper section, and the "adding a test" + composition sections
+(`vm-full-cli-stack`→`vm-compose-stack`). `docs/VMTEST-TARGET-DESIGN.md`: added an AS-BUILT banner (design's
+per-check backend guesses superseded; as-built = 11 nspawn / 8 QEMU; live list is authoritative). Historical
+artifacts (VMTEST-AUDIT.md, TESTING_JOURNAL.md, test-coverage-report.md) left as point-in-time records.
+
+**Commit note:** the `e027a99` commit needed `--no-verify` — the pre-commit flake-check hook (triggered by
+the staged .nix deletion) exceeds the 2-min tool timeout; validated `nix flake check --no-build` = exit 0
+manually first (per the `nixcfg-precommit-flakecheck-timeout` memory).
+
+**Remaining P6-family work:** P8 (nixcfg-work CI) — deferred per Tim; and monitor the first push/PR to
+confirm the nspawn + aarch64 CI jobs actually run on GitHub's runners.
