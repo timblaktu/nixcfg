@@ -218,7 +218,7 @@ primary-source citation. If viable, R2's conclusion feeds a potential upstream n
 Needs KVM/nspawn builder (nspawn checks build via the ad-hoc sudo-root path per §10 until this host's daemon
 advertises `uid-range`); on an incapable host → ENVIRONMENT_NOT_CAPABLE (leave PENDING).
 
-### P5c — Tier-1 behavioral refactor `TASK:IN_PROGRESS` (dep P5b)
+### P5c — Tier-1 behavioral refactor `TASK:COMPLETE 2026-08-21` (dep P5b)
 Edits `modules/flake-parts/vm-tests.nix` + deletes `tests/integration/{ssh-management,sops-deployment}.nix`.
 Backend per each test = the **P5b findings** (not the design doc's `N?` guesses). Steps (idempotent):
 1. **Delete** `vm-ssh-management` + `vm-sops-deployment` and their two `tests/integration/*.nix` files.
@@ -279,7 +279,7 @@ Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | P5b | nspawn-fidelity spike (prove HM-activation + sops-nix + multi-node isolation under `mkContainerTest`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — sops-nix + multi-node = nspawn-OK (build+pass); HM-activation = must-stay-QEMU (writable-store gap, 3 probes; see "P5b spike findings" + `docs/nix-store-model-and-vmtest-backends.md`) |
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
 | R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim; probe2/2b overlay-on-live-store BLOCKED+moot; **probe3b: FULL HM activation CONFIRMED on nspawn via `build-users-group=""`+`load-db`, RO store, NO writable store / NO upstream** — overturns P5b "HM must stay QEMU"; **P5c HM-family backend map flagged for Tim's reconsideration** (see "R2 spike findings") |
-| P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:IN_PROGRESS (dep P5b) |
+| P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); 12 nspawn / 7 QEMU; flake check --no-build exit 0; build-verified vm-nspawn-smoke + vm-hm-activation + vm-hm-composition-pairs (nspawn) + vm-wsl-dev-team-layers (QEMU); 2 recorded QEMU fallbacks (see "P5c execution") |
 | P6 | CI wiring (KVM runners, both arches) + carry into nixcfg-work corp hosts | 1 · CI / nixcfg-work | TASK:PENDING (dep P5a, P5c) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 
@@ -729,3 +729,57 @@ from `config.home-manager.users.<user>.home.activationPackage`), and migrate the
 per-test QEMU fallback if a straggler won't pass. `spike-r2-hm-roskip` is the reference implementation.
 (d) Any upstream nixpkgs PR (the `writableStore`-analog) is now OPTIONAL convenience, not a prerequisite —
 out of scope for plan 054.
+
+### P5c execution (2026-08-21) — DONE
+
+Ran on `pa161878-nixos` (KVM + nspawn; daemon still lacks `uid-range`, so nspawn checks build via the §10
+ad-hoc sudo-root path). Single file touched: `modules/flake-parts/vm-tests.nix` (+ deleted the two
+`tests/integration/*.nix` mocks). **Net: 24 `vm-*` → 19** (x86_64/aarch64 attrName sets verified mirrored,
+57 checks each). `nix flake check --no-build` exits 0.
+
+**Helpers.** Removed the now-unused QEMU `mkHmModuleTest`. Added two nspawn helpers baking in the R2
+direction-#3 recipe: `hmNspawnNode` (a container node module = `system-default` + HM + `build-users-group=""`
++ a `register-nix-paths` oneshot running daemon-free `nix-store --load-db` of the HM closure's `closureInfo`,
+ordered `before` `home-manager-<user>.service`) and `mkHmContainerTest` (single-node wrapper). Lifted from
+`spike-r2-hm-roskip`.
+
+**Structural changes (all steps done):**
+- **Deleted** `vm-ssh-management` + `vm-sops-deployment` and their `tests/integration/{ssh-management,
+  sops-deployment}.nix` (kept real twins `vm-ssh-service`/`vm-sops-secrets`).
+- **Dropped `vm-yazi`**; folded its `init.lua`/`keymap.toml`/`yazi.toml` asserts into `vm-hm-module-isolation`'s
+  `node-yazi`.
+- **Merged** `vm-full-cli-stack` + `vm-dev-team-stack` → one parameterized **`vm-compose-stack`** (nodes
+  `cli` = system-cli layer, `devteam` = real `nixos-dev-team` host module with grub/disk forced off; a
+  `check_stack(node)` runs the union of asserts per parameterization + dev-team sudo/podman).
+- **Added `vm-wsl-dev-team-layers`** — first BEHAVIORAL coverage of `monitoring` + `mss-clamp`
+  (build-verified: `security.wrappers` bandwhich/iotop-c present + the `mss-clamp` TCPMSS mangle rule installed).
+- **Removed** the 4 throwaway spikes (`spike-nspawn-hm-activation`, `spike-nspawn-sops`,
+  `spike-nspawn-multinode`, `spike-r2-hm-roskip`); kept `vm-nspawn-smoke` as the permanent nspawn reference.
+
+**Backend map AS-EXECUTED (12 nspawn / 7 QEMU):**
+- **nspawn (12):** `vm-nspawn-smoke`, `vm-system-type-default`, `vm-user-config`, `vm-sops-secrets`,
+  `vm-hm-activation`, `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`,
+  `vm-hm-module-isolation`, `vm-hm-composition-pairs`. The 9 HM-family tests use the `hmNspawnNode` recipe.
+  Multi-node HM tests renamed underscore node names → hyphens (`node-tmux`, `pair-git-nvim`, …); the driver's
+  `pythonize_name` (`re.sub(r"^[^A-Za-z_]|[^A-Za-z0-9_]","_",name)`) maps them back to the `node_*`/`pair_*`
+  Python vars, so testScripts were unchanged.
+- **QEMU (7):** `vm-boot-minimal`, `vm-system-type-cli`, `vm-system-type-desktop`, `vm-ssh-service`,
+  `vm-dev-team-vm-smoketest` (the retained set, unchanged), **plus two P5c fallbacks**:
+  1. **`vm-compose-stack` stays QEMU** — its `devteam` parameterization imports the real `nixos-dev-team`
+     HOST module, which sets read-only `nixpkgs.hostPlatform`; the `runNixOSTest` nspawn backend also sets it
+     read-only → *"option `nixpkgs.hostPlatform' is read-only, but it's set multiple times"*. Host modules
+     need real boot semantics; HM runs natively on QEMU's `writableStore` (no recipe needed).
+  2. **`vm-wsl-dev-team-layers` is QEMU** — its behavioral surface is `security.wrappers` (setcap file
+     capabilities) + an iptables mangle rule, both requiring real kernel-capability semantics. On nspawn,
+     `suid-sgid-wrappers.service` fails with *"Failed to set capabilities … Operation not supported"* so
+     `/run/wrappers/bin/*` never appears (verified 2026-08-21). Separately, the `wsl-dev-team`/`wsl-enterprise`
+     layers themselves can't run in ANY test backend — NixOS-WSL needs an `inputs` MODULE arg the framework
+     doesn't provide (→ eval infinite recursion) and sets `wsl.enable`/boot semantics — so the test composes
+     the container-independent carrier `system-cli + monitoring + mss-clamp`; the WSL layers stay eval-gated
+     (Tier-0) + shipped-image tested.
+
+**Build verification (per DoD; heavy full-suite builds are P6/CI):** built via the sudo-root nspawn path —
+`vm-nspawn-smoke` ✅, `vm-hm-activation` ✅ (DoD representative HM-on-nspawn), `vm-hm-composition-pairs` ✅
+(de-risks the multi-node hyphen-naming + per-node load-db). QEMU: `vm-wsl-dev-team-layers` ✅ (setcap + mss
+mangle assertions pass). The remaining nspawn migrations were not individually built this session (P6/CI) —
+they share the identical proven `hmNspawnNode`/`mkContainerTest` recipe and all pass `flake check --no-build`.

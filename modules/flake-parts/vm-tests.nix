@@ -118,23 +118,103 @@ in
           inherit testScript;
         };
 
-      # mkHmModuleTest: Create a VM test for Home Manager module(s)
+      # hmNspawnNode: a systemd-nspawn CONTAINER node module that activates Home
+      # Manager module(s) on the READ-ONLY shared /nix/store, using the R2
+      # "direction #3" recipe (plan 054 — proven by spike-r2-hm-roskip):
       #
-      # Provides system-default + home-manager NixOS integration + home-minimal
-      # automatically. Caller only specifies which HM modules to test and what
-      # to assert in the testScript.
+      #   1. `nix.settings.build-users-group = ""` — skips nix's LocalStore chown
+      #      of /nix/store on open (the chown is guarded by a non-empty
+      #      build-users-group), which otherwise aborts on the RO store.
+      #   2. a daemon-free `register-nix-paths` oneshot that runs
+      #      `nix-store --load-db` from the HM generation's closureInfo BEFORE
+      #      home-manager-<user>.service — so the container db agrees the
+      #      generation path is valid (HM's `nix-env --set` writes only the
+      #      profile symlink under the writable /nix/var, never the RO store).
+      #
+      # This makes the whole HM-activation family runnable on nspawn (~5-7x
+      # faster than QEMU) with NO writable store, NO overlay, NO upstream change.
+      # See plan 054 "R2 spike findings" + docs/nix-store-model-and-vmtest-backends.md §8f.
+      #
+      # Arguments mirror the old mkHmModuleTest node:
+      #   hmModules         - HM modules to import (self.modules.homeManager.*)
+      #   hmConfig          - attrs merged into the HM user config (default: {})
+      #   extraNixosModules - additional NixOS modules to import (default: [])
+      hmNspawnNode =
+        { hmModules
+        , hmConfig ? { }
+        , extraNixosModules ? [ ]
+        ,
+        }:
+        { config, pkgs, lib, ... }:
+        let
+          hmGen = config.home-manager.users.${testUsername}.home.activationPackage;
+          regInfo = pkgs.closureInfo { rootPaths = [ hmGen ]; };
+        in
+        {
+          imports = [
+            self.modules.nixos.system-default
+            inputs.home-manager.nixosModules.home-manager
+          ] ++ extraNixosModules;
+
+          systemDefault.userName = testUsername;
+          systemDefault.wheelNeedsPassword = false;
+          networking.firewall.enable = false;
+
+          # R2 direction #3 lever: skip the LocalStore chown on the RO store.
+          nix.settings.build-users-group = "";
+
+          home-manager = {
+            useGlobalPkgs = true;
+            useUserPackages = true;
+            extraSpecialArgs = { inherit inputs; };
+            users.${testUsername} = { config, pkgs, lib, ... }: {
+              imports = [
+                self.modules.homeManager.home-minimal
+              ] ++ hmModules;
+
+              homeMinimal = {
+                username = testUsername;
+                homeDirectory = testHomeDir;
+              };
+
+              # NixOS-integrated HM doesn't need genericLinux
+              targets.genericLinux.enable = lib.mkForce false;
+            } // hmConfig;
+          };
+
+          # Register the HM closure daemon-free BEFORE HM activation (RO store,
+          # writable /nix/var db). Lifted from spike-r2-hm-roskip.
+          systemd.services.register-nix-paths = {
+            description = "HM-on-nspawn: daemon-free load-db of the HM closure (R2 dir #3)";
+            wantedBy = [ "multi-user.target" ];
+            before = [ "home-manager-${testUsername}.service" ];
+            path = [ pkgs.nix ];
+            environment.NIX_REMOTE = "";
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+            };
+            script = ''
+              set -eux
+              nix-store --load-db < ${regInfo}/registration
+            '';
+          };
+        };
+
+      # mkHmContainerTest: single-node HM module test on the nspawn backend.
+      # nspawn analog of the old mkHmModuleTest (which was QEMU). Bakes in the
+      # hmNspawnNode recipe. Caller specifies HM modules + asserts.
       #
       # Arguments:
       #   name             - Test name (prefixed with "vm-" in checks)
-      #   description      - Human-readable description (default: "HM module test: ${name}")
-      #   hmModules        - List of HM modules to import (from self.modules.homeManager.*)
+      #   description      - Human-readable description
+      #   hmModules        - HM modules to import (self.modules.homeManager.*)
       #   testScript       - Python test script (nixos-test-driver syntax)
-      #   memory           - VM memory in MB (default: 2048)
-      #   extraNixosModules - Additional NixOS modules to import (default: [])
-      #   hmConfig         - Additional attrs merged into the HM user config (default: {})
+      #   extraNixosModules - additional NixOS modules to import (default: [])
+      #   hmConfig         - attrs merged into the HM user config (default: {})
       #
       # Example:
-      #   mkHmModuleTest {
+      #   mkHmContainerTest {
       #     name = "yazi";
       #     hmModules = [ self.modules.homeManager.yazi ];
       #     testScript = ''
@@ -143,71 +223,24 @@ in
       #       machine.succeed("su - ${testUsername} -c 'yazi --version'")
       #     '';
       #   }
-      mkHmModuleTest =
+      mkHmContainerTest =
         { name
-        , description ? "HM module test: ${name}"
+        , description ? "HM container test: ${name}"
         , hmModules
         , testScript
-        , memory ? 2048
         , extraNixosModules ? [ ]
         , hmConfig ? { }
         ,
         }:
-        pkgs.testers.nixosTest {
+        pkgs.testers.runNixOSTest {
           name = "vm-${name}";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-default
-              inputs.home-manager.nixosModules.home-manager
-            ] ++ extraNixosModules;
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-            networking.firewall.enable = false;
-            virtualisation.memorySize = memory;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                ] ++ hmModules;
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                # NixOS-integrated HM doesn't need genericLinux
-                targets.genericLinux.enable = lib.mkForce false;
-              } // hmConfig;
-            };
-          };
-
+          containers.machine = hmNspawnNode { inherit hmModules hmConfig extraNixosModules; };
           inherit testScript;
         };
 
     in
     {
       checks = {
-        # === VM INTEGRATION TESTS ===
-        # Wired from tests/integration/ — require KVM to build
-
-        # SSH key management: multi-node test (host1 + host2)
-        # Tests SSH service, key deployment, cross-host auth, error recovery
-        vm-ssh-management = import ../../tests/integration/ssh-management.nix {
-          inherit pkgs lib;
-        };
-
-        # SOPS-NiX secret deployment: single-node test
-        # Tests age key generation, encryption/decryption, permissions, rotation
-        vm-sops-deployment = import ../../tests/integration/sops-deployment.nix {
-          inherit pkgs lib;
-        };
-
         # === VM BOOT SMOKE TESTS (T2) ===
 
         # Boot smoke test: does a minimal NixOS config boot to multi-user.target?
@@ -228,7 +261,8 @@ in
         # on top of the layers it imports.
 
         # system-default: imports minimal, adds user creation, locale, timezone, zsh
-        vm-system-type-default = mkVmTest {
+        # nspawn (HM-free system-layer test; migrated P5c per R2/P5b backend map).
+        vm-system-type-default = mkContainerTest {
           name = "system-type-default";
           description = "system-default layer: user creation, locale, timezone";
           modules = [ self.modules.nixos.system-default ];
@@ -335,318 +369,68 @@ in
           '';
         };
 
-        # ===================================================================
-        # P5b NSPAWN-FIDELITY SPIKE (plan 054) — TEMPORARY, may be removed or
-        # absorbed in P5c. Proves mkContainerTest (nspawn) can host the three
-        # semantics P5c wants to migrate off QEMU: (i) HM activation, (ii)
-        # sops-nix /run/secrets activation, (iii) multi-node isolation via
-        # start_all. Each is a container clone of an existing QEMU test's core
-        # assertions, so a pass = that semantic is nspawn-safe. See plan 054
-        # "P5b spike findings".
-        # ===================================================================
-
-        # (i) HM activation under nspawn — clone of vm-hm-activation's core:
-        # reach home-manager-<user>.service and find one generated home.file
-        # (git's XDG config) with the expected content.
+        # === WSL DEV-TEAM LAYER STACK (plan 054 P5c — NEW) ===
+        # QEMU: first BEHAVIORAL coverage of the Tier-A WSL daily-driver stack
+        # (pa161878-nixos) — specifically `monitoring` + `mss-clamp`, the two
+        # modules the audit flagged as live-but-unguarded (only this host enables
+        # them). HM-free NixOS-layer compose.
         #
-        # NSPAWN FIDELITY FINDING (P5b, 2026-08-21): *** RECORDED FAILURE ***
-        # This check FAILS TO BUILD under nspawn (it PASSES under its QEMU twin
-        # vm-hm-activation with the identical modules). Root cause: the container
-        # shares the host /nix/store read-only, so the in-container nix-daemon
-        # aborts on startup — `changing ownership of path "/nix/store": Operation
-        # not permitted` — and home-manager-<user>.service's profile registration
-        # (`nix-env --set` via the daemon) then dies with `cannot open connection
-        # to remote store 'daemon': Connection reset by peer`, leaving the unit
-        # "failed". CONSEQUENCE for P5c: every test that waits on
-        # home-manager-<user>.service MUST STAY ON QEMU (vm-hm-activation,
-        # vm-shell-env, vm-neovim, vm-tmux, vm-git-advanced, vm-development-tools,
-        # vm-hm-composition-pairs, vm-hm-module-isolation, vm-compose-stack). The
-        # HM-FREE tests (vm-system-type-default, vm-user-config, vm-sops-secrets)
-        # still migrate to nspawn.
+        # BACKEND (P5c, evidence-recorded 2026-08-21): STAYS QEMU — this test
+        # asserts genuine KERNEL-CAPABILITY semantics that the unprivileged nspawn
+        # container cannot provide:
+        #   - monitoring's NixOS surface is `security.wrappers` (file capabilities
+        #     via setcap); nspawn fails these with "Failed to set capabilities ...
+        #     Operation not supported", so suid-sgid-wrappers.service dies and
+        #     /run/wrappers/bin/* never appears (verified on nspawn 2026-08-21).
+        #   - mss-clamp installs an iptables mangle TCPMSS rule (netfilter/NET_ADMIN).
+        # These are exactly the "keep QEMU for real kernel/capability semantics"
+        # class from the P5b/P3 backend policy.
         #
-        # WHY IT CAN'T BE FIXED IN-CONFIG — the real blocker is a WRITABLE nix
-        # store, and all three routes to one are blocked by the Nix BUILD SANDBOX
-        # the test runs inside (three probes, Tim-requested, 2026-08-21):
-        #   1. Borrow the host daemon/db (what real nixos-containers do,
-        #      NIX_REMOTE=daemon): `--bind-ro=/nix/var/nix/db` → container won't
-        #      start, `Failed to clone /nix/var/nix/db: No such file or directory`
-        #      (the sandbox hides the host db + daemon socket).
-        #   2. Register the db daemon-free like QEMU's `virtualisation.writableStore`
-        #      does (`nix-store --load-db`, qemu-vm.nix:1202): the load-db step ALSO
-        #      dies on `changing ownership of path "/nix/store": Operation not
-        #      permitted` — proving the wall is nix's LocalStore (EVERY store op
-        #      chowns the store on open), not the daemon.
-        #   3. Make the store writable via a systemd-nspawn overlay
-        #      (`--overlay=/nix/store:…:/nix/store`, the direct analog of QEMU's
-        #      writableStore): systemd-nspawn fails at spawn — the sandbox blocks
-        #      the overlayfs mount.
-        # QEMU tests dodge all of this because `virtualisation.writableStore` layers
-        # a writable overlay INSIDE the guest kernel + loads the path-registration
-        # db — machinery that (a) is QEMU-only (`virtualisation.*`) and (b) runs in
-        # the guest, not the build sandbox. The nspawn test backend has no
-        # equivalent yet. So HM activation is NOT nspawn-viable via test-level
-        # config — it needs UPSTREAM support (a writableStore-for-containers in the
-        # nspawn backend), confirming must-stay-QEMU. Kept as a reproducible failure
-        # per the DoD's "+ evidence"; excluded from CI (all nspawn checks are).
-        spike-nspawn-hm-activation = mkContainerTest {
-          name = "spike-nspawn-hm-activation";
-          description = "P5b spike (i): Home Manager activation on the nspawn backend";
+        # It composes the container-independent carrier of the two features —
+        # `system-cli` (the base the WSL stack sits on) + `monitoring` + `mss-clamp`
+        # — NOT the wsl-dev-team/wsl-enterprise layers themselves: those pull
+        # NixOS-WSL, which requires an `inputs` MODULE argument the test framework
+        # does not provide (→ eval infinite recursion) and sets `wsl.enable`/boot
+        # semantics that only a real WSL boot satisfies. The WSL-specific layers
+        # remain eval-gated (Tier-0 regression-test / eval-nixos-wsl-dev-team) +
+        # covered by the shipped WSL image test.
+        vm-wsl-dev-team-layers = mkVmTest {
+          name = "wsl-dev-team-layers";
+          description = "WSL dev-team stack carrier: monitoring + mss-clamp behavioral coverage";
           modules = [
-            self.modules.nixos.system-default
-            inputs.home-manager.nixosModules.home-manager
+            self.modules.nixos.system-cli
+            self.modules.nixos.monitoring
+            self.modules.nixos.mss-clamp
           ];
+          memory = 2048;
           extraConfig = {
             systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.git
-                ];
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
+            monitoring.enable = true;
+            mssClamp.enable = true;
           };
           testScript = ''
             machine.wait_for_unit("multi-user.target")
 
-            # HM activation service reached under nspawn?
-            machine.wait_for_unit("home-manager-${testUsername}.service")
+            # Base user from the layer stack exists.
+            machine.succeed("id ${testUsername}")
 
-            # One generated home.file exists with expected content (git XDG config).
-            machine.succeed("test -f /home/${testUsername}/.config/git/config")
-            machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
-            machine.succeed("su - ${testUsername} -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
-          '';
-        };
+            # --- monitoring: NixOS security.wrappers created (capability tools) ---
+            # suid-sgid-wrappers.service is a oneshot (no RemainAfterExit): it goes
+            # inactive after succeeding, so assert on its OUTPUT (the wrapper files),
+            # not wait_for_unit. setcap works under QEMU (unlike the nspawn backend).
+            machine.succeed("test -e /run/wrappers/bin/bandwhich")
+            machine.succeed("test -e /run/wrappers/bin/iotop-c")
 
-        # (ii) sops-nix activation under nspawn — clone of vm-sops-secrets' core:
-        # a checked-in fixture secret decrypted to /run/secrets with the expected
-        # mode/owner. Uses the same fixture path (tests/fixtures/sops/).
-        spike-nspawn-sops =
-          let
-            testSecretsFile = ../../tests/fixtures/sops/test-secrets.yaml;
-            testAgeKeyFile = ../../tests/fixtures/sops/test-age-key.txt;
-          in
-          pkgs.testers.runNixOSTest {
-            name = "vm-spike-nspawn-sops";
-            containers.machine = { config, pkgs, lib, ... }: {
-              imports = [
-                self.modules.nixos.system-default
-                inputs.sops-nix.nixosModules.sops
-                self.modules.nixos.secrets-management
-              ];
-
-              systemDefault.userName = testUsername;
-              systemDefault.wheelNeedsPassword = false;
-              networking.firewall.enable = false;
-
-              secretsManagement = {
-                enable = true;
-                sops = {
-                  ageKeyFile = "/var/lib/sops-nix/key.txt";
-                  generateHostKeys = false;
-                };
-              };
-
-              # Deploy the fixture age key before sops-nix's setupSecrets runs.
-              system.activationScripts.deployTestAgeKey.text = ''
-                mkdir -p /var/lib/sops-nix
-                cp ${testAgeKeyFile} /var/lib/sops-nix/key.txt
-                chmod 600 /var/lib/sops-nix/key.txt
-              '';
-
-              sops.defaultSopsFile = testSecretsFile;
-              sops.age.sshKeyPaths = lib.mkForce [ ];
-
-              sops.secrets."database_password" = {
-                mode = "0400";
-                owner = "root";
-                group = "root";
-              };
-              sops.secrets."api_key" = {
-                mode = "0440";
-                owner = testUsername;
-                group = "users";
-              };
-            };
-
-            testScript = ''
-              machine.wait_for_unit("multi-user.target")
-
-              # sops-nix activation ran → /run/secrets populated.
-              machine.succeed("test -d /run/secrets")
-              machine.succeed("test -f /run/secrets/database_password")
-              machine.succeed("test -f /run/secrets/api_key")
-
-              # Content decrypted correctly.
-              db_pass = machine.succeed("cat /run/secrets/database_password").strip()
-              assert db_pass == "supersecret123", f"Expected 'supersecret123', got '{db_pass}'"
-
-              # Expected mode/owner preserved under nspawn.
-              perms = machine.succeed("stat -c %a /run/secrets/database_password").strip()
-              assert perms == "400", f"database_password: expected mode 400, got {perms}"
-              owner = machine.succeed("stat -c %U:%G /run/secrets/database_password").strip()
-              assert owner == "root:root", f"database_password: expected root:root, got {owner}"
-
-              perms = machine.succeed("stat -c %a /run/secrets/api_key").strip()
-              assert perms == "440", f"api_key: expected mode 440, got {perms}"
-              owner = machine.succeed("stat -c %U:%G /run/secrets/api_key").strip()
-              assert owner == "${testUsername}:users", f"api_key: expected ${testUsername}:users, got {owner}"
-
-              # Ownership enforcement: non-root cannot read the root-only secret.
-              machine.fail("su - ${testUsername} -c 'cat /run/secrets/database_password'")
-            '';
-          };
-
-        # (iii) multi-node isolation under nspawn — two containers via start_all
-        # (stand-in for vm-hm-composition-pairs / vm-hm-module-isolation). Proves
-        # two containers boot in parallel and stay isolated (distinct hostnames,
-        # a file written on one is absent on the other).
-        #
-        # NSPAWN FIDELITY FINDING (P5b, 2026-08-21): container/node names become
-        # the systemd-nspawn `--machine=` name, which MUST be a valid hostname —
-        # so UNDERSCORES ARE REJECTED ("Invalid machine name: node_a"). QEMU node
-        # names tolerate underscores, so this bites on migration: existing
-        # multi-node tests (vm-hm-composition-pairs' `pair_nvim_tmux`,
-        # vm-hm-module-isolation's `node_podman`, etc.) MUST be renamed to
-        # hostname-valid forms (hyphens OK) when moved to nspawn. Spike uses
-        # `nodea`/`nodeb` to demonstrate the working path.
-        spike-nspawn-multinode = pkgs.testers.runNixOSTest {
-          name = "vm-spike-nspawn-multinode";
-          containers =
-            let
-              node = { config, pkgs, lib, ... }: {
-                imports = [ self.modules.nixos.system-cli ];
-                networking.firewall.enable = false;
-                systemDefault.userName = testUsername;
-              };
-            in
-            {
-              nodea = node;
-              nodeb = node;
-            };
-          testScript = ''
-            start_all()
-
-            for node in [nodea, nodeb]:
-                node.wait_for_unit("multi-user.target")
-                node.succeed("id ${testUsername}")
-
-            # Distinct machines: each sees its own hostname.
-            nodea.succeed("hostname | grep -q nodea")
-            nodeb.succeed("hostname | grep -q nodeb")
-
-            # Filesystem isolation: a file created on nodea is not visible on nodeb.
-            nodea.succeed("touch /run/only-on-a")
-            nodea.succeed("test -f /run/only-on-a")
-            nodeb.fail("test -f /run/only-on-a")
-          '';
-        };
-
-        # ===================================================================
-        # R2 WRITABLE-STORE SPIKE (plan 054) — TEMPORARY canonical proof. Builds
-        # via the ad-hoc sudo-root path (this host's daemon lacks `uid-range`; see
-        # §10). The R2 spike ran FIVE probes (see plan 054 "R2 spike findings" +
-        # docs/nix-store-model-and-vmtest-backends.md §8f); four have been PRUNED
-        # after their conclusions were recorded, keeping only the one below:
-        #   - spike-r2-overlay / spike-r2-hm-overlay-live (dir #1 in-namespace
-        #     overlay): the mechanism works at a side path, but overlaying the LIVE
-        #     /nix/store breaks all exec even done early + --make-rprivate → dir #1
-        #     BLOCKED and MOOT. Removed.
-        #   - spike-r2-roskip (bare `nix-env --set` under dir #3): subsumed by the
-        #     full-HM proof below. Removed.
-        # ★ KEY R2 RESULT (retained): dir #3 drives FULL Home Manager activation on
-        # nspawn with a READ-ONLY store — no writable store, no overlay, NO upstream
-        # change. This OVERTURNS the P5b "HM must stay QEMU" conclusion.
-        # ===================================================================
-
-        # (R2 probe 3b) Direction #3 END-TO-END — the chown-skip route drives a
-        # FULL home-manager-<user>.service to `active`. Same modules as the P5b
-        # spike-nspawn-hm-activation FAILURE reproducer, plus the two direction-#3
-        # levers: `build-users-group = ""` (skip the LocalStore chown, §8c) + a
-        # daemon-free `nix-store --load-db` of the HM closure (so the db agrees the
-        # generation is valid), store left READ-ONLY, /nix/var writable. RESULT
-        # (build+pass, 2026-08-21): HM activation reaches `active (exited)` status=0
-        # — confirming nspawn CAN host the HM family via this recipe. This is the
-        # seed for the P5c HM-on-nspawn migration (Tim's decision, 2026-08-21).
-        spike-r2-hm-roskip = pkgs.testers.runNixOSTest {
-          name = "vm-spike-r2-hm-roskip";
-          containers.machine = { config, pkgs, lib, ... }:
-            let
-              hmGen = config.home-manager.users.${testUsername}.home.activationPackage;
-              regInfo = pkgs.closureInfo { rootPaths = [ hmGen ]; };
-            in
-            {
-              imports = [
-                self.modules.nixos.system-default
-                inputs.home-manager.nixosModules.home-manager
-              ];
-              systemDefault.userName = testUsername;
-              systemDefault.wheelNeedsPassword = false;
-              networking.firewall.enable = false;
-
-              # Direction #3 lever: skip the LocalStore chown without DB-immutability.
-              nix.settings.build-users-group = "";
-
-              home-manager = {
-                useGlobalPkgs = true;
-                useUserPackages = true;
-                extraSpecialArgs = { inherit inputs; };
-                users.${testUsername} = { config, pkgs, lib, ... }: {
-                  imports = [
-                    self.modules.homeManager.home-minimal
-                    self.modules.homeManager.git
-                  ];
-                  homeMinimal = {
-                    username = testUsername;
-                    homeDirectory = testHomeDir;
-                  };
-                  targets.genericLinux.enable = lib.mkForce false;
-                };
-              };
-
-              # Register the HM closure daemon-free BEFORE HM activation, so the db
-              # knows the generation path is valid (RO store, writable /nix/var db).
-              systemd.services.r2-register-hm-closure = {
-                description = "R2 probe3b: daemon-free load-db of the HM closure (dir #3)";
-                wantedBy = [ "multi-user.target" ];
-                before = [ "home-manager-${testUsername}.service" ];
-                path = [ pkgs.nix ];
-                environment.NIX_REMOTE = "";
-                serviceConfig = {
-                  Type = "oneshot";
-                  RemainAfterExit = true;
-                };
-                script = ''
-                  set -eux
-                  nix-store --load-db < ${regInfo}/registration
-                '';
-              };
-            };
-          testScript = ''
-            machine.wait_for_unit("multi-user.target")
-
-            print("=== store writability (expect READ-ONLY) ===")
-            print(machine.execute("test -w /nix/store && echo WRITABLE || echo READ-ONLY")[1])
-            print("=== r2-register-hm-closure.service ===")
-            print(machine.execute("systemctl status r2-register-hm-closure.service --no-pager -l || true")[1])
-            print("=== HM service ===")
-            print(machine.execute("systemctl status home-manager-${testUsername}.service --no-pager -l || true")[1])
-
-            # DoD: full HM activation reaches active under the chown-skip route.
-            machine.wait_for_unit("home-manager-${testUsername}.service")
-            machine.succeed("test -f /home/${testUsername}/.config/git/config")
-            machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
+            # --- mss-clamp: boot oneshot ran and installed the TCPMSS mangle rule ---
+            # mss-clamp.service is a `set -eu` oneshot (RemainAfterExit): reaching
+            # `active` already proves the iptables rule was added (else it fails).
+            # Also assert the rule directly via the service's own iptables (not on
+            # the interactive shell PATH → use the store binary).
+            machine.wait_for_unit("mss-clamp.service")
+            machine.succeed(
+                "${pkgs.iptables}/bin/iptables -t mangle -C OUTPUT -p tcp"
+                " --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1240"
+            )
           '';
         };
 
@@ -740,43 +524,15 @@ in
         # activates successfully, generates config files, and provides programs.
         # Uses NixOS-integrated HM (home-manager.nixosModules) to test activation
         # in a VM, even though the repo normally uses standalone HM.
-        vm-hm-activation = pkgs.testers.nixosTest {
-          name = "vm-hm-activation";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-default
-              inputs.home-manager.nixosModules.home-manager
-            ];
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 2048;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.shell
-                  self.modules.homeManager.git
-                ];
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                # Override genericLinux — not needed in NixOS-integrated mode
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
-          };
-
+        # nspawn (migrated P5c): HM activation via the hmNspawnNode recipe
+        # (build-users-group="" + daemon-free load-db). Reference-verified by
+        # spike-r2-hm-roskip and rebuilt on nspawn as the P5c representative.
+        vm-hm-activation = mkHmContainerTest {
+          name = "hm-activation";
+          hmModules = [
+            self.modules.homeManager.shell
+            self.modules.homeManager.git
+          ];
           testScript = ''
             machine.wait_for_unit("multi-user.target")
 
@@ -817,41 +573,12 @@ in
 
         # Shell environment test: verifies zsh configuration, aliases, session
         # variables, plugins, and custom functions via Home Manager in a VM.
-        vm-shell-env = pkgs.testers.nixosTest {
-          name = "vm-shell-env";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-default
-              inputs.home-manager.nixosModules.home-manager
-            ];
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 2048;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.shell
-                ];
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
-          };
-
+        # nspawn (migrated P5c): HM shell module via hmNspawnNode recipe.
+        vm-shell-env = mkHmContainerTest {
+          name = "shell-env";
+          hmModules = [
+            self.modules.homeManager.shell
+          ];
           testScript = ''
             machine.wait_for_unit("multi-user.target")
             machine.wait_for_unit("home-manager-${testUsername}.service")
@@ -892,10 +619,9 @@ in
         # SOPS secrets test: verifies sops-nix NixOS module integration with
         # our dendritic secrets-management module. Tests that secrets defined in
         # sops.secrets.* are decrypted at boot and placed at correct paths with
-        # correct permissions and ownership.
-        #
-        # Unlike vm-sops-deployment (which tests manual SOPS CLI operations),
-        # this test validates the actual sops-nix NixOS module decryption service.
+        # correct permissions and ownership. Validates the actual sops-nix NixOS
+        # module decryption service (the CLI-mock vm-sops-deployment was dropped
+        # in P5c as a redundant mock).
         vm-sops-secrets =
           let
             # Static test fixtures: pre-generated age keypair + SOPS-encrypted YAML.
@@ -911,10 +637,12 @@ in
             testSecretsFile = ../../tests/fixtures/sops/test-secrets.yaml;
             testAgeKeyFile = ../../tests/fixtures/sops/test-age-key.txt;
           in
-          pkgs.testers.nixosTest {
+          pkgs.testers.runNixOSTest {
             name = "vm-sops-secrets";
 
-            nodes.machine = { config, pkgs, lib, ... }: {
+            # nspawn: sops-nix /run/secrets activation proven nspawn-safe by the
+            # P5b spike-nspawn-sops (exact mode/owner preserved). Migrated P5c.
+            containers.machine = { config, pkgs, lib, ... }: {
               imports = [
                 self.modules.nixos.system-default
                 inputs.sops-nix.nixosModules.sops
@@ -925,7 +653,6 @@ in
               systemDefault.wheelNeedsPassword = false;
 
               networking.firewall.enable = false;
-              virtualisation.memorySize = 1024;
 
               # Enable our dendritic secrets-management module
               secretsManagement = {
@@ -1064,41 +791,12 @@ in
         # Tests config loading, plugin availability, treesitter, LSP config, and
         # checkhealth output. Uses NixOS-integrated HM with system-default.
         # Plan 021 Task 3.1
-        vm-neovim = pkgs.testers.nixosTest {
-          name = "vm-neovim";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-default
-              inputs.home-manager.nixosModules.home-manager
-            ];
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 2048;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.neovim
-                ];
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
-          };
-
+        # nspawn (migrated P5c): HM neovim module via hmNspawnNode recipe.
+        vm-neovim = mkHmContainerTest {
+          name = "neovim";
+          hmModules = [
+            self.modules.homeManager.neovim
+          ];
           testScript = ''
             machine.wait_for_unit("multi-user.target")
             machine.wait_for_unit("home-manager-${testUsername}.service")
@@ -1164,41 +862,12 @@ in
         # Tests server lifecycle, config loading, plugin availability, session
         # management, and helper scripts. Uses NixOS-integrated HM with system-default.
         # Plan 021 Task 3.2
-        vm-tmux = pkgs.testers.nixosTest {
-          name = "vm-tmux";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-default
-              inputs.home-manager.nixosModules.home-manager
-            ];
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 2048;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.tmux
-                ];
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
-          };
-
+        # nspawn (migrated P5c): HM tmux module via hmNspawnNode recipe.
+        vm-tmux = mkHmContainerTest {
+          name = "tmux";
+          hmModules = [
+            self.modules.homeManager.tmux
+          ];
           testScript = ''
             machine.wait_for_unit("multi-user.target")
             machine.wait_for_unit("home-manager-${testUsername}.service")
@@ -1271,41 +940,12 @@ in
         # Tests delta integration, aliases, gitignore, LFS, merge tools, credential
         # helper, and bundled utility scripts. Uses NixOS-integrated HM with system-default.
         # Plan 021 Task 3.3
-        vm-git-advanced = pkgs.testers.nixosTest {
-          name = "vm-git-advanced";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-default
-              inputs.home-manager.nixosModules.home-manager
-            ];
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 2048;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.git
-                ];
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
-          };
-
+        # nspawn (migrated P5c): HM git module via hmNspawnNode recipe.
+        vm-git-advanced = mkHmContainerTest {
+          name = "git-advanced";
+          hmModules = [
+            self.modules.homeManager.git
+          ];
           testScript = ''
             machine.wait_for_unit("multi-user.target")
             machine.wait_for_unit("home-manager-${testUsername}.service")
@@ -1399,44 +1039,16 @@ in
         # build utilities, enhanced CLI tools, and Claude dev utilities.
         # Uses NixOS-integrated HM with system-default.
         # Plan 021 Task 3.4
-        vm-development-tools = pkgs.testers.nixosTest {
-          name = "vm-development-tools";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-default
-              inputs.home-manager.nixosModules.home-manager
-            ];
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 2048;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.development-tools
-                ];
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                developmentTools.enable = true;
-                # All feature flags default to true except enableKubernetes and enablePyenv
-
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
+        # nspawn (migrated P5c): HM development-tools module via hmNspawnNode recipe.
+        # All feature flags default to true except enableKubernetes and enablePyenv.
+        vm-development-tools = mkHmContainerTest {
+          name = "development-tools";
+          hmModules = [
+            self.modules.homeManager.development-tools
+          ];
+          hmConfig = {
+            developmentTools.enable = true;
           };
-
           testScript = ''
             machine.wait_for_unit("multi-user.target")
             machine.wait_for_unit("home-manager-${testUsername}.service")
@@ -1692,100 +1304,48 @@ in
             '';
           };
 
-        # Yazi VM test: validates the yazi file manager module using mkHmModuleTest.
-        # Tests binary presence, config generation, and basic functionality.
-        # Also serves as proof-of-concept for the mkHmModuleTest helper.
-        # Plan 021 Task 4.1 (helper validation)
-        vm-yazi = mkHmModuleTest {
-          name = "yazi";
-          hmModules = [ self.modules.homeManager.yazi ];
-          testScript = ''
-            machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-${testUsername}.service")
-
-            # --- Test 1: yazi binary present ---
-            machine.succeed("su - ${testUsername} -c 'yazi --version'")
-
-            # --- Test 2: Yazi config directory exists ---
-            machine.succeed("test -d /home/${testUsername}/.config/yazi")
-
-            # --- Test 3: Yazi config file generated ---
-            machine.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
-
-            # --- Test 4: Custom init.lua deployed ---
-            machine.succeed("test -f /home/${testUsername}/.config/yazi/init.lua")
-
-            # --- Test 5: Keymap config generated ---
-            machine.succeed("test -f /home/${testUsername}/.config/yazi/keymap.toml")
-          '';
-        };
+        # (vm-yazi dropped in P5c — its init.lua/keymap.toml/yazi.toml asserts were
+        # folded into vm-hm-module-isolation's node-yazi. See plan 054 P4 Q2.)
 
         # HM Module Isolation VM Tests: proves each VM-safe HM module activates
         # successfully with ONLY home-minimal — no other HM modules.
         # Each module gets its own VM node; all boot in parallel via start_all().
         # This validates the dendritic pattern's promise of truly independent modules.
         # Plan 021 Task 4.2
+        # nspawn (migrated P5c): each HM module activates in isolation on its own
+        # container via the hmNspawnNode recipe (build-users-group="" +
+        # daemon-free load-db). Container names use hyphens — systemd-nspawn
+        # --machine= rejects underscores (P5b finding #2) — while the test driver
+        # maps `node-tmux` → Python variable `node_tmux` (pythonize_name), so the
+        # testScript references below stay unchanged.
         vm-hm-module-isolation =
-          let
-            # Helper: create a NixOS node that activates a single HM module in isolation
-            mkIsolationNode = { hmModules, hmConfig ? { } }:
-              { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.nixos.system-default
-                  inputs.home-manager.nixosModules.home-manager
-                ];
-
-                systemDefault.userName = testUsername;
-                systemDefault.wheelNeedsPassword = false;
-                networking.firewall.enable = false;
-                virtualisation.memorySize = 1024;
-
-                home-manager = {
-                  useGlobalPkgs = true;
-                  useUserPackages = true;
-                  extraSpecialArgs = { inherit inputs; };
-                  users.${testUsername} = { config, pkgs, lib, ... }: {
-                    imports = [
-                      self.modules.homeManager.home-minimal
-                    ] ++ hmModules;
-
-                    homeMinimal = {
-                      username = testUsername;
-                      homeDirectory = testHomeDir;
-                    };
-
-                    targets.genericLinux.enable = lib.mkForce false;
-                  } // hmConfig;
-                };
-              };
-          in
-          pkgs.testers.nixosTest {
+          pkgs.testers.runNixOSTest {
             name = "vm-hm-module-isolation";
 
-            nodes = {
-              node_tmux = mkIsolationNode {
+            containers = {
+              node-tmux = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.tmux ];
               };
-              node_neovim = mkIsolationNode {
+              node-neovim = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.neovim ];
               };
-              node_git = mkIsolationNode {
+              node-git = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.git ];
               };
-              node_shell = mkIsolationNode {
+              node-shell = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.shell ];
               };
-              node_devtools = mkIsolationNode {
+              node-devtools = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.development-tools ];
                 hmConfig = { developmentTools.enable = true; };
               };
-              node_yazi = mkIsolationNode {
+              node-yazi = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.yazi ];
               };
-              node_shellutils = mkIsolationNode {
+              node-shellutils = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.shell-utils ];
               };
-              node_podman = mkIsolationNode {
+              node-podman = hmNspawnNode {
                 hmModules = [ self.modules.homeManager.podman ];
                 hmConfig = { programs.podman-tools.enable = true; };
               };
@@ -1820,9 +1380,13 @@ in
               node_devtools.succeed("su - ${testUsername} -c 'bat --version'")
               node_devtools.succeed("su - ${testUsername} -c 'rustc --version'")
 
-              # === yazi: binary + config file ===
+              # === yazi: binary + config files (absorbs dropped vm-yazi, P5c) ===
               node_yazi.succeed("su - ${testUsername} -c 'yazi --version'")
+              node_yazi.succeed("test -d /home/${testUsername}/.config/yazi")
               node_yazi.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
+              # Custom init.lua + keymap.toml deployed (folded from vm-yazi).
+              node_yazi.succeed("test -f /home/${testUsername}/.config/yazi/init.lua")
+              node_yazi.succeed("test -f /home/${testUsername}/.config/yazi/keymap.toml")
 
               # === shell-utils: representative script + library file ===
               node_shellutils.succeed("su - ${testUsername} -c 'which mytree'")
@@ -1838,46 +1402,17 @@ in
         # that only work when specific module pairs are combined.
         # 4 nodes (one per pair), all boot in parallel via start_all().
         # Plan 021 Task 4.3
+        # nspawn (migrated P5c): each module pair activates on its own container
+        # via the hmNspawnNode recipe. Hyphenated container names (pair-nvim-tmux)
+        # map to Python vars (pair_nvim_tmux) via pythonize_name; underscores are
+        # rejected by systemd-nspawn --machine= (P5b finding #2).
         vm-hm-composition-pairs =
-          let
-            # Reuse the isolation node helper pattern but with multiple HM modules
-            mkPairNode = { hmModules, hmConfig ? { } }:
-              { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.nixos.system-default
-                  inputs.home-manager.nixosModules.home-manager
-                ];
-
-                systemDefault.userName = testUsername;
-                systemDefault.wheelNeedsPassword = false;
-                networking.firewall.enable = false;
-                virtualisation.memorySize = 2048;
-
-                home-manager = {
-                  useGlobalPkgs = true;
-                  useUserPackages = true;
-                  extraSpecialArgs = { inherit inputs; };
-                  users.${testUsername} = { config, pkgs, lib, ... }: {
-                    imports = [
-                      self.modules.homeManager.home-minimal
-                    ] ++ hmModules;
-
-                    homeMinimal = {
-                      username = testUsername;
-                      homeDirectory = testHomeDir;
-                    };
-
-                    targets.genericLinux.enable = lib.mkForce false;
-                  } // hmConfig;
-                };
-              };
-          in
-          pkgs.testers.nixosTest {
+          pkgs.testers.runNixOSTest {
             name = "vm-hm-composition-pairs";
 
-            nodes = {
+            containers = {
               # Pair 1: neovim + tmux (vim-tmux-navigator integration)
-              pair_nvim_tmux = mkPairNode {
+              pair-nvim-tmux = hmNspawnNode {
                 hmModules = [
                   self.modules.homeManager.neovim
                   self.modules.homeManager.tmux
@@ -1885,7 +1420,7 @@ in
               };
 
               # Pair 2: git + neovim (merge/diff tool integration)
-              pair_git_nvim = mkPairNode {
+              pair-git-nvim = hmNspawnNode {
                 hmModules = [
                   self.modules.homeManager.git
                   self.modules.homeManager.neovim
@@ -1893,7 +1428,7 @@ in
               };
 
               # Pair 3: git + shell (aliases integration)
-              pair_git_shell = mkPairNode {
+              pair-git-shell = hmNspawnNode {
                 hmModules = [
                   self.modules.homeManager.git
                   self.modules.homeManager.shell
@@ -1901,7 +1436,7 @@ in
               };
 
               # Pair 4: shell + tmux (terminal env integration)
-              pair_shell_tmux = mkPairNode {
+              pair-shell-tmux = hmNspawnNode {
                 hmModules = [
                   self.modules.homeManager.shell
                   self.modules.homeManager.tmux
@@ -2058,276 +1593,185 @@ in
             '';
           };
 
-        # Full CLI Stack Integration Test: activates system-cli + ALL 9 VM-safe
-        # HM modules together in a single VM. This is the ultimate integration test
-        # for the dendritic pattern — proving all modules compose without conflicts
-        # in a near-production configuration.
-        # Plan 021 Task 4.4
-        vm-full-cli-stack = pkgs.testers.nixosTest {
-          name = "vm-full-cli-stack";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.system-cli
-              inputs.home-manager.nixosModules.home-manager
+        # QEMU (merged P5c): vm-full-cli-stack + vm-dev-team-stack → one
+        # parameterized vm-compose-stack (resolves P4 Q2). Two nodes exercise the
+        # SAME full HM stack over two NixOS bases: `cli` (system-cli layer) and
+        # `devteam` (the real nixos-dev-team host module, grub/disk forced off).
+        # The union of the two former stacks' asserts runs per parameterization
+        # (check_stack), plus dev-team-specific sudo/podman asserts.
+        #
+        # STAYS QEMU (P5c fallback, evidence-recorded 2026-08-21): the `devteam`
+        # parameterization imports the real nixos-dev-team HOST module, which sets
+        # the read-only `nixpkgs.hostPlatform` — irreconcilable with the nspawn
+        # test backend (runNixOSTest also sets it read-only → "set multiple times").
+        # Host modules need real boot semantics; HM activation runs natively on
+        # QEMU's writableStore, so no hmNspawnNode recipe is needed here.
+        vm-compose-stack =
+          let
+            fullHmStack = [
+              self.modules.homeManager.shell
+              self.modules.homeManager.git
+              self.modules.homeManager.tmux
+              self.modules.homeManager.neovim
+              self.modules.homeManager.development-tools
+              self.modules.homeManager.yazi
+              self.modules.homeManager.shell-utils
+              self.modules.homeManager.files
+              self.modules.homeManager.podman
             ];
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 3072;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
+            # The base NixOS layer (system-cli / nixos-dev-team) already imports
+            # system-default transitively; do NOT import it again here or the
+            # dendritic deferredModule's options get declared twice.
+            mkStackNode = { extraNixosModules }:
+              { config, pkgs, lib, ... }: {
                 imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.shell
-                  self.modules.homeManager.git
-                  self.modules.homeManager.tmux
-                  self.modules.homeManager.neovim
-                  self.modules.homeManager.development-tools
-                  self.modules.homeManager.yazi
-                  self.modules.homeManager.shell-utils
-                  self.modules.homeManager.podman
-                ];
+                  inputs.home-manager.nixosModules.home-manager
+                ] ++ extraNixosModules;
 
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
+                systemDefault.userName = testUsername;
+                systemDefault.wheelNeedsPassword = false;
+                networking.firewall.enable = false;
+                virtualisation.memorySize = 3072;
+
+                home-manager = {
+                  useGlobalPkgs = true;
+                  useUserPackages = true;
+                  extraSpecialArgs = { inherit inputs; };
+                  users.${testUsername} = { config, pkgs, lib, ... }: {
+                    imports = [ self.modules.homeManager.home-minimal ] ++ fullHmStack;
+                    homeMinimal = {
+                      username = testUsername;
+                      homeDirectory = testHomeDir;
+                    };
+                    developmentTools.enable = true;
+                    programs.podman-tools.enable = true;
+                    targets.genericLinux.enable = lib.mkForce false;
+                  };
                 };
+              };
+          in
+          pkgs.testers.nixosTest {
+            name = "vm-compose-stack";
 
-                developmentTools.enable = true;
-                programs.podman-tools.enable = true;
-
-                targets.genericLinux.enable = lib.mkForce false;
+            nodes = {
+              # Parameterization 1: system-cli layer.
+              cli = mkStackNode {
+                extraNixosModules = [ self.modules.nixos.system-cli ];
+              };
+              # Parameterization 2: real nixos-dev-team host module (grub/disk
+              # forced off so the driver's own VM disk suffices).
+              devteam = mkStackNode {
+                extraNixosModules = [
+                  self.modules.nixos.nixos-dev-team
+                  ({ lib, ... }: {
+                    boot.loader.grub.enable = lib.mkForce false;
+                    boot.loader.grub.device = lib.mkForce "";
+                    fileSystems."/" = lib.mkForce { device = "none"; fsType = "tmpfs"; };
+                  })
+                ];
               };
             };
+
+            testScript = ''
+              # Both parameterizations boot in parallel; check_stack runs the union
+              # of the two former stacks' asserts against each.
+              start_all()
+
+              def check_stack(node):
+                  node.wait_for_unit("multi-user.target")
+                  node.wait_for_unit("home-manager-${testUsername}.service")
+
+                  # --- Primary binaries present ---
+                  node.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
+                  node.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
+                  node.succeed("su - ${testUsername} -c 'git --version'")
+                  node.succeed("su - ${testUsername} -c 'yazi --version'")
+                  node.succeed("su - ${testUsername} -c 'bat --version'")
+                  node.succeed("su - ${testUsername} -c 'which podman-tui'")
+                  node.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
+
+                  # --- system-cli layer: sshd running (QEMU persistent service) ---
+                  node.wait_for_unit("sshd.service")
+                  node.succeed("which jq")
+                  node.succeed("which fzf")
+                  node.succeed("which eza")
+
+                  # --- Cross-module: git + delta ---
+                  node.succeed("su - ${testUsername} -c 'git config core.pager' | grep -q delta")
+                  node.succeed("su - ${testUsername} -c 'delta --version'")
+
+                  # --- Cross-module: zsh + git aliases ---
+                  node.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
+                  node.succeed("su - ${testUsername} -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
+
+                  # --- Cross-module: neovim + tmux navigator ---
+                  tmux_conf = node.succeed("cat /home/${testUsername}/.config/tmux/tmux.conf")
+                  assert "is_vim" in tmux_conf, "vim-tmux-navigator detection missing"
+
+                  # --- Cross-module: git + neovim merge tool ---
+                  node.succeed("su - ${testUsername} -c 'git config merge.tool' | grep -q smart-nvimdiff")
+                  node.succeed("su - ${testUsername} -c 'git config diff.tool' | grep -q nvimdiff")
+
+                  # --- Neovim starts cleanly with full config ---
+                  node.succeed("su - ${testUsername} -c 'nvim --headless -c \"qa!\"'")
+
+                  # --- Tmux server lifecycle ---
+                  node.succeed("su - ${testUsername} -c 'tmux new-session -d -s compose-test'")
+                  node.succeed("su - ${testUsername} -c 'tmux list-sessions' | grep -q compose-test")
+                  node.succeed("su - ${testUsername} -c 'tmux kill-server'")
+
+                  # --- User environment coherent ---
+                  node.succeed("su - ${testUsername} -c 'echo $EDITOR' | grep -q nvim")
+                  node.succeed("getent passwd ${testUsername} | grep -q zsh")
+                  node.succeed("id -nG ${testUsername} | grep -q wheel")
+                  node.succeed("nix show-config | grep trusted-users | grep -q ${testUsername}")
+
+                  # --- Module-specific configs all generated ---
+                  node.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
+                  node.succeed("test -f /home/${testUsername}/.config/git/config")
+                  node.succeed("test -d /home/${testUsername}/.config/nvim")
+                  node.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
+                  node.succeed("test -f /home/${testUsername}/.zshrc")
+                  node.succeed("test -f /home/${testUsername}/.config/containers/registries.conf")
+
+                  # --- Development toolchains present ---
+                  node.succeed("su - ${testUsername} -c 'rustc --version'")
+                  node.succeed("su - ${testUsername} -c 'node --version'")
+                  node.succeed("su - ${testUsername} -c 'python3 --version'")
+                  node.succeed("su - ${testUsername} -c 'go version'")
+
+                  # --- shell-utils scripts ---
+                  node.succeed("su - ${testUsername} -c 'which mytree'")
+                  node.succeed("test -f /home/${testUsername}/.local/lib/general-utils.bash")
+
+                  # --- Functional: init repo, commit via zsh ---
+                  node.succeed(
+                      "su - ${testUsername} -c '"
+                      "cd /tmp && rm -rf compose-repo && mkdir compose-repo && cd compose-repo && git init"
+                      " && echo hello > file.txt && git add file.txt"
+                      " && git commit -m \"test commit\""
+                      " && git log --oneline | grep -q \"test commit\"'"
+                  )
+
+              # Parameterization 1: system-cli layer.
+              check_stack(cli)
+
+              # Parameterization 2: real nixos-dev-team host module.
+              check_stack(devteam)
+
+              # --- dev-team specifics: passwordless wheel sudo + podman present ---
+              devteam.succeed("su - ${testUsername} -c 'sudo -n true'")
+              devteam.succeed("su - ${testUsername} -c 'command -v podman'")
+            '';
           };
-
-          testScript = ''
-            machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-${testUsername}.service")
-
-            # === Section 1: All primary binaries present ===
-
-            machine.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
-            machine.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
-            machine.succeed("su - ${testUsername} -c 'git --version'")
-            machine.succeed("su - ${testUsername} -c 'yazi --version'")
-            machine.succeed("su - ${testUsername} -c 'bat --version'")
-            machine.succeed("su - ${testUsername} -c 'which podman-tui'")
-            machine.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
-
-            # === Section 2: NixOS system-cli layer verified ===
-
-            machine.wait_for_unit("sshd.service")
-            machine.succeed("which jq")
-            machine.succeed("which fzf")
-            machine.succeed("which eza")
-
-            # === Section 3: Cross-module integration — git + delta ===
-
-            machine.succeed("su - ${testUsername} -c 'git config core.pager' | grep -q delta")
-            machine.succeed("su - ${testUsername} -c 'delta --version'")
-
-            # === Section 4: Cross-module integration — zsh + git aliases ===
-
-            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
-            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias ga\"' | grep -q 'git add'")
-
-            # === Section 5: Cross-module integration — neovim + tmux navigator ===
-
-            tmux_conf = machine.succeed("cat /home/${testUsername}/.config/tmux/tmux.conf")
-            assert "is_vim" in tmux_conf, "vim-tmux-navigator detection missing"
-
-            # === Section 6: Cross-module integration — git + neovim merge tool ===
-
-            machine.succeed("su - ${testUsername} -c 'git config merge.tool' | grep -q smart-nvimdiff")
-            machine.succeed("su - ${testUsername} -c 'git config diff.tool' | grep -q nvimdiff")
-
-            # === Section 7: Neovim starts cleanly with full config ===
-
-            machine.succeed("su - ${testUsername} -c 'nvim --headless -c \"qa!\"'")
-
-            # === Section 8: Tmux server lifecycle ===
-
-            machine.succeed("su - ${testUsername} -c 'tmux new-session -d -s full-stack-test'")
-            machine.succeed("su - ${testUsername} -c 'tmux list-sessions' | grep -q full-stack-test")
-            machine.succeed("su - ${testUsername} -c 'tmux kill-server'")
-
-            # === Section 9: User environment coherent ===
-
-            # EDITOR set to nvim
-            machine.succeed("su - ${testUsername} -c 'echo $EDITOR' | grep -q nvim")
-
-            # Shell is zsh
-            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
-
-            # User is in wheel group (from system-default via system-cli)
-            machine.succeed("id -nG ${testUsername} | grep -q wheel")
-
-            # Nix trusts the user
-            machine.succeed("nix show-config | grep trusted-users | grep -q ${testUsername}")
-
-            # === Section 10: Module-specific configs all generated ===
-
-            machine.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
-            machine.succeed("test -f /home/${testUsername}/.config/git/config")
-            machine.succeed("test -d /home/${testUsername}/.config/nvim")
-            machine.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
-            machine.succeed("test -f /home/${testUsername}/.zshrc")
-            machine.succeed("test -f /home/${testUsername}/.config/containers/registries.conf")
-
-            # === Section 11: Development toolchains present ===
-
-            machine.succeed("su - ${testUsername} -c 'rustc --version'")
-            machine.succeed("su - ${testUsername} -c 'node --version'")
-            machine.succeed("su - ${testUsername} -c 'python3 --version'")
-            machine.succeed("su - ${testUsername} -c 'go version'")
-
-            # === Section 12: Shell utility scripts from shell-utils ===
-
-            machine.succeed("su - ${testUsername} -c 'which mytree'")
-            machine.succeed("test -f /home/${testUsername}/.local/lib/general-utils.bash")
-
-            # === Section 13: Functional integration — init repo with aliases in zsh ===
-
-            machine.succeed(
-                "su - ${testUsername} -c '"
-                "cd /tmp && mkdir full-stack-repo && cd full-stack-repo && git init"
-                " && echo hello > file.txt && git add file.txt"
-                " && git commit -m \"test commit\""
-                " && git log --oneline | grep -q \"test commit\"'"
-            )
-          '';
-        };
-
-        # Dev Team Stack Integration Test: activates the actual nixos-dev-team host
-        # module (pure NixOS, no WSL) with HM dev tool modules. Validates that the
-        # non-WSL dev-team configuration boots, provides SSH, user management, and
-        # all expected dev tooling through HM integration.
-        # Tests the full module chain: system-cli + binfmt + podman + HM dev stack
-        vm-dev-team-stack = pkgs.testers.nixosTest {
-          name = "vm-dev-team-stack";
-
-          nodes.machine = { config, pkgs, lib, ... }: {
-            imports = [
-              self.modules.nixos.nixos-dev-team
-              inputs.home-manager.nixosModules.home-manager
-            ];
-
-            # Override hardware config for VM test (nixos-dev-team has grub/disk)
-            boot.loader.grub.enable = lib.mkForce false;
-            boot.loader.grub.device = lib.mkForce "";
-            fileSystems."/" = lib.mkForce {
-              device = "none";
-              fsType = "tmpfs";
-            };
-
-            systemDefault.userName = testUsername;
-            systemDefault.wheelNeedsPassword = false;
-            networking.firewall.enable = false;
-            virtualisation.memorySize = 3072;
-
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${testUsername} = { config, pkgs, lib, ... }: {
-                imports = [
-                  self.modules.homeManager.home-minimal
-                  self.modules.homeManager.shell
-                  self.modules.homeManager.git
-                  self.modules.homeManager.tmux
-                  self.modules.homeManager.neovim
-                  self.modules.homeManager.development-tools
-                  self.modules.homeManager.yazi
-                  self.modules.homeManager.shell-utils
-                  self.modules.homeManager.files
-                  self.modules.homeManager.podman
-                ];
-
-                homeMinimal = {
-                  username = testUsername;
-                  homeDirectory = testHomeDir;
-                };
-
-                developmentTools.enable = true;
-                programs.podman-tools.enable = true;
-
-                targets.genericLinux.enable = lib.mkForce false;
-              };
-            };
-          };
-
-          testScript = ''
-            machine.wait_for_unit("multi-user.target")
-            machine.wait_for_unit("home-manager-${testUsername}.service")
-
-            # === Section 1: Boot and user creation ===
-
-            machine.succeed("id ${testUsername}")
-            machine.succeed("id -nG ${testUsername} | grep -q wheel")
-
-            # === Section 2: Sudo works (wheelNeedsPassword = false) ===
-
-            machine.succeed("su - ${testUsername} -c 'sudo -n true'")
-
-            # === Section 3: SSH service running ===
-
-            machine.wait_for_unit("sshd.service")
-
-            # === Section 4: HM activation completed ===
-
-            # HM config files generated
-            machine.succeed("test -f /home/${testUsername}/.config/tmux/tmux.conf")
-            machine.succeed("test -f /home/${testUsername}/.config/git/config")
-            machine.succeed("test -d /home/${testUsername}/.config/nvim")
-            machine.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
-            machine.succeed("test -f /home/${testUsername}/.zshrc")
-
-            # === Section 5: Core binaries present ===
-
-            machine.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
-            machine.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
-            machine.succeed("su - ${testUsername} -c 'git --version'")
-            machine.succeed("su - ${testUsername} -c 'yazi --version'")
-            machine.succeed("su - ${testUsername} -c 'bat --version'")
-            machine.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")
-
-            # === Section 6: Cross-module integration — git + delta ===
-
-            machine.succeed("su - ${testUsername} -c 'git config core.pager' | grep -q delta")
-            machine.succeed("su - ${testUsername} -c 'delta --version'")
-
-            # === Section 7: Cross-module integration — zsh + git aliases ===
-
-            machine.succeed("su - ${testUsername} -c 'zsh -ic \"alias gs\"' | grep -q 'git status'")
-
-            # === Section 8: Development toolchains ===
-
-            machine.succeed("su - ${testUsername} -c 'rustc --version'")
-            machine.succeed("su - ${testUsername} -c 'node --version'")
-            machine.succeed("su - ${testUsername} -c 'python3 --version'")
-            machine.succeed("su - ${testUsername} -c 'go version'")
-
-            # === Section 9: User environment coherent ===
-
-            machine.succeed("su - ${testUsername} -c 'echo $EDITOR' | grep -q nvim")
-            machine.succeed("getent passwd ${testUsername} | grep -q zsh")
-            machine.succeed("nix show-config | grep trusted-users | grep -q ${testUsername}")
-          '';
-        };
 
         # Shipped dev-team image smoketest. Reproduces the SHIPPED defaults
         # (default user "user", passwordless wheel sudo) and asserts the
         # invariants that the 2026-08-13 "user is not in sudoers file"
-        # regression violated. Unlike vm-dev-team-stack, this does NOT override
-        # systemDefault.userName or wheelNeedsPassword -- it validates the image
-        # exactly as distributed. Consumed by the nixcfg-work dev-team-vm CI as a
+        # regression violated. Unlike vm-compose-stack's devteam parameterization,
+        # this does NOT override systemDefault.userName or wheelNeedsPassword -- it
+        # validates the image exactly as distributed (and stays on QEMU as the
+        # shipped-image boot gate). Consumed by the nixcfg-work dev-team-vm CI as a
         # test-stage gate after the image build, on the aarch64 KVM-metal runner
         # (tag aws-uswest2-metal-nix-arm64-kvm), which provides hardware /dev/kvm.
         vm-dev-team-vm-smoketest = mkVmTest {
@@ -2369,7 +1813,8 @@ in
 
         # User configuration test: verifies user setup, groups, home directory,
         # shell, sudo, nix trusted-users, and environment variables
-        vm-user-config = mkVmTest {
+        # nspawn (HM-free system-layer test; migrated P5c per R2/P5b backend map).
+        vm-user-config = mkContainerTest {
           name = "user-config";
           description = "User creation, groups, home directory, shell, and sudo";
           modules = [ self.modules.nixos.system-default ];
