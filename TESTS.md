@@ -33,10 +33,8 @@
   ├── ssh-auth.nix               # SSH authentication tests
   ├── sops-nix.nix              # SOPS encryption tests
   ├── sops-simple.nix           # Simple SOPS roundtrip test
-  └── integration/              # VM-based integration tests
-      ├── ssh-management.nix
-      ├── sops-deployment.nix
-      └── bitwarden-mock.nix
+  └── integration/              # integration test fixtures
+      └── test-secrets/          # SOPS fixtures (VM tests live in modules/flake-parts/vm-tests.nix)
 
   flake-modules/
   └── tests.nix                  # Main test orchestration

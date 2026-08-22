@@ -5,10 +5,26 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.11.0
-**Last Updated**: 2026-07-01
+**Version**: 1.12.0
+**Last Updated**: 2026-07-22
 
 ## Changelog
+
+### v1.12.0 (2026-07-22)
+- Section 15: added a hard **"Definition of Done - EVERY frame reviewed"** gate
+  (multi-page / animation diagrams must have every frame read, not page 1) and a
+  new **"Review at actual scale first, then zoom"** rule (over-zoomed crops hide
+  bulk/proportion defects and exaggerate stroke weight - judge overall balance at
+  render scale, zoom only to confirm a detail). Both came from a session where
+  edge-label overlaps, a clipped text box, and a bulky/mis-proportioned nested
+  table all slipped past a page-1 / over-zoomed spot check and the USER had to
+  catch them.
+- New **Section 36: Animation & Moving-Glyph Diagrams** - orient moving glyphs
+  along the path, show concurrent activity rather than sequential phases, ride the
+  real routed polyline (not a straight center-to-center line).
+- New **Section 37: Nested Sub-Structures Inside a Shape** - choose the expansion
+  axis by where the whitespace is, keep nested-cell borders <=1px, label with
+  concrete intent (not vague verbs).
 
 ### v1.11.0 (2026-07-01)
 - Integrated four capabilities adapted from Agents365-ai/drawio-skill (MIT):
@@ -1550,6 +1566,36 @@ said "quick draft" - the structural pass always runs. If you cannot rasterize
 (the nix shell above fails and no Windows draw.io is available), fall back to
 asking the user for a screenshot and analyze that.
 
+### Definition of Done - EVERY frame reviewed (non-negotiable)
+
+**Diagram work is NOT done until you have read the rendered raster of EVERY page /
+frame / beat yourself and confirmed each is free of the checklist defects below.**
+This is a hard gate, not an optional polish step. It applies especially to
+multi-page files and multi-frame animations (e.g. per-beat story GIFs): render
+ALL pages, read ALL of them - not just page 1 - because label overlap, truncated
+text, and mis-placed edge labels are per-page defects that a single-page spot
+check will miss. Do not present, mark complete, or say "looks good" until you
+have personally eyeballed the last frame. Never offload this visual QA to the
+user - if they are the one who spots an overlapping arrow label or clipped text
+box, the self-check failed. When a generator emits N frames, loop over all N
+rasters and inspect each for: edge/arrow labels overlapping other text or boxes,
+text clipped/cut off inside a box (widen or re-wrap the box), leader/connector
+lines routing through unrelated content, and pulse/marker glyphs landing off
+their intended path. Fix what you find and re-render before showing anything.
+
+### Review at actual scale FIRST, then zoom for detail
+
+Read the raster at (or near) its rendered scale before you zoom in. Over-zoomed
+crops (200-400%) *exaggerate stroke weight and hide proportion problems* - a
+nested box that is too bulky, grew along the wrong axis, or is mis-balanced
+against its neighbours looks "fine" when you only ever see it at 3x. Judge
+overall balance, border weight, and whether an element is the right size/shape at
+render scale; zoom in ONLY to confirm a specific detail (is that letter legible?
+do these two labels touch?). If the user says an element "looks bad/bulky," go
+look at it at actual scale and name the concrete defect (wrong expansion axis,
+border too thick, poor proportion) before changing anything - do not trust a
+prior over-zoomed impression.
+
 ### Visual Quality Checklist
 
 After viewing the rendered diagram, systematically check for:
@@ -2676,3 +2722,57 @@ render, and it renders inline on GitHub/GitLab). Common RAG/vector stores lackin
 a lobe logo (Postgres, Redis, Qdrant, ...) fall back to simple-icons
 automatically. Icon names: `data/lobe-icons.json` (lobehub/lobe-icons, MIT);
 logos are their owners' trademarks.
+
+## Section 36: Animation & Moving-Glyph Diagrams
+
+Multi-frame diagrams (per-beat story GIFs, a marker travelling a wire, a value
+propagating a pipeline) have craft rules a static diagram does not. These were
+learned the hard way over many iteration rounds - apply them up front.
+
+- **A moving glyph must ride the REAL routed path, not a straight line between
+  endpoint centres.** If the connector is orthogonal (bus, dog-leg, corridor), the
+  glyph has to trace that same polyline by arc-length, or it visibly cuts across
+  unrelated content. Share ONE geometry function between the edge waypoints and the
+  glyph position so they cannot drift apart.
+- **Orient the glyph along its direction of travel.** A packet/token moving up a
+  vertical run should be tall; moving along a horizontal run it should be wide. Give
+  the point-on-path helper a "which axis is this segment" flag and swap the glyph's
+  long axis to match. A fixed-orientation glyph reads wrong at every turn.
+- **Size a travelling glyph to clear the tightest turn.** If it must round a right
+  angle between two short segments, make it small enough that it doesn't overshoot
+  the corner. ~20% smaller is usually the difference between "snaps cleanly" and
+  "spills past the bend".
+- **Show concurrent activity, not sequential phases, when the message is "the
+  system is busy".** N separate one-thing-at-a-time phases (A reports, THEN B
+  reports, THEN the link is busy) is both longer AND less truthful than a single
+  phase where every wire carries traffic at once (both directions, all pairs,
+  intra- and inter-container simultaneously). Concurrency enriches the frame and
+  shortens the animation - prefer it unless the sequence itself is the point.
+- **Colour a travelling glyph in ONE hue (dark border, lighter fills) unless
+  distinct sections carry meaning.** A rainbow glyph is distracting; same-hue
+  framed sections still read as "a structured packet" without shouting.
+- **Hold the frame before a big transition longer** (e.g. the last calm frame
+  before a fault) for suspense/legibility; expose per-frame delay as a knob.
+
+## Section 37: Nested Sub-Structures Inside a Shape
+
+When a shape must contain a small data structure (a table, a register map, a
+status array):
+
+- **Choose the expansion axis by where the whitespace is.** Growing a box the
+  "obvious" direction often collides with a neighbour or reflows the whole layout;
+  grow it toward the empty margin instead. If cells read as a list, a vertical
+  stack on one side is usually tidier than a horizontal row that forces the whole
+  shape wider than its slot. Look at the actual render to decide, don't guess.
+- **Keep nested-cell borders thin (<=1px; 0.5px for the smallest cells).** Default
+  stroke weight on a cluster of small adjacent cells reads as heavy/bulky at render
+  scale (and much worse when you over-zoom - see Section 15). Set strokeWidth
+  explicitly; do not inherit the default on tiny cells.
+- **Label with concrete intent, not a vague verb.** A beat/box called "Watch" or
+  "Handle" tells the reader nothing; name what is actually recorded or done
+  ("Health Table", "Member Remove", "Quorum Check"). If you cannot name it
+  concretely, the element probably has no clear job.
+- **A state change inside a cell should be a solid re-fill, not a translucent
+  overlay.** A semitransparent red over a green cell muddies to brown and reads as
+  neither; redraw the cell in the target colour with its label so the change is
+  unambiguous.

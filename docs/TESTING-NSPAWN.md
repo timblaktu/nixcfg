@@ -151,6 +151,46 @@ These are real differences observed while migrating, not theory:
   cannot *build* a container test (it fails with "missing system features: uid-range"). Under
   `nix flake check --no-build` the check still **evaluates** fine — the requirement bites only at
   build time. Keep container tests out of a CI matrix until that runner is configured.
+- **Any test that performs a nix *store operation* at runtime does NOT work — this rules out Home
+  Manager activation (ROOT-CAUSED across THREE probes, plan 054 P5b, VERIFIED).** The nub: the container
+  base module bind-mounts the host store **read-only** (`--bind-ro=/nix/store:/nix/store`,
+  `nixos/modules/virtualisation/nspawn-container/default.nix`), and nix's `LocalStore` **chowns the store
+  on open for every write/registration op** — which fails on a read-only mount (`changing ownership of
+  path "/nix/store": Operation not permitted`). Home Manager activation trips this because
+  `home-manager-<user>.service` runs `nix-env --set <generation>` (a genuine runtime nix write) to
+  register the new generation. The identical config PASSES under QEMU. **Why QEMU is fine and the fix
+  can't be done from test config:** QEMU test VMs set `virtualisation.writableStore`, which layers a
+  **writable overlay** over the read-only store *inside the guest kernel* AND loads the closure's
+  path-registration into the db (`register-nix-paths`, `nixos/modules/virtualisation/qemu-vm.nix`).
+  That machinery is (a) **QEMU-only** (`virtualisation.*` doesn't apply to containers) and (b) runs in
+  the guest, not the build sandbox. Every route to reproduce it for an nspawn container is blocked by the
+  **Nix build sandbox the test runs inside**:
+  1. *Borrow the host daemon/db* (what real `nixos-containers` do via `NIX_REMOTE=daemon`,
+     `container-config.nix`): `--bind-ro=/nix/var/nix/db` → container won't start, `Failed to clone
+     /nix/var/nix/db: No such file or directory` (sandbox hides the host db + daemon socket).
+  2. *Register the db daemon-free* (`nix-store --load-db`, the writableStore trick): the load-db step
+     **also** dies on the read-only-store chown — proving the wall is `LocalStore`, not the daemon.
+  3. *Make the store writable via a systemd-nspawn `--overlay`* (the direct analog of writableStore):
+     systemd-nspawn fails at spawn — the sandbox blocks the overlayfs mount.
+  So this is **not** a hardcoded-broken framework and **not** just our config — it's a genuine
+  **capability gap in the nspawn *test* backend** (no writableStore equivalent), fixable only upstream.
+  **Lesson: keep every NixOS-integrated Home Manager *activation* test on QEMU** (anything that waits on
+  `home-manager-<user>.service`). A container can still assert HM-*produced* files/packages if the
+  generation is realised without a runtime nix op — but our HM tests all wait on the activation service,
+  so they stay QEMU.
+- **Container/node names must be VALID HOSTNAMES — no underscores (VERIFIED, plan 054 P5b).** A
+  `containers.<name>` / `nodes.<name>` key becomes the `systemd-nspawn --machine=<name>` name, which
+  must be a valid hostname. Underscores are rejected: the run prints `Invalid machine name: node_a`,
+  the machine never comes up, and the test dies with `systemd-nspawn process exited unexpectedly`. QEMU
+  node names tolerate underscores, so **this bites on migration** — any multi-node test moved to nspawn
+  (e.g. `vm-hm-composition-pairs`'s `pair_nvim_tmux`, `vm-hm-module-isolation`'s `node_podman`) must be
+  renamed to hyphen/alnum forms first. (Hyphens are fine; `nodea`/`node-a` work.)
+- **sops-nix activation DOES work (VERIFIED, plan 054 P5b).** A checked-in fixture age key + SOPS-
+  encrypted YAML decrypt during activation to `/run/secrets` with mode/owner/content **preserved
+  exactly** (0400 root:root, 0440 user:group, plaintext intact) and ownership enforcement holds — sops
+  activation is a plain activation-script + tmpfiles path, no nix-daemon round-trip, so it is
+  container-safe. (Minor cosmetic: `su -` prints "Authentication service cannot retrieve authentication
+  info (Ignored)" in the container but still drops privileges for the perms check.)
 
 ## Networking capabilities & fidelity (for network-topology tests)
 
@@ -196,21 +236,34 @@ no meaningful `/dev/kvm` passthrough (foreign-arch / KubeVirt is off the table).
 
 ## Per-test migration inventory (this repo's 21 `vm-*` tests)
 
-All 21 were verified to assert **pure userspace** at runtime (no kernel/boot/`/dev/kvm`/`modprobe`/
-device-unit/nested-container assertions). Classification:
+> **⚠ SUPERSEDED IN PART by empirical results (plan 054 P5b spike).** The list below was a *theoretical*
+> "asserts pure userspace" classification made before anything was built. The P5b spike then actually
+> **built and ran** representative containers and discovered that "asserts pure userspace" is **not**
+> sufficient: the single biggest correction is that **Home Manager *activation* fails under nspawn** (the
+> in-container nix-daemon can't operate on the read-only shared store — see the HM caveat above), which
+> knocks every HM test off the candidate list. Treat the empirical verdicts below as authoritative and
+> the original theoretical bucket as historical.
 
-- **18 clean container candidates:** `vm-system-type-{default,cli}`, `vm-user-config`,
-  `vm-shell-env`, `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`, `vm-yazi`,
-  `vm-hm-activation`, `vm-hm-module-isolation` (8 nodes — biggest RAM win), `vm-hm-composition-pairs`,
-  `vm-full-cli-stack`, `vm-dev-team-stack`, `vm-sops-deployment`, `vm-sops-secrets`,
-  `vm-ssh-service` (2-node), `vm-ssh-management` (2-node).
-  - Watch `vm-sops-secrets` (sops-nix `/run/secrets` activation) and the two SSH tests (networking +
-    service-activation) — verify empirically per the caveats above.
-  - `node_podman` in `vm-hm-module-isolation` only asserts `which podman-tui` + a config file (no
-    nested `podman run`), so it is eligible.
-- **Keep QEMU on principle (1):** `vm-boot-minimal` — its meaning is *boot*.
-- **Verify before moving (2):** `vm-system-type-desktop` (appears to be static `systemctl` checks →
-  likely eligible), `vm-dev-team-vm-smoketest` (name implies image/boot smoke).
+**Empirical verdicts (plan 054 P5b — built + run on `pa161878-nixos`):**
+- **nspawn-safe (proven or safe by construction — the HM-FREE tests):** `vm-nspawn-smoke` (proven),
+  `vm-sops-secrets` (sops activation proven — see caveat), `vm-system-type-default` and `vm-user-config`
+  (import only `system-default`, no Home Manager → no HM-activation service to fail). Multi-node is fine
+  **if node names are hostname-valid** (proven with a 2-container `start_all`).
+- **Must stay QEMU — Home Manager activation (proven failure):** `vm-hm-activation`, `vm-shell-env`,
+  `vm-neovim`, `vm-tmux`, `vm-git-advanced`, `vm-development-tools`, `vm-hm-composition-pairs`,
+  `vm-hm-module-isolation` — all wait on `home-manager-<user>.service`, which fails in a container.
+  (`vm-hm-composition-pairs`/`-module-isolation` would ALSO need their underscore node names renamed —
+  but they stay QEMU regardless.) NOTE: `vm-user-config` is NOT in this list — it has no HM, so it
+  migrates.
+- **Keep QEMU on principle:** `vm-boot-minimal` (*boot* is the meaning), `vm-system-type-desktop`
+  (graphics), `vm-ssh-service` (real cross-node SSH service), `vm-dev-team-vm-smoketest` (image/boot).
+
+*(Original pre-spike theoretical classification, retained for history: "18 clean container candidates"
+incl. `vm-system-type-{default,cli}`, `vm-user-config`, `vm-shell-env`, `vm-neovim`, `vm-tmux`,
+`vm-git-advanced`, `vm-development-tools`, `vm-yazi`, `vm-hm-activation`, `vm-hm-module-isolation`,
+`vm-hm-composition-pairs`, `vm-full-cli-stack`, `vm-dev-team-stack`, `vm-sops-deployment`,
+`vm-sops-secrets`, `vm-ssh-service`, `vm-ssh-management` — the HM entries in this line are now known to
+be QEMU-only.)*
 
 ## Verified vs open (honesty ledger)
 
@@ -227,6 +280,16 @@ device-unit/nested-container assertions). Classification:
 - **`sshd` root-caused:** no `sshd.service` exists in the container; `sshd.socket` (from
   `systemd-ssh-generator`) is active+listening. QEMU has a real running `sshd.service`. The container
   *does* have framework networking (`eth1: 192.168.1.1/24`).
+- **sops-nix `/run/secrets` activation works under nspawn** (plan 054 P5b `spike-nspawn-sops`,
+  build+pass): fixture secrets decrypt with mode/owner/content preserved exactly.
+- **Multi-node `start_all` works under nspawn** (plan 054 P5b `spike-nspawn-multinode`, build+pass) —
+  **provided node names are valid hostnames** (underscores are rejected).
+- **Home Manager activation does NOT work under nspawn** (plan 054 P5b `spike-nspawn-hm-activation`,
+  recorded failure + THREE alt-config probes): root-caused to nix's `LocalStore` chowning the read-only
+  shared store on every store op, and confirmed unfixable from test config — all three routes to a
+  writable/registered store (borrow host db, daemon-free `load-db`, `--overlay`) are blocked by the Nix
+  build sandbox. QEMU works only via `virtualisation.writableStore`, which the nspawn *test* backend has
+  no equivalent for (upstream gap). See the HM caveat under "Constraints & caveats". HM tests stay QEMU.
 
 **Not yet verified / open:**
 - `vm-nspawn-smoke` is registered as a check but intentionally **not** in the CI matrix; it has not

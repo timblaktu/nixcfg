@@ -42,7 +42,7 @@ let
       diff_style = tuiCfg.diffStyle;
     }
     // optionalAttrs (tuiCfg.keybinds != { }) {
-      keybinds = tuiCfg.keybinds;
+      inherit (tuiCfg) keybinds;
     }
     // optionalAttrs (tuiCfg.plugins != [ ]) {
       plugin = tuiCfg.plugins;

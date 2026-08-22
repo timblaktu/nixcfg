@@ -1,5 +1,11 @@
 # modules/flake-parts/tests.nix
-# Comprehensive test suite for NixOS configurations
+# Tier-0 eval-regression gate for NixOS + Home Manager configurations
+#
+# Plan 054 P5a consolidated this suite: per-host/-module standalone eval checks
+# were folded into batched gates (regression-test, eval-hm-modules,
+# eval-nixos-modules), the misnamed build-*-dryrun forcers were renamed to
+# eval-*, the SSH-2223 triple was merged into one eval-wsl-settings-ssh-port,
+# and pure no-op checks were deleted. See docs/VMTEST-TARGET-DESIGN.md §T0.
 { inputs, self, config, ... }:
 let
   inherit (config.meta) username;
@@ -7,48 +13,9 @@ in
 {
   perSystem = { config, self', inputs', pkgs, system, lib, ... }:
     let
-      # Helper function to create configuration evaluation tests
-      mkEvalTest = name: hostName:
-        pkgs.runCommand "eval-${name}"
-          {
-            meta = {
-              description = "Evaluation test for ${hostName} configuration";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            # Force evaluation of the configuration by referencing it
-            inherit (self.nixosConfigurations.${hostName}.config.system) stateVersion;
-          } ''
-          echo "Testing ${hostName} configuration evaluation..."
-          # If we got here, the configuration evaluated successfully
-          echo "Configuration state version: $stateVersion"
-          echo "✅ ${hostName} evaluation passed"
-          touch $out
-        '';
-
-      # Helper function to create Home Manager evaluation tests
-      mkHmEvalTest = name: configName:
-        pkgs.runCommand "eval-hm-${name}"
-          {
-            meta = {
-              description = "Evaluation test for ${configName} HM configuration";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            # Force evaluation of the HM configuration by referencing it
-            inherit (self.homeConfigurations.${configName}.config.home) homeDirectory;
-            inherit (self.homeConfigurations.${configName}.config.home) username;
-          } ''
-          echo "Testing ${configName} HM evaluation..."
-          echo "Home directory: $homeDirectory"
-          echo "Username: $username"
-          echo "OK"
-          touch $out
-        '';
-
       # Helper function to create a Home Manager ACTIVATION test.
       #
-      # Unlike mkHmEvalTest (which only references string attrs and so forces
+      # Unlike a plain eval (which only references string attrs and so forces
       # config *evaluation*), this forces the activationPackage — including the
       # generated activation-script.drv — to actually BUILD. That is the only
       # thing that exercises activation-string generators such as the
@@ -106,18 +73,12 @@ in
           touch $out
         '';
 
-      # Helper: Test that a Home Manager module evaluates standalone with home-minimal
-      #
-      # Arguments:
-      #   name         - Module name (used in check name: eval-hm-module-<name>)
-      #   module       - The deferred module to test (e.g., self.modules.homeManager.shell)
-      #   extraImports - Additional modules to import (default: [])
-      #   extraConfig  - Additional HM config to merge (default: {})
-      #
-      # Provides home-minimal with test user settings automatically.
-      # Forces evaluation by referencing config.home.homeDirectory.
-      mkHmModuleEvalTest = name: module:
-        { extraImports ? [ ], extraConfig ? { } }:
+      # === Tier-0 batched-eval helpers (Plan 054 P5a) ===
+
+      # Force a single HM module to evaluate standalone against home-minimal.
+      # Returns the config's home.homeDirectory so that referencing it forces
+      # full evaluation. Used by the eval-hm-modules batch gate.
+      forceHmModuleEval = module:
         let
           hmConfig = inputs.home-manager.lib.homeManagerConfiguration {
             inherit pkgs;
@@ -130,34 +91,17 @@ in
                   homeDirectory = "/home/testuser";
                 };
               }
-              extraConfig
-            ] ++ extraImports;
+            ];
             extraSpecialArgs = { inherit inputs; };
           };
         in
-        pkgs.runCommand "eval-hm-module-${name}"
-          {
-            meta = {
-              description = "Isolation eval test: HM module ${name}";
-              timeout = 60;
-            };
-            # Force evaluation by referencing a config attribute
-            homeDir = hmConfig.config.home.homeDirectory;
-          } ''
-          echo "HM module '${name}' evaluates standalone: $homeDir"
-          touch $out
-        '';
+        hmConfig.config.home.homeDirectory;
 
-      # Helper: Test that a NixOS module evaluates standalone
-      #
-      # Arguments:
-      #   name        - Module name (used in check name: eval-nixos-module-<name>)
-      #   module      - The deferred module to test (e.g., self.modules.nixos.system-minimal)
-      #   extraConfig - Additional NixOS config module (default: {})
-      #
-      # Forces evaluation by referencing config.system.stateVersion.
-      mkNixosModuleEvalTest = name: module:
-        { extraConfig ? { } }:
+      # Force a single NixOS layer module to evaluate standalone. `extraConfig`
+      # carries the per-layer assertion setup each module needs. Returns the
+      # config's system.stateVersion to force evaluation. Used by
+      # eval-nixos-modules.
+      forceNixosModuleEval = module: extraConfig:
         let
           nixosConfig = inputs.nixpkgs.lib.nixosSystem {
             inherit system;
@@ -168,131 +112,16 @@ in
             ];
           };
         in
-        pkgs.runCommand "eval-nixos-module-${name}"
-          {
-            meta = {
-              description = "Isolation eval test: NixOS module ${name}";
-              timeout = 60;
-            };
-            # Force evaluation by referencing a config attribute
-            stateVer = nixosConfig.config.system.stateVersion;
-          } ''
-          echo "NixOS module '${name}' evaluates standalone: $stateVer"
-          touch $out
-        '';
-
-      # Configuration snapshot baseline for validation
-      snapshotBaseline = {
-        "thinky-nixos" = { stateVersion = "24.11"; };
-        "potato" = { stateVersion = "24.11"; };
-        "nixos-wsl-minimal" = { stateVersion = "24.11"; };
-        "mbp" = { stateVersion = "24.11"; };
-      };
+        nixosConfig.config.system.stateVersion;
     in
     {
       checks = {
         # Run all tests with: nix flake check
-        # Run specific test: nix build .#checks.x86_64-linux.eval-thinky-nixos
-        # Run regression tests: nix flake check --keep-going
-
-        # === BASIC VALIDATION CHECKS (from checks.nix) ===
-        flake-validation = pkgs.runCommand "flake-validation"
-          {
-            meta = {
-              description = "Validate flake structure and configuration";
-              maintainers = [ ];
-              timeout = 10;
-            };
-          } ''
-          echo "✅ Flake structure validation passed"
-          touch $out
-        '';
-
-        validated-scripts-module = pkgs.runCommand "validated-scripts-module-check"
-          {
-            meta = {
-              description = "Check validated scripts module integration";
-              maintainers = [ ];
-              timeout = 10;
-            };
-          } ''
-          echo "✅ Validated scripts module integration check passed"
-          touch $out
-        '';
-
-        # === VALIDATED SCRIPTS COLLECTED TESTS ===
-        # Working implementation - tests collected via home-manager evaluation bridge
-
-        # Test unified files module implementation (current architecture)
-        unified-files-diagnostic-test =
-          let
-            # Try to get scripts from unified files module (current architecture)
-            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
-
-            # Check what's available in home packages (where scripts would be installed)
-            homePackages = hmConfig.home.packages or [ ];
-            packageCount = builtins.length homePackages;
-
-            # Check unified files module
-            unifiedFilesEnabled = hmConfig.homeFiles.enable or false;
-
-          in
-          pkgs.runCommand "unified-files-diagnostic-test"
-            {
-              meta = {
-                description = "Test unified files module implementation (current architecture)";
-                maintainers = [ ];
-                timeout = 10;
-              };
-              # Force evaluation by referencing the attributes
-              inherit packageCount unifiedFilesEnabled;
-            } ''
-            echo "✅ Testing unified files module implementation..."
-            echo "📊 CURRENT ARCHITECTURE DIAGNOSTIC:"
-            echo "  - Unified files enabled: $unifiedFilesEnabled"
-            echo "  - Home packages count: $packageCount"
-            echo ""
-            echo "🔍 ARCHITECTURE STATUS:"
-            echo "  - validated-scripts module: ❌ DEPRECATED (migrated to unified files)"
-            echo "  - unified files module: ✅ CURRENT ARCHITECTURE"
-            echo "  - autoWriter integration: ✅ ACTIVE"
-            echo ""
-            echo "📋 PRIORITY 2 CONCLUSION:"
-            echo "  - Root cause identified: Testing deprecated validated-scripts module"
-            echo "  - Current system uses unified files + autoWriter architecture"
-            echo "  - No passthru.tests infrastructure needed - different approach used"
-            echo "  - Architecture migration already completed successfully"
-
-            touch $out
-          '';
-
-        # === CONFIGURATION EVALUATION TESTS ===
-        # NixOS configuration eval tests
-        eval-thinky-nixos = mkEvalTest "thinky-nixos" "thinky-nixos";
-        eval-potato = mkEvalTest "potato" "potato";
-        eval-nixos-wsl-minimal = mkEvalTest "nixos-wsl-minimal" "nixos-wsl-minimal";
-        eval-mbp = mkEvalTest "mbp" "mbp";
-        eval-nixos-wsl-dev-team = mkEvalTest "nixos-wsl-dev-team" "nixos-wsl-dev-team";
-        eval-nixos-dev-team = mkEvalTest "nixos-dev-team" "nixos-dev-team";
-        eval-nixos-dev-team-ec2 = mkEvalTest "nixos-dev-team-ec2" "nixos-dev-team-ec2";
-        eval-nixos-dev-team-graviton = mkEvalTest "nixos-dev-team-graviton" "nixos-dev-team-graviton";
-
-        # Home Manager configuration eval tests (x86_64-linux only)
-        # Note: tim@potato (aarch64-linux) and tim@macbook-air (aarch64-darwin) skipped — wrong system
-        eval-hm-thinky-nixos = mkHmEvalTest "thinky-nixos" "${username}@thinky-nixos";
-        eval-hm-thinky-ubuntu = mkHmEvalTest "thinky-ubuntu" "${username}@thinky-ubuntu";
-        eval-hm-mbp = mkHmEvalTest "mbp" "${username}@mbp";
-        eval-hm-nixvim-minimal = mkHmEvalTest "nixvim-minimal" "${username}@nixvim-minimal";
-
-        # Home Manager ACTIVATION-script build test (x86_64-linux). thinky-nixos
-        # enables programs.claude-code with accounts + the categorized hooks, so
-        # building its activationPackage exercises the .claude.json activation
-        # generator and guards the shell-quoting bug class (Plan 046). Only meaningful
-        # when BUILT — `nix flake check --no-build` skips it; run full `nix flake check`
-        # or `nix build '.#checks.x86_64-linux.activate-hm-thinky-nixos'`.
-        activate-hm-thinky-nixos = mkHmActivationTest "thinky-nixos" "${username}@thinky-nixos";
+        # Run a specific test: nix build .#checks.x86_64-linux.regression-test
 
         # === MODULE INTEGRATION TESTS ===
+        # Rewritten (Plan 054 P5a): asserts systemDefault.userGroups (contains
+        # wheel) in addition to userName, instead of only echoing a constant.
         module-base-integration = mkModuleTest {
           name = "module-base-integration";
           description = "Testing system default module integration";
@@ -303,27 +132,9 @@ in
           };
           checks = ''
             [[ "$userName" == "${username}" ]] || (echo "❌ Username not ${username}" && exit 1)
+            echo "$userGroups" | grep -qw "wheel" || (echo "❌ userGroups missing wheel (got: $userGroups)" && exit 1)
             echo "User name: $userName"
             echo "User groups: $userGroups"
-          '';
-        };
-
-        module-wsl-settings-integration = mkModuleTest {
-          name = "module-wsl-settings-integration";
-          description = "Testing WSL settings module integration";
-          hostName = "thinky-nixos";
-          attributes = {
-            enable = if self.nixosConfigurations.thinky-nixos.config.wsl.enable then "1" else "0";
-            inherit (self.nixosConfigurations.thinky-nixos.config.wsl-settings) hostname;
-            sshPort = toString self.nixosConfigurations.thinky-nixos.config.wsl-settings.sshPort;
-          };
-          checks = ''
-            [[ "$enable" == "1" ]] || (echo "❌ WSL not enabled" && exit 1)
-            [[ "$hostname" == "thinky-nixos" ]] || (echo "❌ Hostname mismatch" && exit 1)
-            [[ "$sshPort" == "2223" ]] || (echo "❌ SSH port mismatch" && exit 1)
-            echo "WSL enabled: $enable"
-            echo "Hostname: $hostname"
-            echo "SSH Port: $sshPort"
           '';
         };
 
@@ -361,25 +172,34 @@ in
           '';
         };
 
-        # === CRITICAL SERVICE TESTS ===
-        ssh-service-configured = pkgs.runCommand "ssh-service-configured"
+        # === WSL SETTINGS EVAL (merged SSH-2223 triple, Plan 054 P5a T0.5) ===
+        # Folds ssh-service-configured + cross-module-wsl-base +
+        # module-wsl-settings-integration into one eval keeping the invariants
+        # worth having: openssh port == wsl sshPort, base userName == wsl
+        # defaultUser (plus the ssh-enabled / port-2223 / wsl-enabled guards).
+        eval-wsl-settings-ssh-port = pkgs.runCommand "eval-wsl-settings-ssh-port"
           {
             meta = {
-              description = "Verify SSH service is properly configured";
+              description = "Eval: WSL settings SSH/user invariants (openssh port == wsl sshPort; base userName == wsl defaultUser)";
               maintainers = [ ];
               timeout = 30;
             };
-            # Force evaluation by referencing configuration attributes
-            enable = if self.nixosConfigurations.thinky-nixos.config.services.openssh.enable then "1" else "0";
-            ports = builtins.concatStringsSep " " (map toString self.nixosConfigurations.thinky-nixos.config.services.openssh.ports);
+            enable = if self.nixosConfigurations.thinky-nixos.config.wsl.enable then "1" else "0";
+            sshEnable = if self.nixosConfigurations.thinky-nixos.config.services.openssh.enable then "1" else "0";
+            hostname = self.nixosConfigurations.thinky-nixos.config.wsl-settings.hostname;
+            inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
+            wslUser = self.nixosConfigurations.thinky-nixos.config.wsl.defaultUser;
+            sshPort = toString self.nixosConfigurations.thinky-nixos.config.wsl-settings.sshPort;
+            opensshPort = toString (builtins.head self.nixosConfigurations.thinky-nixos.config.services.openssh.ports);
           } ''
-          echo "Testing SSH service configuration..."
-          # If we got here, the configuration evaluated successfully
-          [[ "$enable" == "1" ]] || (echo "❌ SSH not enabled" && exit 1)
-          echo "$ports" | grep -q "2223" || (echo "❌ SSH port 2223 not configured" && exit 1)
-          echo "SSH enabled: $enable"
-          echo "SSH ports: $ports"
-          echo "✅ SSH service configuration passed"
+          echo "Evaluating WSL settings SSH/user invariants..."
+          [[ "$enable" == "1" ]] || (echo "❌ WSL not enabled" && exit 1)
+          [[ "$sshEnable" == "1" ]] || (echo "❌ SSH not enabled" && exit 1)
+          [[ "$hostname" == "thinky-nixos" ]] || (echo "❌ hostname mismatch (got $hostname)" && exit 1)
+          [[ "$sshPort" == "2223" ]] || (echo "❌ wsl-settings.sshPort != 2223 (got $sshPort)" && exit 1)
+          [[ "$sshPort" == "$opensshPort" ]] || (echo "❌ openssh port ($opensshPort) != wsl sshPort ($sshPort)" && exit 1)
+          [[ "$userName" == "$wslUser" ]] || (echo "❌ base userName ($userName) != wsl defaultUser ($wslUser)" && exit 1)
+          echo "✅ WSL settings invariants hold: hostname=$hostname sshPort=$sshPort user=$userName"
           touch $out
         '';
 
@@ -402,169 +222,6 @@ in
           echo "User is normal user: $isNormalUser"
           echo "User groups: $extraGroups"
           echo "✅ User ${username} configuration passed"
-          touch $out
-        '';
-
-        # === CONFIGURATION SNAPSHOT & VALIDATION ===
-        config-snapshot-validation = pkgs.runCommand "config-snapshot-validation"
-          {
-            meta = {
-              description = "Validate configuration snapshots against baseline";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            # Pre-evaluate all configurations to ensure they're valid
-            thinkyVersion = self.nixosConfigurations.thinky-nixos.config.system.stateVersion;
-            potatoVersion = self.nixosConfigurations.potato.config.system.stateVersion;
-            wslVersion = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
-            mbpVersion = self.nixosConfigurations.mbp.config.system.stateVersion;
-          } ''
-          echo "Generating and validating configuration snapshots..."
-          mkdir -p $out
-
-          # Validate against baseline
-          ${pkgs.lib.concatMapStringsSep "\n" (host: ''
-            expected="${snapshotBaseline.${host}.stateVersion}"
-            case "${host}" in
-              thinky-nixos) actual="$thinkyVersion" ;;
-              potato) actual="$potatoVersion" ;;
-              nixos-wsl-minimal) actual="$wslVersion" ;;
-              mbp) actual="$mbpVersion" ;;
-            esac
-
-            if [[ "$actual" != "$expected" ]]; then
-              echo "❌ ${host}: State version mismatch! Expected $expected, got $actual"
-              exit 1
-            fi
-            echo "✅ ${host}: State version $actual matches baseline"
-            echo "{\"stateVersion\": \"$actual\", \"host\": \"${host}\"}" > $out/${host}.json
-          '') (builtins.attrNames snapshotBaseline)}
-
-          echo "✅ All configuration snapshots validated"
-        '';
-
-        # === CROSS-MODULE INTEGRATION TESTS ===
-        # Test that base + wsl-common modules integrate properly
-        cross-module-wsl-base = pkgs.runCommand "cross-module-wsl-base"
-          {
-            meta = {
-              description = "Test WSL and base module interaction";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            # Verify both modules' attributes are accessible and consistent
-            inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
-            wslUser = self.nixosConfigurations.thinky-nixos.config.wsl.defaultUser;
-            sshPort = toString self.nixosConfigurations.thinky-nixos.config.wsl-settings.sshPort;
-            opensshPort = toString (builtins.head self.nixosConfigurations.thinky-nixos.config.services.openssh.ports);
-          } ''
-          echo "Testing cross-module integration between base and WSL modules..."
-
-          # Verify user consistency across modules
-          [[ "$userName" == "$wslUser" ]] || (echo "❌ User mismatch between base and WSL" && exit 1)
-          echo "✅ User consistency: $userName matches WSL default user"
-
-          # Verify SSH port consistency
-          [[ "$sshPort" == "$opensshPort" ]] || (echo "❌ SSH port mismatch between wsl-settings and openssh" && exit 1)
-          echo "✅ SSH port consistency: $sshPort matches openssh configuration"
-
-          echo "✅ Cross-module integration test passed"
-          touch $out
-        '';
-
-        # Test SOPS-NiX integration with base module
-        cross-module-sops-base = pkgs.runCommand "cross-module-sops-base"
-          {
-            meta = {
-              description = "Test SOPS-NiX and base module integration";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            # Check if SOPS is enabled via wsl-settings and user matches
-            sopsEnabled = if self.nixosConfigurations.thinky-nixos.config.wsl-settings.sops.enable then "1" else "0";
-            inherit (self.nixosConfigurations.thinky-nixos.config.systemDefault) userName;
-            userExists = if (builtins.hasAttr username self.nixosConfigurations.thinky-nixos.config.users.users) then "1" else "0";
-          } ''
-          echo "Testing SOPS-NiX integration with base module..."
-
-          [[ "$sopsEnabled" == "1" ]] || (echo "❌ SOPS-NiX not enabled" && exit 1)
-          echo "✅ SOPS-NiX is enabled"
-
-          [[ "$userExists" == "1" ]] || (echo "❌ User ${username} not configured" && exit 1)
-          echo "✅ User $userName exists in system configuration"
-
-          echo "✅ SOPS-NiX and base module integration test passed"
-          touch $out
-        '';
-
-        # Test Home Manager integration for WSL hosts
-        cross-module-home-manager =
-          let
-            systemUser = self.nixosConfigurations.thinky-nixos.config.systemDefault.userName;
-            hmConfigName = "${systemUser}@thinky-nixos";
-          in
-          pkgs.runCommand "cross-module-home-manager"
-            {
-              meta = {
-                description = "Test Home Manager integration with NixOS configuration";
-                maintainers = [ ];
-                timeout = 30;
-              };
-              # Check Home Manager configuration
-              inherit systemUser;
-              inherit hmConfigName;
-              hmUserExists = if (builtins.hasAttr hmConfigName self.homeConfigurations) then "1" else "0";
-            } ''
-            echo "Testing Home Manager integration..."
-
-            [[ "$hmUserExists" == "1" ]] || (echo "❌ Home Manager configuration '$hmConfigName' not found" && exit 1)
-            echo "✅ Home Manager configuration exists for $hmConfigName"
-
-            echo "✅ Home Manager integration test passed"
-            touch $out
-          '';
-
-        # Test SSH Public Keys Registry Module
-        ssh-public-keys-registry = pkgs.runCommand "ssh-public-keys-registry"
-          {
-            meta = {
-              description = "Test SSH public keys registry module functionality";
-              maintainers = [ ];
-              timeout = 30;
-            };
-          } ''
-          echo "Testing SSH public keys registry module..."
-
-          # Test SSH key format validation patterns (used in dendritic modules)
-
-          # Test key format validation regex
-          # Valid SSH key should match the pattern
-          test_key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITEST1 testuser@host1"
-          if [[ "$test_key" =~ ^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521)[[:space:]][A-Za-z0-9+/]+(=*)?([[:space:]].*)?$ ]]; then
-            echo "✅ SSH key format validation regex working"
-          else
-            echo "❌ SSH key format validation failed"
-            exit 1
-          fi
-
-          # Test invalid key should not match
-          invalid_key="invalid-key-format"
-          if ! [[ "$invalid_key" =~ ^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521)[[:space:]][A-Za-z0-9+/]+(=*)?([[:space:]].*)?$ ]]; then
-            echo "✅ Invalid key correctly rejected"
-          else
-            echo "❌ Invalid key incorrectly accepted"
-            exit 1
-          fi
-
-          # Test module structure expectations
-          echo "✅ Module provides expected structure:"
-          echo "  - Central key registry (users & hosts)"
-          echo "  - Key format validation"
-          echo "  - Auto-distribution options"
-          echo "  - Integration points for authorized_keys"
-          echo "  - Restricted user configuration"
-
-          echo "✅ SSH public keys registry module test passed"
           touch $out
         '';
 
@@ -691,7 +348,7 @@ in
             touch $out
           '';
 
-        # === PACKAGE BUILD TESTS (T1) ===
+        # === PACKAGE BUILD TESTS (T0.6) ===
         # Referencing packages in checks forces nix flake check to build them.
         # These verify that all custom packages build successfully.
         build-marker-pdf = self'.packages.marker-pdf;
@@ -701,12 +358,15 @@ in
         build-docling = self'.packages.docling;
         build-termux-claude-scripts = self'.packages.termux-claude-scripts;
 
-        # === BUILD EVALUATION TESTS ===
-        # NixOS toplevel derivation eval tests (force evaluation without full build)
-        build-thinky-nixos-dryrun = pkgs.runCommand "build-thinky-nixos-dryrun"
+        # === TOPLEVEL / TARBALL / IMAGE EVAL FORCERS (Plan 054 P5a T0.4) ===
+        # Renamed from build-*-dryrun: they force a *deeper* eval (toplevel /
+        # tarballBuilder / images attrset) than regression-test's stateVersion,
+        # so they stay as per-host deep-eval gates. They never build — the old
+        # build-* prefix was misleading.
+        eval-thinky-nixos-toplevel = pkgs.runCommand "eval-thinky-nixos-toplevel"
           {
             meta = {
-              description = "Dry-run build test for thinky-nixos";
+              description = "Force eval of thinky-nixos system.build.toplevel";
               maintainers = [ ];
               timeout = 30;
             };
@@ -719,10 +379,10 @@ in
           touch $out
         '';
 
-        build-nixos-wsl-minimal-dryrun = pkgs.runCommand "build-nixos-wsl-minimal-dryrun"
+        eval-nixos-wsl-minimal-toplevel = pkgs.runCommand "eval-nixos-wsl-minimal-toplevel"
           {
             meta = {
-              description = "Dry-run build test for nixos-wsl-minimal";
+              description = "Force eval of nixos-wsl-minimal system.build.toplevel";
               maintainers = [ ];
               timeout = 30;
             };
@@ -735,12 +395,25 @@ in
           touch $out
         '';
 
-        # === TARBALL BUILDER EVALUATION TESTS ===
-        # Force evaluation of tarball builder derivations for all WSL configs
-        build-tarball-dev-team-dryrun = pkgs.runCommand "build-tarball-dev-team-dryrun"
+        eval-nixos-dev-team-toplevel = pkgs.runCommand "eval-nixos-dev-team-toplevel"
           {
             meta = {
-              description = "Dry-run eval of nixos-wsl-dev-team tarball builder";
+              description = "Force eval of nixos-dev-team system.build.toplevel";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.nixos-dev-team.config.system.build) toplevel;
+          } ''
+          echo "Testing nixos-dev-team build evaluation..."
+          echo "Toplevel derivation: $toplevel"
+          echo "nixos-dev-team build evaluation passed"
+          touch $out
+        '';
+
+        eval-nixos-wsl-dev-team-tarball = pkgs.runCommand "eval-nixos-wsl-dev-team-tarball"
+          {
+            meta = {
+              description = "Force eval of nixos-wsl-dev-team tarball builder";
               maintainers = [ ];
               timeout = 30;
             };
@@ -749,6 +422,21 @@ in
           echo "Testing nixos-wsl-dev-team tarball builder evaluation..."
           echo "Tarball builder derivation: $tarballBuilder"
           echo "nixos-wsl-dev-team tarball builder evaluation passed"
+          touch $out
+        '';
+
+        eval-thinky-nixos-tarball = pkgs.runCommand "eval-thinky-nixos-tarball"
+          {
+            meta = {
+              description = "Force eval of thinky-nixos tarball builder";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            inherit (self.nixosConfigurations.thinky-nixos.config.system.build) tarballBuilder;
+          } ''
+          echo "Testing thinky-nixos tarball builder evaluation..."
+          echo "Tarball builder derivation: $tarballBuilder"
+          echo "thinky-nixos tarball builder evaluation passed"
           touch $out
         '';
 
@@ -784,46 +472,15 @@ in
             touch $out
           '';
 
-        build-tarball-thinky-dryrun = pkgs.runCommand "build-tarball-thinky-dryrun"
-          {
-            meta = {
-              description = "Dry-run eval of thinky-nixos tarball builder";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            inherit (self.nixosConfigurations.thinky-nixos.config.system.build) tarballBuilder;
-          } ''
-          echo "Testing thinky-nixos tarball builder evaluation..."
-          echo "Tarball builder derivation: $tarballBuilder"
-          echo "thinky-nixos tarball builder evaluation passed"
-          touch $out
-        '';
-
-        # === BUILD EVALUATION TEST: nixos-dev-team ===
-        build-nixos-dev-team-dryrun = pkgs.runCommand "build-nixos-dev-team-dryrun"
-          {
-            meta = {
-              description = "Dry-run build test for nixos-dev-team";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            inherit (self.nixosConfigurations.nixos-dev-team.config.system.build) toplevel;
-          } ''
-          echo "Testing nixos-dev-team build evaluation..."
-          echo "Toplevel derivation: $toplevel"
-          echo "nixos-dev-team build evaluation passed"
-          touch $out
-        '';
-
-        # === IMAGE OUTPUTS EVALUATION TEST ===
-        # Verifies image.modules framework produces expected image attributes
-        # on nixos-dev-team. Forces eval of the images attrset without building.
-        # For full VMA build, use:
+        # === IMAGE OUTPUTS EVALUATION TESTS ===
+        # Verifies image.modules framework produces expected image attributes.
+        # Forces eval of the images attrset without building. For a full VMA
+        # build, use e.g.:
         #   nix build '.#nixosConfigurations.nixos-dev-team.config.system.build.images.proxmox'
-        build-images-dev-team-dryrun = pkgs.runCommand "build-images-dev-team-dryrun"
+        eval-images-dev-team = pkgs.runCommand "eval-images-dev-team"
           {
             meta = {
-              description = "Dry-run eval of nixos-dev-team image.modules (Proxmox VMA wiring)";
+              description = "Force eval of nixos-dev-team image.modules (Proxmox VMA wiring)";
               maintainers = [ ];
               timeout = 30;
             };
@@ -838,13 +495,10 @@ in
           touch $out
         '';
 
-        # === IMAGE OUTPUTS EVALUATION TEST: EC2 AMI ===
-        # Verifies image.modules framework produces amazon image attributes
-        # on nixos-dev-team-ec2 (x86_64). Forces eval without building.
-        build-images-ec2-dryrun = pkgs.runCommand "build-images-ec2-dryrun"
+        eval-images-ec2 = pkgs.runCommand "eval-images-ec2"
           {
             meta = {
-              description = "Dry-run eval of nixos-dev-team-ec2 image.modules (Amazon AMI wiring)";
+              description = "Force eval of nixos-dev-team-ec2 image.modules (Amazon AMI wiring)";
               maintainers = [ ];
               timeout = 30;
             };
@@ -859,12 +513,10 @@ in
           touch $out
         '';
 
-        # Verifies image.modules framework produces amazon image attributes
-        # on nixos-dev-team-graviton (aarch64). Forces eval without building.
-        build-images-graviton-dryrun = pkgs.runCommand "build-images-graviton-dryrun"
+        eval-images-graviton = pkgs.runCommand "eval-images-graviton"
           {
             meta = {
-              description = "Dry-run eval of nixos-dev-team-graviton image.modules (Amazon AMI wiring)";
+              description = "Force eval of nixos-dev-team-graviton image.modules (Amazon AMI wiring)";
               maintainers = [ ];
               timeout = 30;
             };
@@ -879,89 +531,52 @@ in
           touch $out
         '';
 
-        # === FILES MODULE TEST ===
-        files-module-test = pkgs.runCommand "files-module-test"
-          {
-            meta = {
-              description = "Verify custom files module behavior";
-              maintainers = [ ];
-              timeout = 10;
-            };
-            # Force evaluation by checking if files attribute exists
-            hasFiles = builtins.hasAttr "files" self.nixosConfigurations.thinky-nixos.config;
-          } ''
-          echo "Testing files module activation..."
-          # If we got here, the configuration evaluated successfully
-          echo "Files module available: $hasFiles"
-          echo "✅ Files module test passed"
-          touch $out
-        '';
-
-        # === HYBRID UNIFIED FILES MODULE TEST ===
-        # Tests the homeFiles module with autoWriter integration
-        # Module location: modules/programs/files/_homefiles-module.nix
-        hybrid-files-module-test =
+        # === FILES MODULE TEST (Plan 054 P5a, salvaged) ===
+        # Rewritten from a tautological hasAttr check into one genuine
+        # files-module assertion: build an HM config that uses the files
+        # module's staticFiles path and assert the generated home.file exists
+        # with the expected content. This exercises the real home.file
+        # generation code in modules/programs/files/_homefiles-module.nix.
+        files-module-test =
           let
-            homefilesModulePath = ../programs + "/files/_homefiles-module.nix";
-            moduleFile = import homefilesModulePath {
-              config = { homeFiles = { }; };
-              inherit lib pkgs;
+            hmConfig = inputs.home-manager.lib.homeManagerConfiguration {
+              inherit pkgs;
+              modules = [
+                self.modules.homeManager.home-minimal
+                self.modules.homeManager.files
+                {
+                  homeMinimal = { username = "testuser"; homeDirectory = "/home/testuser"; };
+                  homeFiles.enable = true;
+                  homeFiles.staticFiles.glow = {
+                    source = ../programs/files/files/glow.yml;
+                    target = ".config/glow/glow.yml";
+                  };
+                }
+              ];
+              extraSpecialArgs = { inherit inputs; };
             };
-            success = builtins.isAttrs moduleFile;
-            hasOptions = builtins.hasAttr "options" moduleFile;
-            hasConfig = builtins.hasAttr "config" moduleFile;
+            generatedSource = hmConfig.config.home.file.".config/glow/glow.yml".source;
           in
-          pkgs.runCommand "hybrid-files-module-test"
+          pkgs.runCommand "files-module-test"
             {
               meta = {
-                description = "Test hybrid unified files module (autoWriter + enhanced libraries)";
+                description = "Verify files module generates a real home.file with expected content";
                 maintainers = [ ];
                 timeout = 30;
               };
+              # Referencing the generated source forces the files module's
+              # home.file generation to evaluate.
+              generatedSource = "${generatedSource}";
             } ''
-            echo "Testing hybrid unified files module..."
-
-            # Module import validation (validated at Nix eval time)
-            ${if success && hasOptions && hasConfig then ''
-              echo "✅ Hybrid module imports and evaluates correctly"
-            '' else ''
-              echo "❌ Hybrid module import failed"
-              echo "  success: ${toString success}, hasOptions: ${toString hasOptions}, hasConfig: ${toString hasConfig}"
-              exit 1
-            ''}
-
-            # Test autoWriter availability in current nixpkgs
-            ${if pkgs.writers ? autoWriter then ''
-              echo "✅ autoWriter available in nixpkgs"
-            '' else ''
-              echo "⚠️  autoWriter fallback will be used"
-            ''}
-
-            ${if pkgs.writers ? autoWriterBin then ''
-              echo "✅ autoWriterBin available in nixpkgs"
-            '' else ''
-              echo "⚠️  autoWriterBin fallback will be used"
-            ''}
-
-            # Test that basic writer functions work (the foundation of our hybrid module)
-            ${pkgs.writers.writeBashBin "test-basic-writer" ''
-              #!/bin/bash
-              echo "Basic writer test successful"
-            ''}/bin/test-basic-writer > writer-test.out
-
-            if grep -q "Basic writer test successful" writer-test.out; then
-              echo "✅ Basic writer functionality works"
-            else
-              echo "❌ Basic writer functionality failed"
-              exit 1
-            fi
-
-            echo "✅ Hybrid unified files module test passed"
+            echo "Testing files module home.file generation..."
+            test -e "$generatedSource" || (echo "❌ generated home.file source missing" && exit 1)
+            grep -q "Glow configuration" "$generatedSource" \
+              || (echo "❌ generated glow.yml missing expected content" && exit 1)
+            echo "✅ files module generated .config/glow/glow.yml with expected content"
             touch $out
           '';
 
-        # === VALIDATED SCRIPTS TESTS ===
-        # Test that validates single source of truth implementation
+        # === TMUX PICKER SYNTAX (Plan 054 P5a, rewritten to actually assert) ===
         # Script location: modules/programs/tmux/files/tmux-session-picker
         tmux-picker-syntax =
           let
@@ -970,7 +585,7 @@ in
           pkgs.runCommand "test-tmux-session-picker-syntax"
             {
               meta = {
-                description = "Test tmux-session-picker syntax and single source of truth";
+                description = "Test tmux-session-picker bash syntax and single source of truth";
                 maintainers = [ ];
                 timeout = 30;
               };
@@ -984,78 +599,23 @@ in
               exit 1
             fi
 
-            # Test that file is a valid bash script
+            # Test that file is a valid bash script (shebang)
             if ! head -n 1 "$source_file" | grep -q "#!/usr/bin/env bash"; then
               echo "❌ Source file is not a valid bash script"
               exit 1
             fi
 
-            # Test that the file has the expected content (check for key functions)
-            if ! grep -q "tmux-session-picker" "$source_file"; then
-              echo "❌ Source file does not contain expected tmux-session-picker content"
-              exit 1
-            fi
+            # Actually syntax-check the script (this is the real assertion —
+            # the previous version never ran bash -n).
+            ${pkgs.bash}/bin/bash -n "$source_file" \
+              || (echo "❌ tmux-session-picker has a bash syntax error" && exit 1)
 
-            echo "✅ tmux-session-picker single source of truth validation passed"
-            echo "✅ Source file exists and contains valid bash script"
+            echo "✅ tmux-session-picker exists and passes bash -n syntax check"
             echo "✅ Script owned by tmux module in modules/programs/tmux/files/"
             touch $out
           '';
 
-        # === VM INTEGRATION TESTS ===
-        # Moved to modules/flake-parts/vm-tests.nix (all vm-* prefixed checks live there)
-
         # === OPENCODE CONFIGURATION TESTS ===
-        # Test OpenCode module generates valid configuration
-        opencode-config-validation =
-          let
-            hmConfig = self.homeConfigurations."${username}@thinky-nixos".config;
-            opencodeEnabled = hmConfig.programs.opencode-enhanced.enable or false;
-            opencodeAccounts = hmConfig.programs.opencode-enhanced.accounts or { };
-            enabledAccounts = lib.filterAttrs (_n: a: a.enable or false) opencodeAccounts;
-            accountNames = builtins.attrNames enabledAccounts;
-            mcpServers = hmConfig.programs.opencode-enhanced._internal.mcpServers or { };
-            mcpServerNames = builtins.attrNames mcpServers;
-          in
-          pkgs.runCommand "opencode-config-validation"
-            {
-              meta = {
-                description = "Validate OpenCode module configuration";
-                maintainers = [ ];
-                timeout = 30;
-              };
-              inherit opencodeEnabled;
-              accountList = builtins.concatStringsSep " " accountNames;
-              mcpServerList = builtins.concatStringsSep " " mcpServerNames;
-              accountCount = toString (builtins.length accountNames);
-              mcpCount = toString (builtins.length mcpServerNames);
-            } ''
-            echo "Testing OpenCode module configuration..."
-
-            # Check module is enabled
-            if [[ "$opencodeEnabled" != "1" ]]; then
-              echo "⚠️  OpenCode module not enabled in ${username}@thinky-nixos"
-              echo "This is expected if claude-code is disabled"
-            else
-              echo "✅ OpenCode module is enabled"
-            fi
-
-            # Check accounts are configured
-            echo "📊 Configured accounts ($accountCount): $accountList"
-            if [[ "$accountCount" -gt 0 ]]; then
-              echo "✅ At least one account configured"
-            fi
-
-            # Check MCP servers are configured
-            echo "📊 MCP servers ($mcpCount): $mcpServerList"
-            if [[ "$mcpCount" -gt 0 ]]; then
-              echo "✅ MCP servers configured"
-            fi
-
-            echo "✅ OpenCode configuration validation passed"
-            touch $out
-          '';
-
         # Test OpenCode JSON output is valid
         opencode-json-syntax =
           let
@@ -1173,7 +733,7 @@ in
             touch $out
           '';
 
-        # === STATIC ANALYSIS & LINTING (T0.5) ===
+        # === STATIC ANALYSIS & LINTING ===
         # These checks run source-level analysis tools. They require a build to
         # execute the tool but are logically code quality checks.
         lint-formatting = pkgs.runCommand "lint-formatting"
@@ -1262,128 +822,119 @@ in
           touch $out
         '';
 
-        # === MODULE ISOLATION EVAL TESTS (T0) ===
-        # Prove that individual modules evaluate standalone without host config.
-        # Uses mkHmModuleEvalTest / mkNixosModuleEvalTest helpers.
+        # === MODULE ISOLATION EVAL GATES (Plan 054 P5a T0.2 / T0.3) ===
+        # Prove that individual modules evaluate standalone without a host
+        # config — the property that catches breakage in modules no tested host
+        # enables (e.g. corp-only modules). Batched into one gate per module
+        # class (was: 20 eval-hm-module-* + 6 eval-nixos-module-*). Nix names
+        # the broken module on failure.
 
-        # HM module isolation eval tests — prove each module evaluates standalone
-        # with only home-minimal as a dependency. See Plan 021 Task 2.2.
-        eval-hm-module-shell = mkHmModuleEvalTest "shell"
-          self.modules.homeManager.shell
-          { };
-        eval-hm-module-git = mkHmModuleEvalTest "git"
-          self.modules.homeManager.git
-          { };
-        eval-hm-module-tmux = mkHmModuleEvalTest "tmux"
-          self.modules.homeManager.tmux
-          { };
-        eval-hm-module-neovim = mkHmModuleEvalTest "neovim"
-          self.modules.homeManager.neovim
-          { };
-        eval-hm-module-development-tools = mkHmModuleEvalTest "development-tools"
-          self.modules.homeManager.development-tools
-          { };
-        eval-hm-module-yazi = mkHmModuleEvalTest "yazi"
-          self.modules.homeManager.yazi
-          { };
-        eval-hm-module-shell-utils = mkHmModuleEvalTest "shell-utils"
-          self.modules.homeManager.shell-utils
-          { };
-        eval-hm-module-files = mkHmModuleEvalTest "files"
-          self.modules.homeManager.files
-          { };
-        eval-hm-module-podman = mkHmModuleEvalTest "podman"
-          self.modules.homeManager.podman
-          { };
-        eval-hm-module-terminal = mkHmModuleEvalTest "terminal"
-          self.modules.homeManager.terminal
-          { };
-        eval-hm-module-secrets-management = mkHmModuleEvalTest "secrets-management"
-          self.modules.homeManager.secrets-management
-          { };
-        eval-hm-module-claude-code = mkHmModuleEvalTest "claude-code"
-          self.modules.homeManager.claude-code
-          { };
-        eval-hm-module-opencode = mkHmModuleEvalTest "opencode"
-          self.modules.homeManager.opencode
-          { };
-        eval-hm-module-github-auth = mkHmModuleEvalTest "github-auth"
-          self.modules.homeManager.github-auth
-          { };
-        eval-hm-module-gitlab-auth = mkHmModuleEvalTest "gitlab-auth"
-          self.modules.homeManager.gitlab-auth
-          { };
-        eval-hm-module-git-auth-helpers = mkHmModuleEvalTest "git-auth-helpers"
-          self.modules.homeManager.git-auth-helpers
-          { };
-        eval-hm-module-esp-idf = mkHmModuleEvalTest "esp-idf"
-          self.modules.homeManager.esp-idf
-          { };
-        eval-hm-module-windows-terminal = mkHmModuleEvalTest "windows-terminal"
-          self.modules.homeManager.windows-terminal
-          { };
-        eval-hm-module-onedrive = mkHmModuleEvalTest "onedrive"
-          self.modules.homeManager.onedrive
-          { };
-        eval-hm-module-system-tools = mkHmModuleEvalTest "system-tools"
-          self.modules.homeManager.system-tools
-          { };
+        # Every HM module forced to evaluate standalone against home-minimal.
+        eval-hm-modules =
+          let
+            hmModules = {
+              inherit (self.modules.homeManager)
+                claude-code development-tools esp-idf files git git-auth-helpers
+                github-auth gitlab-auth neovim onedrive opencode podman
+                secrets-management shell shell-utils system-tools terminal tmux
+                windows-terminal yazi;
+            };
+            forced = lib.mapAttrsToList
+              (name: module: "${name}:${forceHmModuleEval module}")
+              hmModules;
+          in
+          pkgs.runCommand "eval-hm-modules"
+            {
+              meta = {
+                description = "Isolation eval gate: all HM modules evaluate standalone";
+                maintainers = [ ];
+                timeout = 120;
+              };
+              forced = builtins.concatStringsSep " " forced;
+            } ''
+            echo "All HM modules evaluate standalone:"
+            for m in $forced; do echo "  $m"; done
+            touch $out
+          '';
 
-        # NixOS module isolation eval tests — prove each module evaluates standalone.
-        # See Plan 021 Tasks 2.1 (helpers) and 2.3 (NixOS modules).
-        eval-nixos-module-system-minimal = mkNixosModuleEvalTest "system-minimal"
-          self.modules.nixos.system-minimal
-          { };
-        eval-nixos-module-system-default = mkNixosModuleEvalTest "system-default"
-          self.modules.nixos.system-default
-          {
-            extraConfig = {
-              # system-default asserts userName != ""
-              systemDefault.userName = "testuser";
-            };
-          };
-        eval-nixos-module-system-cli = mkNixosModuleEvalTest "system-cli"
-          self.modules.nixos.system-cli
-          {
-            extraConfig = {
-              # system-cli imports system-default which asserts userName != ""
-              systemDefault.userName = "testuser";
-            };
-          };
-        eval-nixos-module-system-desktop = mkNixosModuleEvalTest "system-desktop"
-          self.modules.nixos.system-desktop
-          {
-            extraConfig = {
-              # system-desktop imports system-cli → system-default
-              systemDefault.userName = "testuser";
-            };
-          };
-        eval-nixos-module-secrets-management = mkNixosModuleEvalTest "secrets-management"
-          self.modules.nixos.secrets-management
-          {
-            # secrets-management sets sops.* options, which require sops-nix module
-            extraConfig = {
-              imports = [ inputs.sops-nix.nixosModules.sops ];
-            };
-          };
-        eval-nixos-module-wsl = mkNixosModuleEvalTest "wsl"
-          self.modules.nixos.wsl
-          {
-            extraConfig = {
-              # WSL module requires system-cli co-imported (for containerRuntime.enablePodman)
-              imports = [ self.modules.nixos.system-cli ];
-              # system-cli imports system-default which asserts userName != ""
-              systemDefault.userName = "testuser";
-              # WSL module asserts hostname, defaultUser, and sshPort
-              wsl-settings = {
-                hostname = "test-wsl";
-                defaultUser = "testuser";
-                sshPort = 2223;
+        # Every NixOS system-layer module forced to evaluate standalone, with
+        # its required per-layer assertion setup carried as extraConfig.
+        eval-nixos-modules =
+          let
+            nixosModules = {
+              system-minimal = {
+                module = self.modules.nixos.system-minimal;
+                extraConfig = { };
+              };
+              system-default = {
+                module = self.modules.nixos.system-default;
+                # system-default asserts userName != ""
+                extraConfig = { systemDefault.userName = "testuser"; };
+              };
+              system-cli = {
+                module = self.modules.nixos.system-cli;
+                # system-cli imports system-default which asserts userName != ""
+                extraConfig = { systemDefault.userName = "testuser"; };
+              };
+              system-desktop = {
+                module = self.modules.nixos.system-desktop;
+                # system-desktop imports system-cli → system-default
+                extraConfig = { systemDefault.userName = "testuser"; };
+              };
+              secrets-management = {
+                module = self.modules.nixos.secrets-management;
+                # secrets-management sets sops.* options, which require sops-nix
+                extraConfig = { imports = [ inputs.sops-nix.nixosModules.sops ]; };
+              };
+              wsl = {
+                module = self.modules.nixos.wsl;
+                extraConfig = {
+                  # WSL module requires system-cli co-imported (for containerRuntime.enablePodman)
+                  imports = [ self.modules.nixos.system-cli ];
+                  # system-cli imports system-default which asserts userName != ""
+                  systemDefault.userName = "testuser";
+                  # WSL module asserts hostname, defaultUser, and sshPort
+                  wsl-settings = {
+                    hostname = "test-wsl";
+                    defaultUser = "testuser";
+                    sshPort = 2223;
+                  };
+                };
               };
             };
-          };
+            forced = lib.mapAttrsToList
+              (name: spec: "${name}:${forceNixosModuleEval spec.module spec.extraConfig}")
+              nixosModules;
+          in
+          pkgs.runCommand "eval-nixos-modules"
+            {
+              meta = {
+                description = "Isolation eval gate: all NixOS system-layer modules evaluate standalone";
+                maintainers = [ ];
+                timeout = 120;
+              };
+              forced = builtins.concatStringsSep " " forced;
+            } ''
+            echo "All NixOS layer modules evaluate standalone:"
+            for m in $forced; do echo "  $m"; done
+            touch $out
+          '';
 
-        # Regression test: forces evaluation of ALL NixOS and HM configs
+        # === HM ACTIVATION-SCRIPT BUILD TESTS (T0.7, build-tier) ===
+        # thinky-nixos enables programs.claude-code with accounts + categorized
+        # hooks, so building its activationPackage exercises the .claude.json
+        # activation generator and guards the shell-quoting bug class (Plan 046).
+        # Only meaningful when BUILT — `nix flake check --no-build` skips these;
+        # run full `nix flake check` or
+        #   nix build '.#checks.x86_64-linux.activate-hm-thinky-nixos'
+        activate-hm-thinky-nixos = mkHmActivationTest "thinky-nixos" "${username}@thinky-nixos";
+        # Second host to widen the activation-build coverage pattern (T0.7).
+        activate-hm-nixvim-minimal = mkHmActivationTest "nixvim-minimal" "${username}@nixvim-minimal";
+
+        # === REGRESSION TEST (Plan 054 P5a T0.1 — the single host/config eval batch) ===
+        # Forces evaluation of ALL NixOS and HM configs. Absorbs the 12
+        # standalone host/config evals plus config-snapshot-validation
+        # (stateVersion == "24.11" equality assertions).
         regression-test = pkgs.runCommand "regression-test"
           {
             meta = {
@@ -1396,33 +947,55 @@ in
             nixosPotato = self.nixosConfigurations.potato.config.system.stateVersion;
             nixosMbp = self.nixosConfigurations.mbp.config.system.stateVersion;
             nixosWslMinimal = self.nixosConfigurations.nixos-wsl-minimal.config.system.stateVersion;
+            nixosWslDevTeam = self.nixosConfigurations.nixos-wsl-dev-team.config.system.stateVersion;
             nixosDevTeam = self.nixosConfigurations.nixos-dev-team.config.system.stateVersion;
             nixosDevTeamEc2 = self.nixosConfigurations.nixos-dev-team-ec2.config.system.stateVersion;
             nixosDevTeamGraviton = self.nixosConfigurations.nixos-dev-team-graviton.config.system.stateVersion;
-            # Force evaluation of all 5 x86_64-linux Home Manager configurations
+            # Force evaluation of all 4 x86_64-linux Home Manager configurations
+            # (homeDirectory + username, for parity with the folded eval-hm-* checks)
             hmThinky = self.homeConfigurations."${username}@thinky-nixos".config.home.homeDirectory;
+            hmThinkyUser = self.homeConfigurations."${username}@thinky-nixos".config.home.username;
             hmUbuntu = self.homeConfigurations."${username}@thinky-ubuntu".config.home.homeDirectory;
+            hmUbuntuUser = self.homeConfigurations."${username}@thinky-ubuntu".config.home.username;
             hmMbp = self.homeConfigurations."${username}@mbp".config.home.homeDirectory;
+            hmMbpUser = self.homeConfigurations."${username}@mbp".config.home.username;
             hmNixvim = self.homeConfigurations."${username}@nixvim-minimal".config.home.homeDirectory;
+            hmNixvimUser = self.homeConfigurations."${username}@nixvim-minimal".config.home.username;
           } ''
           echo "Regression test: evaluating all configurations..."
           echo ""
           echo "NixOS configurations:"
-          echo "  thinky-nixos:        stateVersion=$nixosThinky"
-          echo "  potato:              stateVersion=$nixosPotato"
-          echo "  mbp:                 stateVersion=$nixosMbp"
-          echo "  nixos-wsl-minimal:   stateVersion=$nixosWslMinimal"
-          echo "  nixos-dev-team:      stateVersion=$nixosDevTeam"
-          echo "  nixos-dev-team-ec2:  stateVersion=$nixosDevTeamEc2"
+          echo "  thinky-nixos:            stateVersion=$nixosThinky"
+          echo "  potato:                  stateVersion=$nixosPotato"
+          echo "  mbp:                     stateVersion=$nixosMbp"
+          echo "  nixos-wsl-minimal:       stateVersion=$nixosWslMinimal"
+          echo "  nixos-wsl-dev-team:      stateVersion=$nixosWslDevTeam"
+          echo "  nixos-dev-team:          stateVersion=$nixosDevTeam"
+          echo "  nixos-dev-team-ec2:      stateVersion=$nixosDevTeamEc2"
           echo "  nixos-dev-team-graviton: stateVersion=$nixosDevTeamGraviton"
           echo ""
           echo "Home Manager configurations:"
-          echo "  ${username}@thinky-nixos:   homeDir=$hmThinky"
-          echo "  ${username}@thinky-ubuntu:  homeDir=$hmUbuntu"
-          echo "  ${username}@mbp:            homeDir=$hmMbp"
-          echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim"
+          echo "  ${username}@thinky-nixos:   homeDir=$hmThinky user=$hmThinkyUser"
+          echo "  ${username}@thinky-ubuntu:  homeDir=$hmUbuntu user=$hmUbuntuUser"
+          echo "  ${username}@mbp:            homeDir=$hmMbp user=$hmMbpUser"
+          echo "  ${username}@nixvim-minimal: homeDir=$hmNixvim user=$hmNixvimUser"
           echo ""
-          echo "All 11 configurations evaluated successfully"
+          # Folded config-snapshot-validation: stateVersion baseline equality.
+          for pair in \
+            "thinky-nixos:$nixosThinky" \
+            "potato:$nixosPotato" \
+            "nixos-wsl-minimal:$nixosWslMinimal" \
+            "mbp:$nixosMbp"; do
+            host="''${pair%%:*}"
+            actual="''${pair#*:}"
+            if [[ "$actual" != "24.11" ]]; then
+              echo "❌ $host: stateVersion mismatch! Expected 24.11, got $actual"
+              exit 1
+            fi
+            echo "✅ $host: stateVersion $actual matches baseline"
+          done
+          echo ""
+          echo "All configurations evaluated successfully"
           touch $out
         '';
       };

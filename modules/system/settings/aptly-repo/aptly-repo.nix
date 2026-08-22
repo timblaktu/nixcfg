@@ -66,7 +66,7 @@ _: {
       aptlyConfig = builtins.toJSON ({
         rootDir = cfg.dataDir;
         downloadConcurrency = 4;
-        architectures = cfg.architectures;
+        inherit (cfg) architectures;
         gpgDisableSign = !cfg.signing.enable;
         gpgDisableVerify = !cfg.signing.enable;
         gpgProvider = cfg.signing.gpgProvider;
@@ -485,9 +485,7 @@ _: {
 
         # Ensure publish directory exists before service starts (systemd namespace
         # setup requires all ReadWritePaths to exist; preStart runs too late)
-        systemd.tmpfiles.rules = optional (cfg.publishEndpoints ? default) (
-          "d ${cfg.publishEndpoints.default.rootDir} 0755 aptly aptly -"
-        );
+        systemd.tmpfiles.rules = optional (cfg.publishEndpoints ? default) "d ${cfg.publishEndpoints.default.rootDir} 0755 aptly aptly -";
 
         # Firewall
         networking.firewall.allowedTCPPorts = mkIf cfg.openFirewall [ cfg.port ];

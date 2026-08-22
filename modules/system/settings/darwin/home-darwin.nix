@@ -21,7 +21,7 @@
 #   ];
 _:
 {
-  flake.modules.homeManager.home-darwin = { ... }: {
+  flake.modules.homeManager.home-darwin = _: {
     # Thin by design. No imports or settings yet -- the platform-neutral tiers
     # (home-enterprise / home-dev-team) plus the platform-aware feature modules
     # provide the working Darwin baseline. Add macOS-only HM config here when a

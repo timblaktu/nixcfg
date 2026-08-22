@@ -646,7 +646,7 @@
             };
 
             reserved = mkOption {
-              type = types.nullOr (types.ints.unsigned);
+              type = types.nullOr types.ints.unsigned;
               default = null;
               description = ''
                 Token buffer for compaction. Leaves enough window to avoid
@@ -1177,7 +1177,7 @@
                         prov.options != null
                         && prov.options.baseURL or null != null
                         && prov.options.apiKey or null != null
-                        && builtins.match "[{]env:(.+)[}]" (prov.options.apiKey) != null
+                        && builtins.match "[{]env:(.+)[}]" prov.options.apiKey != null
                       )
                       cfg.provider;
 
