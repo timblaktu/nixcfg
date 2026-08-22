@@ -280,7 +280,7 @@ Needs KVM/nspawn builder → else ENVIRONMENT_NOT_CAPABLE.
 | R1 | **Upstream research: `writableStore` for the nspawn test backend** (find prior art to unblock HM-on-nspawn) | 1 · research (host-agnostic) | TASK:COMPLETE 2026-08-21 — `docs/nix-store-model-and-vmtest-backends.md` §8 "Prior art & upstream path (R1)"; chown skip-flag confirmed; overlay-from-inside = recommended path; Clan.lol = key prior art (see "R1 findings") |
 | R2 | **Writable-store spike for nspawn** (implement R1 recommendation: clan-core clanTest read + in-namespace-overlay prototype + LocalStore RO-skip probe) — **do BEFORE P5c** | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — probe1 CORRECTS R1's Clan.lol claim; probe2/2b overlay-on-live-store BLOCKED+moot; **probe3b: FULL HM activation CONFIRMED on nspawn via `build-users-group=""`+`load-db`, RO store, NO writable store / NO upstream** — overturns P5b "HM must stay QEMU"; **P5c HM-family backend map flagged for Tim's reconsideration** (see "R2 spike findings") |
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); **11 nspawn / 8 QEMU**; flake check --no-build exit 0; **all 11 nspawn + all 3 changed/new QEMU tests individually build+pass** (Tim asked for full verification; the 5 unchanged retained-QEMU tests also re-verified); 3 recorded QEMU fallbacks (vm-compose-stack, vm-wsl-dev-team-layers, vm-user-config); fixed 2 latent pre-existing bugs surfaced by building (stale `git core.pager` assert; yazi.toml invalid for pinned yazi → logged P7) (see "P5c execution" + "P5c verification addendum") |
-| P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup | 1 · CI | TASK:COMPLETE 2026-08-22 — ci.yml rewritten to the 57-check suite (was broken: ~40 dead names); per-PR = lint+checks+nspawn(x86+arm)+QEMU(7); nightly = compose-stack+pkgs+tarballs; validated (all 56 refs live, actionlint clean, flake check passes); user-facing test docs refreshed; orphan bitwarden-mock removed. nixcfg-work SPLIT to P8. GH-runner execution self-validates on first push (nspawn + arm paths unverified until then) (see "P6 execution") |
+| P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup + **prove it green in actual GitHub CI** | 1 · CI | TASK:IN_PROGRESS 2026-08-22 — LOCAL WORK DONE + committed (ci.yml→57-check suite; per-PR=lint+checks+nspawn(x86+arm)+QEMU(7); nightly=compose-stack+pkgs+tarballs; all 56 refs live, actionlint clean, flake check passes; docs refreshed; orphan removed). **NOT DONE = the DoD: run it on GitHub and get it green** (nspawn-on-GH-runner + aarch64 arm-runner paths UNVERIFIED). Resume = open PR feat/vmtest-refactor→main (or workflow_dispatch), watch CI, fix runner-specific failures, THEN COMPLETE. nixcfg-work SPLIT to P8 (see "P6 execution") |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 | P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6; split from P6 per Tim 2026-08-22) |
 
@@ -838,11 +838,31 @@ git-alias asserts now prefix `TERM=dumb` (the script's own skip guard). This lat
 `name`→`url` previewer fix, see above); (b) sweep other tests for stale `git config core.pager`-style
 assertions from module drift (delta was one; there may be others hidden behind eval-only checks).
 
-### P6 execution (2026-08-22) — nixcfg public CI + doc pass — DONE
+### P6 execution (2026-08-22) — nixcfg public CI + doc pass — LOCAL WORK DONE, **CI-VERIFICATION PENDING (task stays IN_PROGRESS)**
+
+**Status honesty (corrected on Tim's call 2026-08-22):** the ci.yml rewrite + doc pass + orphan cleanup are
+authored, validated LOCALLY, and committed — but the actual DoD ("the CI runs green on GitHub") is NOT met:
+the workflow has never executed on a GitHub runner, and two paths in it are unverified (see below). Per the
+COMPLETION STANDARD ("end-to-end functionality demonstrated") this task is **IN_PROGRESS**, not COMPLETE.
+`/next-task` next session correctly resumes here.
+
+**P6 remaining DoD (checkable, to reach COMPLETE):**
+1. Get the workflow to RUN on GitHub — open a PR `feat/vmtest-refactor → main` (fires the `pull_request`
+   per-PR jobs) and/or `workflow_dispatch` (needed to also exercise the nightly-gated jobs: compose-stack,
+   pkgs, tarball). NOTE: pushing `feat/vmtest-refactor` alone does NOT trigger CI (triggers are push→main,
+   PR→main, dispatch, schedule). Push needs Tim's OK + `GH_TOKEN=$(gh auth token)` (see auth memory).
+2. The **per-PR jobs go green**: lint, checks(26), `vmtest-nspawn` on BOTH x86_64 AND aarch64, `vmtest-qemu`(7).
+   The two highest-risk unknowns are (a) **nspawn works inside the GH runner sandbox** (needs cgroups + user
+   namespaces + the `auto-allocate-uids`/`uid-range` config we pass) and (b) **the aarch64 arm-runner** runs
+   the nspawn matrix at all. If either fails, fix runner-side (or narrow the matrix) — that IS the P6 work.
+3. The **nightly-gated jobs** validated at least once via `workflow_dispatch` (compose-stack QEMU; the 6
+   `build-*` package builds incl. heavy ML closures — may need timeout/disk tuning; the real tarball builds).
+4. Only when the run is green (or the fixes/narrowing are committed with recorded rationale) → mark COMPLETE.
 
 Scope decided with Tim (interactive): VMTests run **every push/PR**; **arch = both** (subject to the
-runner-support finding below); **nixcfg-work DEFERRED** → split to new task P8. Three commits on
-`feat/vmtest-refactor`: `f40ed53` (IN_PROGRESS), `e027a99` (CI + orphan), `164fe48` (doc pass).
+runner-support finding below); **nixcfg-work DEFERRED** → split to new task P8. Four commits on
+`feat/vmtest-refactor`: `f40ed53` (IN_PROGRESS), `e027a99` (CI + orphan), `164fe48` (doc pass),
+`61c6e75` (premature COMPLETE — SUPERSEDED by this IN_PROGRESS correction).
 
 **Runner research (the CI feasibility gate — Tim asked me to verify before committing to a design):**
 - **KVM on GitHub-hosted runners:** available on the **standard free `ubuntu-latest`** for
