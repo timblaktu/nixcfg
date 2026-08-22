@@ -814,12 +814,16 @@ ROOT — root→user needs no setuid.) Same capability class as the `vm-wsl-dev-
    config -f <gen> core.pager` = unset, `pager.diff` = the delta store path). This assert would fail on QEMU
    too (proven — `vm-compose-stack` on QEMU failed identically). **Fixed** → assert `pager.diff` +
    `interactive.diffFilter`.
-2. **`vm-yazi`'s config is INVALID for the pinned yazi.** `yazi --version` PARSES `~/.config/yazi/yazi.toml`,
-   which errors — `[[plugin.prepend_previewers]]` now requires `url` or `mime` — and yazi then blocks on an
-   interactive "Press <Enter>" prompt (non-interactive `su -c` → exit 1). A real **yazi-module defect** (the
-   user's `yazi` won't start cleanly), independent of backend. P5c change: the node-yazi + compose-stack yazi
-   asserts use `command -v yazi` (presence-only, no config parse); the config bug itself is **logged for P7**
-   (do NOT guess-fix the module's yazi.toml — needs the intended `url`/`mime`).
+2. **`vm-yazi`'s config was INVALID for the pinned yazi (26.8.15) — FIXED 2026-08-21.** `yazi --version`
+   PARSES `~/.config/yazi/yazi.toml`, which errored (`[[plugin.prepend_previewers]]` requires `url` or
+   `mime`) and blocked on an interactive "Press <Enter>" prompt (non-interactive `su -c` → exit 1) — a real
+   **yazi-module defect** (the user's `yazi` wouldn't start cleanly), independent of backend. **Root-caused +
+   fixed** in `modules/programs/yazi/yazi.nix`: yazi >=25.x replaced the previewer-rule `name` key with a
+   `Selector` (`url` filename-glob or `mime`); `{ name = "*.md"; run = "glow"; }` → `{ url = "*.md"; run =
+   "glow"; }` (confirmed authoritative via yazi's `yazi-config/src/plugin/previewer.rs` + default rules like
+   `{ url = "*.{AppImage,appimage}" }`, and verified by running the pinned yazi against the generated config
+   — parses clean, no prompt). The node-yazi + compose-stack asserts were **restored to `yazi --version`**
+   (which parses the config → doubles as a config-validity regression guard) and re-verified on nspawn.
 
 **One nspawn capability gap (drove the `vm-user-config` QEMU fallback above):** setuid/setcap wrappers
 (`sudo`, `security.wrappers`) cannot be created in the unprivileged nspawn test container. This is why
@@ -829,6 +833,6 @@ init sources `~/bin/tmux-auto-attach` which runs `tmux attach` and BLOCKS `zsh -
 git-alias asserts now prefix `TERM=dumb` (the script's own skip guard). This latent hang also predated P5c
 (the old `vm-full-cli-stack`/`vm-dev-team-stack` had the same `zsh -ic` + tmux combination).
 
-**P7 backlog additions (surfaced here):** (a) fix the yazi module's `yazi.toml`
-(`[[plugin.prepend_previewers]]` needs `url`/`mime`); (b) sweep other tests for stale `git config core.pager`
--style assertions from module drift.
+**P7 backlog additions (surfaced here):** (a) ~~fix the yazi module's `yazi.toml`~~ — DONE 2026-08-21 (the
+`name`→`url` previewer fix, see above); (b) sweep other tests for stale `git config core.pager`-style
+assertions from module drift (delta was one; there may be others hidden behind eval-only checks).

@@ -1386,13 +1386,11 @@ in
               node_devtools.succeed("su - ${testUsername} -c 'rustc --version'")
 
               # === yazi: binary + config files (absorbs dropped vm-yazi, P5c) ===
-              # Presence-only check (command -v, not `yazi --version`): the pinned
-              # yazi parses its config even for --version and the module's yazi.toml
-              # is currently INVALID for it — `[[plugin.prepend_previewers]]` needs
-              # `url` or `mime`, so yazi errors + blocks on an interactive prompt.
-              # That is a real yazi-module bug surfaced by P5c (logged for P7),
-              # independent of the backend; don't execute yazi here.
-              node_yazi.succeed("su - ${testUsername} -c 'command -v yazi'")
+              # `yazi --version` PARSES the generated yazi.toml, so this doubles as a
+              # config-validity guard: it caught the module's stale `name`-vs-`url`
+              # previewer key (fixed 2026-08-21 — yazi >=25.x uses url/mime). Keep it
+              # strong so a future config-schema drift is caught, not hidden.
+              node_yazi.succeed("su - ${testUsername} -c 'yazi --version'")
               node_yazi.succeed("test -d /home/${testUsername}/.config/yazi")
               node_yazi.succeed("test -f /home/${testUsername}/.config/yazi/yazi.toml")
               # Custom init.lua + keymap.toml deployed (folded from vm-yazi).
@@ -1696,10 +1694,9 @@ in
                   node.succeed("su - ${testUsername} -c 'nvim --version' | grep -q NVIM")
                   node.succeed("su - ${testUsername} -c 'tmux -V' | grep -q tmux")
                   node.succeed("su - ${testUsername} -c 'git --version'")
-                  # command -v, not `yazi --version`: the module's yazi.toml is
-                  # currently invalid for the pinned yazi (see node-yazi note in
-                  # vm-hm-module-isolation; logged for P7). Presence-only here.
-                  node.succeed("su - ${testUsername} -c 'command -v yazi'")
+                  # `yazi --version` parses the generated config → doubles as a
+                  # config-validity guard (see node-yazi note in vm-hm-module-isolation).
+                  node.succeed("su - ${testUsername} -c 'yazi --version'")
                   node.succeed("su - ${testUsername} -c 'bat --version'")
                   node.succeed("su - ${testUsername} -c 'which podman-tui'")
                   node.succeed("su - ${testUsername} -c 'zsh -c \"echo ZSH_OK\"' | grep -q ZSH_OK")

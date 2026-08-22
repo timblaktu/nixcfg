@@ -69,7 +69,11 @@
             plugin = {
               prepend_previewers = [
                 {
-                  name = "*.md";
+                  # yazi >=25.x previewer rules use a Selector: `url` (filename/path
+                  # glob) or `mime` (MIME glob). The old `name` key was removed and
+                  # makes yazi abort config parsing ("at least one of `url` or `mime`
+                  # must be specified"), blocking startup on an interactive prompt.
+                  url = "*.md";
                   run = "glow";
                 }
               ];
