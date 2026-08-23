@@ -303,6 +303,52 @@ cache.nixos.org). See memory `docling-nlohmann-fod-hash-drift` + plan §"P6 CI-v
   ENVIRONMENT_NOT_CAPABLE. Idempotent: if `build-docling` already builds (upstream fixed / overlay present),
   the task is a no-op → COMPLETE.
 
+### P11 — CI-as-code: generate CI from a flake-SSOT classification map `TASK:PENDING` (dep P6 — COMPLETE)
+**Run as a multi-agent Workflow — Tim explicitly opted in (2026-08-23) AND asked to DELAY the expensive
+workflow to a dedicated next session.** This is the pre-merge design task that makes nixcfg a true reference
+model for nixcfg-work's GitLab CI, by extending the "nix as single source of truth" principle to CI itself.
+Do this BEFORE merging PR #6 to main, and BEFORE P8 (P8/004-T1 consume the artifacts this produces).
+
+**Problem (from the 2026-08-23 design review).** Today `.github/workflows/ci.yml` is already pure thin
+orchestration (every job step is `nix build '.#checks.<sys>.<name>'`), BUT the *partition* — which checks
+run, at which tier (per-PR vs nightly), on which backend (eval/nspawn/qemu/build), on which arch — lives
+only as hand-maintained YAML matrix lists + comments. Porting to GitLab would re-hardcode the same lists and
+they would drift independently. The flake knows its check *names* but not their tier/backend/arch.
+
+**Deliverables (all three, agreed with Tim):**
+1. **Central classification map + `.#ci.matrix` output + drift-guard.**
+   - Add ONE plain attrset (central map, NOT per-check `passthru` — decided: VM checks from
+     `runNixOSTest`/`mkContainerTest` are awkward to attach passthru to; one map is trivially diffable):
+     `ci.classification = { <checkName> = { tier = "pr"|"nightly"; backend = "eval"|"nspawn"|"qemu"|"build"|"lint"|"tarball"; systems = [ "x86_64-linux" ... ]; requires = [ ... ]; }; ... }` — capturing, per check, the facts currently scattered across the YAML matrices + backend comments (incl. the P5b/R2 backend evidence and per-backend builder-feature requirements e.g. `uid-range`/`kvm`).
+   - Expose a derived, machine-readable manifest: `nix eval '.#ci.matrix' --json` (shape TBD by the
+     workflow; must be consumable by both a GitHub `fromJSON` matrix AND a GitLab child pipeline).
+   - Add a `checks.ci-matrix-sync` **drift-guard** (a normal check, runs on BOTH platforms): fails if any
+     `builtins.attrNames checks` entry is unclassified, or any classification names a nonexistent check.
+2. **Rewire `.github/workflows/ci.yml`** so its job matrices are GENERATED from `.#ci.matrix` (e.g. a
+   `matrix` prep job that emits JSON then downstream jobs `fromJSON` it), replacing the hardcoded lists.
+   Prove it green in real GitHub CI (per-PR + a nightly dispatch), same bar as P6. This proves the model on
+   GitHub before it is replicated on GitLab.
+3. **`docs/CI-MODEL.md`** — document the portability boundary: SHARED/flake-owned (check set, tier, backend,
+   arch applicability, `nix build .#checks.*` dispatch, the `.#ci.matrix` manifest, the drift-guard) vs
+   PLATFORM-SPECIFIC (cache backend: magic-nix-cache vs hsw-infra S3; runner selection: ubuntu-latest vs
+   hsw runner `tags:`; matrix realization: GH `strategy.matrix` vs GitLab child pipeline; KVM/arch reach —
+   note GitLab's redeployed KVM-on-all-arches runners can run the `qemu` backend on aarch64 too, which
+   GitHub cannot). This doc is the spec P8/004-T1 build the GitLab pipeline against.
+
+**Workflow shape (next session):** parallel review/design across (a) classification schema + which check
+gets which tier/backend/arch (reconcile against the live `ci.yml` matrices + `nix eval '.#checks.<sys>'`),
+(b) GitHub matrix-generation mechanics (`fromJSON`/prep-job), (c) GitLab child-pipeline mapping (for the
+doc, not implementation here), (d) drift-guard implementation, (e) `docs/CI-MODEL.md` — then synthesize,
+implement, and prove green. Include an interactive checkpoint for Tim to review the classification map
+before the `ci.yml` rewire lands.
+
+**DoD (checkable):** (i) `nix eval '.#ci.matrix' --json` returns a valid manifest partitioning every check
+by tier/backend/systems; (ii) `nix build '.#checks.x86_64-linux.ci-matrix-sync'` passes AND fails if a
+check is added without classification (demonstrate the guard); (iii) `ci.yml` matrices are derived from the
+manifest (no hardcoded check lists remain) and a real GitHub CI run (per-PR + nightly dispatch) is green;
+(iv) `docs/CI-MODEL.md` exists documenting the shared/platform-specific boundary. Needs nix + GitHub CI;
+host-agnostic for the flake work. Idempotent. This is a Workflow task, so next session runs it via `Workflow`.
+
 ## Progress tracking
 | ID | Task | Kind | Status |
 |----|------|------|--------|
@@ -318,7 +364,8 @@ cache.nixos.org). See memory `docling-nlohmann-fod-hash-drift` + plan §"P6 CI-v
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); **11 nspawn / 8 QEMU**; flake check --no-build exit 0; **all 11 nspawn + all 3 changed/new QEMU tests individually build+pass** (Tim asked for full verification; the 5 unchanged retained-QEMU tests also re-verified); 3 recorded QEMU fallbacks (vm-compose-stack, vm-wsl-dev-team-layers, vm-user-config); fixed 2 latent pre-existing bugs surfaced by building (stale `git core.pager` assert; yazi.toml invalid for pinned yazi → logged P7) (see "P5c execution" + "P5c verification addendum") |
 | P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup + **prove it green in actual GitHub CI** | 1 · CI | TASK:COMPLETE 2026-08-22 — CI GREEN on GitHub. Both first-run failure classes root-caused + fixed: (1) pre-existing lint debt (fmt/statix/deadnix/ps1-BOM, commit 1c33202); (2) aarch64 nspawn = spurious `kvm` requiredSystemFeature, fixed via `requiredFeatures.kvm=false` on all 5 container sites (commit d437cd6). **Per-PR run 32599938257 = success (61 jobs, 0 fail)**: nspawn green on BOTH x86_64+aarch64, QEMU(7) green, lint(5)+checks(26)+eval green. **Nightly dispatch 32600536292 = 69/70**: compose-stack + 5/6 pkgs + both tarballs green; sole failure `build-docling` = UPSTREAM FOD hash-drift (nlohmann_json v3.10.5 GitHub tarball, transitive via arrow-cpp/onnxruntime), env-independent + non-gating → recorded as P9 package-health task (split from P7 per Tim). nixcfg-work SPLIT to P8 (see "P6 CI-verification session") |
 | P9 | **Package-health: fix `build-docling`** — upstream FOD hash-drift on nlohmann_json v3.10.5 GitHub tarball (transitive via arrow-cpp/onnxruntime); apply an nlohmann_json src-hash overlay (or nixpkgs pin bump); nightly-only, non-gating | 1 · builder (package fix) | TASK:COMPLETE 2026-08-23 — filed scope (FOD hash-drift) FIXED + CI-proven: the 3-facet scoped overlay (hash + CMake4 policy + GCC14-test) builds the ENTIRE docling C++ closure (nlohmann + arrow-cpp + onnxruntime + google-cloud-cpp) end-to-end on CI run 32618353622. Raised nightly `pkgs` timeout 120→350min (closure is genuinely >2hr; run 32612864168 was CANCELLED at the 120-min cap, not a build error). Building the full closure surfaced a distinct 4th blocker — docling-parse-4.5.0 won't compile vs nlohmann under GCC14 with EITHER 3.10.5 (input_adapter ambiguous) or 3.11.3 (basic_json bool SFINAE, run 32628030378) — a genuine upstream compat problem beyond P9's scope, SPLIT to P10. Overlay reverted to faithful 3.10.5 3-facet (commit 4482ac2). build-docling non-gating (nightly-only; per-PR CI green). (see "P9 OUTCOME (2026-08-23)") |
-| P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6; split from P6 per Tim 2026-08-22) — **NEXT (cursor set here per Tim 2026-08-23)** |
+| P11 | **CI-as-code: generate CI from a flake-SSOT classification map** (central map + `.#ci.matrix` output + `ci-matrix-sync` drift-guard + ci.yml matrix generation + `docs/CI-MODEL.md`) — pre-merge model for nixcfg-work GitLab CI | 1 · CI design (workflow) | TASK:PENDING (dep P6 — COMPLETE) — **NEXT: run as multi-agent Workflow (Tim opted in 2026-08-23; delayed to a dedicated session)**; do BEFORE merge + P8 |
+| P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6 + P11 + merge PR #6 to main; split from P6 per Tim 2026-08-22) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 | P10 | **docling-parse × nlohmann × GCC14 compat (facet 4)** — docling-parse-4.5.0 won't compile vs nlohmann 3.10.5 (input_adapter ambiguous) NOR 3.11.3 (basic_json bool SFINAE) under GCC14; real fix = backport 3.11.0 input_adapter patch into 3.10.5 json.hpp, or gcc13Stdenv for docling-parse, or track docling nixpkgs PR #184; needs upstream reading not trial CI builds; nightly-only, non-gating; ALSO re-enable build-docling in nightly matrix (skipped 2026-08-23 pending this) | 1 · deferred (package fix) | TASK:PENDING (split from P9 2026-08-23; dep P9's hash-drift+C++-closure fixes — DONE) |
 
@@ -1204,3 +1251,20 @@ CI builds): (a) backport ONLY the upstream nlohmann 3.11.0 `input_adapter` disam
 surgical; (b) build docling-parse with `gcc13Stdenv` (watch onnxruntime ABI mixing); (c) track docling
 nixpkgs PR #184. **P9 stays IN_PROGRESS** (its DoD wants build-docling green, which requires P10); Tim may
 prefer to reclassify P9 as done-for-its-filed-scope and let P10 carry the docling-build objective.
+
+### CI-design review + P11 authored (2026-08-23) — expand nix-as-SSOT to CI (pre-merge)
+After P9 resolution, Tim asked (before merging PR #6) to review whether more design/test patterns could be
+improved so nixcfg (GitHub) serves as a deliberate reference MODEL for nixcfg-work's GitLab CI. Design review
+findings: nixcfg CI is already pure thin orchestration (`nix build '.#checks.<sys>.<name>'` everywhere) and
+two-tier gated — the one structural gap is that the *partition* (which checks / tier / backend / arch) lives
+only as hand-maintained YAML matrices + comments, not in the flake, so a GitLab port would re-hardcode and
+drift. Decision (Tim signed off): extend nix-as-SSOT to CI via a **central classification map** +
+`.#ci.matrix` manifest + `ci-matrix-sync` drift-guard + generate `ci.yml` matrices from it + a
+`docs/CI-MODEL.md` portability-boundary doc. Chose central map over per-check `passthru` (VM checks from
+runNixOSTest/mkContainerTest are awkward to attach passthru to; one map is trivially drift-checkable).
+Captured as **new task P11** (all 3 deliverables), sequenced BEFORE merge + P8. Tim opted into a deep
+multi-agent Workflow to execute P11 but asked to DELAY it to a dedicated next session → P11 is the next
+`/next-task` cursor; run it via `Workflow`. Also noted: hsw/hsw-infra runners were REDEPLOYED (KVM on all
+arches available now) → the VM-test infra block on nixcfg-work (004 T6 / P8 VM jobs) is LIFTED; GitLab can
+run the `qemu` backend on aarch64 too (GitHub cannot) — recorded as a portability-boundary point for
+CI-MODEL.md. No code changed this session (prep/planning only, per Tim's delay request).
