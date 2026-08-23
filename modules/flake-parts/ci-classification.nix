@@ -215,6 +215,17 @@ let
     # Schema/version marker so consumers can guard against drift.
     schemaVersion = 1;
   };
+
+  # The nightly tarball builds are NOT .#checks entries: they build
+  # nixosConfigurations.<config>.config.system.build.tarballBuilder and then run
+  # the builder (shipped-image path). They are keyed by CONFIG name, not check
+  # name, so they live in a sibling .#ci.tarballs manifest (out of the
+  # ci-matrix-sync guard's .#checks reconciliation) rather than being forced to
+  # look like checks. Consumed by a dedicated CI job on both platforms.
+  tarballs = [
+    { config = "nixos-wsl-dev-team"; artifact = "nixcfg-wsl-dev-team"; systems = x86; requires = [ "kvm" ]; }
+    { config = "thinky-nixos"; artifact = "nixcfg-thinky-nixos"; systems = x86; requires = [ "kvm" ]; }
+  ];
 in
 {
   options.dendriticMeta.ci.classification = lib.mkOption {
@@ -229,6 +240,7 @@ in
     # flake.ci becomes the .#ci flake output; .#ci.matrix is the manifest
     # (arch-agnostic, one eval). Escape-hatch attr like flake.lib in lib.nix.
     flake.ci.matrix = matrix;
+    flake.ci.tarballs = tarballs;
 
     # ci-matrix-sync: bidirectional drift guard (perSystem check). Fails if any
     # LIVE check is unclassified OR any classification key names a nonexistent
