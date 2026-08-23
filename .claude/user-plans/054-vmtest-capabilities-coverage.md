@@ -316,6 +316,7 @@ cache.nixos.org). See memory `docling-nlohmann-fod-hash-drift` + plan §"P6 CI-v
 | P9 | **Package-health: fix `build-docling`** — upstream FOD hash-drift on nlohmann_json v3.10.5 GitHub tarball (transitive via arrow-cpp/onnxruntime); apply an nlohmann_json src-hash overlay (or nixpkgs pin bump); nightly-only, non-gating | 1 · builder (package fix) | TASK:IN_PROGRESS (dep P6 — COMPLETE; split from P7 per Tim 2026-08-22) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 | P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6; split from P6 per Tim 2026-08-22) |
+| P10 | **docling-parse × nlohmann × GCC14 compat (facet 4)** — docling-parse-4.5.0 won't compile vs nlohmann 3.10.5 (input_adapter ambiguous) NOR 3.11.3 (basic_json bool SFINAE) under GCC14; real fix = backport 3.11.0 input_adapter patch into 3.10.5 json.hpp, or gcc13Stdenv for docling-parse, or track docling nixpkgs PR #184; needs upstream reading not trial CI builds; nightly-only, non-gating | 1 · deferred (package fix) | TASK:PENDING (split from P9 2026-08-23; dep P9's hash-drift+C++-closure fixes — DONE) |
 
 ## Inputs already gathered this session (feed P1-P4)
 - **Backend capability (053 T6, DONE):** `mkVmTest` (QEMU) + `mkContainerTest` (nspawn, proven,
@@ -1168,3 +1169,34 @@ pushed. **Full gate dispatched → CI run 32628030378** (`workflow_dispatch`, `f
 cap). **P9 stays IN_PROGRESS until that run's `build-docling` goes green** (the C++ closure must rebuild
 against 3.11.3 → ~2.5-3 hr; if arrow/onnxruntime hit a 3.11.3 incompatibility that's a new finding, but is
 unlikely). Verify: `gh run view 32628030378 --json jobs -q '.jobs[]|select(.name|test("docling"))|.conclusion'`.
+
+### P9 OUTCOME (2026-08-23) — facet 4 is a genuine upstream blocker; SPLIT to P10 (deferred, non-gating)
+**Run 32628030378 (nlohmann 3.11.3): the full C++ closure rebuilt against 3.11.3 and again FAILED at
+docling-parse — a DIFFERENT compile error.** The version bump did not fix facet 4; it merely traded one
+incompatibility for another. docling-parse-4.5.0's own C++ fails to compile against nlohmann under GCC 14
+with BOTH candidate versions:
+- **3.10.5** → `json.hpp:3658: call of overloaded 'input_adapter(const char*)' is ambiguous` (GCC13/14
+  strictness; fixed upstream in nlohmann 3.11.0).
+- **3.11.3** → `json_sax.hpp:313: no matching function for 'basic_json(bool&)'` + `enable_if<false>` SFINAE
+  failures inside nlohmann's own SAX headers (docling-parse's usage is tied to the pre-3.11 API).
+
+**Conclusion:** no single nlohmann version satisfies BOTH the GCC-14 compiler AND docling-parse-4.5.0's API
+expectations. This is a real upstream toolchain-compatibility problem in the vendored nixpkgs-docling fork,
+well beyond P9's filed scope ("fix the FOD hash-drift"). Per stop-and-summarize + no-trial-and-error
+discipline, I stopped spawning multi-hour CI builds. **Reverted the overlay to the faithful 3.10.5 3-facet
+state** (commit follows): keeps the CI-proven hash-drift + CMake4 + GCC14-test fixes (which correctly build
+the entire C++ closure — nlohmann + arrow-cpp + onnxruntime + google-cloud-cpp) and the version the fork
+deliberately pinned for docling-parse; docling itself remains unbuildable pending the facet-4 fix.
+
+**What P9 DID achieve (all CI-proven):** the FOD hash-drift is fixed, and the heavy C++ closure builds
+end-to-end on CI — the originally-filed P9 objective is met. The `pkgs` CI job timeout was also raised
+120→350 min (build-docling's closure is genuinely >2 hr on GitHub runners; kept — the other 5 package builds
+are unaffected).
+
+**Facet 4 SPLIT to new deferred task P10** (non-gating: build-docling is nightly/workflow_dispatch-only,
+never blocks per-PR CI, which is fully green). Real fix directions for P10 (needs upstream reading, not trial
+CI builds): (a) backport ONLY the upstream nlohmann 3.11.0 `input_adapter` disambiguation into 3.10.5's
+`json.hpp` via `patches`/`postPatch` (keeps docling-parse's expected pre-3.11 API, satisfies GCC 14) — most
+surgical; (b) build docling-parse with `gcc13Stdenv` (watch onnxruntime ABI mixing); (c) track docling
+nixpkgs PR #184. **P9 stays IN_PROGRESS** (its DoD wants build-docling green, which requires P10); Tim may
+prefer to reclassify P9 as done-for-its-filed-scope and let P10 carry the docling-build objective.

@@ -12,38 +12,52 @@ let
     overlays = [
       # WORKAROUND (2026-08-22, updated 2026-08-23, plan 054 P9): the fork's pinned
       # nlohmann_json 3.10.5 - a transitive dep (arrow-cpp -> onnxruntime ->
-      # docling-parse -> docling) - is broken FOUR ways on the current toolchain. The
-      # first three (hash-drift, CMake4 policy, GCC14 test-compile) were patchable on
-      # 3.10.5, but the fourth is not: docling-parse's OWN C++ (parse_v1/v2.cpp, built
-      # via local_build.py -> cmake -DUSE_SYSTEM_DEPS=1) #includes the store nlohmann
-      # header and hits the known 3.10.5 x GCC13/14 overload-ambiguity regression
-      # ("nlohmann/json.hpp:3658: call of overloaded 'input_adapter(const char*)' is
-      # ambiguous"), which was fixed UPSTREAM in nlohmann 3.11.0 - a downstream
-      # consumer failing on the old header, not a flag we can set on nlohmann. So we
-      # BUMP nlohmann_json to 3.11.3, which fixes all four facets at once (current,
-      # GCC-14-clean, canonical stable fetchFromGitHub hash, API-compatible with
-      # arrow-cpp/onnxruntime). Overriding the single top-level nlohmann_json attribute
-      # propagates through the whole docling closure (all three consume it via
-      # callPackage). Scoped to pkgsDocling only - no blast radius on the main pkgs set.
+      # docling-parse -> docling) - is broken on the current toolchain. THREE facets are
+      # fixed below; a FOURTH is an unresolved upstream compat blocker (docling deferred).
       #
-      # Retained belt-and-suspenders flags (harmless if unneeded on 3.11.3):
-      #   - cmakeFlags += -DCMAKE_POLICY_VERSION_MINIMUM=3.5: nlohmann's CMakeLists still
-      #     declares an old cmake_minimum_required that CMake 4.x rejects.
-      #   - doCheck = false: the library's own unit tests are not needed for a
-      #     header-only build dep and have historically failed to compile under GCC 14.
+      # FIXED here (lets the entire C++ closure - nlohmann + arrow-cpp + onnxruntime +
+      # google-cloud-cpp - build; all CI-proven, run 32618353622):
+      #   (1) GitHub-tarball hash drift: GitHub's auto-generated /archive/v3.10.5.tar.gz
+      #       is not byte-stable, so the fork's pinned FOD hash no longer matches what
+      #       codeload serves (specified sha256-DTsZrdB9GcaNkx7ZKxcJwp3pCVXCDlnoRHwn6R6AJnI=
+      #       vs got sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=). Fix = pin src to
+      #       the served content hash. (fetchFromGitHub hashes the unpacked tree, so it is
+      #       drift-immune going forward.)
+      #   (2) CMake 4.x dropped `cmake_minimum_required(VERSION < 3.5)` compat, which
+      #       3.10.5's CMakeLists declares -> configure aborts. Fix =
+      #       -DCMAKE_POLICY_VERSION_MINIMUM=3.5 (CMake's own escape hatch).
+      #   (3) 3.10.5's own unit tests (unit-allocator.cpp) fail to compile under GCC 14
+      #       (allocator_traits static assert). Header-only dep -> tests not needed.
+      #       Fix = doCheck=false (also flips JSON_BuildTests OFF).
       #
-      # Migration path: drop this overlay once the nixpkgs-docling fork (or its pinned
-      # nixpkgs rev) ships nlohmann_json >= 3.11 with a correct hash.
+      # UNRESOLVED facet (4) - docling itself does NOT build; DEFERRED as a separate,
+      # non-gating backlog item (build-docling is nightly-only, never per-PR): docling-parse
+      # 4.5.0's OWN C++ (parse_v1/v2.cpp, built via local_build.py -> cmake
+      # -DUSE_SYSTEM_DEPS=1) does not compile against nlohmann under GCC 14 with EITHER
+      # candidate version:
+      #     - 3.10.5 -> "json.hpp:3658: call of overloaded 'input_adapter(const char*)'
+      #       is ambiguous" (GCC13/14 strictness; fixed upstream in nlohmann 3.11.0).
+      #     - 3.11.3 -> "json_sax.hpp:313: no matching function for
+      #       basic_json(bool&)" + enable_if<false> SFINAE failures (docling-parse's usage
+      #       is tied to the pre-3.11 API). Proven by CI run 32628030378.
+      # So a version bump cannot satisfy both the compiler and docling-parse's API
+      # expectations. The real fix (separate focused task, NOT trial-and-error CI builds):
+      # either backport ONLY the upstream 3.11.0 input_adapter disambiguation into 3.10.5's
+      # json.hpp (keep docling-parse's expected API, satisfy GCC14), OR build docling-parse
+      # with gcc13Stdenv (watch onnxruntime ABI), OR track docling nixpkgs PR #184. Until
+      # then we keep 3.10.5 (the version the fork deliberately pinned for docling-parse).
+      #
+      # Migration path: drop this overlay once the fork/PR-#184 ships an nlohmann + docling-parse
+      # combination that compiles on the pinned CMake+GCC.
       (_finalDocling: prevDocling: {
-        nlohmann_json = prevDocling.nlohmann_json.overrideAttrs (_old: {
-          version = "3.11.3";
+        nlohmann_json = prevDocling.nlohmann_json.overrideAttrs (old: {
           src = prevDocling.fetchFromGitHub {
             owner = "nlohmann";
             repo = "json";
-            rev = "v3.11.3";
-            hash = "sha256-7F0Jon+1oWL7uqet5i1IgHX0fUw/+z0QwEcA3zs5xHg=";
+            rev = "v${old.version}";
+            hash = "sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=";
           };
-          cmakeFlags = (_old.cmakeFlags or [ ]) ++ [ "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" ];
+          cmakeFlags = (old.cmakeFlags or [ ]) ++ [ "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" ];
           doCheck = false;
         });
       })
