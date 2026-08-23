@@ -204,6 +204,7 @@ let
       "vm-hm-composition-pairs"
       "vm-hm-module-isolation"
       "vm-development-tools"
+      "vm-monitoring"
     ])
     (grp qemuPr [
       "vm-boot-minimal"
