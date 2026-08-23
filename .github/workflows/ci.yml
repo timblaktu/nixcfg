@@ -188,18 +188,24 @@ jobs:
     name: Package build (${{ matrix.check }} · nightly)
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    # 120 min was too tight for build-docling: its uncached C++ closure
-    # (arrow-cpp + onnxruntime + google-cloud-cpp, from the nixpkgs-docling fork rev)
-    # was still actively compiling at the 120-min cap and got cancelled (run
-    # 32612864168, plan 054 P9). The other 5 package builds finish well under an hour;
-    # timeout-minutes is only a ceiling, so raising it does not slow them. magic-nix-cache
-    # persists completed deps between runs, so subsequent nightlies resume from cache.
+    # timeout-minutes is a ceiling only (the 5 active builds finish well under an hour).
+    # 350 is retained for when build-docling is re-enabled: its uncached C++ closure
+    # (arrow-cpp + onnxruntime + google-cloud-cpp, from the nixpkgs-docling fork rev) is
+    # genuinely >2 hr on a GitHub runner - run 32612864168 was CANCELLED at the prior
+    # 120-min cap while still actively compiling (a wall-clock limit, NOT a build error).
     timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
         check:
-          - build-docling
+          # build-docling is SKIPPED (plan 054 P10): the nlohmann FOD hash-drift + C++
+          # closure are fixed (P9), but docling-parse-4.5.0 will not compile against
+          # nlohmann under GCC14 with either 3.10.5 (input_adapter ambiguous) or 3.11.3
+          # (basic_json bool SFINAE) - a distinct upstream compat blocker. Running it
+          # nightly would burn ~2.5 hr building the closure only to fail at docling-parse.
+          # Re-enable (uncomment) when P10 lands. Still buildable on demand via
+          # `nix build '.#checks.x86_64-linux.build-docling'` / workflow_dispatch.
+          # - build-docling
           - build-marker-pdf
           - build-markitdown
           - build-nixvim-anywhere
