@@ -6,11 +6,21 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    # Nightly full run: adds the heavy QEMU compose-stack + package/tarball builds
+    # on top of the per-PR jobs (which also run here for a complete nightly signal).
+    - cron: '0 6 * * *'
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The job matrices below are GENERATED from the flake, not hand-maintained. The
+# `matrix` prep job evaluates `.#ci.matrix` (derived from the ci.classification
+# single source of truth) and emits one check-name list per job; downstream jobs
+# consume those via fromJSON. Adding/retiering a check is a one-line edit in
+# modules/flake-parts/ci-classification.nix; the ci-matrix-sync check fails the
+# build if any check is left unclassified. See docs/CI-MODEL.md.
 jobs:
   eval:
     name: Flake evaluation
@@ -19,180 +29,183 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
       - name: Evaluate flake metadata
         run: nix flake metadata
-      - name: Evaluate check names
+      - name: Evaluate check names (both arches)
         run: |
-          nix eval '.#checks.x86_64-linux' --apply 'x: builtins.attrNames x'
+          nix eval '.#checks.x86_64-linux' --apply builtins.attrNames
+          nix eval '.#checks.aarch64-linux' --apply builtins.attrNames
+
+  # Generate the per-job check lists from the flake's classification manifest.
+  matrix:
+    name: Generate CI matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      lint: ${{ steps.gen.outputs.lint }}
+      checks: ${{ steps.gen.outputs.checks }}
+      nspawn: ${{ steps.gen.outputs.nspawn }}
+      qemu: ${{ steps.gen.outputs.qemu }}
+      nightly_qemu: ${{ steps.gen.outputs.nightly_qemu }}
+      nightly_pkgs: ${{ steps.gen.outputs.nightly_pkgs }}
+      tarballs: ${{ steps.gen.outputs.tarballs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+      - name: Derive job matrices from .#ci.matrix
+        id: gen
+        run: |
+          emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          emit lint         "$(nix eval --json '.#ci.matrix.pr.lint'      --apply 'map (r: r.name)')"
+          emit checks       "$(nix eval --json '.#ci.matrix.pr'           --apply 'p: map (r: r.name) (p.eval ++ p.build)')"
+          emit nspawn       "$(nix eval --json '.#ci.matrix.pr.nspawn'    --apply 'map (r: r.name)')"
+          emit qemu         "$(nix eval --json '.#ci.matrix.pr.qemu'      --apply 'map (r: r.name)')"
+          emit nightly_qemu "$(nix eval --json '.#ci.matrix.nightly.qemu' --apply 'map (r: r.name)')"
+          emit nightly_pkgs "$(nix eval --json '.#ci.matrix.nightly.build' --apply 'map (r: r.name)')"
+          emit tarballs     "$(nix eval --json '.#ci.tarballs'            --apply 'map (t: { inherit (t) config artifact; })')"
+          echo "--- generated matrices ---"; cat "$GITHUB_OUTPUT"
 
   lint:
     name: Lint (${{ matrix.check }})
+    needs: matrix
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        check:
-          - lint-formatting
-          - lint-statix
-          - lint-deadnix
-          - lint-ps1-encoding
-          - lint-version
+        check: ${{ fromJSON(needs.matrix.outputs.lint) }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
       - name: ${{ matrix.check }}
         run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
 
-  module-eval-hm:
-    name: HM module eval (${{ matrix.check }})
+  # Tier-0 eval-regression gate + integration/module/opencode/skill/activate checks
+  # and the ci-matrix-sync drift guard. Eval-only + light build checks; all per-PR.
+  checks:
+    name: Check (${{ matrix.check }})
+    needs: matrix
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        check:
-          - eval-hm-module-shell
-          - eval-hm-module-git
-          - eval-hm-module-tmux
-          - eval-hm-module-neovim
-          - eval-hm-module-development-tools
-          - eval-hm-module-yazi
-          - eval-hm-module-shell-utils
-          - eval-hm-module-files
-          - eval-hm-module-podman
-          - eval-hm-module-terminal
-          - eval-hm-module-secrets-management
-          - eval-hm-module-claude-code
-          - eval-hm-module-opencode
-          - eval-hm-module-github-auth
-          - eval-hm-module-gitlab-auth
-          - eval-hm-module-git-auth-helpers
-          - eval-hm-module-esp-idf
-          - eval-hm-module-windows-terminal
-          - eval-hm-module-onedrive
-          - eval-hm-module-system-tools
+        check: ${{ fromJSON(needs.matrix.outputs.checks) }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
       - name: ${{ matrix.check }}
         run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
 
-  module-eval-nixos:
-    name: NixOS module eval (${{ matrix.check }})
-    runs-on: ubuntu-latest
+  # Behavioral VMTests on the systemd-nspawn container backend. No KVM needed ->
+  # runs on BOTH x86_64 and aarch64 (native arm64 runner). nspawn requires the
+  # builder to advertise the `uid-range` system feature via auto-allocate-uids
+  # (see docs/TESTING-NSPAWN.md).
+  vmtest-nspawn:
+    name: VMTest nspawn (${{ matrix.check }} · ${{ matrix.target.system }})
+    needs: matrix
+    runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        check:
-          - eval-nixos-module-system-minimal
-          - eval-nixos-module-system-default
-          - eval-nixos-module-system-cli
-          - eval-nixos-module-system-desktop
-          - eval-nixos-module-secrets-management
-          - eval-nixos-module-wsl
+        check: ${{ fromJSON(needs.matrix.outputs.nspawn) }}
+        target:
+          - { runner: ubuntu-latest, system: x86_64-linux }
+          - { runner: ubuntu-24.04-arm, system: aarch64-linux }
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes auto-allocate-uids cgroups
+            auto-allocate-uids = true
+            extra-system-features = uid-range
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
       - name: ${{ matrix.check }}
-        run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
+        run: nix build '.#checks.${{ matrix.target.system }}.${{ matrix.check }}' --print-build-logs
 
-  config-eval:
-    name: Config eval (${{ matrix.check }})
+  # Behavioral VMTests on the QEMU backend (need /dev/kvm -> x86_64 only; GitHub
+  # arm64 runners have no KVM). install-nix-action auto-enables KVM when present.
+  vmtest-qemu:
+    name: VMTest QEMU (${{ matrix.check }})
+    needs: matrix
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        check:
-          # NixOS configs
-          - eval-thinky-nixos
-          - eval-potato
-          - eval-nixos-wsl-minimal
-          - eval-mbp
-          - eval-nixos-wsl-dev-team
-          - eval-nixos-dev-team
-          - eval-nixos-dev-team-ec2
-          - eval-nixos-dev-team-graviton
-          # HM configs
-          - eval-hm-thinky-nixos
-          - eval-hm-thinky-ubuntu
-          - eval-hm-mbp
-          - eval-hm-nixvim-minimal
+        check: ${{ fromJSON(needs.matrix.outputs.qemu) }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
       - name: ${{ matrix.check }}
         run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
 
-  integration:
-    name: Integration (${{ matrix.check }})
+  # --- Nightly + manual-dispatch only (heavy) ---------------------------------
+
+  # The broad cross-module composition test (two full QEMU VMs, ~80 asserts, ~6min)
+  # plus any other nightly-tier qemu check. Classified nightly in ci.classification.
+  vmtest-qemu-nightly:
+    name: VMTest QEMU (${{ matrix.check }} · nightly)
+    needs: matrix
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        check:
-          - flake-validation
-          - validated-scripts-module
-          - unified-files-diagnostic-test
-          - module-base-integration
-          - module-wsl-settings-integration
-          - module-binfmt-integration
-          - ssh-service-configured
-          - user-configured
-          - config-snapshot-validation
-          - cross-module-wsl-base
-          - cross-module-sops-base
-          - cross-module-home-manager
-          - ssh-public-keys-registry
-          - files-module-test
-          - hybrid-files-module-test
-          - tmux-picker-syntax
-          - opencode-config-validation
-          - opencode-json-syntax
-          - opencode-mcp-structure
-          # Tarball builder eval tests
-          - build-tarball-dev-team-dryrun
-          - build-tarball-thinky-dryrun
-          # Non-WSL build eval
-          - build-nixos-dev-team-dryrun
-          # Image outputs eval (Proxmox VMA + Amazon AMI via image.modules)
-          - build-images-dev-team-dryrun
-          - build-images-ec2-dryrun
-          - build-images-graviton-dryrun
+        check: ${{ fromJSON(needs.matrix.outputs.nightly_qemu) }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
       - name: ${{ matrix.check }}
         run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
 
+  # Custom package builds (heavy ML/Python closures) -> nightly, not per-PR.
+  pkgs:
+    name: Package build (${{ matrix.check }} · nightly)
+    needs: matrix
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    # timeout-minutes is a ceiling only. Kept high for the heaviest uncached C++
+    # closure builds; the active builds finish well under it.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ${{ fromJSON(needs.matrix.outputs.nightly_pkgs) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+      - name: ${{ matrix.check }}
+        run: nix build '.#checks.x86_64-linux.${{ matrix.check }}' --print-build-logs
+
+  # Real WSL tarball builds (shipped-image path) -> nightly, not per-PR.
   tarball-build:
-    name: Tarball (${{ matrix.config }})
+    name: Tarball (${{ matrix.config }} · nightly)
+    needs: matrix
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - config: nixos-wsl-dev-team
-            artifact: nixcfg-wsl-dev-team
-          - config: thinky-nixos
-            artifact: nixcfg-thinky-nixos
+        include: ${{ fromJSON(needs.matrix.outputs.tarballs) }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             system-features = kvm
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
       - name: Build tarball builder
         run: nix build '.#nixosConfigurations.${{ matrix.config }}.config.system.build.tarballBuilder' --print-build-logs
       - name: Build tarball

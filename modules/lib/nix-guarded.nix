@@ -25,12 +25,13 @@ let
   nixReal = "${pkgs.nix}/bin/nix";
 in
 # systemd cgroup guarding is Linux-only (systemd-run / user slices). Off-Linux
-# (e.g. aarch64-darwin) there is no systemd, and pkgs.systemd does not even
-# evaluate, so return a no-op passthrough wrapper that execs the real nix. This
-# keeps the claude-code / opencode wrappers cross-platform; the Linux branch is
-# byte-identical to before (unchanged WSL behavior).
+  # (e.g. aarch64-darwin) there is no systemd, and pkgs.systemd does not even
+  # evaluate, so return a no-op passthrough wrapper that execs the real nix. This
+  # keeps the claude-code / opencode wrappers cross-platform; the Linux branch is
+  # byte-identical to before (unchanged WSL behavior).
 if !pkgs.stdenv.hostPlatform.isLinux then
-  pkgs.writeShellApplication {
+  pkgs.writeShellApplication
+  {
     name = "nix";
     text = ''exec ${nixReal} "$@"'';
   }

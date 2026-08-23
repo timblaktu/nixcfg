@@ -2,7 +2,7 @@
 <!-- modules/programs/claude-code/_hm/claude-code-user-memory-template.md -->
 <!-- and run home-manager switch to regenerate. -->
 
-# User-specific Claude Code Configuration - {{ACCOUNT}} Account
+# User-specific Claude Code Configuration - MAX Account
 
 ## Critical Rules
 
@@ -232,15 +232,6 @@ Long-running tasks (>5 min) are allowed but require management:
 - Poll ~once/minute, monitor process output for progress and errors
 - Continue other work while waiting, engage user interactively
 - Patterns: background + periodic monitoring, sub-agent delegation, fire-and-forget, user runs separately
-
-## Memory Index Curation (memory/MEMORY.md)
-
-The file-based memory is per-directory (keyed by cwd, one memory dir per worktree - a rule in one project's memory does NOT apply in another), and the harness loads MEMORY.md in full every session, capped at 25 KB / 200 lines (whichever first) - NOT user-configurable. Curate MEMORY.md as a working set, not an archive:
-
-- **ONE line per entry** - a title link + a short hook, never a paragraph. All detail lives in the topic file (recalled on demand), not the index. Write the one-liner from the start; do not draft a paragraph and then shave it.
-- **Demote, don't shave.** Under size pressure, DROP or collapse entries for COMPLETED / merged / superseded work (the topic file persists for on-demand recall) rather than word-trimming live entries. The 200-line count usually binds before bytes, so fewer entries - not shorter ones - is the real lever.
-- **Link liberally with `[[slug]]`; merge near-duplicates; delete entries proven wrong.** Orphaned topic files (no index line and no inbound `[[link]]`) are dead weight - drop or re-link them.
-- **Bulk curation is cohesive + signed-off, never silent.** A single-entry update as you work is routine. But a periodic sweep that drops/merges MANY entries: analyze -> classify (keep/merge/drop) -> get owner sign-off -> then apply. No silent mass-deletes; the auto-memory has no review gate (unlike git-tracked files), so accretion and reactive shaving are the owner's diagnosed cause of signal loss.
 
 ## Universal Technical Learnings
 

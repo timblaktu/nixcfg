@@ -121,10 +121,18 @@
             SESSION="${cfg.dashboard.sessionName}"
             T="${monitor-tool}/bin/monitor-tool"
             tmux kill-session -t "$SESSION" 2>/dev/null || true
-            tmux set-option -g remain-on-exit on
 
             # Window 1: overview — btop (large) + bandwhich (small)
+            # Create the first session BEFORE the global `set-option`: on a fresh
+            # machine with no running server, a bare `set-option -g` (or an empty
+            # `start-server`, which exits immediately having no sessions) errors
+            # "no server running" and aborts under `set -e`. new-session starts a
+            # durable server; remain-on-exit is then set globally (it keeps a pane
+            # visible if its tool exits, so failures are diagnosable) and applies
+            # to every pane opened below. This path is exactly the documented
+            # "bootstrap a fresh tmux server with no snapshot" case.
             tmux new-session -d -s "$SESSION" -n overview 'btop'
+            tmux set-option -g remain-on-exit on
             tmux split-window -v -t "$SESSION:overview" "$T bandwhich"
             tmux select-layout -t "$SESSION:overview" main-horizontal
             tmux set-option -t "$SESSION:overview" main-pane-height 70%

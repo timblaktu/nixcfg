@@ -39,7 +39,7 @@
         # canonical stateNames at eval time (a bad state is a build-time throw). The
         # command strings are byte-identical to the CC/shell sources' (same writer
         # store path) - true cross-program dedup.
-        nvimSource = tmuxCmdState.mkProgramSource { events = ncfg.events; };
+        nvimSource = tmuxCmdState.mkProgramSource { inherit (ncfg) events; };
         # Bake the Overseer-STATUS -> command map into a Lua table literal. Keys are
         # the STATUS strings ("RUNNING"/"SUCCESS"/"FAILURE"); values are the writer
         # invocations. builtins.toJSON yields a valid (double-quoted) Lua string.

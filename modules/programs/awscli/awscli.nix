@@ -78,7 +78,6 @@
         cfg = config.awscli;
         bw = cfg.azureAuth.bitwarden;
         hasCredentials = bw.credentialItem != null;
-        hasRoleArn = bw.roleArnItem != null || cfg.azureAuth.defaultRoleArn != null;
 
         roles = cfg.azureAuth.knownRoles;
         roleNames = attrNames roles;

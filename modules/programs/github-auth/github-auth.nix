@@ -459,7 +459,6 @@
                   {
                     helper = mkForce "!${
                       let
-                        bwConfig = resolveBwConfig cfg.bitwarden;
                         # Build org case branches that match on path=<org>/*
                         orgCaseBranches =
                           if cfg.orgs == { } then ""

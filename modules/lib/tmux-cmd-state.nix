@@ -53,7 +53,7 @@ rec {
   # Resolves tmux from PATH (`command -v tmux`) so it talks to the pane's own
   # running server, not whatever tmux happens to be in the store closure. No-op
   # when $TMUX / $TMUX_PANE are unset, so it is harmless outside tmux.
-  mkHelper = {}:
+  mkHelper = _:
     let
       # case-pattern generated from the state set, so adding/renaming a
       # clearOnView state is a one-line edit here - never a hand-edited case arm.
