@@ -10,41 +10,40 @@ let
     inherit (prev) system;
     config.allowUnfree = true;
     overlays = [
-      # WORKAROUND (2026-08-22, plan 054 P9): two upstream issues break build-docling
-      # fresh, both in the fork's pinned nlohmann_json 3.10.5 - a transitive dep
-      # (arrow-cpp -> onnxruntime -> docling-parse -> docling). Overriding the single
-      # top-level nlohmann_json attribute propagates through the whole docling closure
-      # (all three consume it via callPackage). Scoped to pkgsDocling only - no blast
-      # radius on the main pkgs set.
+      # WORKAROUND (2026-08-22, updated 2026-08-23, plan 054 P9): the fork's pinned
+      # nlohmann_json 3.10.5 - a transitive dep (arrow-cpp -> onnxruntime ->
+      # docling-parse -> docling) - is broken FOUR ways on the current toolchain. The
+      # first three (hash-drift, CMake4 policy, GCC14 test-compile) were patchable on
+      # 3.10.5, but the fourth is not: docling-parse's OWN C++ (parse_v1/v2.cpp, built
+      # via local_build.py -> cmake -DUSE_SYSTEM_DEPS=1) #includes the store nlohmann
+      # header and hits the known 3.10.5 x GCC13/14 overload-ambiguity regression
+      # ("nlohmann/json.hpp:3658: call of overloaded 'input_adapter(const char*)' is
+      # ambiguous"), which was fixed UPSTREAM in nlohmann 3.11.0 - a downstream
+      # consumer failing on the old header, not a flag we can set on nlohmann. So we
+      # BUMP nlohmann_json to 3.11.3, which fixes all four facets at once (current,
+      # GCC-14-clean, canonical stable fetchFromGitHub hash, API-compatible with
+      # arrow-cpp/onnxruntime). Overriding the single top-level nlohmann_json attribute
+      # propagates through the whole docling closure (all three consume it via
+      # callPackage). Scoped to pkgsDocling only - no blast radius on the main pkgs set.
       #
-      #   (1) GitHub-tarball hash drift: GitHub's auto-generated /archive/v3.10.5.tar.gz
-      #       is not byte-stable, so the fork's pinned FOD hash no longer matches what
-      #       codeload serves (specified sha256-DTsZrdB9GcaNkx7ZKxcJwp3pCVXCDlnoRHwn6R6AJnI=
-      #       vs got sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=). Fix = pin the
-      #       src to the currently-served content hash.
-      #   (2) CMake 4.x dropped compatibility for `cmake_minimum_required(VERSION < 3.5)`,
-      #       which nlohmann_json 3.10.5's CMakeLists.txt still declares -> configurePhase
-      #       aborts ("Compatibility with CMake < 3.5 has been removed"). Fix = pass
-      #       -DCMAKE_POLICY_VERSION_MINIMUM=3.5 (CMake's own suggested escape hatch).
-      #       Masked in CI because issue (1) failed at fetch, before configure ran.
-      #   (3) nlohmann_json 3.10.5's own unit tests (unit-allocator.cpp) fail to compile
-      #       under GCC 14's stricter libstdc++ allocator_traits static assertion. These
-      #       are the library's tests, not needed for a header-only build dep of
-      #       arrow-cpp/onnxruntime. Fix = doCheck=false (also flips the package's
-      #       JSON_BuildTests to OFF so the broken tests never compile).
+      # Retained belt-and-suspenders flags (harmless if unneeded on 3.11.3):
+      #   - cmakeFlags += -DCMAKE_POLICY_VERSION_MINIMUM=3.5: nlohmann's CMakeLists still
+      #     declares an old cmake_minimum_required that CMake 4.x rejects.
+      #   - doCheck = false: the library's own unit tests are not needed for a
+      #     header-only build dep and have historically failed to compile under GCC 14.
       #
       # Migration path: drop this overlay once the nixpkgs-docling fork (or its pinned
-      # nixpkgs rev) ships a corrected nlohmann_json hash AND a version whose CMakeLists
-      # requires CMake >= 3.5 AND whose test suite builds on the pinned GCC.
+      # nixpkgs rev) ships nlohmann_json >= 3.11 with a correct hash.
       (_finalDocling: prevDocling: {
-        nlohmann_json = prevDocling.nlohmann_json.overrideAttrs (old: {
+        nlohmann_json = prevDocling.nlohmann_json.overrideAttrs (_old: {
+          version = "3.11.3";
           src = prevDocling.fetchFromGitHub {
             owner = "nlohmann";
             repo = "json";
-            rev = "v${old.version}";
-            hash = "sha256-DTsZrdB9GcaNkx7ZKxcgCA3A9ShM5icSF0xyGguJNbk=";
+            rev = "v3.11.3";
+            hash = "sha256-7F0Jon+1oWL7uqet5i1IgHX0fUw/+z0QwEcA3zs5xHg=";
           };
-          cmakeFlags = (old.cmakeFlags or [ ]) ++ [ "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" ];
+          cmakeFlags = (_old.cmakeFlags or [ ]) ++ [ "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" ];
           doCheck = false;
         });
       })
