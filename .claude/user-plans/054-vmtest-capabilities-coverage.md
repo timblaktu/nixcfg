@@ -1091,4 +1091,22 @@ freed). Nothing docling-specific was left to prove locally; only ordinary heavy 
 dispatched `ci.yml` via `workflow_dispatch` → **run 32612864168** (branch `feat/vmtest-refactor`), which
 includes the nightly `build-docling` matrix job on GitHub's runners (no local CPU). **P9 stays IN_PROGRESS
 until that job goes green**, then flip to `TASK:COMPLETE`. To check:
-`gh run view 32612864168 --json jobs -q '.jobs[]|select(.name|test("docling"))|"\(.name): \(.conclusion)"'`.
+`gh run view <run> --json jobs -q '.jobs[]|select(.name|test("docling"))|"\(.name): \(.conclusion)"'`.
+
+**Run 32612864168 result: 61/62 jobs GREEN; `build-docling` CANCELLED — NOT a build failure.**
+The docling step compiled cleanly for the full **120 min** (02:29:05Z→04:29:25Z) with NO error, then hit
+the `pkgs` job's `timeout-minutes: 120` cap and GitHub cancelled it. Root cause = the uncached C++ closure
+(arrow-cpp + onnxruntime + google-cloud-cpp, from the nixpkgs-docling fork rev) is too heavy for a 120-min
+job on a GitHub runner — a wall-clock limit, not a correctness problem. This RE-CONFIRMS the fix: the job
+reached deep C++ compilation (past every previously-failing nlohmann point) without error, exactly as the
+local build did. Every other job (all lints, all evals, all VMTests x86+aarch64, the 5 other package builds,
+both tarballs, vm-compose-stack) = success.
+
+**CI capability fix + re-dispatch (2026-08-23).** Raised the `pkgs` job `timeout-minutes` 120→**350**
+(commit on `feat/vmtest-refactor`; timeout is a ceiling so the 5 light package builds are unaffected;
+magic-nix-cache's Post step DID run on the cancelled job, so deps that finished pre-cutoff — arrow-cpp,
+likely google-cloud-cpp — are now in the GHA cache and a re-run resumes from them). Re-dispatched →
+**run 32618353622** (`workflow_dispatch`, branch `feat/vmtest-refactor`). **P9 remains IN_PROGRESS until
+that run's `build-docling` job goes green** (the fix is proven at every checkable layer + CI-proven to
+compile past all failing points; only the full-closure exit-0 remains, now with adequate CI headroom).
+Verify: `gh run view 32618353622 --json jobs -q '.jobs[]|select(.name|test("docling"))|.conclusion'`.
