@@ -1110,3 +1110,41 @@ likely google-cloud-cpp — are now in the GHA cache and a re-run resumes from t
 that run's `build-docling` job goes green** (the fix is proven at every checkable layer + CI-proven to
 compile past all failing points; only the full-closure exit-0 remains, now with adequate CI headroom).
 Verify: `gh run view 32618353622 --json jobs -q '.jobs[]|select(.name|test("docling"))|.conclusion'`.
+
+### P9 FACET 4 discovered (2026-08-23) — docling-parse won't compile against nlohmann 3.10.5 under GCC 14
+**Run 32618353622 (350-min cap): the ENTIRE C++ closure built — then a 4th, deeper failure surfaced.**
+With the raised timeout, the job compiled for ~160 min and successfully built **nlohmann_json 3.10.5
+(3-facet fix), arrow-cpp, onnxruntime-1.22.2, AND google-cloud-cpp-2.38.0** — confirming the P9 nlohmann
+fix is 100% correct and the C++ heavy closure is sound. The build then failed at a NEW derivation,
+`python3.13-docling-parse-4.5.0`, whose **own** C++ (`parse_v1.cpp`/`parse_v2.cpp`, built via its
+`local_build.py` → cmake with `-DUSE_SYSTEM_DEPS=1`) `#include`s the same nlohmann 3.10.5 header and fails:
+```
+/nix/store/mjip5k6s…-nlohmann_json-3.10.5/include/nlohmann/json.hpp:3658:37:
+  error: call of overloaded 'input_adapter(const char*)' is ambiguous
+```
+This is the **well-known nlohmann_json 3.10.5 × GCC 13/14 overload-resolution regression** (the
+`input_adapter` overloads were disambiguated upstream in **3.11.0**). It is NOT fixable by a build flag on
+nlohmann (header-only; our `doCheck=false` only skipped nlohmann's *own* tests). It is downstream code that
+consumes the old header failing under the current compiler. `docling-parse` uses `-DUSE_SYSTEM_DEPS=1` so it
+resolves nlohmann from the Nix store (our overridden 3.10.5), not a vendored copy — so it inherits the
+regression.
+
+**Two fix directions, both with real tradeoffs → Tim-gated (the plan reserves the version-bump path):**
+- **A. Scoped overlay bump nlohmann_json → 3.11.3** (single `.overrideAttrs`/version change in the SAME
+  `pkgsDocling` overlay). This fixes ALL FOUR facets at once (3.11.3 = current, GCC-14-clean, hash-stable,
+  API-compatible) and is the *correct* long-term fix. COST: changing the shared nlohmann attr invalidates
+  the just-built arrow-cpp/onnxruntime/google-cloud-cpp (they consume it via callPackage) → a one-time
+  ~2.5-3 hr CI rebuild; small residual risk arrow/onnxruntime need 3.10.x exactly (unlikely — nlohmann is
+  very API-stable 3.10→3.11).
+- **B. Keep 3.10.5, patch its `json.hpp`** with the upstream 3.11.0 `input_adapter` disambiguation
+  (via `patches`/`postPatch` in the existing overrideAttrs). COST: preserves the cached C++ closure (no
+  arrow/onnxruntime rebuild) but must source/verify the exact upstream commit; fiddlier; other latent
+  3.10.5-on-modern-toolchain issues could still surface further down the closure.
+- **C. Defer.** `build-docling` is nightly-only + NON-gating (per-PR CI is green; it never blocks merges).
+  Mark it out-of-gate / accept-known-broken and revisit when the nixpkgs-docling fork updates its pins.
+
+**STATUS: P9 stays IN_PROGRESS — facet 4 is a scope-expansion + Tim-gated decision (USER_INPUT_REQUIRED).**
+The originally-filed P9 scope (nlohmann FOD hash-drift) IS fixed and CI-proven; facet 4 is a distinct
+"old-pins-on-new-toolchain" problem uncovered only because the fix let the build reach docling-parse. Await
+Tim's choice of A / B / C before proceeding. Failed-run evidence:
+`gh run view 32618353622 --log-failed | rg 'input_adapter'`.
