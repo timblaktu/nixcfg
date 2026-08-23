@@ -188,7 +188,13 @@ jobs:
     name: Package build (${{ matrix.check }} · nightly)
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 120 min was too tight for build-docling: its uncached C++ closure
+    # (arrow-cpp + onnxruntime + google-cloud-cpp, from the nixpkgs-docling fork rev)
+    # was still actively compiling at the 120-min cap and got cancelled (run
+    # 32612864168, plan 054 P9). The other 5 package builds finish well under an hour;
+    # timeout-minutes is only a ceiling, so raising it does not slow them. magic-nix-cache
+    # persists completed deps between runs, so subsequent nightlies resume from cache.
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
