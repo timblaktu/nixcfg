@@ -1068,10 +1068,12 @@ fixes active) → the closure advanced PAST every previously-failing point; now 
 The three fixes are already independently build-proven at the package level (source FOD + compiled
 nlohmann_json both build); the remaining closure is ordinary heavy C++ with no docling-specific risk left.
 
-**STATUS: P9 stays IN_PROGRESS pending the full-closure build's exit-0.** To finish next session (or when the
-background build `b31i3xl3u` notifies): check `build-docling.buildlog` for `BUILD_EXIT=0` and a printed
-docling store path → then flip P9 to `TASK:COMPLETE 2026-08-22`. If the local build was interrupted by
-session exit, either re-run `nix build '.#checks.x86_64-linux.build-docling'` (nlohmann/arrow already cached
-locally, so it resumes fast) OR accept the CI path — push `feat/vmtest-refactor` and dispatch the nightly;
-the DoD's full gate is satisfied by `build-docling` going green in nightly CI. The fix is proven correct;
-only the green-build confirmation remains.
+**STATUS: P9 stays IN_PROGRESS pending the full-closure build's exit-0.** The local full build was
+**intentionally killed (2026-08-22)** to free CPU for a higher-priority build — at kill time it had passed
+ALL previously-failing points (nlohmann built OK) and was mid-compile on onnxruntime + google-cloud-cpp with
+no errors; those two did NOT finish so they are not cached (a local re-run rebuilds them). To finish: EITHER
+(recommended, no local CPU) push `feat/vmtest-refactor` + dispatch the nightly and confirm the `build-docling`
+job goes green — the DoD accepts CI green as the full gate; OR re-run
+`nix build '.#checks.x86_64-linux.build-docling' --no-link --print-out-paths` when the machine is free
+(success = prints a `…-python3.13-docling-2.47.1` path). Then flip P9 to `TASK:COMPLETE 2026-08-22`. The fix
+is proven correct at every checkable layer; only the green full-build confirmation remains.
