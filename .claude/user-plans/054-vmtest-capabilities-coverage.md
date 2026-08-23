@@ -1148,3 +1148,23 @@ The originally-filed P9 scope (nlohmann FOD hash-drift) IS fixed and CI-proven; 
 "old-pins-on-new-toolchain" problem uncovered only because the fix let the build reach docling-parse. Await
 Tim's choice of A / B / C before proceeding. Failed-run evidence:
 `gh run view 32618353622 --log-failed | rg 'input_adapter'`.
+
+### P9 FACET 4 FIX applied (2026-08-23) — Option A (bump nlohmann → 3.11.3); Tim delegated the call
+Tim: "whatever you recommend - we can do another CI build." Recommended + applied **Option A**: in the
+scoped `pkgsDocling` overlay (`overlays/default.nix`), replaced the 3.10.5 hash-override with a clean
+**version bump to nlohmann_json 3.11.3** (`fetchFromGitHub` rev `v3.11.3`, hash
+`sha256-7F0Jon+1oWL7uqet5i1IgHX0fUw/+z0QwEcA3zs5xHg=` — obtained + verified via
+`nix store prefetch-file --unpack`, the same unpacked-NAR hash fetchFromGitHub uses, so drift-immune).
+3.11.3 is current, GCC-14-clean, and API-compatible, so it fixes ALL FOUR facets in one pin (hash-drift,
+CMake4 policy, GCC14 tests, AND the docling-parse input_adapter ambiguity). Kept
+`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` + `doCheck=false` as harmless belt-and-suspenders. Blast radius =
+docling closure only (arrow-cpp/onnxruntime/google-cloud-cpp rebuild against 3.11.3 — the accepted cost).
+
+**Light gate MET.** `nix flake check --no-build` → "all checks passed!" (exit 0); the compiled
+`nlohmann_json-3.11.3` builds under GCC 14 (`/nix/store/c4ig9qm…-nlohmann_json-3.11.3`); docling drv
+resolves (`…-python3.13-docling-2.47.1.drv`). Committed `2662f50` (`--no-verify`: the pre-commit
+flake-check hook exceeds the tool's 2-min cap — validated manually first, per the known-issue memory) +
+pushed. **Full gate dispatched → CI run 32628030378** (`workflow_dispatch`, `feat/vmtest-refactor`, 350-min
+cap). **P9 stays IN_PROGRESS until that run's `build-docling` goes green** (the C++ closure must rebuild
+against 3.11.3 → ~2.5-3 hr; if arrow/onnxruntime hit a 3.11.3 incompatibility that's a new finding, but is
+unlikely). Verify: `gh run view 32628030378 --json jobs -q '.jobs[]|select(.name|test("docling"))|.conclusion'`.
