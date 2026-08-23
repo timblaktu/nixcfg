@@ -349,6 +349,53 @@ manifest (no hardcoded check lists remain) and a real GitHub CI run (per-PR + ni
 (iv) `docs/CI-MODEL.md` exists documenting the shared/platform-specific boundary. Needs nix + GitHub CI;
 host-agnostic for the flake work. Idempotent. This is a Workflow task, so next session runs it via `Workflow`.
 
+#### P11 progress (2026-08-23) — deliverables 1 + 3 DONE (verified); deliverable 2 at interactive checkpoint
+Ran the 4-agent design Workflow (1 classifier -> 3 parallel designers: flake-integration, github-rewire, docs).
+Agents were read-only (no nix); all nix eval/build ran serialized inline afterward (concurrency guard).
+
+**DONE + committed + verified:**
+- **Deliverable 1** (`modules/flake-parts/ci-classification.nix`, commit 931ae0a + d73eebb):
+  - `dendriticMeta.ci.classification` = ONE attrset classifying all 58 live checks (57 domain + the
+    `ci-matrix-sync` guard itself) by `{tier,backend,systems,requires,enabled}`, reproducing the pre-P11
+    `ci.yml` partition EXACTLY (behavior-preserving). Group builders keep it DRY.
+  - `flake.ci.matrix` (top-level output, arch-agnostic, escape-hatch like `flake.lib`) = machine-readable
+    manifest `{all, ci, pr.{lint,eval,build,nspawn,qemu}, nightly.{build,qemu}, schemaVersion=1}`. `all` is the
+    audit view (incl. local+disabled); the `ci`/`pr`/`nightly` views OMIT `tier=local` (github-actions) and
+    `enabled=false` (build-docling). Sibling `flake.ci.tarballs` = the 2 nightly tarballBuilder configs
+    (config-keyed, outside the guard).
+  - `checks.ci-matrix-sync` (perSystem) = bidirectional drift-guard; flake-level classification captured via
+    lexical closure (perSystem `config` has no dendriticMeta); reads only `attrNames config.checks` (no
+    recursion). **DoD (i)+(ii) MET:** `nix eval '.#ci.matrix' --json` = valid 58-row manifest; guard
+    build+passes on synced tree (58 live = 58 classified) AND fails naming the offender when a row is dropped
+    (demonstrated by temporarily removing `lint-version` -> "UNCLASSIFIED live checks: lint-version", exit 1).
+    `nix flake check --no-build` = "all checks passed!" (the `unknown flake output 'ci'` warning is benign,
+    same class as the existing `modules`/`homeManagerModules` warnings; does NOT fail).
+- **Deliverable 3** (`docs/CI-MODEL.md`, commit d73eebb): the portability-boundary spec (list A SHARED/
+  flake-owned vs list B platform-specific), classification schema, the REAL `.#ci.matrix` shape, per-platform
+  consumption (GitHub `fromJSON` prep-job in §5.1; GitLab child-pipeline in §5.2 — the spec 004-T1 builds
+  against), the `build-docling` `enabled=false` row, `.#ci.tarballs`, and the fail-closed new-check lifecycle.
+  **DoD (iv) MET.**
+
+**DEFERRED to post-checkpoint (deliverable 2, DoD (iii)):** rewrite `.github/workflows/ci.yml` so its matrices
+are generated from `.#ci.matrix` (prep-job emits per-group JSON -> downstream `fromJSON`; the exact pattern is
+documented in `docs/CI-MODEL.md` §5.1), then prove green in real GitHub CI (per-PR + nightly dispatch). This
+is gated on (a) Tim's sign-off on the classification map at the interactive checkpoint below, and (b) a push.
+
+**Interactive checkpoint — 6 open questions for Tim (all have a recommended default already baked into the
+committed flake side; changing any is a small edit):**
+1. `build-docling`: kept classified `nightly/build` with `enabled=false` (excluded from matrix until P10).
+   Accept the boolean `enabled` flag, or prefer a distinct `tier`/status value? (Recommend: keep `enabled`.)
+2. `github-actions`: `tier=local`, fully absent from `.#ci.matrix`. Confirm exclude-entirely (behavior-preserving,
+   it is in no current ci.yml job). (Recommend: exclude.)
+3. Tarball builds: modeled as sibling `.#ci.tarballs` (config-keyed, outside the guard). Confirm. (Recommend: yes.)
+4. `lint-version`: classified `lint/pr/x86`. It lives in a lint module (not tests.nix/vm-tests.nix); confirm the
+   backend is lint (not an eval forcer).
+5. Systems policy: classification is behavior-preserving = eval/lint/build/qemu are x86_64-only in CI (nspawn stays
+   dual-arch) even though `.#checks` is mirrored on aarch64. Keep x86-only, or opportunistically add aarch64
+   eval/lint coverage on the arm64 runner? (Recommend: keep behavior-preserving for now; revisit in P8/GitLab.)
+6. Classification carries pure INTENT (tier/backend/systems/requires/enabled); runner/nixConfig are computed only
+   in each platform's adapter, keeping the SSOT runner-agnostic. Confirm. (Recommend: yes.)
+
 ## Progress tracking
 | ID | Task | Kind | Status |
 |----|------|------|--------|
@@ -364,7 +411,7 @@ host-agnostic for the flake work. Idempotent. This is a Workflow task, so next s
 | P5c | Tier-1 behavioral refactor (drop mocks/vm-yazi, merge stacks→`vm-compose-stack`, nspawn migrations, add `vm-wsl-dev-team-layers`) | 1 · builder (KVM/nspawn) | TASK:COMPLETE 2026-08-21 — 24→19 vm-* (drop 2 mocks+vm-yazi, merge 2 stacks→vm-compose-stack, add vm-wsl-dev-team-layers, remove 4 spikes); **11 nspawn / 8 QEMU**; flake check --no-build exit 0; **all 11 nspawn + all 3 changed/new QEMU tests individually build+pass** (Tim asked for full verification; the 5 unchanged retained-QEMU tests also re-verified); 3 recorded QEMU fallbacks (vm-compose-stack, vm-wsl-dev-team-layers, vm-user-config); fixed 2 latent pre-existing bugs surfaced by building (stale `git core.pager` assert; yazi.toml invalid for pinned yazi → logged P7) (see "P5c execution" + "P5c verification addendum") |
 | P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup + **prove it green in actual GitHub CI** | 1 · CI | TASK:COMPLETE 2026-08-22 — CI GREEN on GitHub. Both first-run failure classes root-caused + fixed: (1) pre-existing lint debt (fmt/statix/deadnix/ps1-BOM, commit 1c33202); (2) aarch64 nspawn = spurious `kvm` requiredSystemFeature, fixed via `requiredFeatures.kvm=false` on all 5 container sites (commit d437cd6). **Per-PR run 32599938257 = success (61 jobs, 0 fail)**: nspawn green on BOTH x86_64+aarch64, QEMU(7) green, lint(5)+checks(26)+eval green. **Nightly dispatch 32600536292 = 69/70**: compose-stack + 5/6 pkgs + both tarballs green; sole failure `build-docling` = UPSTREAM FOD hash-drift (nlohmann_json v3.10.5 GitHub tarball, transitive via arrow-cpp/onnxruntime), env-independent + non-gating → recorded as P9 package-health task (split from P7 per Tim). nixcfg-work SPLIT to P8 (see "P6 CI-verification session") |
 | P9 | **Package-health: fix `build-docling`** — upstream FOD hash-drift on nlohmann_json v3.10.5 GitHub tarball (transitive via arrow-cpp/onnxruntime); apply an nlohmann_json src-hash overlay (or nixpkgs pin bump); nightly-only, non-gating | 1 · builder (package fix) | TASK:COMPLETE 2026-08-23 — filed scope (FOD hash-drift) FIXED + CI-proven: the 3-facet scoped overlay (hash + CMake4 policy + GCC14-test) builds the ENTIRE docling C++ closure (nlohmann + arrow-cpp + onnxruntime + google-cloud-cpp) end-to-end on CI run 32618353622. Raised nightly `pkgs` timeout 120→350min (closure is genuinely >2hr; run 32612864168 was CANCELLED at the 120-min cap, not a build error). Building the full closure surfaced a distinct 4th blocker — docling-parse-4.5.0 won't compile vs nlohmann under GCC14 with EITHER 3.10.5 (input_adapter ambiguous) or 3.11.3 (basic_json bool SFINAE, run 32628030378) — a genuine upstream compat problem beyond P9's scope, SPLIT to P10. Overlay reverted to faithful 3.10.5 3-facet (commit 4482ac2). build-docling non-gating (nightly-only; per-PR CI green). (see "P9 OUTCOME (2026-08-23)") |
-| P11 | **CI-as-code: generate CI from a flake-SSOT classification map** (central map + `.#ci.matrix` output + `ci-matrix-sync` drift-guard + ci.yml matrix generation + `docs/CI-MODEL.md`) — pre-merge model for nixcfg-work GitLab CI | 1 · CI design (workflow) | TASK:IN_PROGRESS 2026-08-23 — running as multi-agent Workflow (Tim opted in); do BEFORE merge + P8 |
+| P11 | **CI-as-code: generate CI from a flake-SSOT classification map** (central map + `.#ci.matrix` output + `ci-matrix-sync` drift-guard + ci.yml matrix generation + `docs/CI-MODEL.md`) — pre-merge model for nixcfg-work GitLab CI | 1 · CI design (workflow) | TASK:IN_PROGRESS 2026-08-23 — **deliverables 1 (flake SSOT: `ci-classification.nix` — map + `.#ci.matrix` + `.#ci.tarballs` + `ci-matrix-sync` guard, DoD i+ii MET) + 3 (`docs/CI-MODEL.md`, DoD iv MET) DONE + verified** (commits 931ae0a, d73eebb). **AT INTERACTIVE CHECKPOINT: Tim reviews classification map + 6 open questions** (see "P11 progress"). Deliverable 2 (ci.yml rewire + prove green in GitHub CI, DoD iii) DEFERRED to post-sign-off + push. Do BEFORE merge + P8 |
 | P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6 + P11 + merge PR #6 to main; split from P6 per Tim 2026-08-22) |
 | P7 | Backlog — deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:PENDING (dep P4) |
 | P10 | **docling-parse × nlohmann × GCC14 compat (facet 4)** — docling-parse-4.5.0 won't compile vs nlohmann 3.10.5 (input_adapter ambiguous) NOR 3.11.3 (basic_json bool SFINAE) under GCC14; real fix = backport 3.11.0 input_adapter patch into 3.10.5 json.hpp, or gcc13Stdenv for docling-parse, or track docling nixpkgs PR #184; needs upstream reading not trial CI builds; nightly-only, non-gating; ALSO re-enable build-docling in nightly matrix (skipped 2026-08-23 pending this) | 1 · deferred (package fix) | TASK:PENDING (split from P9 2026-08-23; dep P9's hash-drift+C++-closure fixes — DONE) |
