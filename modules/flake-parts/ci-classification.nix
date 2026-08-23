@@ -1,27 +1,116 @@
 # modules/flake-parts/ci-classification.nix
-# Plan 054 P11: CI is a pure function of this ONE classification attrset.
+# CI is a pure function of one classification attrset.
 #
 # ci.classification.<checkName> = { tier; backend; systems; requires; enabled?; }
 #   tier     : "pr" | "nightly" | "local"   -- WHEN it runs
 #   backend  : "eval"|"lint"|"build"|"nspawn"|"qemu"|"tarball" -- HOW it runs
 #   systems  : arches the check is meaningful on
 #   requires : builder features ("kvm","uid-range") or [ ]
-#   enabled  : optional; false => classified but omitted from the CI matrix
-#              (still a real check; the drift guard still requires it to exist).
+#   enabled  : optional (default true); false => classified but omitted from the
+#              CI matrix. Still a real check; the drift guard still requires it.
 #
-# This attrset lives under `dendriticMeta` (NOT `flake.*`) so it is plain config
-# data and does not create an unknown flake output (same rationale as
-# systems.nix). The machine-readable manifest is derived in `flake.ci.matrix`,
-# and the `ci-matrix-sync` drift guard (a perSystem check) keeps this map and the
-# live `.#checks` set bidirectionally in sync.
-#
-# ONE module supplies options + flake.* + perSystem (the shape version.nix uses);
-# import-tree auto-loads it (flake.nix imports ./modules/flake-parts), so no
-# manual wiring is needed.
+# The reusable mechanism (mkMatrix + mkDriftGuard) is exported as flake.lib.ci so
+# a DOWNSTREAM consumer flake (which already imports this one) can apply the same
+# classify-and-generate pattern to ITS OWN checks. This flake dogfoods it: the
+# classification data below is nixcfg's own, and flake.ci.matrix / ci-matrix-sync
+# are produced by the very functions it exports.
 { lib, config, ... }:
 let
-  # System-set shorthands sourced from the SSOT in systems.nix so an arch rename
-  # can never desync classification from the flake's real systems.
+  # ===========================================================================
+  # Reusable mechanism (exported as flake.lib.ci; pure functions of their args)
+  # ===========================================================================
+
+  # mkMatrix : classification-attrset -> machine-readable manifest.
+  # Tolerant of plain attrsets (defaults enabled=true, requires=[]) so a
+  # downstream caller need not route its data through the option type.
+  mkMatrix = classification:
+    let
+      names = builtins.attrNames classification;
+      rows = map
+        (name:
+          let c = classification.${name}; in
+          {
+            inherit name;
+            inherit (c) tier backend systems;
+            requires = c.requires or [ ];
+            enabled = c.enabled or true;
+          })
+        names;
+      ciRows = builtins.filter (r: r.enabled && r.tier != "local") rows;
+      isTier = t: builtins.filter (r: r.tier == t);
+      byBackend = b: builtins.filter (r: r.backend == b);
+    in
+    {
+      # Audit view: every classified row, including local + disabled.
+      all = rows;
+      # CI-eligible rows (enabled, non-local), grouped by tier then backend so
+      # each list is a ready-to-realize job payload.
+      pr = {
+        lint = byBackend "lint" (isTier "pr" ciRows);
+        eval = byBackend "eval" (isTier "pr" ciRows);
+        build = byBackend "build" (isTier "pr" ciRows);
+        nspawn = byBackend "nspawn" (isTier "pr" ciRows);
+        qemu = byBackend "qemu" (isTier "pr" ciRows);
+      };
+      nightly = {
+        build = byBackend "build" (isTier "nightly" ciRows);
+        qemu = byBackend "qemu" (isTier "nightly" ciRows);
+      };
+      # Flat CI-eligible list for consumers that partition themselves.
+      ci = ciRows;
+      schemaVersion = 1;
+    };
+
+  # mkDriftGuard : { pkgs, classification, liveCheckNames } -> a check derivation
+  # that fails if any live check is unclassified OR any classification names a
+  # nonexistent check. `liveCheckNames` is passed in (builtins.attrNames of the
+  # caller's own checks set) so this function stays a pure, repo-agnostic helper.
+  mkDriftGuard = { pkgs, classification, liveCheckNames }:
+    let
+      classifiedNames = lib.naturalSort (builtins.attrNames classification);
+      liveNames = lib.naturalSort liveCheckNames;
+      unclassified = lib.subtractLists classifiedNames liveNames; # live but not classified
+      phantom = lib.subtractLists liveNames classifiedNames; # classified but no such check
+    in
+    pkgs.runCommand "ci-matrix-sync"
+      {
+        meta = {
+          description = "Drift guard: every live check is classified and every classification names a real check.";
+          maintainers = [ ];
+          timeout = 30;
+        };
+        unclassified = builtins.concatStringsSep " " unclassified;
+        phantom = builtins.concatStringsSep " " phantom;
+        liveCount = toString (builtins.length liveNames);
+        classifiedCount = toString (builtins.length classifiedNames);
+      } ''
+      echo "Live checks:        $liveCount"
+      echo "Classified entries: $classifiedCount"
+      rc=0
+      if [ -n "$unclassified" ]; then
+        echo "UNCLASSIFIED live checks (add to ci.classification):"
+        for c in $unclassified; do echo "   - $c"; done
+        rc=1
+      fi
+      if [ -n "$phantom" ]; then
+        echo "PHANTOM classification keys (no such check):"
+        for c in $phantom; do echo "   - $c"; done
+        rc=1
+      fi
+      if [ "$rc" -ne 0 ]; then
+        echo ""
+        echo "The classification map is out of sync with the live checks set."
+        echo "Add/remove classification rows so the two sets are identical."
+        exit 1
+      fi
+      echo "Classification and checks are in perfect sync."
+      touch $out
+    '';
+
+  # ===========================================================================
+  # This flake's own classification data (nixcfg's checks)
+  # ===========================================================================
+
   linux = config.dendriticMeta.systems.linux; # [ x86_64-linux aarch64-linux ]
   x86 = [ "x86_64-linux" ];
 
@@ -47,17 +136,17 @@ let
       enabled = lib.mkOption {
         type = lib.types.bool;
         default = true;
-        description = "If false, classified but omitted from the CI matrix (e.g. build-docling pending plan 054 P10). Still a live check; the drift guard still requires it to exist.";
+        description = "If false, classified but omitted from the CI matrix. Still a live check the drift guard requires.";
       };
       rationale = lib.mkOption {
         type = lib.types.str;
         default = "";
-        description = "Human note on why this classification (from plan 054 P5c evidence).";
+        description = "Human note on why this classification.";
       };
     };
   });
 
-  # --- backend/tier/systems group builders (DRY) ---
+  # backend/tier/systems group builders (DRY)
   lintPr = { tier = "pr"; backend = "lint"; systems = x86; requires = [ ]; };
   evalPr = { tier = "pr"; backend = "eval"; systems = x86; requires = [ ]; };
   buildPr = { tier = "pr"; backend = "build"; systems = x86; requires = [ ]; };
@@ -66,11 +155,9 @@ let
   qemuPr = { tier = "pr"; backend = "qemu"; systems = x86; requires = [ "kvm" ]; };
   qemuNightly = { tier = "nightly"; backend = "qemu"; systems = x86; requires = [ "kvm" ]; };
   localEval = { tier = "local"; backend = "eval"; systems = x86; requires = [ ]; };
-  # Attach the same group to a list of check names.
   grp = attrs: names: lib.genAttrs names (_: attrs);
 
   classificationData = lib.mkMerge [
-    # --- job 'lint' (per-PR, x86 only) ---
     (grp lintPr [
       "lint-formatting"
       "lint-statix"
@@ -78,7 +165,6 @@ let
       "lint-ps1-encoding"
       "lint-version"
     ])
-    # --- job 'checks' (per-PR, x86 only): pure eval / light runCommand ---
     (grp evalPr [
       "regression-test"
       "eval-hm-modules"
@@ -105,9 +191,7 @@ let
       "skill-injection-negative"
       "skill-injection-pulumi"
     ])
-    # --- job 'checks' build-tier (per-PR, x86; HM activation BUILD) ---
     (grp buildPr [ "activate-hm-nixvim-minimal" "activate-hm-thinky-nixos" ])
-    # --- job 'vmtest-nspawn' (per-PR, BOTH arches; needs uid-range, NO kvm) ---
     (grp nspawnPr [
       "vm-nspawn-smoke"
       "vm-system-type-default"
@@ -121,7 +205,6 @@ let
       "vm-hm-module-isolation"
       "vm-development-tools"
     ])
-    # --- job 'vmtest-qemu' (per-PR, x86 only; needs /dev/kvm) ---
     (grp qemuPr [
       "vm-boot-minimal"
       "vm-system-type-cli"
@@ -131,9 +214,7 @@ let
       "vm-wsl-dev-team-layers"
       "vm-dev-team-vm-smoketest"
     ])
-    # --- job 'vmtest-compose-stack' (NIGHTLY, x86, heavy QEMU) ---
     { vm-compose-stack = qemuNightly; }
-    # --- job 'pkgs' (NIGHTLY, x86) ---
     (grp buildNightly [
       "build-marker-pdf"
       "build-markitdown"
@@ -141,156 +222,68 @@ let
       "build-termux-claude-scripts"
       "build-tomd"
     ])
-    # build-docling: nightly/build but DISABLED pending plan 054 P10
-    # (docling-parse won't compile vs nlohmann under GCC14). Still a live check
-    # (tests.nix: build-docling = self'.packages.docling), so it must be
-    # classified; enabled=false so consumers omit it from the matrix. Re-enabling
-    # after P10 is a single flag flip here.
     {
       build-docling = buildNightly // {
         enabled = false;
-        rationale = "DISABLED pending plan 054 P10 (docling-parse GCC14/nlohmann). Buildable on demand via workflow_dispatch.";
+        rationale = "Disabled pending an upstream compiler-compat fix; buildable on demand.";
       };
     }
-    # github-actions: act-based local validation runCommand. tier=local =>
-    # excluded from every CI job (would be recursive; needs podman). It IS a live
-    # check (github-actions.nix root override sets enable=true), so it must be
-    # classified; tier=local keeps it out of the CI matrix.
     {
       github-actions = localEval // {
-        rationale = "act+podman local GitHub Actions validation; skip-ci (recursive, needs podman).";
+        rationale = "Local-only validation harness; never scheduled by CI.";
       };
     }
-    # ci-matrix-sync: the drift guard itself is a live check, so it must be
-    # classified too (no guard exception needed). Pure eval gate; per-PR checks.
     {
       ci-matrix-sync = evalPr // {
-        rationale = "Self-classified drift guard; pure eval, runs in per-PR checks.";
+        rationale = "Self-classified drift guard; pure eval, runs on every change.";
       };
     }
   ];
 
-  # --- Derived, machine-readable manifest (.#ci.matrix) ---
-  # Reads the MERGED option value (the SSOT) so any future extension is seen.
-  cls = config.dendriticMeta.ci.classification;
-  names = builtins.attrNames cls;
-
-  # One normalized manifest row per check. `name` is folded in so the JSON is a
-  # flat list (ideal for GitHub matrix.include fromJSON / GitLab child pipeline).
-  rows = map
-    (name:
-      let c = cls.${name}; in
-      { inherit name; inherit (c) tier backend systems requires enabled; })
-    names;
-
-  # `enabled == false` and `tier == "local"` rows are dropped from CI views but
-  # kept in `all` for transparency/auditing.
-  ciRows = builtins.filter (r: r.enabled && r.tier != "local") rows;
-  isTier = t: r: r.tier == t;
-  byBackend = backend: builtins.filter (r: r.backend == backend);
-
-  matrix = {
-    # Full classification (audit view, includes disabled + local).
-    all = rows;
-
-    # Per-PR gate, split by the runner class each backend needs. Each list is a
-    # ready matrix.include payload: fromJSON(...) in GitHub, or iterate in a
-    # GitLab child-pipeline generator.
-    pr = {
-      lint = byBackend "lint" (builtins.filter (isTier "pr") ciRows);
-      eval = byBackend "eval" (builtins.filter (isTier "pr") ciRows);
-      build = byBackend "build" (builtins.filter (isTier "pr") ciRows);
-      nspawn = byBackend "nspawn" (builtins.filter (isTier "pr") ciRows);
-      qemu = byBackend "qemu" (builtins.filter (isTier "pr") ciRows);
-    };
-
-    nightly = {
-      build = byBackend "build" (builtins.filter (isTier "nightly") ciRows);
-      qemu = byBackend "qemu" (builtins.filter (isTier "nightly") ciRows);
-    };
-
-    # Flat CI-eligible list (all tiers except local, enabled only).
-    ci = ciRows;
-
-    # Schema/version marker so consumers can guard against drift.
-    schemaVersion = 1;
-  };
-
-  # The nightly tarball builds are NOT .#checks entries: they build
-  # nixosConfigurations.<config>.config.system.build.tarballBuilder and then run
-  # the builder (shipped-image path). They are keyed by CONFIG name, not check
-  # name, so they live in a sibling .#ci.tarballs manifest (out of the
-  # ci-matrix-sync guard's .#checks reconciliation) rather than being forced to
-  # look like checks. Consumed by a dedicated CI job on both platforms.
+  # The nightly image-tarball builds are NOT checks: they build a config's
+  # tarball builder and run it. Keyed by config name, exposed in a sibling
+  # manifest so the drift guard (which reconciles the checks set) ignores them.
   tarballs = [
     { config = "nixos-wsl-dev-team"; artifact = "nixcfg-wsl-dev-team"; systems = x86; requires = [ "kvm" ]; }
     { config = "thinky-nixos"; artifact = "nixcfg-thinky-nixos"; systems = x86; requires = [ "kvm" ]; }
   ];
+
+  # The flake-level (merged) classification, captured here so the perSystem drift
+  # guard can close over it without shadowing its own `config` arg. Reading the
+  # option we also define is safe (the definition does not depend on the read),
+  # exactly as flake.ci.matrix does below.
+  ownClassification = config.dendriticMeta.ci.classification;
 in
 {
   options.dendriticMeta.ci.classification = lib.mkOption {
     type = lib.types.attrsOf classificationType;
     default = { };
-    description = "Single source of truth: per-check CI classification. Consumed by flake.ci.matrix and the ci-matrix-sync drift guard.";
+    description = "Single source of truth: per-check CI classification. Consumed by flake.ci.matrix and the drift guard.";
   };
 
   config = {
     dendriticMeta.ci.classification = classificationData;
 
-    # flake.ci becomes the .#ci flake output; .#ci.matrix is the manifest
-    # (arch-agnostic, one eval). Escape-hatch attr like flake.lib in lib.nix.
-    flake.ci.matrix = matrix;
+    # flake.ci is this module's own output (single owner, no cross-module merge):
+    #   .ci.lib      -- reusable mechanism a downstream consumer imports
+    #                   (inputs.<this>.ci.lib.{mkMatrix,mkDriftGuard})
+    #   .ci.matrix   -- this flake's own derived manifest (arch-agnostic, one eval)
+    #   .ci.tarballs -- this flake's image-tarball builds (config-keyed)
+    flake.ci.lib = { inherit mkMatrix mkDriftGuard; };
+    flake.ci.matrix = mkMatrix config.dendriticMeta.ci.classification;
     flake.ci.tarballs = tarballs;
 
-    # ci-matrix-sync: bidirectional drift guard (perSystem check). Fails if any
-    # LIVE check is unclassified OR any classification key names a nonexistent
-    # check. `cls` is the flake-level classification captured lexically from the
-    # outer scope (the perSystem `config` arg has no dendriticMeta). Only
-    # attrNames of config.checks is read, never forcing sibling derivations, so
-    # adding ci-matrix-sync to the set does not recurse.
-    perSystem = { config, pkgs, lib, ... }:
-      let
-        classifiedNames = lib.naturalSort (builtins.attrNames cls);
-        liveNames = lib.naturalSort (builtins.attrNames config.checks);
-        unclassified = lib.subtractLists classifiedNames liveNames; # live but not classified
-        phantom = lib.subtractLists liveNames classifiedNames; # classified but no such check
-      in
-      {
-        checks.ci-matrix-sync = pkgs.runCommand "ci-matrix-sync"
-          {
-            meta = {
-              description = "Drift guard: every live check is classified and every classification names a real check (plan 054 P11).";
-              maintainers = [ ];
-              timeout = 30;
-            };
-            unclassified = builtins.concatStringsSep " " unclassified;
-            phantom = builtins.concatStringsSep " " phantom;
-            liveCount = toString (builtins.length liveNames);
-            classifiedCount = toString (builtins.length classifiedNames);
-          } ''
-          echo "Live checks:        $liveCount"
-          echo "Classified entries: $classifiedCount"
-          rc=0
-          if [ -n "$unclassified" ]; then
-            echo "UNCLASSIFIED live checks (add to ci.classification):"
-            for c in $unclassified; do echo "   - $c"; done
-            rc=1
-          fi
-          if [ -n "$phantom" ]; then
-            echo "PHANTOM classification keys (no such check in .#checks):"
-            for c in $phantom; do echo "   - $c"; done
-            rc=1
-          fi
-          if [ "$rc" -ne 0 ]; then
-            echo ""
-            echo "ci.classification (modules/flake-parts/ci-classification.nix) is out of"
-            echo "sync with the live .#checks set. Add/remove classification rows so the"
-            echo "two sets are identical, then re-run."
-            exit 1
-          fi
-          echo "ci.classification and .#checks are in perfect sync."
-          touch $out
-        '';
+    # The drift guard as a per-system check. The classification is the outer
+    # (flake-level) merged option, captured lexically; the perSystem `config` arg
+    # (renamed psArgs here to avoid shadowing it) has no dendriticMeta. Only
+    # attrNames of the checks set is read (never forcing sibling derivations), so
+    # adding this check does not recurse.
+    perSystem = { config, pkgs, ... }: {
+      checks.ci-matrix-sync = mkDriftGuard {
+        inherit pkgs;
+        classification = ownClassification;
+        liveCheckNames = builtins.attrNames config.checks;
       };
+    };
   };
 }
