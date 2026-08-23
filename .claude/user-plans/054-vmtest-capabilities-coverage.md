@@ -1077,3 +1077,18 @@ job goes green — the DoD accepts CI green as the full gate; OR re-run
 `nix build '.#checks.x86_64-linux.build-docling' --no-link --print-out-paths` when the machine is free
 (success = prints a `…-python3.13-docling-2.47.1` path). Then flip P9 to `TASK:COMPLETE 2026-08-22`. The fix
 is proven correct at every checkable layer; only the green full-build confirmation remains.
+
+### P9 full-gate session (2026-08-23) — CI dispatched (local build killed for Tim's isar builds)
+Resumed the full gate. Re-ran `nix build '.#checks.x86_64-linux.build-docling' --no-link --print-out-paths`
+locally on the (then-free) host: eval resolved cleanly to `python3.13-docling-2.47.1.drv` (**light gate
+re-confirmed**), and the closure advanced **past every previously-failing point** — the corrected
+nlohmann_json rebuilt fine and the run reached the heavy `onnxruntime-1.22.2` + `google-cloud-cpp-2.38.0`
+compiles (~50 min in, 30-60+ min remaining). Tim's higher-priority **isar rust builds** needed the CPU, so
+per his choice the local build was **intentionally killed** (SIGINT; compiles drained to `cc1plus`=0, host
+freed). Nothing docling-specific was left to prove locally; only ordinary heavy C++ remained.
+
+**Deferred the full gate to CI (DoD-sanctioned).** Pushed `feat/vmtest-refactor` (`d85b2fa..6eda7af`) and
+dispatched `ci.yml` via `workflow_dispatch` → **run 32612864168** (branch `feat/vmtest-refactor`), which
+includes the nightly `build-docling` matrix job on GitHub's runners (no local CPU). **P9 stays IN_PROGRESS
+until that job goes green**, then flip to `TASK:COMPLETE`. To check:
+`gh run view 32612864168 --json jobs -q '.jobs[]|select(.name|test("docling"))|"\(.name): \(.conclusion)"'`.
