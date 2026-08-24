@@ -188,6 +188,7 @@
                 pkgs.gnutar
                 pkgs.nixos-install-tools
                 pkgs.pigz
+                pkgs.util-linux # unshare (private mount namespace, see below)
                 config.nix.package
               ];
 
@@ -195,6 +196,20 @@
                 if ! [ $EUID -eq 0 ]; then
                   echo "This script must be run as root!"
                   exit 1
+                fi
+
+                # Re-exec the whole build in a PRIVATE mount namespace. nixos-install's
+                # final bootloader step does `mount --rbind / $root; ...; umount -R $root`;
+                # that recursive un-mount fails with "target is busy" on hosts with shared
+                # mount propagation or a bind-mounted /tmp (e.g. a CI runner whose /tmp is
+                # an instance-store bind mount). A private mount namespace isolates those
+                # temporary mounts and discards any leftovers on exit - the same technique
+                # nixos-install itself uses for its non-root path. We are already root here
+                # (CAP_SYS_ADMIN), so unshare works with no extra privilege. Guard with
+                # WSL_TARBALL_UNSHARED so the re-exec happens exactly once.
+                if [ -z "''${WSL_TARBALL_UNSHARED:-}" ]; then
+                  export WSL_TARBALL_UNSHARED=1
+                  exec unshare --mount --propagation private -- "$0" "$@"
                 fi
 
                 out=''${1:-nixos.wsl}
