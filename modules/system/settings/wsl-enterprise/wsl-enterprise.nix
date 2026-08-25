@@ -187,7 +187,7 @@
                 pkgs.e2fsprogs
                 pkgs.gnutar
                 pkgs.nixos-install-tools
-                pkgs.pigz
+                pkgs.xz # xz -9 compression (~half the size of gzip; wsl --import auto-detects it)
                 pkgs.util-linux # unshare (private mount namespace, see below)
                 config.nix.package
               ];
@@ -254,7 +254,7 @@
                   --numeric-owner \
                   --hard-dereference \
                   . \
-                | pigz > "$out"
+                | xz -9 -T0 > "$out"
               '';
             });
           }
