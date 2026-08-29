@@ -84,15 +84,6 @@ in
 
   # opencode 1.14.48 - pinned ahead of nixpkgs input (which has 1.2.5)
   opencode = prev.callPackage ../pkgs/opencode-pinned/package.nix { };
-  # glab: patch fixes index-out-of-range panic when navigating to/from
-  # downstream pipelines in ci view (unfixed upstream through v1.93.0)
-  # Upstream MR: https://gitlab.com/gitlab-org/cli/-/merge_requests/3179
-  # TODO: upgrade to newer glab when nixpkgs-unstable input is updated (needs Go 1.26.1)
-  glab = prev.glab.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [
-      ./glab-ci-view-navigator-reset.patch
-    ];
-  });
 
   # Fix watchfiles test failure that affects MCP servers
   # Fallback: Disable problematic tests while working on version update
