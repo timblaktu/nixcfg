@@ -226,6 +226,21 @@ These two files are gitignored (per-worktree, never committed). A fresh `claude`
 
 **Last resort only (single-session machine, no `$CLAUDE_PROJECT_DIR`):** if the per-worktree file channel is genuinely unavailable, fall back to `clip.exe` (short) or a temp `.md` + `xdg-open` (long). NEVER use this fallback on a multi-session node - it is the exact mechanism this protocol replaces.
 
+## Memory Index Compaction (MEMORY.md auto-memory)
+
+When the harness flags MEMORY.md as too big ("approaching the read limit / compact to under X KB"), compaction is RELEVANCE curation, NOT byte-minimization. NEVER just trim the longest lines to hit the byte target: entry length correlates with recency and importance (active plans accumulate the most detail and are updated most), so "cut the biggest" destroys the most load-bearing memory. Size is a symptom; relevance is the target.
+
+Order of operations:
+1. DROP or archive STALE entries first. Stale = no longer informs future action: completed-and-landed work with no open `NEXT=`, superseded/reversed decisions, resolved one-offs whose reusable lesson already lives in another entry, dated past events. Signals: `DONE`/`LANDED`/`MERGED`/`RESOLVED`/`FIXED` with no `NEXT=`; a merged MR; a past date with no forward action.
+2. MERGE duplicate or same-plan multi-line entries into one bullet.
+3. ONLY THEN, for still-long ACTIVE entries, move detail into that entry's topic file and leave a one-line pointer that PRESERVES its identity and current status/`NEXT=`.
+
+Rules:
+- "One line per entry" is a FORMAT rule (collapse multi-line bullets), not license to truncate active content.
+- PROTECT active entries (any with `NEXT=`, in-flight branch/MR/pipeline, or recent date); trim the OLDEST INACTIVE entries instead.
+- If dropping stale + merging still exceeds budget, too many ACTIVE plans are indexed: ARCHIVE completed plans or tell the user. Do NOT mutilate active entries to fit.
+- When unsure whether an entry is stale, KEEP it or ask. Deleting memory is high-cost; over-keeping is low-cost.
+
 ## Long-Running Task Strategy
 
 Long-running tasks (>5 min) are allowed but require management:
