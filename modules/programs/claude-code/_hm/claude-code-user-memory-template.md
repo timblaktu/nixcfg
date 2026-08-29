@@ -271,9 +271,12 @@ The file-based memory is per-directory (keyed by cwd, one memory dir per worktre
 - **Fix**: `kas-build` wrapper unmounts `/mnt/[a-z]` drives before building. Leaves `/usr/lib/wsl/drivers` (read-only, no sync hang).
 
 ### Git Worktree Workflow
+- **Default to a dedicated worktree per branch** for any non-trivial or parallelizable work. Worktrees are as cheap as branches; prefer `git worktree add` over an in-place `git checkout -b` whenever the current worktree is dirty, the new branch's base differs (e.g. a clean feature off `main` while the current tree carries unrelated doc/churn), or the work could run alongside other efforts. This keeps each branch's diff clean (clean MRs, accurate code permalinks) and enables maximum parallelism across the many workspaces here.
+- **Parent/child workspace pattern**: treat the workspace that holds the plan, docs, and handoff as the coordination "parent"; cut isolated child worktrees off `main` (or the correct base) for the shippable code. Navigate the set with `git worktree list` (it reads as a task map when dirs/branches are named for the task, e.g. `~/src/<repo>-<feature>` on branch `<feature>`).
+- **Self-authorized**: create worktrees and their branches without asking; just name what you created in your report so the human can follow. Moving/removing a worktree later is cheap and reversible.
 - **Use case**: Parallel work across Claude accounts without interference
 - **Setup**: `git worktree add ~/src/project-pro feature/foo-pro`
-- **Cleanup**: `git worktree remove`, `git branch -d`
+- **Cleanup**: `git worktree remove`, `git branch -d` (root-owned build dirs may need `sudo rm -rf` first)
 
 ### Claude Task Runner Artifacts
 - `.claude-task-logs/` and `.claude-task-state` are local session state - should be gitignored
