@@ -602,6 +602,7 @@ Ordered by information value per unit of effort.
 | Version | Date | Change |
 |---|---|---|
 | v1 | 2026-08-31 | Initial compilation. Rosetta mechanics, `linux-builder-vz` upstreaming, VM-test analysis, verification plan. All §6.4–§6.6 claims `[UNVERIFIED]`. |
+| v1.1 | 2026-08-31 | `[STATED]` Placed under nixcfg plan 055 (worktree `nixcfg-rosetta`, branch `plan-055-rosetta-multiarch`). Cross-repo survey (nixcfg + nixcfg-work, all worktrees/branches): existing prior art is QEMU-binfmt cross-builds (`dev-team.nix` `boot.binfmt.emulatedSystems`), an aarch64 NixOS qcow2 run under UTM/QEMU (`nixos-dev-team-vm` / `image-vm-dev-team`, nixcfg-work CI-published), an *inverted* remote builder (Linux host → Mac for aarch64-darwin), and Rosetta-into-a-Linux-guest already used once via Colima `rosetta=true` (x86 containers). `linux-builder-vz`/`vzvm`/`virtualisation.vz` have ZERO occurrences in either repo — the mechanism here is new to us. Full claim-verification deferred to plan 055 P1. `[DECISION]` (governance, not §7): split public/private — nixcfg owns the portable mechanism + claim-verification; nixcfg-work owns the §7 adoption decision + corp experiments; §6 feeds plan 054, not a fork. Reference §7 A/B/C/D remain **options, none adopted.** |
 
 ---
 
