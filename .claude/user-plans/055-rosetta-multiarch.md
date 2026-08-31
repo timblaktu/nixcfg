@@ -67,7 +67,7 @@ as **two separate decisions**, not one.
 ## Progress tracking
 | ID | Task | Kind · Home | Ref §·Q | Status |
 |----|------|------|------|--------|
-| P1 | Code-verification pass: confirm/refute reference §4 + §6 `[UNVERIFIED]` claims vs actual nixpkgs + our flakes/tests/CI; answer Q7, Q9; edit reference + Changelog | analysis · nixcfg | §4,§6 · Q7,Q9 | TASK:IN_PROGRESS |
+| P1 | Code-verification pass: confirm/refute reference §4 + §6 `[UNVERIFIED]` claims vs actual nixpkgs + our flakes/tests/CI; answer Q7, Q9; edit reference + Changelog | analysis · nixcfg | §4,§6 · Q7,Q9 | TASK:COMPLETE (2026-08-31) |
 | PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | portable module · nixcfg | §4.5,§6.5 | TASK:PENDING (dep P1; design-only until P9) |
 | P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | research · nixcfg | §2.2 · Q10 | TASK:PENDING |
 | P0 | Fleet inventory: M-generation + macOS version for every dev machine | Interactive · **→ nixcfg-work** (052 M-A / 001) | §8.1 · Q1 | TASK:PENDING |
@@ -111,6 +111,21 @@ as **two separate decisions**, not one.
   Operator/corp-decision tasks yield **USER_INPUT_REQUIRED** and are executed in nixcfg-work.
 
 ## Session log
+- 2026-08-31 (P1 COMPLETE) — Code-verification pass (host-independent, no Mac). Verified against live
+  nixos-unstable (mcp-nixos) + both repos. **Confirmed upstream:** `darwin.linux-builder-vz` + `vzvm`
+  v1.0.0 exist (§4.2); `virtualisation.rosetta.{enable,mountTag}` exist (§4.1); `nix.linux-builder.*`
+  config shape exists (§4.5). **Flagged discrepancy:** `virtualisation.vz.*` option paths (§4.5/§6.3)
+  not in the options index → downgraded to `[UNVERIFIED]`, source confirmation handed to P6a/PM.
+  **Q7 CLOSED:** systems-under-test are NixOS guests (19 `nixosTest`/`runNixOSTest`, 26
+  `self.modules.nixos.*`; zero embedded/cross-arch guests). **Q9 CLOSED:** zero `cpick`/rosetta-builder
+  refs anywhere. **New findings:** our nixpkgs pin (2026-01-30) predates the Aug-2026 merge (mechanism
+  not in our lock; adoption needs a bump); §6.4 x86-on-Mac pathology not currently triggered (all tests
+  host-arch; aarch64 gate on KVM-metal runner); §6.3 KVM premise already true for us
+  (`vm-dev-team-vm-smoketest` needs hardware `/dev/kvm`). Reference §4.1/§4.2/§4.5/§6.3/§6.4/§6.6 edited,
+  §9 Q7+Q9 struck, Changelog v1.2 added. Empirical benchmark/TCG claims (§4.4/§6.3/§6.4) correctly remain
+  `[UNVERIFIED]` — they need a Mac and are delegated to P2/P3/P4, not P1's scope.
+  **Next in-repo:** PM (portable module sketch, dep P1 met — design + eval-gate only), then P6a
+  (nixpkgs `rosetta.nix` `fixBinary`) and P8 (Apple-docs recheck). All are host-independent.
 - 2026-08-31 — Plan created; worktree `/home/tim/src/nixcfg-rosetta` + branch `plan-055-rosetta-multiarch` cut from
   `main`; reference doc imported. **Cross-repo survey done** (nixcfg + nixcfg-work, all worktrees/branches): mapped
   existing darwin/Mac-VM/cross-arch work; found the vz/Rosetta-linux-builder mechanism is new to us, with real overlap

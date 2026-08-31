@@ -170,6 +170,11 @@ with "Enable Rosetta" ticked). Options include the mount tag and mount point.
 This module was always usable — with UTM, Lima, or vfkit. What was missing was a
 first-class, declarative, zero-config path.
 
+`[RESEARCH]` **Verified (P1, live nixos-unstable):** the NixOS options index exposes
+`virtualisation.rosetta.enable` (boolean; "requires the system to be a virtualised guest on an
+Apple silicon host"; defaults tuned for UTM "Apple Virtualization" + "Enable Rosetta") and
+`virtualisation.rosetta.mountTag` (the VirtioFS mount tag). ✓ Matches this section.
+
 ### 4.2 The recent development (this is what the podcast was describing)
 
 `[RESEARCH]` **`pkgs.darwin.linux-builder-vz`, backed by `pkgs.vzvm`.**
@@ -192,6 +197,26 @@ first-class, declarative, zero-config path.
 > `github.com/cpick/nix-rosetta-builder` — which solved the same problem before upstream
 > did. If team configurations already reference it, that is a candidate for migration, but
 > **that is an observation, not a recommendation.**
+
+`[RESEARCH]` **Upstream presence verified (P1, 2026-08-31, live nixos-unstable via mcp-nixos):**
+- `pkgs.darwin.linux-builder-vz` exists (attribute `darwin.linux-builder-vz`, package name
+  `create-builder`, "Create a Linux builder VM for macOS"). ✓
+- `pkgs.vzvm` exists — v1.0.0, "Minimal Linux VM monitor built on Apple's Virtualization.framework",
+  homepage `github.com/applicative-systems/vzvm`, MIT. ✓ (The "~1000 lines of Swift" figure is not
+  checkable from package metadata; treat that specific number as still `[UNVERIFIED]`.)
+- The PR number (#544193), author, reviewer, and 2026-08-10 announcement date are **not** verifiable
+  from nixpkgs metadata alone; they remain as-cited from the announcement post (§10), unverified here.
+
+`[RESEARCH]` **Not in our current lock (P1):** our `flake.lock` pins `nixpkgs` to `nixos-unstable`
+rev `62c8382960464ceb98ea593cb8321a2cf8f9e3e5`, `lastModified` 2026-01-30. That predates the
+August-2026 merge, so `linux-builder-vz`/`vzvm` are upstream but **absent from the nixpkgs we
+currently evaluate against.** Adopting the mechanism requires a `nixpkgs` bump first — a concrete
+prerequisite for PM/P9, not a blocker for this code-verification pass.
+
+`[UNVERIFIED]` **Zero adoption in our repos (P1, Q9):** `rg` across every nixcfg and nixcfg-work
+worktree finds no reference to `cpick/nix-rosetta-builder`, nor to `linux-builder-vz`, `vzvm`,
+`virtualisation.vz`, or `virtualisation.rosetta`. Nothing to migrate; the mechanism is genuinely
+new to us (confirms the plan-055 survey).
 
 ### 4.3 What `linux-builder-vz` actually is
 
@@ -255,6 +280,18 @@ $ softwareupdate --install-rosetta --agree-to-license
 `[RESEARCH]` The builder **refuses to start** when Rosetta is missing rather than
 silently dropping `x86_64-linux` support. To run without it:
 `virtualisation.vz.rosetta.enable = false;`
+
+`[RESEARCH]` **Partially verified (P1):** the nix-darwin option index confirms
+`nix.linux-builder.{enable,package,systems,ephemeral,maxJobs,supportedFeatures,config,speedFactor}`
+— the whole config shape above evaluates against real options. ✓ **Discrepancy to resolve:** the
+guest-side toggles this section and §6.3 cite — `virtualisation.vz.rosetta.enable` and
+`virtualisation.vz.nestedVirtualization` — return **no matches** in the NixOS options index
+(searched live). That index covers the standard NixOS module set; `virtualisation.vz.*` are almost
+certainly defined only inside the `vzvm`/`linux-builder-vz` guest module (imported via
+`nix.linux-builder.config`), so absence from the index is **not** proof of absence — but the exact
+attribute path is now `[UNVERIFIED]` and must be confirmed against the module source before use.
+Deferred to **P6a/PM** (which read nixpkgs module source directly). Do not copy these paths into a
+real config until confirmed.
 
 Realistic sizing (defaults of 1 core / 3 GB / 20 GB are too small for production builds):
 
@@ -400,6 +437,15 @@ can still build.
 aarch64, and the guest kernel is aarch64. Acceleration is available end to end and
 performance should approach a native aarch64 runner. Benchmark to confirm.
 
+`[RESEARCH]` **Our-suite premise confirmed (P1):** our VM tests are standard
+`pkgs.testers.nixosTest`/`runNixOSTest` derivations, which the nixpkgs testing framework tags with
+the `kvm` + `nixos-test` `requiredSystemFeatures`. We rely on this in practice: the
+`vm-dev-team-vm-smoketest` is explicitly routed by nixcfg-work CI to an aarch64 KVM-metal runner
+(tag `aws-uswest2-metal-nix-arm64-kvm`) "which provides hardware `/dev/kvm`"
+(`modules/flake-parts/vm-tests.nix:2016-2017`). So "the builder must provide `/dev/kvm`" is not
+hypothetical for us — it is already a hard requirement our aarch64 tests satisfy via a metal runner,
+and is exactly what a Mac vz builder would need `vz.nestedVirtualization` to reproduce locally.
+
 ### 6.4 x86_64 VM tests: Rosetta does not help
 
 `[UNVERIFIED — this is the central analytical claim of this document and must be tested]`
@@ -435,6 +481,16 @@ Consequences to expect and verify:
   Nix gates on `requiredSystemFeatures` (`kvm`, `nixos-test`); QEMU invocation in the
   nixpkgs test machinery may attempt KVM acceleration and fail rather than silently
   degrade to TCG. Determine which failure mode actually occurs.
+
+`[RESEARCH]` **Scope check against our actual suite (P1): this pathology is not currently
+triggered.** Every test in `modules/flake-parts/vm-tests.nix` builds a guest of the **host**
+architecture — x86_64-linux guests evaluate/run on x86_64 runners, and the one aarch64 gate
+(`vm-dev-team-vm-smoketest`) runs on an aarch64 metal runner. We have **no** test that boots an
+x86_64 guest kernel on an aarch64 host. The §6.4 two-translation-layers case therefore only arises
+if we *choose* to route an x86_64 NixOS VM test onto a Mac's aarch64 vz builder (an Option-C-style
+decision, §7). Until then the risk is latent, not active. The empirical "does TCG-under-Rosetta run
+at all" question stays for **P3** (needs a Mac); this finding just bounds *when* it would matter for
+us and hands that framing to plan 054.
 
 ### 6.5 The scheduling hazard
 
@@ -473,13 +529,19 @@ composes with hand-written `buildMachines`, must be verified before this is used
 
 ### 6.6 The embedded-specific caveat
 
-`[UNVERIFIED — depends on facts not yet established]`
+`[RESEARCH — Q7 resolved, P1 2026-08-31]` **Our systems under test are NixOS guests, not
+arbitrary embedded images.** All 19 VM tests in `modules/flake-parts/vm-tests.nix` (plus the two
+`tests/integration/*.nix`) build the guest from our dendritic `self.modules.nixos.*` via
+`pkgs.testers.nixosTest` (19 calls) or `runNixOSTest` (nspawn backend); 26 `self.modules.nixos.*`
+imports; **zero** custom-kernel / raw-`.img` / `crossSystem` / non-NixOS guests. Even the
+closest-to-"shipped-artifact" case (`vm-dev-team-vm-smoketest`) is a NixOS guest composed from
+`system-cli` + `dev-team`, run on the test driver's own VM disk. So the "arbitrary embedded image"
+branch below is, for us today, hypothetical.
 
-If the systems under test are not NixOS guests but arbitrary embedded Linux images wrapped
-in a NixOS test harness, the same architecture rule applies unchanged: the *guest kernel's*
-architecture, not the userspace, determines whether hardware acceleration is available.
-Wrapping a custom `x86_64` kernel image in a NixOS test does not change the analysis in
-§6.4.
+The general rule still holds and is worth keeping: *if* a test ever wraps a non-NixOS `x86_64`
+kernel image in a NixOS harness, the same architecture rule applies unchanged — the **guest
+kernel's** architecture, not the userspace, determines whether hardware acceleration is available,
+and wrapping a custom `x86_64` kernel in a NixOS test does not change the §6.4 analysis.
 
 Separately: **VM tests of any architecture do not validate target hardware behaviour** —
 timing, cache effects, errata, peripheral interaction, or anything touching real silicon.
@@ -563,9 +625,9 @@ Ordered by information value per unit of effort.
 | Q4 | Does Nix error or degrade when `kvm` is advertised but unusable for the target arch? | — | Open |
 | Q5 | Can `nix.buildMachines` carry two entries for one host with different features? | — | Open |
 | Q6 | Does `virtualisation.rosetta` register binfmt with `fixBinary` for sandbox use? | — | Open |
-| Q7 | Are the systems under test NixOS guests or arbitrary embedded images? | — | Open |
+| Q7 | Are the systems under test NixOS guests or arbitrary embedded images? | P1 | **CLOSED (§6.6):** NixOS guests. All 19 VM tests build the guest from `self.modules.nixos.*` via `pkgs.testers.nixosTest`/`runNixOSTest`; zero embedded/raw-image/custom-kernel/cross-arch guests. |
 | Q8 | Do the team's amd64-only vendor toolchains run clean under Rosetta? | — | Open |
-| Q9 | Do any existing configs reference `cpick/nix-rosetta-builder`? | — | Open |
+| Q9 | Do any existing configs reference `cpick/nix-rosetta-builder`? | P1 | **CLOSED (§4.2):** No. `rg` across all nixcfg + nixcfg-work worktrees: zero hits for `cpick`/`nix-rosetta-builder` (also zero for `linux-builder-vz`/`vzvm`/`virtualisation.vz`/`virtualisation.rosetta`). |
 | Q10 | Confirm the Linux-VM Rosetta path's status in current Apple docs | — | Open |
 
 ---
@@ -602,6 +664,7 @@ Ordered by information value per unit of effort.
 | Version | Date | Change |
 |---|---|---|
 | v1 | 2026-08-31 | Initial compilation. Rosetta mechanics, `linux-builder-vz` upstreaming, VM-test analysis, verification plan. All §6.4–§6.6 claims `[UNVERIFIED]`. |
+| v1.2 | 2026-08-31 | **P1 code-verification pass** (host-independent; no Mac). Verified vs live nixos-unstable (mcp-nixos) + our repos: `pkgs.darwin.linux-builder-vz` and `pkgs.vzvm` (v1.0.0) **exist upstream** (§4.2 ✓); `virtualisation.rosetta.{enable,mountTag}` **exist** (§4.1 ✓); `nix.linux-builder.{package,systems,ephemeral,maxJobs,supportedFeatures,config,speedFactor}` **exist** (§4.5 config shape ✓). **Discrepancy flagged:** `virtualisation.vz.rosetta.enable` / `virtualisation.vz.nestedVirtualization` (§4.5/§6.3) are **not** in the NixOS options index — likely guest-module-only; exact attr path downgraded to `[UNVERIFIED]`, source confirmation deferred to P6a/PM. **Q7 CLOSED (§6.6):** our systems-under-test are NixOS guests (19 `nixosTest`/`runNixOSTest`, 26 `self.modules.nixos.*` imports, zero embedded/raw-image/cross-arch guests). **Q9 CLOSED (§4.2):** zero refs to `cpick/nix-rosetta-builder` (or `linux-builder-vz`/`vzvm`/`virtualisation.vz`/`virtualisation.rosetta`) anywhere in nixcfg + nixcfg-work. **New findings:** (a) our nixpkgs pin (rev `62c8382`, 2026-01-30) **predates** the Aug-2026 merge — mechanism is upstream but absent from our lock; adoption needs a bump (§4.2). (b) §6.4 pathology is **not currently triggered** — our VM tests are all host-arch, aarch64 gate runs on an aarch64 KVM-metal runner; the x86-on-Mac case only arises under an explicit Option-C routing choice (§6.4). (c) §6.3 KVM premise **confirmed for us** — `vm-dev-team-vm-smoketest` already requires hardware `/dev/kvm` via a metal runner (§6.3). |
 | v1.1 | 2026-08-31 | `[STATED]` Placed under nixcfg plan 055 (worktree `nixcfg-rosetta`, branch `plan-055-rosetta-multiarch`). Cross-repo survey (nixcfg + nixcfg-work, all worktrees/branches): existing prior art is QEMU-binfmt cross-builds (`dev-team.nix` `boot.binfmt.emulatedSystems`), an aarch64 NixOS qcow2 run under UTM/QEMU (`nixos-dev-team-vm` / `image-vm-dev-team`, nixcfg-work CI-published), an *inverted* remote builder (Linux host → Mac for aarch64-darwin), and Rosetta-into-a-Linux-guest already used once via Colima `rosetta=true` (x86 containers). `linux-builder-vz`/`vzvm`/`virtualisation.vz` have ZERO occurrences in either repo — the mechanism here is new to us. Full claim-verification deferred to plan 055 P1. `[DECISION]` (governance, not §7): split public/private — nixcfg owns the portable mechanism + claim-verification; nixcfg-work owns the §7 adoption decision + corp experiments; §6 feeds plan 054, not a fork. Reference §7 A/B/C/D remain **options, none adopted.** |
 
 ---
