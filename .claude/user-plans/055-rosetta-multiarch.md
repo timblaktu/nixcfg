@@ -114,15 +114,17 @@ as **two separate decisions**, not one.
 - 2026-08-31 (P1 COMPLETE) — Code-verification pass (host-independent, no Mac). Verified against live
   nixos-unstable (mcp-nixos) + both repos. **Confirmed upstream:** `darwin.linux-builder-vz` + `vzvm`
   v1.0.0 exist (§4.2); `virtualisation.rosetta.{enable,mountTag}` exist (§4.1); `nix.linux-builder.*`
-  config shape exists (§4.5). **Flagged discrepancy:** `virtualisation.vz.*` option paths (§4.5/§6.3)
-  not in the options index → downgraded to `[UNVERIFIED]`, source confirmation handed to P6a/PM.
-  **Q7 CLOSED:** systems-under-test are NixOS guests (19 `nixosTest`/`runNixOSTest`, 26
-  `self.modules.nixos.*`; zero embedded/cross-arch guests). **Q9 CLOSED:** zero `cpick`/rosetta-builder
-  refs anywhere. **New findings:** our nixpkgs pin (2026-01-30) predates the Aug-2026 merge (mechanism
-  not in our lock; adoption needs a bump); §6.4 x86-on-Mac pathology not currently triggered (all tests
-  host-arch; aarch64 gate on KVM-metal runner); §6.3 KVM premise already true for us
-  (`vm-dev-team-vm-smoketest` needs hardware `/dev/kvm`). Reference §4.1/§4.2/§4.5/§6.3/§6.4/§6.6 edited,
-  §9 Q7+Q9 struck, Changelog v1.2 added. Empirical benchmark/TCG claims (§4.4/§6.3/§6.4) correctly remain
+  config shape exists (§4.5). **Option paths confirmed in source:** `virtualisation.vz.{rosetta.enable,
+  nestedVirtualization}` are real (`vz-vm.nix:81,100`); they were merely absent from search.nixos.org
+  (index lag), NOT a discrepancy. **Q7 CLOSED:** systems-under-test are NixOS guests (19
+  `nixosTest`/`runNixOSTest`, 26 `self.modules.nixos.*`; zero embedded/cross-arch guests). **Q9 CLOSED:**
+  zero `cpick`/rosetta-builder refs anywhere. **New findings:** our top-level `inputs.nixpkgs` = rev
+  `ffb3c9b`/2026-08-19 (post-merge) **already contains** the mechanism — no bump needed (self-corrected:
+  an initial note wrongly cited a transitive `62c8382`/Jan-30 lock node as our root nixpkgs); §6.4
+  x86-on-Mac pathology not currently triggered (all tests host-arch; aarch64 gate on KVM-metal runner);
+  §6.3 KVM premise already true for us (`vm-dev-team-vm-smoketest` needs hardware `/dev/kvm`); incidental
+  P6a preview — `rosetta.nix:77` sets `fixBinary = true`. Reference §4.1/§4.2/§4.5/§6.3/§6.4/§6.6 edited,
+  §9 Q7+Q9 struck, Changelog v1.2 + v1.3 (self-correction) added. Empirical benchmark/TCG claims (§4.4/§6.3/§6.4) correctly remain
   `[UNVERIFIED]` — they need a Mac and are delegated to P2/P3/P4, not P1's scope.
   **Next in-repo:** PM (portable module sketch, dep P1 met — design + eval-gate only), then P6a
   (nixpkgs `rosetta.nix` `fixBinary`) and P8 (Apple-docs recheck). All are host-independent.

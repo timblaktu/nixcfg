@@ -207,11 +207,16 @@ Apple silicon host"; defaults tuned for UTM "Apple Virtualization" + "Enable Ros
 - The PR number (#544193), author, reviewer, and 2026-08-10 announcement date are **not** verifiable
   from nixpkgs metadata alone; they remain as-cited from the announcement post (§10), unverified here.
 
-`[RESEARCH]` **Not in our current lock (P1):** our `flake.lock` pins `nixpkgs` to `nixos-unstable`
-rev `62c8382960464ceb98ea593cb8321a2cf8f9e3e5`, `lastModified` 2026-01-30. That predates the
-August-2026 merge, so `linux-builder-vz`/`vzvm` are upstream but **absent from the nixpkgs we
-currently evaluate against.** Adopting the mechanism requires a `nixpkgs` bump first — a concrete
-prerequisite for PM/P9, not a blocker for this code-verification pass.
+`[RESEARCH]` **Present in our current lock (P1, corrected):** our top-level `inputs.nixpkgs`
+resolves to rev `ffb3c9b700e759be2ef13237c9d8f953b32a1e46`, `lastModified` **2026-08-19** — after the
+August-2026 merge — and `pkgs.darwin.linux-builder-vz`, `pkgs.vzvm`, the `virtualisation.vz.*` module
+(`nixos/modules/virtualisation/vz-vm.nix`) and `virtualisation.rosetta.nix` are all **already in the
+nixpkgs we evaluate against** (verified by store-path inspection + `nix eval`). **No nixpkgs bump is
+needed to adopt the mechanism** — this removes a prerequisite PM/P9 would otherwise have carried.
+(Caveat, corrected in v1.3: an earlier v1.2 note wrongly said our pin was rev `62c8382`/2026-01-30
+and predated the merge. That `62c8382` node in `flake.lock` is a *transitive* nixpkgs pulled in by
+another flake input, **not** our top-level `inputs.nixpkgs`; the mistake came from reading a
+lock-node by name instead of following the root input edge.)
 
 `[UNVERIFIED]` **Zero adoption in our repos (P1, Q9):** `rg` across every nixcfg and nixcfg-work
 worktree finds no reference to `cpick/nix-rosetta-builder`, nor to `linux-builder-vz`, `vzvm`,
@@ -281,17 +286,23 @@ $ softwareupdate --install-rosetta --agree-to-license
 silently dropping `x86_64-linux` support. To run without it:
 `virtualisation.vz.rosetta.enable = false;`
 
-`[RESEARCH]` **Partially verified (P1):** the nix-darwin option index confirms
+`[RESEARCH]` **Verified against source (P1):** the nix-darwin option index confirms
 `nix.linux-builder.{enable,package,systems,ephemeral,maxJobs,supportedFeatures,config,speedFactor}`
-— the whole config shape above evaluates against real options. ✓ **Discrepancy to resolve:** the
-guest-side toggles this section and §6.3 cite — `virtualisation.vz.rosetta.enable` and
-`virtualisation.vz.nestedVirtualization` — return **no matches** in the NixOS options index
-(searched live). That index covers the standard NixOS module set; `virtualisation.vz.*` are almost
-certainly defined only inside the `vzvm`/`linux-builder-vz` guest module (imported via
-`nix.linux-builder.config`), so absence from the index is **not** proof of absence — but the exact
-attribute path is now `[UNVERIFIED]` and must be confirmed against the module source before use.
-Deferred to **P6a/PM** (which read nixpkgs module source directly). Do not copy these paths into a
-real config until confirmed.
+— the whole config shape above evaluates against real options. ✓ The guest-side toggles this section
+and §6.3 cite are **confirmed correct** by reading the actual module in our pinned nixpkgs,
+`nixos/modules/virtualisation/vz-vm.nix`:
+- `virtualisation.vz.rosetta.enable` — declared at `vz-vm.nix:81-82`. ✓
+- `virtualisation.vz.nestedVirtualization` — declared at `vz-vm.nix:100`. ✓
+- `virtualisation.vz.package` = `mkPackageOption "vzvm"` (`vz-vm.nix:79`) — confirms the vz backend is
+  `pkgs.vzvm`.
+- When `vz.rosetta.enable` is set, the module wires `virtualisation.rosetta.enable = true` and
+  `virtualisation.rosetta.mountTag = "rosetta"` (`vz-vm.nix:279-281`) — exactly the §3 mechanism.
+
+These options simply are **not indexed by search.nixos.org yet** (they were merged too recently);
+that index gap is what an earlier v1.2 note mis-read as a "discrepancy." The attribute paths are
+correct — safe to use once a host actually adopts (still gated on P9). `fixBinary`/sandbox behaviour
+of `virtualisation.rosetta` is a separate question owned by **P6a** (preview: `rosetta.nix:77` sets
+`fixBinary = true`).
 
 Realistic sizing (defaults of 1 core / 3 GB / 20 GB are too small for production builds):
 
@@ -664,6 +675,7 @@ Ordered by information value per unit of effort.
 | Version | Date | Change |
 |---|---|---|
 | v1 | 2026-08-31 | Initial compilation. Rosetta mechanics, `linux-builder-vz` upstreaming, VM-test analysis, verification plan. All §6.4–§6.6 claims `[UNVERIFIED]`. |
+| v1.3 | 2026-08-31 | **P1 self-correction (verified against actual pinned nixpkgs source, not just the search index).** Two v1.2 claims were wrong and are corrected in §4.2/§4.5: (1) our top-level `inputs.nixpkgs` is rev `ffb3c9b` / **2026-08-19** (post-merge) and **already contains** `linux-builder-vz`, `vzvm`, `virtualisation.vz.*`, and `rosetta.nix` — **no nixpkgs bump needed**; the `62c8382`/2026-01-30 lock node is a *transitive* input of another flake input, not our root nixpkgs (v1.2 read a lock-node by name instead of following the input edge). (2) The `virtualisation.vz.*` paths are **not** a discrepancy — they are confirmed in `nixos/modules/virtualisation/vz-vm.nix` (`vz.rosetta.enable`@81, `vz.nestedVirtualization`@100, `vz.package=vzvm`@79, and vz→`virtualisation.rosetta` wiring @279-281); they were merely absent from the search.nixos.org index. Source also corroborates §2.3/§3: vz-vm.nix asserts aarch64-darwin-host-only (@197) and cannot emulate a foreign guest arch (@204). Incidental P6a preview: `rosetta.nix:77` sets `fixBinary = true` (P6a still owns the sandbox (b) analysis). |
 | v1.2 | 2026-08-31 | **P1 code-verification pass** (host-independent; no Mac). Verified vs live nixos-unstable (mcp-nixos) + our repos: `pkgs.darwin.linux-builder-vz` and `pkgs.vzvm` (v1.0.0) **exist upstream** (§4.2 ✓); `virtualisation.rosetta.{enable,mountTag}` **exist** (§4.1 ✓); `nix.linux-builder.{package,systems,ephemeral,maxJobs,supportedFeatures,config,speedFactor}` **exist** (§4.5 config shape ✓). **Discrepancy flagged:** `virtualisation.vz.rosetta.enable` / `virtualisation.vz.nestedVirtualization` (§4.5/§6.3) are **not** in the NixOS options index — likely guest-module-only; exact attr path downgraded to `[UNVERIFIED]`, source confirmation deferred to P6a/PM. **Q7 CLOSED (§6.6):** our systems-under-test are NixOS guests (19 `nixosTest`/`runNixOSTest`, 26 `self.modules.nixos.*` imports, zero embedded/raw-image/cross-arch guests). **Q9 CLOSED (§4.2):** zero refs to `cpick/nix-rosetta-builder` (or `linux-builder-vz`/`vzvm`/`virtualisation.vz`/`virtualisation.rosetta`) anywhere in nixcfg + nixcfg-work. **New findings:** (a) our nixpkgs pin (rev `62c8382`, 2026-01-30) **predates** the Aug-2026 merge — mechanism is upstream but absent from our lock; adoption needs a bump (§4.2). (b) §6.4 pathology is **not currently triggered** — our VM tests are all host-arch, aarch64 gate runs on an aarch64 KVM-metal runner; the x86-on-Mac case only arises under an explicit Option-C routing choice (§6.4). (c) §6.3 KVM premise **confirmed for us** — `vm-dev-team-vm-smoketest` already requires hardware `/dev/kvm` via a metal runner (§6.3). |
 | v1.1 | 2026-08-31 | `[STATED]` Placed under nixcfg plan 055 (worktree `nixcfg-rosetta`, branch `plan-055-rosetta-multiarch`). Cross-repo survey (nixcfg + nixcfg-work, all worktrees/branches): existing prior art is QEMU-binfmt cross-builds (`dev-team.nix` `boot.binfmt.emulatedSystems`), an aarch64 NixOS qcow2 run under UTM/QEMU (`nixos-dev-team-vm` / `image-vm-dev-team`, nixcfg-work CI-published), an *inverted* remote builder (Linux host → Mac for aarch64-darwin), and Rosetta-into-a-Linux-guest already used once via Colima `rosetta=true` (x86 containers). `linux-builder-vz`/`vzvm`/`virtualisation.vz` have ZERO occurrences in either repo — the mechanism here is new to us. Full claim-verification deferred to plan 055 P1. `[DECISION]` (governance, not §7): split public/private — nixcfg owns the portable mechanism + claim-verification; nixcfg-work owns the §7 adoption decision + corp experiments; §6 feeds plan 054, not a fork. Reference §7 A/B/C/D remain **options, none adopted.** |
 
