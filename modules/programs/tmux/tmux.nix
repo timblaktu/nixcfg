@@ -215,7 +215,7 @@ in
               // { default = true; };
             style = lib.mkOption {
               type = lib.types.enum [ "italic" "color" "reverse" "background" "blink" ];
-              default = "background";
+              default = "italic";
               example = "reverse";
               description = ''
                 Visual style for the per-window command-status indicator. Each option
