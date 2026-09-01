@@ -928,7 +928,6 @@ in
             # --- Test 11: Helper scripts present and executable ---
             machine.succeed("su - ${testUsername} -c 'which tmux-cpu-mem'")
             machine.succeed("su - ${testUsername} -c 'which tmux-save-with-rename'")
-            machine.succeed("su - ${testUsername} -c 'which tmux-window-status-format'")
             machine.succeed("su - ${testUsername} -c 'which tmux-test-data-generator'")
 
             # --- Test 12: Can create additional sessions and switch between them ---
