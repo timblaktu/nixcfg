@@ -87,7 +87,7 @@ IDs are stable (never renumbered); only order changed and P6 was split into P6a 
 | PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | OFF-MAC · nixcfg | §4.5,§6.5 | TASK:COMPLETE (2026-09-04) |
 | P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | OFF-MAC research · nixcfg | §2.2 · Q10 | TASK:COMPLETE (2026-09-04) |
 | P6a | Code half of P6: verify `virtualisation.rosetta` registers with `fixBinary` in nixpkgs source — cite the line (or its absence) in `rosetta.nix`; answer the code half of Q6 | OFF-MAC code · nixcfg | §8.6 · Q6 | TASK:COMPLETE (2026-09-04) |
-| PD | **Discussion gate (Interactive):** with PM+P8+P6a done, DISCUSS with Tim how the off-Mac findings change HOW we do the darwin integration/validation, BEFORE any Mac testing ("don't test twice"). Output a recorded go-plan for the Mac phase (which of P2-P7, in what order, + any 054/001/004 adjustments) | Interactive GATE · nixcfg | §7 | TASK:PENDING (dep PM,P8,P6a — USER_INPUT_REQUIRED; deliberate STOP after off-Mac work) |
+| PD | **Discussion gate (Interactive):** with PM+P8+P6a done, DISCUSS with Tim how the off-Mac findings change HOW we do the darwin integration/validation, BEFORE any Mac testing ("don't test twice"). Output a recorded go-plan for the Mac phase (which of P2-P7, in what order, + any 054/001/004 adjustments) | Interactive GATE · nixcfg | §7 | TASK:COMPLETE (2026-09-04) |
 | P0 | Fleet inventory: M-generation + macOS version for every dev machine | Interactive · **→ nixcfg-work** (052 M-A / 001) | §8.1 · Q1 | TASK:PENDING (dep PD — USER_INPUT_REQUIRED) |
 | P2 | Baseline the build win: stand up `linux-builder-vz`, time a representative `x86_64-linux` build vs QEMU binfmt; confirm/refute 2.5× | Apple-Silicon | §8.2 | TASK:PENDING (dep P0 — ENVIRONMENT_NOT_CAPABLE here) |
 | P3 | **Highest-value experiment:** does a Rosetta-translated `qemu-system-x86_64` run TCG at all? Smallest x86_64 NixOS VM test on the vz builder; record exact failure mode | Apple-Silicon · **→ 054** | §8.3 · Q2,Q3 | TASK:PENDING (dep P2 — ENVIRONMENT_NOT_CAPABLE here) |
@@ -174,6 +174,26 @@ the same way — committed into 054 (nixcfg) and 001/004 (nixcfg-work), not into
 `feat/darwin-support` · findings sinks → nixcfg `054` + committed docs, nixcfg-work `001`/`004`.
 
 ## Session log
+- 2026-09-04 (PD COMPLETE — discussion gate held with Tim; go-plan exported) — Ran the discussion gate
+  live. Tim clarified goals: (1) Mac devs build locally, (2) run tests on Macs incl. **full emulated
+  Intel VMs** for routine/CI + interactive; Intel vendor binaries nice-to-have only. **Key reframe
+  surfaced + confirmed against the vzvm README** (at Tim's request, reading Nix Freaks #40's links):
+  vzvm/Rosetta do NOT provide full Intel VMs (vzvm = headless build appliance, no Intel guest; Rosetta
+  translates x86_64 *code in an ARM guest*, not a VM) — so the operator's primary goal is a separate
+  **software-emulation** track (UTM/qemu-TCG), unaccelerated by Rosetta, and the macOS-27 Rosetta risk
+  is largely irrelevant to it. **Decision (exported to a COMMITTED target so the MacBook can pick it up):
+  nixcfg-work `docs/darwin/0002-multiarch-build-test-apple-silicon.md`** (branch `feat/darwin-support`,
+  commit `fc91782`; needs a push by Tim to reach the Mac). Build-side ACCEPTED (adopt linux-builder-vz
+  for build-locally; aarch64-native durable, x86_64-via-Rosetta a caveated convenience). Test-side / Intel
+  VMs DEFERRED — measure-then-decide, honest expectation that routine CI on emulated Intel may be too slow,
+  with an ARM-native (nested-virt on M4) fast fallback. **Mac-phase experiment order set:** (1) GATING —
+  measure emulated x86_64 VM speed on a Mac (interactive smell test + one automated x86 NixOS VM test vs
+  Intel Linux) = P3 reframed around plain emulation; (2) confirm build-locally = P2/P6b; (3) ARM-native
+  test path = P4; de-prioritized P7 (vendor) + P5 (scheduler). Reference §4.8 updated with vzvm scope
+  (Changelog v1.6). **Off-Mac phase of plan 055 is now fully COMPLETE (P1, PM, P8, P6a, PD).** Remaining
+  tasks (P0, P2-P7, P6b, P9) are Apple-Silicon / corp-decision and run on the MacBook from nixcfg-work
+  `feat/darwin-support`, driven by ADR 0002 — not from this worktree. P9 (final adopt) updates ADR 0002
+  to Accepted after experiment #1.
 - 2026-09-04 (P6a COMPLETE — rosetta.nix fixBinary confirmed, Q6 code half closed) — Read
   `nixos/modules/virtualisation/rosetta.nix` in our pinned nixpkgs (`ffb3c9b`, store
   `/nix/store/jpnpv93s5ppfb1kbvfp8qa763vfb4fjb-source`). **Q6 code half = YES:**
