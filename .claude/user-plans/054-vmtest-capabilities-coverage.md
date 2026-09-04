@@ -412,6 +412,40 @@ committed flake side; changing any is a small edit):**
 6. Classification carries pure INTENT (tier/backend/systems/requires/enabled); runner/nixConfig are computed only
    in each platform's adapter, keeping the SSOT runner-agnostic. Confirm. (Recommend: yes.)
 
+### P10 — docling-parse × nlohmann × GCC14 compat (facet 4) `TASK:PENDING` (dep P9 — COMPLETE; deferred, non-gating, nightly-only)
+**Autonomous research-then-fix task (NOT Interactive; host-agnostic upstream reading + a scoped-overlay edit; the
+full closure build is CI/nightly, not the local gate).** Split from P9 (2026-08-23). P9 fixed the nlohmann FOD
+hash-drift and proved the whole docling C++ closure builds, but surfaced a DISTINCT upstream blocker:
+**docling-parse-4.5.0 will not compile against nlohmann under GCC14** with EITHER pin — 3.10.5 (`input_adapter`
+ambiguous overload) NOR 3.11.3 (`basic_json` bool-conversion SFINAE; CI run 32628030378). The rest of the C++
+closure builds; only docling-parse's own translation units fail. `build-docling` is currently `enabled=false` in
+`modules/flake-parts/ci-classification.nix` (excluded from the nightly matrix) pending this fix.
+
+**Approach — READ upstream first, then pick the lowest-blast-radius fix (do NOT trial-and-error CI builds):**
+1. Read the nlohmann `json.hpp` delta 3.10.5→3.11.0 around `input_adapter` (the overload set that became
+   unambiguous) and the `basic_json` bool-SFINAE change in 3.11.x; read docling-parse-4.5.0's actual include/usage.
+   Confirm the single change docling-parse needs. Prefer local clones (`~/src/nixpkgs`) per LOCAL-FIRST research.
+2. Track upstream: nixpkgs **docling PR #184** (does it bump/patch nlohmann or switch stdenv?) + docling-parse
+   upstream issues for GCC14/nlohmann. Record URLs so the search is reproducible.
+3. Pick one fix with recorded rationale: (a) backport the 3.11.0 `input_adapter` patch into the pinned 3.10.5
+   `json.hpp` via the existing scoped overlay (keeps the rest of the closure on 3.10.5 — likely lowest blast
+   radius); (b) build docling-parse only under `gcc13Stdenv` (sidestep the GCC14 SFINAE change); (c) adopt nixpkgs
+   PR #184's approach.
+4. Keep it scoped + commented (WORKAROUND: upstream GCC14/nlohmann compat; migration path = drop when nixpkgs ships
+   the fix). Then re-enable build-docling: flip `enabled=false`→`true` in `ci-classification.nix` and confirm it
+   returns to the nightly `build` matrix.
+
+**DoD (checkable, two tiers):**
+- **Light/local gate:** the chosen fix is RECORDED (which upstream change + why) AND applied in the scoped overlay;
+  `nix flake check --no-build` exits 0 (overlay eval-clean); if the fix is a source patch, the patched
+  nlohmann/json source FOD builds locally (fetch/patch only, no heavy closure).
+- **Full gate (CI/nightly):** `nix build '.#checks.x86_64-linux.build-docling'` succeeds OR the nightly
+  build-docling job goes green, AND `ci-classification.nix` has build-docling `enabled=true` (back in the nightly
+  matrix). The full docling closure is build-heavy (>2 hr) → on a host that cannot build it, meet the light gate +
+  record the fix and defer the full build to CI (record it in the task note; NOT a blocking failure). If the host
+  lacks nix → ENVIRONMENT_NOT_CAPABLE. Idempotent: if upstream already fixed it (docling-parse compiles), the task =
+  re-enable + verify → COMPLETE.
+
 ## Progress tracking
 | ID | Task | Kind | Status |
 |----|------|------|--------|
@@ -428,9 +462,9 @@ committed flake side; changing any is a small edit):**
 | P6 | CI wiring for **nixcfg (public)** — rewrite ci.yml to post-054 suite + VMTest jobs + doc pass + orphan cleanup + **prove it green in actual GitHub CI** | 1 · CI | TASK:COMPLETE 2026-08-22 — CI GREEN on GitHub. Both first-run failure classes root-caused + fixed: (1) pre-existing lint debt (fmt/statix/deadnix/ps1-BOM, commit 1c33202); (2) aarch64 nspawn = spurious `kvm` requiredSystemFeature, fixed via `requiredFeatures.kvm=false` on all 5 container sites (commit d437cd6). **Per-PR run 32599938257 = success (61 jobs, 0 fail)**: nspawn green on BOTH x86_64+aarch64, QEMU(7) green, lint(5)+checks(26)+eval green. **Nightly dispatch 32600536292 = 69/70**: compose-stack + 5/6 pkgs + both tarballs green; sole failure `build-docling` = UPSTREAM FOD hash-drift (nlohmann_json v3.10.5 GitHub tarball, transitive via arrow-cpp/onnxruntime), env-independent + non-gating → recorded as P9 package-health task (split from P7 per Tim). nixcfg-work SPLIT to P8 (see "P6 CI-verification session") |
 | P9 | **Package-health: fix `build-docling`** — upstream FOD hash-drift on nlohmann_json v3.10.5 GitHub tarball (transitive via arrow-cpp/onnxruntime); apply an nlohmann_json src-hash overlay (or nixpkgs pin bump); nightly-only, non-gating | 1 · builder (package fix) | TASK:COMPLETE 2026-08-23 — filed scope (FOD hash-drift) FIXED + CI-proven: the 3-facet scoped overlay (hash + CMake4 policy + GCC14-test) builds the ENTIRE docling C++ closure (nlohmann + arrow-cpp + onnxruntime + google-cloud-cpp) end-to-end on CI run 32618353622. Raised nightly `pkgs` timeout 120→350min (closure is genuinely >2hr; run 32612864168 was CANCELLED at the 120-min cap, not a build error). Building the full closure surfaced a distinct 4th blocker — docling-parse-4.5.0 won't compile vs nlohmann under GCC14 with EITHER 3.10.5 (input_adapter ambiguous) or 3.11.3 (basic_json bool SFINAE, run 32628030378) — a genuine upstream compat problem beyond P9's scope, SPLIT to P10. Overlay reverted to faithful 3.10.5 3-facet (commit 4482ac2). build-docling non-gating (nightly-only; per-PR CI green). (see "P9 OUTCOME (2026-08-23)") |
 | P11 | **CI-as-code: generate CI from a flake-SSOT classification map** (central map + `.#ci.matrix` output + `ci-matrix-sync` drift-guard + ci.yml matrix generation + `docs/CI-MODEL.md`) — pre-merge model for nixcfg-work GitLab CI | 1 · CI design (workflow) | TASK:COMPLETE 2026-08-23 — flake SSOT `ci-classification.nix` (classification map + `.#ci.matrix` + `.#ci.tarballs` + reusable `ci.lib.{mkMatrix,mkDriftGuard}` + `ci-matrix-sync` guard); ci.yml matrices GENERATED from `.#ci.matrix` (prep-job + fromJSON, no hardcoded lists); `docs/CI-MODEL.md` (conceptual). **All DoD met + PROVEN GREEN**: per-PR run 32668397134 = 62 jobs success/0 fail; nightly dispatch 32668955741 = prep+gating+generation green. Commits 931ae0a→176f83b. Unblocks merge + P8 (see "P11 COMPLETE") |
-| P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING (dep P6 + P11 + merge PR #6 to main; split from P6 per Tim 2026-08-22) |
+| P8 | **nixcfg-work CI** — carry the cohesive suite into the private corp repo (re-exports nixcfg checks; needs flake.lock pin-bump coordination) | 1 · CI / nixcfg-work | TASK:PENDING — deps P6+P11+merge-to-main ALL DONE 2026-08-23 (main=9397881). **EXECUTES IN nixcfg-work, NOT this repo** (tracked as nixcfg-work plan 004): fresh branch off nixcfg-work main, pin-bump nixcfg 4555c15→9397881, import `inputs.nixcfg.ci.lib.{mkMatrix,mkDriftGuard}` + classification vocab for ITS OWN checks + GitLab child-pipeline per `docs/CI-MODEL.md` §5.2. The eval-gate (ci.lib) is doable now; 004-T1's build/publish stages gate on **004-T0 (Interactive — 5 budget/runner/cache decisions)**. **hsw-infra metal-KVM runners now UP (Tim, 2026-08-23)** → 004-T6 (VM smoketest gate) unblocked AND qemu-on-aarch64 now runnable on GitLab (GitHub cannot) → the GitLab suite can be full-matrix on both arches |
 | P7 | Backlog - deferred Tier-B coverage (nuc-apt-repo, mss-clamp, enterprise, jfrog/monitoring, darwin, real rbw test) | 1 · deferred | TASK:COMPLETE 2026-08-23 - triaged all 7 items (see "P7 triage"); the sole worthwhile one, `monitoring` HM smoke, added as `vm-monitoring` (nspawn; x86 build+pass via sudo-root path, aarch64 evals, classified + drift-guard green) and surfaced+fixed a latent module bug (monitor-rebuild ran `set-option -g` before any tmux server existed). All other Tier-B items permanently deferred/blocked with reasons; jfrog-cli SOPS test left for later per Tim |
-| P10 | **docling-parse × nlohmann × GCC14 compat (facet 4)** — docling-parse-4.5.0 won't compile vs nlohmann 3.10.5 (input_adapter ambiguous) NOR 3.11.3 (basic_json bool SFINAE) under GCC14; real fix = backport 3.11.0 input_adapter patch into 3.10.5 json.hpp, or gcc13Stdenv for docling-parse, or track docling nixpkgs PR #184; needs upstream reading not trial CI builds; nightly-only, non-gating; ALSO re-enable build-docling in nightly matrix (skipped 2026-08-23 pending this) | 1 · deferred (package fix) | TASK:PENDING (split from P9 2026-08-23; dep P9's hash-drift+C++-closure fixes — DONE) |
+| P10 | **docling-parse × nlohmann × GCC14 compat (facet 4)** — docling-parse-4.5.0 won't compile vs nlohmann 3.10.5 (input_adapter ambiguous) NOR 3.11.3 (basic_json bool SFINAE) under GCC14; real fix = backport 3.11.0 input_adapter patch into 3.10.5 json.hpp, or gcc13Stdenv for docling-parse, or track docling nixpkgs PR #184; needs upstream reading not trial CI builds; nightly-only, non-gating; ALSO re-enable build-docling in nightly matrix (skipped 2026-08-23 pending this) | 1 · deferred (package fix) | TASK:PENDING (split from P9 2026-08-23; dep P9's hash-drift+C++-closure fixes — DONE; see `### P10` for the checkable DoD) |
 
 ## Inputs already gathered this session (feed P1-P4)
 - **Backend capability (053 T6, DONE):** `mkVmTest` (QEMU) + `mkContainerTest` (nspawn, proven,
@@ -1361,3 +1395,20 @@ tools/services (aptly/apt-cacher-ng, JFrog Artifactory, Bitwarden) or ride upstr
 Net: `vm-monitoring` added (vm-tests.nix + classified nspawn/pr in ci-classification.nix). All other
 Tier-B items are permanently deferred/blocked with the reasons above. This does not affect PR #6 merge
 readiness.
+
+### Merge + post-merge bookkeeping (2026-08-23)
+**PR #6 squash-merged to `main` — `main` = `9397881`** ("Plan 054: VMTest suite refactor + CI wiring (#6)");
+all 67 branch commits (P1-P11) collapsed; PR closed, merged_by=timblaktu. The whole VMTest audit/refactor +
+CI-as-code SSOT is now on main.
+- **P8 unblocked** (its merge-to-main prerequisite is satisfied). P8 executes in **nixcfg-work** (plan 004),
+  NOT this repo — see the updated P8 row. Not runnable by `/next-task` here; the eval-gate (ci.lib) part is
+  T0-independent, the build/publish stages gate on nixcfg-work 004-T0 (Interactive).
+- **hsw-infra metal-KVM runners are now UP (Tim, 2026-08-23).** This retires the external blocker on nixcfg-work
+  **004-T6** (the dev-team Mac-VM smoketest gate, previously opt-in/non-blocking because runner 5506 was offline)
+  — T6 can flip to a real blocking gate. It also makes the **qemu backend runnable on aarch64 in GitLab** (GitHub
+  hosted runners cannot), so nixcfg-work's GitLab suite can be full-matrix on both arches, not x86-only. This is
+  the concrete realization of the `docs/CI-MODEL.md` "GitLab KVM-on-all-arches" note; fold it into P8's systems
+  policy (expand aarch64 coverage there rather than deferring).
+- **Worktree hygiene:** the `feat/vmtest-refactor` branch (local + remote) was retired post-squash; this repo's
+  nixcfg worktree returned to `main`. This P10-section + P8-row + this log entry land via a small post-merge
+  bookkeeping branch (`docs/plan-054-post-merge`).

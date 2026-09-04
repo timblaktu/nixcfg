@@ -226,6 +226,21 @@ These two files are gitignored (per-worktree, never committed). A fresh `claude`
 
 **Last resort only (single-session machine, no `$CLAUDE_PROJECT_DIR`):** if the per-worktree file channel is genuinely unavailable, fall back to `clip.exe` (short) or a temp `.md` + `xdg-open` (long). NEVER use this fallback on a multi-session node - it is the exact mechanism this protocol replaces.
 
+## Memory Index Compaction (MEMORY.md auto-memory)
+
+When the harness flags MEMORY.md as too big ("approaching the read limit / compact to under X KB"), compaction is RELEVANCE curation, NOT byte-minimization. NEVER just trim the longest lines to hit the byte target: entry length correlates with recency and importance (active plans accumulate the most detail and are updated most), so "cut the biggest" destroys the most load-bearing memory. Size is a symptom; relevance is the target.
+
+Order of operations:
+1. DROP or archive STALE entries first. Stale = no longer informs future action: completed-and-landed work with no open `NEXT=`, superseded/reversed decisions, resolved one-offs whose reusable lesson already lives in another entry, dated past events. Signals: `DONE`/`LANDED`/`MERGED`/`RESOLVED`/`FIXED` with no `NEXT=`; a merged MR; a past date with no forward action.
+2. MERGE duplicate or same-plan multi-line entries into one bullet.
+3. ONLY THEN, for still-long ACTIVE entries, move detail into that entry's topic file and leave a one-line pointer that PRESERVES its identity and current status/`NEXT=`.
+
+Rules:
+- "One line per entry" is a FORMAT rule (collapse multi-line bullets), not license to truncate active content.
+- PROTECT active entries (any with `NEXT=`, in-flight branch/MR/pipeline, or recent date); trim the OLDEST INACTIVE entries instead.
+- If dropping stale + merging still exceeds budget, too many ACTIVE plans are indexed: ARCHIVE completed plans or tell the user. Do NOT mutilate active entries to fit.
+- When unsure whether an entry is stale, KEEP it or ask. Deleting memory is high-cost; over-keeping is low-cost.
+
 ## Long-Running Task Strategy
 
 Long-running tasks (>5 min) are allowed but require management:
@@ -256,9 +271,12 @@ The file-based memory is per-directory (keyed by cwd, one memory dir per worktre
 - **Fix**: `kas-build` wrapper unmounts `/mnt/[a-z]` drives before building. Leaves `/usr/lib/wsl/drivers` (read-only, no sync hang).
 
 ### Git Worktree Workflow
+- **Default to a dedicated worktree per branch** for any non-trivial or parallelizable work. Worktrees are as cheap as branches; prefer `git worktree add` over an in-place `git checkout -b` whenever the current worktree is dirty, the new branch's base differs (e.g. a clean feature off `main` while the current tree carries unrelated doc/churn), or the work could run alongside other efforts. This keeps each branch's diff clean (clean MRs, accurate code permalinks) and enables maximum parallelism across the many workspaces here.
+- **Parent/child workspace pattern**: treat the workspace that holds the plan, docs, and handoff as the coordination "parent"; cut isolated child worktrees off `main` (or the correct base) for the shippable code. Navigate the set with `git worktree list` (it reads as a task map when dirs/branches are named for the task, e.g. `~/src/<repo>-<feature>` on branch `<feature>`).
+- **Self-authorized**: create worktrees and their branches without asking; just name what you created in your report so the human can follow. Moving/removing a worktree later is cheap and reversible.
 - **Use case**: Parallel work across Claude accounts without interference
 - **Setup**: `git worktree add ~/src/project-pro feature/foo-pro`
-- **Cleanup**: `git worktree remove`, `git branch -d`
+- **Cleanup**: `git worktree remove`, `git branch -d` (root-owned build dirs may need `sudo rm -rf` first)
 
 ### Claude Task Runner Artifacts
 - `.claude-task-logs/` and `.claude-task-state` are local session state - should be gitignored

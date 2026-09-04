@@ -1917,6 +1917,37 @@ in
 
             # Core dev-team feature present.
             machine.succeed("command -v podman")
+
+            # === Plan 006 T1: hermetic dev-environment readiness ===
+            # Beyond "boots + can log in", assert the shipped env actually hands the
+            # developer the toolbox that drives the documented HSW/n3x workflows
+            # (`nix run '.' -- --machine <...>`, `nix build '.#checks…'`). Pure
+            # PATH/config assertions -- NO network -- so this stays a hermetic gate;
+            # the credentialed fetch-from-Artifactory/GitLab half is the live gate
+            # (Plan 006 T2/T3), not this test.
+            #
+            # nix is the entrypoint for every HSW workflow; git clones the repo;
+            # podman runs the build containers. Assert as `user` (the developer's
+            # own login shell), not root, and prove they actually run (--version),
+            # not merely resolve on PATH.
+            machine.succeed("su - user -c 'command -v nix && nix --version'")
+            machine.succeed("su - user -c 'command -v git && git --version'")
+            machine.succeed("su - user -c 'command -v podman'")
+
+            ${lib.optionalString (system == "x86_64-linux") ''
+              # x86 dev-team CROSS-builds the ARM HSW product/VTE images
+              # (`nix run '.' -- --machine converix-orin-nano` / `qemuarm64`): the
+              # dev-team module enables aarch64 binfmt emulation and advertises
+              # aarch64-linux as an extra Nix build platform. Assert both halves so
+              # the cross-arch entrypoint is provably usable in-env.
+              machine.succeed("nix show-config | grep -w extra-platforms | grep -qw aarch64-linux")
+              machine.succeed("ls /proc/sys/fs/binfmt_misc/ | grep -qi aarch64")
+            ''}
+            ${lib.optionalString (system == "aarch64-linux") ''
+              # aarch64 dev-team builds the ARM HSW images NATIVELY -- no emulation
+              # layer (dev-team sets emulatedSystems = [] on native aarch64).
+              machine.succeed("uname -m | grep -qw aarch64")
+            ''}
           '';
         };
 

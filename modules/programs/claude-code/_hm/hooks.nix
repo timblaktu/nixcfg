@@ -392,17 +392,32 @@ in
     events = mkOption {
       type = types.attrsOf types.str;
       default = {
+        SessionStart = "clear";
         UserPromptSubmit = "running";
         Notification = "attention";
         Stop = "done";
+        StopFailure = "done";
       };
       description = ''
-        Map of Claude Code hook event name -> canonical command-status state (one
-        of programs.tmux.commandStatus.states: attention/error/running/done). Each
-        entry installs a CC hook that calls the shared `tmux-cmd-state` writer with
-        the mapped state. Overriding this is how you re-map or extend which CC
-        events raise which marker without touching hook plumbing; an unknown state
-        is a build-time error naming the offending event.
+        Map of Claude Code hook event name -> command-status target: one of the
+        canonical states (programs.tmux.commandStatus.states:
+        attention/error/running/done) OR the special `clear` target, which unsets
+        the marker regardless of window focus. Each entry installs a CC hook that
+        calls the shared `tmux-cmd-state` writer with the mapped target.
+
+        The default map makes the CC source authoritative over the pane's marker
+        for the whole session, so a `running` set by the shell's preexec when you
+        launched `claude` (which the shell's precmd can never clear while claude
+        holds the foreground) is retracted as soon as CC is idle:
+          - SessionStart    -> clear    (CC is ready/idle; clears the launch-time amber)
+          - UserPromptSubmit -> running (amber; a turn is in flight)
+          - Notification    -> attention (magenta; Claude wants input/permission)
+          - Stop            -> done      (green completion marker on background panes)
+          - StopFailure     -> done      (a turn that ended abnormally still clears running)
+
+        Overriding this is how you re-map or extend which CC events raise which
+        marker without touching hook plumbing; an unknown target is a build-time
+        error naming the offending event.
       '';
     };
   };

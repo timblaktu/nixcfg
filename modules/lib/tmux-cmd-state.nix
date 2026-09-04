@@ -123,29 +123,46 @@ rec {
     in
     { inherit styleExpr clearPredicate; };
 
+  # The `clear` pseudo-target — NOT a renderable state, so it is absent from
+  # stateNames / statePriority / any fold arm. It unconditionally UNSETS the pane's
+  # @cmd_state (the writer's `clear|""` case), returning the pane to its original
+  # style. A program source maps it to an event meaning "this program is now idle /
+  # ready" so a long-lived foreground app can retract a `running` the shell's
+  # preexec set on launch (the shell's precmd never fires while the app holds the
+  # foreground, so only the app itself can clear it). Unlike the clearOnView states
+  # it clears REGARDLESS of window focus - "idle" is idle whether or not you are
+  # looking at it. Distinct from the "done" marker, which is a background completion
+  # NOTIFICATION that lingers until viewed.
+  clearTarget = "clear";
+
+  # Valid targets a program source may map an event to: every renderable state plus
+  # the `clear` pseudo-target. mkProgramSource validates against THIS (not bare
+  # stateNames) so `SessionStart = "clear"` is accepted while a typo still throws.
+  sourceTargets = stateNames ++ [ clearTarget ];
+
   # mkProgramSource { events } — the D9/T5 per-program source generator. A program
-  # declares its native-event -> canonical-state map (e.g. CC's
-  # `UserPromptSubmit = "running"`), and this returns the shell command each event
+  # declares its native-event -> target map (e.g. CC's `UserPromptSubmit = "running"`
+  # or `SessionStart = "clear"`), and this returns the shell command each event
   # should run: a call to the ONE shared `tmux-cmd-state` writer. The program then
   # folds `.commands` into its OWN native hook mechanism (CC: mkHook/mergeHookSets;
   # nvim: autocmds; etc.) - the tiny last-mile adapter into each event system is
   # irreducible and lives in that program's module, but the TARGET (the single sink)
   # and the DECLARATION SHAPE (`events = { ev = state; }`) are unified here.
   #
-  #   .commands   attrset <nativeEvent> -> "<tmux-cmd-state>/bin/tmux-cmd-state <state>"
+  #   .commands   attrset <nativeEvent> -> "<tmux-cmd-state>/bin/tmux-cmd-state <target>"
   #
-  # Every mapped state is validated against `stateNames` at eval time, so a typo
-  # (`"runing"`) is a build-time throw naming the offending event, not a silent
-  # no-op marker that never renders.
+  # Every mapped target is validated against `sourceTargets` (stateNames + `clear`)
+  # at eval time, so a typo (`"runing"`) is a build-time throw naming the offending
+  # event, not a silent no-op marker that never renders.
   mkProgramSource = { events }:
     let
       bin = "${mkHelper { }}/bin/tmux-cmd-state";
-      toCommand = ev: state:
-        if lib.elem state stateNames then "${bin} ${state}"
+      toCommand = ev: target:
+        if lib.elem target sourceTargets then "${bin} ${target}"
         else
           throw ("tmux-cmd-state.mkProgramSource: event '" + ev
-            + "' maps to unknown state '" + state + "' (valid states: "
-            + lib.concatStringsSep ", " stateNames + ")");
+            + "' maps to unknown target '" + target + "' (valid targets: "
+            + lib.concatStringsSep ", " sourceTargets + ")");
     in
     { commands = lib.mapAttrs toCommand events; };
 }
