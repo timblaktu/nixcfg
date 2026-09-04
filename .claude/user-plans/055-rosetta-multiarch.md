@@ -30,6 +30,14 @@ per plan 052's sharing model). This plan does **not** move wholesale into nixcfg
 - **Plan 054 (nixcfg) owns:** the redesigned VM-test suite + backend/host assignment. 055 P3/P4/P5 tagged
   `→ 054` produce feasibility findings that 054 absorbs.
 
+### Sequencing directive (Tim, 2026-09-04)
+Finish EVERYTHING off-Mac first, and THOROUGHLY: P1 (done) → then **PM + P8 + P6a** here on Linux. Before ANY
+Apple-Silicon testing, research and **DISCUSS with Tim how the off-Mac findings could change HOW we do the darwin
+integration and validation** - the explicit goal is to NOT test twice. Only after that discussion do the Mac-gated
+experiments (P2-P7 → P9); those are the **front of the nixcfg-work `feat/darwin-support` work** (they define the
+build / test / virtualization substrate), not a prerequisite runnable beforehand. Completing rosetta's off-Mac
+portion is the priority to close out in nixcfg before pivoting to the Mac.
+
 ### What the survey found already exists (feeds P1; NOT the new mechanism)
 - **Cross-arch builds today = QEMU binfmt**, not Rosetta (`dev-team.nix` `boot.binfmt.emulatedSystems`; x86_64 host
   emulates aarch64). This is the slow path reference §4.4 claims `linux-builder-vz` beats ~2.5×.
@@ -62,22 +70,32 @@ as **two separate decisions**, not one.
   reference claims; grep our configs. → P1, PM, P6a, P8.
 - **Apple-Silicon-required** (ENVIRONMENT_NOT_CAPABLE here): standing up `linux-builder-vz`, running builds/VM tests
   on the vz builder, nested-virt. → P2, P3, P4, P5b, P6b, P7. Needs an M-series Mac (P4/P5 need **M3+ / macOS 15+**).
-- **Operator / corp decision** (USER_INPUT_REQUIRED, lands in nixcfg-work): fleet inventory, §7 adoption. → P0, P9.
+- **Operator / corp decision** (USER_INPUT_REQUIRED, lands in nixcfg-work): the off-Mac→Mac discussion gate, fleet
+  inventory, §7 adoption. → PD, P0, P9.
 
 ## Progress tracking
+
+**Row order = `/next-task` execution order.** All OFF-MAC work is grouped first (PM → P8 → P6a), followed by the
+**PD discussion gate** (a deliberate STOP: `/next-task` yields USER_INPUT_REQUIRED there). Everything below PD is
+Apple-Silicon or corp-decision and stays blocked on this Linux host. So a fresh session in this worktree can run
+`/next-task` repeatedly to sweep the entire off-Mac set, then it halts at PD for the darwin-approach discussion.
+IDs are stable (never renumbered); only order changed and P6 was split into P6a (off-Mac) / P6b (Mac).
+
 | ID | Task | Kind · Home | Ref §·Q | Status |
 |----|------|------|------|--------|
 | P1 | Code-verification pass: confirm/refute reference §4 + §6 `[UNVERIFIED]` claims vs actual nixpkgs + our flakes/tests/CI; answer Q7, Q9; edit reference + Changelog | analysis · nixcfg | §4,§6 · Q7,Q9 | TASK:COMPLETE (2026-08-31) |
-| PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | portable module · nixcfg | §4.5,§6.5 | TASK:PENDING (dep P1; design-only until P9) |
-| P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | research · nixcfg | §2.2 · Q10 | TASK:PENDING |
-| P0 | Fleet inventory: M-generation + macOS version for every dev machine | Interactive · **→ nixcfg-work** (052 M-A / 001) | §8.1 · Q1 | TASK:PENDING |
-| P2 | Baseline the build win: stand up `linux-builder-vz`, time a representative `x86_64-linux` build vs QEMU binfmt; confirm/refute 2.5× | Apple-Silicon | §8.2 | TASK:PENDING (dep P0) |
-| P3 | **Highest-value experiment:** does a Rosetta-translated `qemu-system-x86_64` run TCG at all? Smallest x86_64 NixOS VM test on the vz builder; record exact failure mode | Apple-Silicon · **→ 054** | §8.3 · Q2,Q3 | TASK:PENDING (dep P2) |
-| P4 | aarch64 VM test under nested virt (M3+/macOS 15+): enable `vz.nestedVirtualization`, run a representative aarch64 test, compare vs native aarch64 runner | Apple-Silicon (M3+) · **→ 054** | §8.4 | TASK:PENDING (dep P2) |
-| P5 | Scheduling behaviour: what does Nix do when a builder advertises `kvm` for an arch it can't accelerate? Test §6.5 dual-`buildMachines`; answer Q4, Q5 | Apple-Silicon + code · **→ 054 / 004** | §8.5 · Q4,Q5 | TASK:PENDING (dep P3) |
-| P6 | binfmt-in-sandbox: (a) verify `virtualisation.rosetta` registers with `fixBinary` in nixpkgs source [code]; (b) confirm x86_64 builds work under `nix build` in the sandbox [Mac]; answer Q6 | (a) code nixcfg / (b) Apple-Silicon | §8.6 · Q6 | TASK:PENDING (dep P2 for b) |
-| P7 | Vendor toolchain smoke test: run the team's amd64-only vendor ELF under Rosetta in-guest; surface AVX/JIT caveats (§3); answer Q8. Reconcile with nixcfg-work Colima `rosetta=true` path | Apple-Silicon · **→ nixcfg-work 001** | §8.7 · Q8 | TASK:PENDING (dep P2) |
-| P9 | **Decision:** adopt a reference §7 option (A/B/C/D) for build-side and test-side separately | Interactive DECISION · **→ nixcfg-work** | §7 | TASK:PENDING (dep P1-P7 findings) |
+| PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | OFF-MAC · nixcfg | §4.5,§6.5 | TASK:IN_PROGRESS (running eval-gate DoD; design note + module file exist) |
+| P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | OFF-MAC research · nixcfg | §2.2 · Q10 | TASK:PENDING (no dep — ACTIONABLE now) |
+| P6a | Code half of P6: verify `virtualisation.rosetta` registers with `fixBinary` in nixpkgs source — cite the line (or its absence) in `rosetta.nix`; answer the code half of Q6 | OFF-MAC code · nixcfg | §8.6 · Q6 | TASK:PENDING (dep P1 met — ACTIONABLE now; P1 previewed `rosetta.nix:77 fixBinary=true`) |
+| PD | **Discussion gate (Interactive):** with PM+P8+P6a done, DISCUSS with Tim how the off-Mac findings change HOW we do the darwin integration/validation, BEFORE any Mac testing ("don't test twice"). Output a recorded go-plan for the Mac phase (which of P2-P7, in what order, + any 054/001/004 adjustments) | Interactive GATE · nixcfg | §7 | TASK:PENDING (dep PM,P8,P6a — USER_INPUT_REQUIRED; deliberate STOP after off-Mac work) |
+| P0 | Fleet inventory: M-generation + macOS version for every dev machine | Interactive · **→ nixcfg-work** (052 M-A / 001) | §8.1 · Q1 | TASK:PENDING (dep PD — USER_INPUT_REQUIRED) |
+| P2 | Baseline the build win: stand up `linux-builder-vz`, time a representative `x86_64-linux` build vs QEMU binfmt; confirm/refute 2.5× | Apple-Silicon | §8.2 | TASK:PENDING (dep P0 — ENVIRONMENT_NOT_CAPABLE here) |
+| P3 | **Highest-value experiment:** does a Rosetta-translated `qemu-system-x86_64` run TCG at all? Smallest x86_64 NixOS VM test on the vz builder; record exact failure mode | Apple-Silicon · **→ 054** | §8.3 · Q2,Q3 | TASK:PENDING (dep P2 — ENVIRONMENT_NOT_CAPABLE here) |
+| P4 | aarch64 VM test under nested virt (M3+/macOS 15+): enable `vz.nestedVirtualization`, run a representative aarch64 test, compare vs native aarch64 runner | Apple-Silicon (M3+) · **→ 054** | §8.4 | TASK:PENDING (dep P2 — ENVIRONMENT_NOT_CAPABLE here) |
+| P5 | Scheduling behaviour: what does Nix do when a builder advertises `kvm` for an arch it can't accelerate? Test §6.5 dual-`buildMachines`; answer Q4, Q5 | Apple-Silicon + code · **→ 054 / 004** | §8.5 · Q4,Q5 | TASK:PENDING (dep P3 — ENVIRONMENT_NOT_CAPABLE here) |
+| P6b | Mac half of P6: confirm x86_64 builds work under `nix build` in the sandbox on a Mac; answer the Mac half of Q6 | Apple-Silicon | §8.6 · Q6 | TASK:PENDING (dep P2 — ENVIRONMENT_NOT_CAPABLE here) |
+| P7 | Vendor toolchain smoke test: run the team's amd64-only vendor ELF under Rosetta in-guest; surface AVX/JIT caveats (§3); answer Q8. Reconcile with nixcfg-work Colima `rosetta=true` path | Apple-Silicon · **→ nixcfg-work 001** | §8.7 · Q8 | TASK:PENDING (dep P2 — ENVIRONMENT_NOT_CAPABLE here) |
+| P9 | **Decision:** adopt a reference §7 option (A/B/C/D) for build-side and test-side separately | Interactive DECISION · **→ nixcfg-work** | §7 | TASK:PENDING (dep P1-P7 findings — USER_INPUT_REQUIRED) |
 
 ## Definition of Done (per task)
 - **P1** — every reference §4/§6 `[UNVERIFIED]` claim is either upgraded to `[RESEARCH]` (confirmed vs cited code) or
@@ -88,6 +106,10 @@ as **two separate decisions**, not one.
   eval-gate (`nix flake check --no-build` green) proving the option *evaluates* on a darwin config; **no host adopts
   it** until P9. Must not presuppose a §7 choice (reference §0 rule 4).
 - **P8** — reference §2.2/§4 reconciled with current Apple docs; Q10 struck.
+- **PD** (gate) — a dated record, written to this plan's session log AND **exported to a COMMITTED nixcfg-work location
+  so the MacBook has it** (see "Continuity" below), capturing: the consolidated off-Mac findings (PM+P8+P6a) and Tim's
+  decision on how they change the darwin approach — which of P2-P7 to run, in what order, and any 054/001/004
+  adjustments. No Mac task (P0/P2-P7) starts until PD is recorded. Purpose: the Mac phase runs once, deliberately.
 - **P0** — a recorded fleet table partitioning machines into nested-virt-capable (M3+/macOS 15+) vs not; captured in
   nixcfg-work 001/052 M-A. Nothing in reference §6 can be planned without it.
 - **P2** — wall-clock: representative `x86_64-linux` build, vz backend vs QEMU binfmt, on named hardware; 2.5×
@@ -97,8 +119,9 @@ as **two separate decisions**, not one.
 - **P4** — aarch64 VM test wall-clock on M3+ vs native aarch64 runner; reference §6.3 confirmed; handed to 054.
 - **P5** — observed Nix scheduler behaviour for the mis-advertised-`kvm` case; verdict on whether duplicate-`hostName`
   `buildMachines` composes with nix-darwin's `linux-builder` module; handed to 054/004.
-- **P6** — (a) cite the `fixBinary`/`F`-flag registration line (or its absence) in nixpkgs `rosetta.nix`;
-  (b) demonstrate an x86_64 `nix build` succeeding through the sandbox on a Mac.
+- **P6a** — cite the `fixBinary`/`F`-flag registration line (or its absence) in nixpkgs `rosetta.nix` (P1 previewed
+  `rosetta.nix:77 fixBinary=true` — confirm + contextualize vs Q6's code half). No Mac needed.
+- **P6b** — demonstrate an x86_64 `nix build` succeeding through the sandbox on a Mac (Q6's Mac half).
 - **P7** — pass/fail per vendor binary, any AVX/JIT fault recorded; reconciled with 001's Colima-rosetta result.
 - **P9** — an explicit, dated `[DECISION]` in reference §1 for each of build-side and test-side, recorded in
   nixcfg-work (001 ADR or a new ADR), only after supporting tasks are done. Until then reference §7 stays "options, none adopted."
@@ -110,7 +133,36 @@ as **two separate decisions**, not one.
 - Apple-Silicon tasks yield **ENVIRONMENT_NOT_CAPABLE** on this Linux host — leave PENDING, do not fabricate results.
   Operator/corp-decision tasks yield **USER_INPUT_REQUIRED** and are executed in nixcfg-work.
 
+## Continuity across worktrees and to the MacBook
+Off-Mac work runs in THIS worktree (`/home/tim/src/nixcfg-rosetta`, Linux). The Mac experiments (P2-P7) run on the
+**MacBook**, from the **nixcfg-work `feat/darwin-support`** worktree; their findings feed 054 (nixcfg, test substrate)
+and 001/004 (nixcfg-work, adoption). Two hard facts govern how state travels:
+
+1. **This plan + the reference doc are UNTRACKED** (`.claude/user-plans/*` are gitignored; plan 048
+   "preserve-untracked-claude-memory-and-plans" is still all-PENDING). They do NOT reach the MacBook via git — never
+   assume a Mac session can read them.
+2. **The MacBook only has nixcfg + nixcfg-work via git.** Anything the Mac phase needs MUST be committed into a repo
+   the Mac clones: **nixcfg-work** (private, darwin-facing — 001/004) for the go-plan/decision, and **nixcfg** (054 or
+   a committed `docs/` note) for test-substrate findings that 054 owns.
+
+**The PD gate is the bridge.** Its DoD requires exporting the consolidated off-Mac findings + the Mac-phase go-plan
+(distilled from the untracked reference doc's confirmed, non-`[UNVERIFIED]` findings) into a COMMITTED nixcfg-work
+location — append to `nixcfg-work .claude/user-plans/001-darwin-support.md` is untracked too, so prefer a **tracked**
+target: a `docs/` note or ADR in nixcfg-work (and a `docs/` note in nixcfg for the 054-owned pieces). Net: the Mac
+session picks up ONE committed go-plan, not this worktree. When the Mac experiments finish, their findings flow back
+the same way — committed into 054 (nixcfg) and 001/004 (nixcfg-work), not into this untracked plan.
+
+**Worktree map:** off-Mac → `/home/tim/src/nixcfg-rosetta` (here) · Mac-phase → MacBook + `nixcfg-work`
+`feat/darwin-support` · findings sinks → nixcfg `054` + committed docs, nixcfg-work `001`/`004`.
+
 ## Session log
+- 2026-09-04 (plan restructured for off-Mac continuity — Tim) — Reordered the progress table so `/next-task`
+  sweeps the off-Mac set consecutively: **PM → P8 → P6a**, then halts at the new **PD** discussion gate
+  (USER_INPUT_REQUIRED). Split P6 into P6a (off-Mac code) / P6b (Mac); IDs stable. Added the **PD gate** whose DoD
+  is the cross-machine bridge: export consolidated off-Mac findings + the Mac-phase go-plan into COMMITTED targets
+  (nixcfg-work docs/ADR for the decision; nixcfg 054/docs for test-substrate findings) so the MacBook — which only
+  has the repos via git and CANNOT see this untracked plan/reference — picks up one committed go-plan. Added the
+  "Continuity across worktrees and to the MacBook" section. No task status changed; next actionable remains PM.
 - 2026-08-31 (P1 COMPLETE) — Code-verification pass (host-independent, no Mac). Verified against live
   nixos-unstable (mcp-nixos) + both repos. **Confirmed upstream:** `darwin.linux-builder-vz` + `vzvm`
   v1.0.0 exist (§4.2); `virtualisation.rosetta.{enable,mountTag}` exist (§4.1); `nix.linux-builder.*`
