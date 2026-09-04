@@ -84,7 +84,7 @@ IDs are stable (never renumbered); only order changed and P6 was split into P6a 
 | ID | Task | Kind · Home | Ref §·Q | Status |
 |----|------|------|------|--------|
 | P1 | Code-verification pass: confirm/refute reference §4 + §6 `[UNVERIFIED]` claims vs actual nixpkgs + our flakes/tests/CI; answer Q7, Q9; edit reference + Changelog | analysis · nixcfg | §4,§6 · Q7,Q9 | TASK:COMPLETE (2026-08-31) |
-| PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | OFF-MAC · nixcfg | §4.5,§6.5 | TASK:IN_PROGRESS (running eval-gate DoD; design note + module file exist) |
+| PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | OFF-MAC · nixcfg | §4.5,§6.5 | TASK:COMPLETE (2026-09-04) |
 | P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | OFF-MAC research · nixcfg | §2.2 · Q10 | TASK:PENDING (no dep — ACTIONABLE now) |
 | P6a | Code half of P6: verify `virtualisation.rosetta` registers with `fixBinary` in nixpkgs source — cite the line (or its absence) in `rosetta.nix`; answer the code half of Q6 | OFF-MAC code · nixcfg | §8.6 · Q6 | TASK:PENDING (dep P1 met — ACTIONABLE now; P1 previewed `rosetta.nix:77 fixBinary=true`) |
 | PD | **Discussion gate (Interactive):** with PM+P8+P6a done, DISCUSS with Tim how the off-Mac findings change HOW we do the darwin integration/validation, BEFORE any Mac testing ("don't test twice"). Output a recorded go-plan for the Mac phase (which of P2-P7, in what order, + any 054/001/004 adjustments) | Interactive GATE · nixcfg | §7 | TASK:PENDING (dep PM,P8,P6a — USER_INPUT_REQUIRED; deliberate STOP after off-Mac work) |
@@ -138,9 +138,12 @@ Off-Mac work runs in THIS worktree (`/home/tim/src/nixcfg-rosetta`, Linux). The 
 **MacBook**, from the **nixcfg-work `feat/darwin-support`** worktree; their findings feed 054 (nixcfg, test substrate)
 and 001/004 (nixcfg-work, adoption). Two hard facts govern how state travels:
 
-1. **This plan + the reference doc are UNTRACKED** (`.claude/user-plans/*` are gitignored; plan 048
-   "preserve-untracked-claude-memory-and-plans" is still all-PENDING). They do NOT reach the MacBook via git — never
-   assume a Mac session can read them.
+1. **This plan + the reference doc do NOT reach the MacBook via git** — never assume a Mac session can read them.
+   (CORRECTED 2026-09-04: an earlier revision claimed these are "UNTRACKED (gitignored)". That is FALSE in this
+   worktree — `git check-ignore` shows `.claude/user-plans/*.md` are **tracked** here. The operative reason they
+   don't reach the Mac is different: they live only on the **local, unpushed** feature branch
+   `plan-055-rosetta-multiarch`, and the Mac phase runs from the **nixcfg-work** clone, which never pulls this
+   branch. Net conclusion is unchanged; the premise is now stated correctly.)
 2. **The MacBook only has nixcfg + nixcfg-work via git.** Anything the Mac phase needs MUST be committed into a repo
    the Mac clones: **nixcfg-work** (private, darwin-facing — 001/004) for the go-plan/decision, and **nixcfg** (054 or
    a committed `docs/` note) for test-substrate findings that 054 owns.
@@ -156,6 +159,34 @@ the same way — committed into 054 (nixcfg) and 001/004 (nixcfg-work), not into
 `feat/darwin-support` · findings sinks → nixcfg `054` + committed docs, nixcfg-work `001`/`004`.
 
 ## Session log
+- 2026-09-04 (PM review with Tim; ephemeral made an option; doc defect fixed) — Post-completion review
+  conversation (Tim flagged that PM was self-certified COMPLETE without the CLAUDE.md Present/Approve gate).
+  Outcome: (1) **`ephemeral` promoted from a hardcoded `true` to a proper option defaulting to `false`**
+  (matches upstream nix-darwin = persistent builder / warm cache; operators opt into wipe-on-restart). It was
+  the only knob the module hardcoded AND it silently deviated from the upstream default — inappropriate for a
+  module nixcfg-work reuses verbatim. Module + design-note option table + eval-gate re-run
+  (proof (a) now shows `"ephemeral":false`; `nix flake check --no-build` re-verified exit 0, zero errors,
+  13:15 PDT). (2) **Doc defect corrected:** the plan+handoff claimed the plan/reference docs are
+  "UNTRACKED (gitignored)" — `git check-ignore` proves they are **tracked** in this worktree; the real reason
+  they don't reach the Mac is that they live only on the local, unpushed `plan-055-rosetta-multiarch` branch
+  (the Mac runs from nixcfg-work). Continuity conclusion unchanged; premise now correct. PM remains COMPLETE.
+- 2026-09-04 (PM COMPLETE) — Eval-gate DoD executed and green on this x86_64-linux dev host
+  (no Mac needed). Deliverables already present: the dendritic darwin module
+  `modules/system/settings/linux-builder-vz/linux-builder-vz.nix` (provides
+  `flake.modules.darwin.linux-builder-vz`, `linuxBuilderVz.*`, `enable` default false, imported by
+  no host) and the design note `055-pm-portable-module-design.md`. **Proof (a):** a throwaway
+  `aarch64-darwin` `darwinSystem` importing the module with `enable = true; nestedVirtualization =
+  true;` evaluates cleanly — `{"enable":true,"packageName":"create-builder","systems":
+  ["aarch64-linux","x86_64-linux"],"trustedUsersHasAdmin":true}` (the `create-builder` package name
+  confirms `pkgs.darwin.linux-builder-vz` resolved from our pinned nixpkgs). **Proof (b):**
+  `nix flake check --no-build` exit 0, zero `error:` lines (only the standard "omitted aarch64-linux"
+  note + a pre-existing unrelated `proxmox.qemuConf.diskSize` warning). Confirmed the design note's
+  stated boundary: reading guest-side leaves (`nix.linux-builder.config.virtualisation.*`) via the
+  host eval fails ("attribute 'virtualisation' missing") because `config` is a deferred guest module,
+  not force-evaluated — exactly as §4 "Boundary" documents; validated only on a Mac (P2/P4). No host
+  adopts the module; §7 choice not presupposed (reference §0 rule 4). Design note updated with the
+  verified timestamp. **Next actionable off-Mac:** P8 (Apple-docs Rosetta-for-Linux recheck), then
+  P6a (`rosetta.nix` `fixBinary` confirm), then the PD discussion gate (STOP).
 - 2026-09-04 (plan restructured for off-Mac continuity — Tim) — Reordered the progress table so `/next-task`
   sweeps the off-Mac set consecutively: **PM → P8 → P6a**, then halts at the new **PD** discussion gate
   (USER_INPUT_REQUIRED). Split P6 into P6a (off-Mac code) / P6b (Mac); IDs stable. Added the **PD gate** whose DoD

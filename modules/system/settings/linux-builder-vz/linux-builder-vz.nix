@@ -110,6 +110,21 @@ in
           '';
         };
 
+        ephemeral = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Wipe the builder guest's filesystem (its Nix store cache) on every
+            restart. Maps to `nix.linux-builder.ephemeral`. Default false matches
+            upstream nix-darwin: a PERSISTENT builder whose dependency cache stays
+            warm across restarts (faster cold builds, lower cache traffic), at the
+            risk of stale guest state / config drift. Set true to force a clean
+            slate on every restart so config changes always apply with no drift
+            (reference §4.5), at the cost of re-populating the guest store on the
+            first build after each restart.
+          '';
+        };
+
         maxJobs = lib.mkOption {
           type = lib.types.ints.positive;
           default = 4;
@@ -146,9 +161,10 @@ in
           enable = true;
           package = pkgs.darwin.linux-builder-vz;
           systems = cfg.systems;
-          # Wipe the builder disk on restart so config changes apply cleanly
-          # (reference §4.5). The store is content-addressed, so this is cheap.
-          ephemeral = true;
+          # Builder-disk lifecycle. Default (false) = persistent builder, matching
+          # upstream nix-darwin; set `ephemeral = true` for a clean slate on every
+          # restart (reference §4.5). Operator's choice, hence an option.
+          ephemeral = cfg.ephemeral;
           maxJobs = cfg.maxJobs;
           config = {
             virtualisation = {
