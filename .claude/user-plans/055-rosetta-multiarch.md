@@ -86,7 +86,7 @@ IDs are stable (never renumbered); only order changed and P6 was split into P6a 
 | P1 | Code-verification pass: confirm/refute reference §4 + §6 `[UNVERIFIED]` claims vs actual nixpkgs + our flakes/tests/CI; answer Q7, Q9; edit reference + Changelog | analysis · nixcfg | §4,§6 · Q7,Q9 | TASK:COMPLETE (2026-08-31) |
 | PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | OFF-MAC · nixcfg | §4.5,§6.5 | TASK:COMPLETE (2026-09-04) |
 | P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | OFF-MAC research · nixcfg | §2.2 · Q10 | TASK:COMPLETE (2026-09-04) |
-| P6a | Code half of P6: verify `virtualisation.rosetta` registers with `fixBinary` in nixpkgs source — cite the line (or its absence) in `rosetta.nix`; answer the code half of Q6 | OFF-MAC code · nixcfg | §8.6 · Q6 | TASK:IN_PROGRESS (citing rosetta.nix fixBinary in pinned nixpkgs) |
+| P6a | Code half of P6: verify `virtualisation.rosetta` registers with `fixBinary` in nixpkgs source — cite the line (or its absence) in `rosetta.nix`; answer the code half of Q6 | OFF-MAC code · nixcfg | §8.6 · Q6 | TASK:COMPLETE (2026-09-04) |
 | PD | **Discussion gate (Interactive):** with PM+P8+P6a done, DISCUSS with Tim how the off-Mac findings change HOW we do the darwin integration/validation, BEFORE any Mac testing ("don't test twice"). Output a recorded go-plan for the Mac phase (which of P2-P7, in what order, + any 054/001/004 adjustments) | Interactive GATE · nixcfg | §7 | TASK:PENDING (dep PM,P8,P6a — USER_INPUT_REQUIRED; deliberate STOP after off-Mac work) |
 | P0 | Fleet inventory: M-generation + macOS version for every dev machine | Interactive · **→ nixcfg-work** (052 M-A / 001) | §8.1 · Q1 | TASK:PENDING (dep PD — USER_INPUT_REQUIRED) |
 | P2 | Baseline the build win: stand up `linux-builder-vz`, time a representative `x86_64-linux` build vs QEMU binfmt; confirm/refute 2.5× | Apple-Silicon | §8.2 | TASK:PENDING (dep P0 — ENVIRONMENT_NOT_CAPABLE here) |
@@ -174,6 +174,18 @@ the same way — committed into 054 (nixcfg) and 001/004 (nixcfg-work), not into
 `feat/darwin-support` · findings sinks → nixcfg `054` + committed docs, nixcfg-work `001`/`004`.
 
 ## Session log
+- 2026-09-04 (P6a COMPLETE — rosetta.nix fixBinary confirmed, Q6 code half closed) — Read
+  `nixos/modules/virtualisation/rosetta.nix` in our pinned nixpkgs (`ffb3c9b`, store
+  `/nix/store/jpnpv93s5ppfb1kbvfp8qa763vfb4fjb-source`). **Q6 code half = YES:**
+  `boot.binfmt.registrations.rosetta` sets **`fixBinary = true` (rosetta.nix:77)** — the binfmt `F` flag,
+  which pre-opens the interpreter fd at registration so translation works inside the Nix build sandbox's
+  mount namespace — alongside `matchCredentials`/`preserveArgvZero`/`wrapInterpreterInShell=false`, AND the
+  module explicitly extends the sandbox for x86_64 (`nix.settings.extra-platforms=["x86_64-linux"]`@65,
+  `extra-sandbox-paths=["/run/binfmt", mountPoint]`@66-69). Confirms P1's incidental preview and is richer
+  than just the one line (purpose-built for sandboxed x86_64 builds). **Q6 Mac half (P6b) stays open** —
+  demonstrating an x86_64 `nix build` through the sandbox needs a Mac. Reference §4.1 gains a P6a block,
+  §9 Q6 code-half struck, Changelog v1.5 added. No code, no Mac. **Off-Mac set for plan 055 is now COMPLETE
+  (P1, PM, P8, P6a) → next actionable is the PD discussion gate (deliberate STOP, USER_INPUT_REQUIRED).**
 - 2026-09-04 (P8 COMPLETE — Apple-docs recheck, Q10 closed) — Verified reference §2.2 against Apple's
   live deprecation notice ("Upcoming changes to Rosetta support for Intel-based macOS apps",
   `developer.apple.com/news/?id=w5ngl9k2`) + developer docs. **Confirmed:** the deprecation is scoped to

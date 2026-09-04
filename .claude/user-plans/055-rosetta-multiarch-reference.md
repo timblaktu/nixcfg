@@ -192,6 +192,26 @@ first-class, declarative, zero-config path.
 Apple silicon host"; defaults tuned for UTM "Apple Virtualization" + "Enable Rosetta") and
 `virtualisation.rosetta.mountTag` (the VirtioFS mount tag). ✓ Matches this section.
 
+`[RESEARCH]` **P6a — binfmt registration confirmed in source (Q6 code half CLOSED).** In our pinned
+nixpkgs (`ffb3c9b`) `nixos/modules/virtualisation/rosetta.nix` registers the handler as
+`boot.binfmt.registrations.rosetta` with, on the `config = mkIf cfg.enable` branch:
+- `rosetta.nix:77` **`fixBinary = true;`** — the binfmt_misc **`F` flag**. The kernel opens the
+  interpreter (`${mountPoint}/rosetta`, line 72) at *registration* time and holds the fd, so exec
+  invokes it via that pre-opened fd instead of re-resolving the path. This is precisely what makes
+  x86_64 translation work **inside the Nix build sandbox** (a mount namespace where `/run/rosetta/rosetta`
+  need not be resolvable by name).
+- Supporting flags: `matchCredentials = true` (line 78, `C`), `preserveArgvZero = true` (line 79, `P`),
+  and `wrapInterpreterInShell = false` (line 82 — call the runtime directly, no shell wrapper).
+- The module is **purpose-built for sandboxed builds**, not just fixBinary: `nix.settings.extra-platforms
+  = [ "x86_64-linux" ]` (line 65) advertises the extra build platform, and `extra-sandbox-paths =
+  [ "/run/binfmt" cfg.mountPoint ]` (lines 66-69) bind-mounts the binfmt dir + the Rosetta share INTO the
+  sandbox. The in-source comment (lines 74-75) cites the SAME Apple "Running Intel Binaries in Linux VMs
+  with Rosetta" doc reconciled in §2.2/P8 as the source of the required flags.
+
+So **Q6's code half is YES**: `virtualisation.rosetta` registers binfmt with `fixBinary` (+`C`/`P`, direct
+interpreter) AND explicitly extends the sandbox for x86_64 builds. **Q6's Mac half stays open (P6b):** actually
+demonstrating an `x86_64` `nix build` succeeding through the sandbox on Apple Silicon still needs a Mac.
+
 ### 4.2 The recent development (this is what the podcast was describing)
 
 `[RESEARCH]` **`pkgs.darwin.linux-builder-vz`, backed by `pkgs.vzvm`.**
@@ -652,7 +672,7 @@ Ordered by information value per unit of effort.
 | Q3 | What is the actual x86_64 VM test wall-clock, if it runs at all? | — | Open |
 | Q4 | Does Nix error or degrade when `kvm` is advertised but unusable for the target arch? | — | Open |
 | Q5 | Can `nix.buildMachines` carry two entries for one host with different features? | — | Open |
-| Q6 | Does `virtualisation.rosetta` register binfmt with `fixBinary` for sandbox use? | — | Open |
+| Q6 | Does `virtualisation.rosetta` register binfmt with `fixBinary` for sandbox use? | P6a/P6b | **Code half CLOSED (§4.1, P6a):** YES — `rosetta.nix:77` sets `fixBinary = true` (binfmt `F` flag) + `matchCredentials`/`preserveArgvZero`/`wrapInterpreterInShell=false`, and the module extends the sandbox for x86_64 (`extra-platforms`, `extra-sandbox-paths=[/run/binfmt, mountPoint]`). **Mac half still Open (P6b):** demonstrate an x86_64 `nix build` succeeding through the sandbox on a Mac. |
 | Q7 | Are the systems under test NixOS guests or arbitrary embedded images? | P1 | **CLOSED (§6.6):** NixOS guests. All 19 VM tests build the guest from `self.modules.nixos.*` via `pkgs.testers.nixosTest`/`runNixOSTest`; zero embedded/raw-image/custom-kernel/cross-arch guests. |
 | Q8 | Do the team's amd64-only vendor toolchains run clean under Rosetta? | — | Open |
 | Q9 | Do any existing configs reference `cpick/nix-rosetta-builder`? | P1 | **CLOSED (§4.2):** No. `rg` across all nixcfg + nixcfg-work worktrees: zero hits for `cpick`/`nix-rosetta-builder` (also zero for `linux-builder-vz`/`vzvm`/`virtualisation.vz`/`virtualisation.rosetta`). |
@@ -694,6 +714,7 @@ Ordered by information value per unit of effort.
 
 | Version | Date | Change |
 |---|---|---|
+| v1.5 | 2026-09-04 | **P6a — binfmt fixBinary confirmed in source (Q6 code half CLOSED).** Read `rosetta.nix` in our pinned nixpkgs (`ffb3c9b`, store `/nix/store/jpnpv93s5ppfb1kbvfp8qa763vfb4fjb-source`): `boot.binfmt.registrations.rosetta` sets `fixBinary = true` (line 77, the `F` flag → interpreter fd pre-opened at registration, works inside the mount-namespace build sandbox), plus `matchCredentials`/`preserveArgvZero`/`wrapInterpreterInShell=false`, and the module explicitly extends the sandbox for x86_64 (`nix.settings.extra-platforms=["x86_64-linux"]`@65, `extra-sandbox-paths=["/run/binfmt", mountPoint]`@66-69). §4.1 gains a P6a block; §9 Q6 code-half struck (Mac half → P6b). Confirms P1's incidental preview. |
 | v1.4 | 2026-09-04 | **P8 — Apple-docs recheck (Q10 CLOSED).** Verified §2.2 against Apple's live deprecation notice + developer news. CONFIRMED: the deprecation is scoped to Intel *macOS apps* only (timeline: macOS 26.4 notifications → macOS 27 final general-purpose Rosetta → beyond = unmaintained-games-only subset), makes NO mention of the Linux/VM path, and Apple DTS confirms the two are distinct use cases; the Linux-VM feature remains separately published. CORRECTED: the earlier `[RESEARCH]` claim that Apple "is *not* sunsetting" the Linux path, and the specific "macOS 27 built-in / no separate install / availability check always reports installed" statement — unverifiable and overstated. Apple DTS explicitly declined to commit whether Linux-VM Rosetta survives past macOS 27, so post-27 availability is now recorded as an OPEN RISK feeding §7 / the PD gate. §2.2 rewritten, §9 Q10 struck, §10 refs add the deprecation-notice + Linux-VMs doc URLs. Empirical build/TCG claims (§4.4/§6.x) remain `[UNVERIFIED]` (Mac-gated, P2-P4). |
 | v1 | 2026-08-31 | Initial compilation. Rosetta mechanics, `linux-builder-vz` upstreaming, VM-test analysis, verification plan. All §6.4–§6.6 claims `[UNVERIFIED]`. |
 | v1.3 | 2026-08-31 | **P1 self-correction (verified against actual pinned nixpkgs source, not just the search index).** Two v1.2 claims were wrong and are corrected in §4.2/§4.5: (1) our top-level `inputs.nixpkgs` is rev `ffb3c9b` / **2026-08-19** (post-merge) and **already contains** `linux-builder-vz`, `vzvm`, `virtualisation.vz.*`, and `rosetta.nix` — **no nixpkgs bump needed**; the `62c8382`/2026-01-30 lock node is a *transitive* input of another flake input, not our root nixpkgs (v1.2 read a lock-node by name instead of following the input edge). (2) The `virtualisation.vz.*` paths are **not** a discrepancy — they are confirmed in `nixos/modules/virtualisation/vz-vm.nix` (`vz.rosetta.enable`@81, `vz.nestedVirtualization`@100, `vz.package=vzvm`@79, and vz→`virtualisation.rosetta` wiring @279-281); they were merely absent from the search.nixos.org index. Source also corroborates §2.3/§3: vz-vm.nix asserts aarch64-darwin-host-only (@197) and cannot emulate a foreign guest arch (@204). Incidental P6a preview: `rosetta.nix:77` sets `fixBinary = true` (P6a still owns the sandbox (b) analysis). |
