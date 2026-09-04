@@ -395,6 +395,24 @@ purpose-built for the remote-builder case. For general-purpose Linux VMs on macO
 Lima, or UTM are the appropriate tools — all three can also expose Rosetta, and
 `virtualisation.rosetta` works with them.
 
+`[RESEARCH]` **Confirmed against the `vzvm` README (verified 2026-09-04, sources per the Nix Freaks
+#40 episode).** Two limits are decisive for scoping this plan, in the project's own words:
+- *"It is highly specialized for the Linux-builder use case. There is no display or GUI, no cloud-init
+  or image import, no snapshots, no bridged or vmnet networking."* → vzvm is a **headless build
+  appliance, not a general VM runner.** It cannot serve interactive VM use or arbitrary-image VMs.
+- *"No x86_64/Intel guest support (Rosetta translates x86_64 **code** running in an ARM64 VM, not the
+  VM architecture itself)."* → **vzvm/Rosetta cannot run a full Intel VM.** Only ARM64 Linux guests;
+  Intel support is limited to translating x86_64 *userspace binaries inside an ARM guest*.
+
+**Consequence for goals (operator, 2026-09-04):** the operator's primary interest is **full emulated
+Intel VMs** and running the test suite on Macs (routine + interactive). vzvm/Rosetta serve the
+*build-locally* and *ARM-native-test* goals well (fast builds; nested-virt for ARM NixOS tests) but do
+**nothing** for full Intel VMs — that is a separate, plain **software-emulation** track (UTM or
+`qemu-system-x86_64` TCG on the Mac; QEMU can emulate x86_64 on ARM, just slowly), unrelated to vzvm and
+unaccelerated by Rosetta. Do not conflate the two tracks. (Companion: the "store was never the point"
+blog linked from the same episode is a Nix-*philosophy* piece — hermetic transactional composition vs.
+the store path — and is orthogonal to Apple-Silicon virtualization; noted here only to close the source.)
+
 ---
 
 ## 5. Capability matrix
@@ -714,6 +732,7 @@ Ordered by information value per unit of effort.
 
 | Version | Date | Change |
 |---|---|---|
+| v1.6 | 2026-09-04 | **vzvm scope pinned to the README (PD-gate research, at operator's request).** Read the `vzvm` README + the two Nix Freaks #40 links directly. §4.8 upgraded with the README's own wording: vzvm is a headless *build appliance* ("no display/GUI, no image import, no snapshots, no bridged networking") with **no x86_64/Intel guest support** (Rosetta translates x86_64 *code in an ARM guest*, not a VM architecture). Decisive for goals: vzvm/Rosetta serve build-locally + ARM-native tests, but do NOTHING for the operator's primary interest (full emulated Intel VMs), which is a separate software-emulation track (UTM / qemu-TCG). The "store was never the point" blog is an orthogonal Nix-philosophy piece (noted + closed). Confirms — does not overturn — the §2.2/§6.4 analysis. |
 | v1.5 | 2026-09-04 | **P6a — binfmt fixBinary confirmed in source (Q6 code half CLOSED).** Read `rosetta.nix` in our pinned nixpkgs (`ffb3c9b`, store `/nix/store/jpnpv93s5ppfb1kbvfp8qa763vfb4fjb-source`): `boot.binfmt.registrations.rosetta` sets `fixBinary = true` (line 77, the `F` flag → interpreter fd pre-opened at registration, works inside the mount-namespace build sandbox), plus `matchCredentials`/`preserveArgvZero`/`wrapInterpreterInShell=false`, and the module explicitly extends the sandbox for x86_64 (`nix.settings.extra-platforms=["x86_64-linux"]`@65, `extra-sandbox-paths=["/run/binfmt", mountPoint]`@66-69). §4.1 gains a P6a block; §9 Q6 code-half struck (Mac half → P6b). Confirms P1's incidental preview. |
 | v1.4 | 2026-09-04 | **P8 — Apple-docs recheck (Q10 CLOSED).** Verified §2.2 against Apple's live deprecation notice + developer news. CONFIRMED: the deprecation is scoped to Intel *macOS apps* only (timeline: macOS 26.4 notifications → macOS 27 final general-purpose Rosetta → beyond = unmaintained-games-only subset), makes NO mention of the Linux/VM path, and Apple DTS confirms the two are distinct use cases; the Linux-VM feature remains separately published. CORRECTED: the earlier `[RESEARCH]` claim that Apple "is *not* sunsetting" the Linux path, and the specific "macOS 27 built-in / no separate install / availability check always reports installed" statement — unverifiable and overstated. Apple DTS explicitly declined to commit whether Linux-VM Rosetta survives past macOS 27, so post-27 availability is now recorded as an OPEN RISK feeding §7 / the PD gate. §2.2 rewritten, §9 Q10 struck, §10 refs add the deprecation-notice + Linux-VMs doc URLs. Empirical build/TCG claims (§4.4/§6.x) remain `[UNVERIFIED]` (Mac-gated, P2-P4). |
 | v1 | 2026-08-31 | Initial compilation. Rosetta mechanics, `linux-builder-vz` upstreaming, VM-test analysis, verification plan. All §6.4–§6.6 claims `[UNVERIFIED]`. |
