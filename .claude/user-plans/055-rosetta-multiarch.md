@@ -85,7 +85,7 @@ IDs are stable (never renumbered); only order changed and P6 was split into P6a 
 |----|------|------|------|--------|
 | P1 | Code-verification pass: confirm/refute reference §4 + §6 `[UNVERIFIED]` claims vs actual nixpkgs + our flakes/tests/CI; answer Q7, Q9; edit reference + Changelog | analysis · nixcfg | §4,§6 · Q7,Q9 | TASK:COMPLETE (2026-08-31) |
 | PM | Portable module sketch (public): design a declarative `linux-builder-vz` enablement + cross-arch-build / VM-test-backend option that could supersede `boot.binfmt.emulatedSystems`; reusable by nixcfg-work. Design + eval-gate only — NO adoption, gated on P9 | OFF-MAC · nixcfg | §4.5,§6.5 | TASK:COMPLETE (2026-09-04) |
-| P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | OFF-MAC research · nixcfg | §2.2 · Q10 | TASK:IN_PROGRESS (Apple-docs recheck) |
+| P8 | Confirm Linux-VM Rosetta path status in current Apple docs (Q10); keep reference §2.2/§4 current | OFF-MAC research · nixcfg | §2.2 · Q10 | TASK:COMPLETE (2026-09-04) |
 | P6a | Code half of P6: verify `virtualisation.rosetta` registers with `fixBinary` in nixpkgs source — cite the line (or its absence) in `rosetta.nix`; answer the code half of Q6 | OFF-MAC code · nixcfg | §8.6 · Q6 | TASK:PENDING (dep P1 met — ACTIONABLE now; P1 previewed `rosetta.nix:77 fixBinary=true`) |
 | PD | **Discussion gate (Interactive):** with PM+P8+P6a done, DISCUSS with Tim how the off-Mac findings change HOW we do the darwin integration/validation, BEFORE any Mac testing ("don't test twice"). Output a recorded go-plan for the Mac phase (which of P2-P7, in what order, + any 054/001/004 adjustments) | Interactive GATE · nixcfg | §7 | TASK:PENDING (dep PM,P8,P6a — USER_INPUT_REQUIRED; deliberate STOP after off-Mac work) |
 | P0 | Fleet inventory: M-generation + macOS version for every dev machine | Interactive · **→ nixcfg-work** (052 M-A / 001) | §8.1 · Q1 | TASK:PENDING (dep PD — USER_INPUT_REQUIRED) |
@@ -174,6 +174,20 @@ the same way — committed into 054 (nixcfg) and 001/004 (nixcfg-work), not into
 `feat/darwin-support` · findings sinks → nixcfg `054` + committed docs, nixcfg-work `001`/`004`.
 
 ## Session log
+- 2026-09-04 (P8 COMPLETE — Apple-docs recheck, Q10 closed) — Verified reference §2.2 against Apple's
+  live deprecation notice ("Upcoming changes to Rosetta support for Intel-based macOS apps",
+  `developer.apple.com/news/?id=w5ngl9k2`) + developer docs. **Confirmed:** the deprecation is scoped to
+  Intel *macOS apps* only (macOS 26.4 user notifications → macOS 27 final general-purpose Rosetta → beyond
+  = unmaintained-games-only subset); it makes NO mention of the Linux/VM path, which stays a separately
+  published feature (VZLinuxRosettaDirectoryShare + update-binfmts in an aarch64 guest); Apple DTS confirms
+  the two are distinct use cases. **Corrected (material):** the earlier confident claim that Apple "is *not*
+  sunsetting" the Linux path, and the "macOS 27 built-in / no separate install / availability always reports
+  installed" statement — both unverifiable and overstated. Apple DTS explicitly declined to commit whether
+  Linux-VM Rosetta survives past macOS 27, so **post-27 availability is now recorded as an OPEN RISK** that
+  feeds §7 / the PD gate (build-side reliance on Rosetta-translated x86_64 has undetermined shelf life beyond
+  macOS 27; the aarch64-native path does not). Reference §2.2 rewritten, §9 Q10 struck, §10 refs + §11
+  Changelog v1.4 added. Research task (no code); finding surfaced for the PD discussion. **Next actionable
+  off-Mac:** P6a (`rosetta.nix` `fixBinary` confirm), then the PD gate (STOP).
 - 2026-09-04 (PM review with Tim; ephemeral made an option; doc defect fixed) — Post-completion review
   conversation (Tim flagged that PM was self-certified COMPLETE without the CLAUDE.md Present/Approve gate).
   Outcome: (1) **`ephemeral` promoted from a hardcoded `true` to a proper option defaulting to `false`**

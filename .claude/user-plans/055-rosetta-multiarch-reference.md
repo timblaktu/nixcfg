@@ -103,17 +103,34 @@ then on, executing an amd64 binary transparently invokes Rosetta.
 **Critical property: the guest kernel remains aarch64.** This is userspace ELF translation
 only. It is not machine emulation and it is not a hypervisor mode.
 
-`[RESEARCH]` **This is the product Apple is *not* sunsetting.** Apple's documentation
-states that starting in macOS 27, Intel binary translation for Linux is built into the OS
-with no separate Rosetta install, and the availability check always reports installed.
-Apple developer support has drawn the distinction explicitly: running x86_64 Linux
-binaries in VMs is a separate use case from the macOS Rosetta translation environment,
-because those binaries do not depend on macOS system frameworks.
+`[RESEARCH]` **The two Rosetta use cases are officially distinct, but the Linux/VM path's
+long-term future is NOT guaranteed (P8, verified 2026-09-04 against Apple's live pages).**
+What is confirmed:
+- Apple's deprecation notice is titled *"Upcoming changes to Rosetta support for **Intel-based
+  macOS apps**"* and its scope is **exclusively macOS applications** — it makes **no mention**
+  of Linux VMs, the Virtualization framework, or running x86_64 Linux binaries. Its timeline:
+  **macOS 26.4+** — users may get a system notification when launching apps that rely on
+  Rosetta; **macOS 27** — *"Final release to support Rosetta — Intel-only apps will no longer
+  run"* as a general-purpose tool; **beyond macOS 27** — only *"Rosetta functionality for
+  older, unmaintained gaming titles that rely on Intel-based frameworks will continue."*
+- The Linux/VM path is a **separate, still-published feature** (Apple's *"Running Intel
+  Binaries in Linux VMs with Rosetta"* doc + WWDC22 session): a `VZLinuxRosettaDirectoryShare`
+  is mounted in an aarch64 guest and registered via `update-binfmts` so x86_64 Linux ELF is
+  translated (TSO memory-model support in the guest kernel improves throughput). Apple DTS has
+  drawn the distinction explicitly — x86_64 Linux binaries in a VM do **not** depend on macOS
+  system frameworks, so it is *not* the same use case as the macOS Rosetta translation environment.
 
-> **Implication for planning:** the macOS-app Rosetta deprecation timeline does **not**
-> apply to the Linux/VM path. Do not let the two get conflated in risk assessments.
-> `[UNVERIFIED]` — re-verify against Apple docs before committing a team toolchain, since
-> this is still in motion as of writing.
+> **Implication for planning (CORRECTED — earlier draft overstated this):** the announced
+> deprecation is scoped to **macOS apps** and does not name the Linux/VM path, so the two must
+> not be conflated. **BUT** an earlier claim here — that Apple "is *not* sunsetting" the Linux
+> path and that "starting in macOS 27 it is built into the OS with no separate install and the
+> availability check always reports installed" — could **not** be verified and **overstates
+> Apple's position.** Asked directly whether Linux-VM x86_64 translation survives past macOS 27,
+> Apple DTS declined to commit either way: *"At this point in time we're not able to provide
+> guidance beyond that text in the public documentation."* **Treat post-macOS-27 availability of
+> Rosetta-for-Linux as an OPEN RISK, not a guarantee** — this is a real input to the §7 adoption
+> decision and the PD gate (build-side reliance on Rosetta-translated x86_64 has an undetermined
+> shelf life beyond macOS 27; the aarch64-native build path does not).
 
 ### 2.3 The hardware requirement is not "Rosetta needs a Max chip"
 
@@ -639,7 +656,7 @@ Ordered by information value per unit of effort.
 | Q7 | Are the systems under test NixOS guests or arbitrary embedded images? | P1 | **CLOSED (§6.6):** NixOS guests. All 19 VM tests build the guest from `self.modules.nixos.*` via `pkgs.testers.nixosTest`/`runNixOSTest`; zero embedded/raw-image/custom-kernel/cross-arch guests. |
 | Q8 | Do the team's amd64-only vendor toolchains run clean under Rosetta? | — | Open |
 | Q9 | Do any existing configs reference `cpick/nix-rosetta-builder`? | P1 | **CLOSED (§4.2):** No. `rg` across all nixcfg + nixcfg-work worktrees: zero hits for `cpick`/`nix-rosetta-builder` (also zero for `linux-builder-vz`/`vzvm`/`virtualisation.vz`/`virtualisation.rosetta`). |
-| Q10 | Confirm the Linux-VM Rosetta path's status in current Apple docs | — | Open |
+| Q10 | Confirm the Linux-VM Rosetta path's status in current Apple docs | P8 | **CLOSED (§2.2):** The deprecation notice is scoped to Intel *macOS apps* only (macOS 26.4 notifications → macOS 27 final general-purpose Rosetta → beyond = unmaintained-games subset) and does **not** mention the Linux/VM path, which remains a separately-published feature; Apple DTS confirms the two are distinct use cases. **However** Apple explicitly declined to guarantee Linux-VM Rosetta past macOS 27 — post-27 availability is an OPEN RISK, not assured (correcting the earlier overstated "not being sunset" framing). |
 
 ---
 
@@ -665,7 +682,10 @@ Ordered by information value per unit of effort.
 **Apple**
 - *About the Rosetta translation environment* —
   `https://developer.apple.com/documentation/apple-silicon/about-the-rosetta-translation-environment`
-- *Running Intel Binaries in Linux VMs with Rosetta*
+- *Running Intel Binaries in Linux VMs with Rosetta* —
+  `https://developer.apple.com/documentation/virtualization/running_intel_binaries_in_linux_vms_with_rosetta`
+- *Upcoming changes to Rosetta support for Intel-based macOS apps* (deprecation notice, P8) —
+  `https://developer.apple.com/news/?id=w5ngl9k2`
 - `VZGenericPlatformConfiguration.isNestedVirtualizationSupported` — the M3+ requirement
 
 ---
@@ -674,6 +694,7 @@ Ordered by information value per unit of effort.
 
 | Version | Date | Change |
 |---|---|---|
+| v1.4 | 2026-09-04 | **P8 — Apple-docs recheck (Q10 CLOSED).** Verified §2.2 against Apple's live deprecation notice + developer news. CONFIRMED: the deprecation is scoped to Intel *macOS apps* only (timeline: macOS 26.4 notifications → macOS 27 final general-purpose Rosetta → beyond = unmaintained-games-only subset), makes NO mention of the Linux/VM path, and Apple DTS confirms the two are distinct use cases; the Linux-VM feature remains separately published. CORRECTED: the earlier `[RESEARCH]` claim that Apple "is *not* sunsetting" the Linux path, and the specific "macOS 27 built-in / no separate install / availability check always reports installed" statement — unverifiable and overstated. Apple DTS explicitly declined to commit whether Linux-VM Rosetta survives past macOS 27, so post-27 availability is now recorded as an OPEN RISK feeding §7 / the PD gate. §2.2 rewritten, §9 Q10 struck, §10 refs add the deprecation-notice + Linux-VMs doc URLs. Empirical build/TCG claims (§4.4/§6.x) remain `[UNVERIFIED]` (Mac-gated, P2-P4). |
 | v1 | 2026-08-31 | Initial compilation. Rosetta mechanics, `linux-builder-vz` upstreaming, VM-test analysis, verification plan. All §6.4–§6.6 claims `[UNVERIFIED]`. |
 | v1.3 | 2026-08-31 | **P1 self-correction (verified against actual pinned nixpkgs source, not just the search index).** Two v1.2 claims were wrong and are corrected in §4.2/§4.5: (1) our top-level `inputs.nixpkgs` is rev `ffb3c9b` / **2026-08-19** (post-merge) and **already contains** `linux-builder-vz`, `vzvm`, `virtualisation.vz.*`, and `rosetta.nix` — **no nixpkgs bump needed**; the `62c8382`/2026-01-30 lock node is a *transitive* input of another flake input, not our root nixpkgs (v1.2 read a lock-node by name instead of following the input edge). (2) The `virtualisation.vz.*` paths are **not** a discrepancy — they are confirmed in `nixos/modules/virtualisation/vz-vm.nix` (`vz.rosetta.enable`@81, `vz.nestedVirtualization`@100, `vz.package=vzvm`@79, and vz→`virtualisation.rosetta` wiring @279-281); they were merely absent from the search.nixos.org index. Source also corroborates §2.3/§3: vz-vm.nix asserts aarch64-darwin-host-only (@197) and cannot emulate a foreign guest arch (@204). Incidental P6a preview: `rosetta.nix:77` sets `fixBinary = true` (P6a still owns the sandbox (b) analysis). |
 | v1.2 | 2026-08-31 | **P1 code-verification pass** (host-independent; no Mac). Verified vs live nixos-unstable (mcp-nixos) + our repos: `pkgs.darwin.linux-builder-vz` and `pkgs.vzvm` (v1.0.0) **exist upstream** (§4.2 ✓); `virtualisation.rosetta.{enable,mountTag}` **exist** (§4.1 ✓); `nix.linux-builder.{package,systems,ephemeral,maxJobs,supportedFeatures,config,speedFactor}` **exist** (§4.5 config shape ✓). **Discrepancy flagged:** `virtualisation.vz.rosetta.enable` / `virtualisation.vz.nestedVirtualization` (§4.5/§6.3) are **not** in the NixOS options index — likely guest-module-only; exact attr path downgraded to `[UNVERIFIED]`, source confirmation deferred to P6a/PM. **Q7 CLOSED (§6.6):** our systems-under-test are NixOS guests (19 `nixosTest`/`runNixOSTest`, 26 `self.modules.nixos.*` imports, zero embedded/raw-image/cross-arch guests). **Q9 CLOSED (§4.2):** zero refs to `cpick/nix-rosetta-builder` (or `linux-builder-vz`/`vzvm`/`virtualisation.vz`/`virtualisation.rosetta`) anywhere in nixcfg + nixcfg-work. **New findings:** (a) our nixpkgs pin (rev `62c8382`, 2026-01-30) **predates** the Aug-2026 merge — mechanism is upstream but absent from our lock; adoption needs a bump (§4.2). (b) §6.4 pathology is **not currently triggered** — our VM tests are all host-arch, aarch64 gate runs on an aarch64 KVM-metal runner; the x86-on-Mac case only arises under an explicit Option-C routing choice (§6.4). (c) §6.3 KVM premise **confirmed for us** — `vm-dev-team-vm-smoketest` already requires hardware `/dev/kvm` via a metal runner (§6.3). |
