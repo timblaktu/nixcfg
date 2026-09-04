@@ -132,6 +132,21 @@ IDs are stable (never renumbered); only order changed and P6 was split into P6a 
 - Do NOT generate config/CI/ADR that presupposes an unmade §7 choice (reference §0 rule 4).
 - Apple-Silicon tasks yield **ENVIRONMENT_NOT_CAPABLE** on this Linux host — leave PENDING, do not fabricate results.
   Operator/corp-decision tasks yield **USER_INPUT_REQUIRED** and are executed in nixcfg-work.
+- **Present/STOP gate for artifact-producing tasks (learned 2026-09-04).** `/next-task` runs a task
+  autonomously, but this project's CLAUDE.md workflow is `Research → Present (STOP for confirmation) → Approve
+  → Execute → Validate`, and `CONSERVATIVE TASK COMPLETION` says err toward NOT self-certifying. **When a task
+  produces a reviewable artifact (a new/edited module, a design choice with baked-in defaults, an ADR/decision) —
+  e.g. PM — present the design + any defaults and STOP for Tim's sign-off BEFORE marking COMPLETE and committing.**
+  The project's Present/STOP gate wins over `/next-task`'s autonomy for these. Pure research / code-confirmation
+  tasks (P8, P6a) are lower-stakes and closer to safe-autonomous, but still surface findings for a quick check
+  before COMPLETE since they feed the PD decision. (PM was initially self-certified COMPLETE without this gate;
+  the review then caught a hardcoded `ephemeral=true` that deviated from upstream, and a tracked/untracked doc
+  defect — see the 2026-09-04 session-log entry.)
+- **Full-green DoD needs a backgrounded flake check.** When a DoD literally requires `nix flake check --no-build`
+  green (not just `nix eval`), it runs ~8 min here (> the 2-min tool timeout). Run it with `run_in_background`
+  and poll the log for `error:` count + an exit marker; do NOT conclude from a timed-out foreground run.
+- **`$CLAUDE_PROJECT_DIR` is NOT set in the Bash tool shell.** Use the absolute worktree path
+  (`/home/tim/src/nixcfg-rosetta/.claude/...`) when writing `active-plan` / `HANDOFF.md`, not `$CLAUDE_PROJECT_DIR`.
 
 ## Continuity across worktrees and to the MacBook
 Off-Mac work runs in THIS worktree (`/home/tim/src/nixcfg-rosetta`, Linux). The Mac experiments (P2-P7) run on the
