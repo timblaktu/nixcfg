@@ -50,13 +50,80 @@ All of this is in `modules/programs/claude-code/` — read `_hm/hooks.nix` first
 
 Class key: **A** = cleanly hook-enforceable as a hard block; **B** = partially enforceable (detect/warn, some judgment); **C** = inherently soft / needs model judgment (a hook can only approximate).
 
+## P1 findings — definitive soft-rule classification (supersedes the seed inventory above)
+
+Completed 2026-09-05. Sources audited in full: global CLAUDE.md (`.claude-max`), project CLAUDE.md (nixcfg), all 28 auto-memory entries (behavioral/`feedback`-tagged ones read in detail), and the Guardrails of every active plan (050-054, 056; plans 013-049 without a Guardrails heading contribute their CRITICAL-rule prose, already captured by the CLAUDE.md rows). Category surface confirmed against `modules/programs/claude-code/_hm/hooks.nix`: enable-toggles are `formatting, linting, security, git {autoStage, autoCommit}, testing, logging, notifications, development, resume, rtk` plus freeform `hooks.custom`. **No** first-class option today for attribution / no-main / no-verify / git-add-f / rm-i / emdash / handoff-gate — each Class-A/B row below that says "NEW" needs a new toggle (though `hooks.custom` could express any of them ad hoc).
+
+Class key extended: **D** = already enforced mechanically or superseded (excluded from conversion — listed for completeness).
+
+### Class A — cleanly enforceable hard blocks (highest value; P3/P4 targets)
+
+| # | Rule | Source(s) | Real incident? | Target event + mechanism | Option status |
+|---|---|---|---|---|---|
+| A1 | **No AI attribution** in commits/PRs | global CRITICAL; memory `project_ai_attribution_leak`; EVERY active plan's Guardrails | YES — 11 public commits leaked `Co-Authored-By` | PreToolUse Bash `git commit`: scan `-m`/`-F` arg + `COMMIT_EDITMSG` for `Co-Authored-By`/`Claude`/`Anthropic`/`Generated with`/`claude.ai` → `exit 2` | NEW toggle (default block) |
+| A2 | **Never commit/push on main/master** | project CRITICAL "NEVER WORK ON MAIN"; plan Guardrails "confirm merge to main" | latent | PreToolUse Bash `git commit`\|`git push`: `git symbolic-ref --short HEAD` ∈ {main,master} → `exit 2` | NEW toggle (default block) |
+| A3 | **No `git commit/push --no-verify`/`-n`** | memory `nixcfg-precommit-flakecheck-timeout` (the *inverse* pressure); **plan 017 already designed this** | YES — flake-check timeout tempts `--no-verify` | PreToolUse Bash: `--no-verify`/bare `-n` on `git commit`\|`git push` → `exit 2` | NEW = **plan 017's `gitSafety` category** (R1 done, I1/T1/D1 PENDING) → 056 P4 must COORDINATE/subsume, not duplicate |
+| A4 | **No `git add -f`/`--force`** | global CRITICAL "NEVER use `git add -f`" | latent | PreToolUse Bash: `git add` with `-f`/`--force` → `exit 2` | NEW toggle (default block) |
+| A5 | **No emdash (U+2014)** in file content | global CRITICAL | recurring | PreToolUse Write/Edit: `new_string`/`content` contains U+2014 → `exit 2` (purely textual, cheapest possible check, zero false positives outside legitimately emdash-bearing files) | NEW toggle |
+
+### Class A/B — enforceable but auto-rewrite is UNSAFE here (block-with-message, never silently rewrite)
+
+Both rows are cautioned by memory `rtk-grep-false-negative-disabled`: the RTK experiment that *rewrote* Bash commands (grep→rg) silently corrupted output and was disabled host-wide. Lesson for P3/P4: **detect + block with an instructive message; do NOT auto-rewrite the command.**
+
+| # | Rule | Source(s) | Real incident? | Target event + mechanism | Option status |
+|---|---|---|---|---|---|
+| A/B6 | **`rm -i`/`cp -i`/`mv -i` hang** (bare `rm`/`cp`/`mv`; user alias adds `-i`) | global CRITICAL | YES — hangs non-interactive sessions | PreToolUse Bash: bare `rm`/`cp`/`mv` lacking `-f` → block with "add `-f`" message (NOT rewrite) | NEW toggle |
+| A/B7 | **Use `rg`/`fd`, never `grep`/`find`** | global CRITICAL | — | PreToolUse Bash: top-level `grep`/`find` invocation → warn (NOT rewrite — RTK proved rewrite corrupts) | `rtk` category exists but is DISABLED/corrupting; a warn-only variant would be NEW |
+
+### Class B — partial / detect-and-warn (a hook narrows the gap; judgment remains)
+
+| # | Rule | Source(s) | Target event + mechanism | Option status |
+|---|---|---|---|---|
+| B8 | **Stage changes before nix commands** | global CRITICAL; seed | PreToolUse Bash `nix *`: tracked `.nix`/`flake.lock` unstaged → warn | PARTIAL — `git.autoStage` already auto-stages on some events; extend/repurpose vs new warn |
+| B9 | **Single-quote Nix derivation refs** | global CRITICAL | PreToolUse Bash: `nix (build\|run\|develop) .#…` unquoted → warn | NEW |
+| B10 | **Relative paths for inter-doc md links** | global CRITICAL | PreToolUse Write/Edit on `.md`: absolute in-repo link → warn | NEW |
+| B11 | **Mandatory session handoff before stop** | global "NEVER SKIP"; project "End of Session" | Stop/SessionEnd: `.claude/HANDOFF.md` older than last commit OR `.claude/active-plan` unset → nag/gate. Can enforce *that a fresh handoff exists*, NOT compose it (only the model can distill) | NEW toggle → P5b |
+| B12 | **Edit the template, not the Nix-generated file** | memory `nix-managed-context-files` | YES | PreToolUse Write/Edit: path ∈ generated set (`settings.json`, per-account `CLAUDE.md`) → block w/ pointer to template | NEW toggle |
+| B13 | **Verify process provenance before killing** | global CRITICAL | PreToolUse Bash `kill`/`pkill` → inject reminder (walk pstree, check `/proc/<pid>/cwd`) | NEW (reminder-only) |
+| B14 | **git push auth prefix** | memory `feedback_git_push_auth` | PreToolUse Bash `git push` to github remote w/o `GH_TOKEN` in env → inject reminder (`GH_TOKEN=$(gh auth token)`) | NEW (reminder-only) |
+| B15 | **No hard-wrap in files** | global CRITICAL | weak — reliable detection is hard; warn-only, low value | NEW (weak) — recommend defer |
+| B16 | **No parallel git in same worktree** | global CRITICAL | weak — cross-call race, one PreToolUse can't see concurrency | (weak) — recommend keep soft |
+
+### Class C — irreducibly soft (a hook can only approximate; P5 research or keep-soft)
+
+| # | Rule | Source(s) | Why soft / best a hook can do |
+|---|---|---|---|
+| C17 | **Present/STOP before marking artifact-task COMPLETE** | memory `next-task-present-stop-artifact-gate`; project 5-step; plan 054 Guardrail | YES-incident (plan 055 PM). Needs session-state inference: a Stop/PostToolUse hook can flag "a `TASK:COMPLETE` edit + a commit landed with no intervening review marker" — approximate only → **P5a** |
+| C18 | **Confirm merge to main / never auto-merge** | plan Guardrails 052-054 | PreToolUse `git merge` into main → could gate, but "confirm with Tim" is a judgment/approval, not a mechanical predicate → partial, P5 |
+| C19 | **ONE TASK PER SESSION** (multi-session plans) | global | Stop: >1 `TASK:COMPLETE` transition this session → nag (approx) → P5 |
+| C20 | Commit-msg technical-content-only; conservative completion; validation≠fixing; stop-and-summarize; dependency-analysis boundary; rapid-iteration=check-ins | global + project CRITICAL | pure model judgment — keep soft (context only) |
+| C21 | Don't clutter global CLAUDE.md; add docs to existing md / ask where; local-first research; use mcp-nixos before nix changes; ask for auth help; bash+zsh compat; escape shell chars; timestamp format | global + project | judgment / low-value; some (e.g. auth-help, mcp-nixos) could be UserPromptSubmit context nudges but not blocks — keep soft |
+
+### Class D — already enforced or superseded (excluded from conversion)
+
+| Rule | Status |
+|---|---|
+| Serialize nix / no concurrent evals | DONE — `nix-guard` cgroup interlock (`modules/lib/nix-guarded.nix`) |
+| Sensitive-file access | DONE — `security` hook blocks via PreToolUse `exit 2` |
+| Surface active-plan next task on session start | DONE — `resume` hook (plan 044) |
+| "NEVER sudo long-running with timeout" | SUPERSEDED — reversed by memory `long-running-sudo-timeout-ok` (was about self-imposed short timeouts) |
+| RTK rg/grep command rewrite | DISABLED host-wide (output corruption) — cautionary precedent for A/B6, A/B7 (block, don't rewrite) |
+
+### Corrections / conflicts surfaced by the audit
+
+1. **Stale conflicting rule (must resolve before B11).** Project CLAUDE.md "End of Session (MANDATORY)" still says to **pipe the continuation prompt to the clipboard via `clip.exe`**. This DIRECTLY CONTRADICTS global CLAUDE.md "Session Handoff Protocol", which mandates the per-worktree **file** channel (`.claude/HANDOFF.md` + `.claude/active-plan`) precisely because the shared Windows clipboard is a proven cross-session contamination hazard (plan 044). A B11 handoff-gate hook MUST gate on the FILE channel, and project CLAUDE.md should be updated to match (flagged; the CLAUDE.md edit itself is out of 056's hook scope but P6 should note it).
+2. **A3 overlaps plan 017.** The `--no-verify` block is not new work — plan 017 (`gitSafety` category, R1 COMPLETE, I1/T1/D1 PENDING) already specced it. 056 P4 should implement 017's I1 as part of the same category rather than a parallel hook. Recommend folding 017 into 056 (or explicitly cross-referencing) at P6.
+3. **Plan 049 is the false-positive canary.** A project-level PreToolUse hook there fired "Failed with non-blocking status code" on nearly every Edit/Write. Every Class-A/B design in P3 must carry the false-positive analysis the DoD requires, and prefer narrow matchers + `ifFilter`; 049's root-cause note is the reference for what a bad matcher does module-wide.
+4. **Seed inventory row for "`git commit --no-verify` … mostly informational (Class B/C)" is corrected to Class A (A3)** — it is a clean, mechanically-detectable flag block, already designed in plan 017.
+5. **Enforcement-priority ranking (feeds P3):** ship A1 (attribution) and A2 (no-main) first (both safety-critical, real/latent blast radius, zero-judgment predicates), then A3 (coordinate w/ 017), A4, A5 (all trivial textual/flag checks). A/B6, A/B7 next (block-not-rewrite). Class B is warn-tier for P4/P5; Class C is P5 research.
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate.
 
 | ID | Task | Kind | Depends | Status |
 |----|------|------|---------|--------|
-| P1 | Audit & classify ALL soft rules across global+project CLAUDE.md, auto-memory `feedback` entries, and every active plan's Guardrails. Produce the definitive classification table (A/B/C) with, per rule, the target hook event + one-line mechanism sketch + whether the current option surface already supports it. Correct/extend the seed inventory above. | analysis | — | TASK:IN_PROGRESS |
+| P1 | Audit & classify ALL soft rules across global+project CLAUDE.md, auto-memory `feedback` entries, and every active plan's Guardrails. Produce the definitive classification table (A/B/C) with, per rule, the target hook event + one-line mechanism sketch + whether the current option surface already supports it. Correct/extend the seed inventory above. | analysis | — | TASK:COMPLETE (2026-09-05) |
 | P2 | Map the existing hook substrate & gaps: document (in-plan) the `programs.claude-code.hooks` API, `mkHook`, exit-code/injection conventions, module-global caveat, and the VM-test harness; enumerate which Class-A/B conversions the current options already express vs. which need NEW toggle options. | analysis | P1 | TASK:PENDING |
 | P3 | **Design** the high-confidence Class-A interlocks — P3a AI-attribution block, P3b no-commit/push-on-main, P3c `rm -i`/`cp -i`/`mv -i` hazard. Per rule: hook event, matcher, script logic, exit code, new toggle option (default safety=block), FALSE-POSITIVE analysis, and VM-test approach. No adoption. | design (artifact → Present/STOP) | P2 | TASK:PENDING |
 | P4 | **Implement + VM-test** the Class-A interlocks: add the toggle options + hooks to the claude-code module (safety-critical default block, individually toggleable), wire via `mkHook`/`custom`. Add/extend a VM test proving each block FIRES (attribution-trailer commit rejected; commit on main rejected) and does NOT false-positive on a clean commit. | implementation (artifact → Present/STOP + review) | P3 | TASK:PENDING |
@@ -84,3 +151,4 @@ Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, bra
 
 ## Session log
 - 2026-09-04 — Plan created. Worktree `/home/tim/src/nixcfg-session-hooks` + branch `plan-056-session-workflow-hooks` cut from `main` (7e2ab33). Motivated by plan 055 task PM, where a `/next-task` session blew past soft Present/STOP conventions; Tim asked to generalize "suggestions in context" into "hard clear processes to follow". Surveyed the existing hook substrate (`modules/programs/claude-code/_hm/hooks.nix`): mature declarative categorized+custom hook API, `mkHook`, `exit 2` PreToolUse-block convention, module-global settings.json (Nix build output), VM-test harness for hooks. Locked decisions (Tim): dedicated worktree off main; both enforceable + hard-gate scope, phased; per-rule enforcement with safety-critical defaulting to block. Seed inventory of soft→hard candidates drafted (AI-attribution, no-main-commit, rm-i hazard as Class-A; handoff + Present/STOP as harder gates). Next actionable: **P1** (audit & classify all soft rules).
+- 2026-09-05 — **P1 COMPLETE.** Audited global + project CLAUDE.md, all 28 auto-memory entries, and every active plan's Guardrails (050-054, 056). Produced the definitive A/B/C/D classification (see "P1 findings" section, supersedes seed inventory): 5 Class-A hard-block targets (A1 attribution, A2 no-main, A3 no-verify, A4 git-add-f, A5 emdash), 2 Class-A/B block-not-rewrite (rm-i, grep/find), 9 Class-B detect/warn, 5 Class-C soft, plus Class-D already-done. Confirmed category surface in `hooks.nix` (no attribution/no-main/no-verify/rm-i/emdash/handoff options exist yet — all NEW). Key findings: (1) project CLAUDE.md "clipboard handoff" rule stale-conflicts with global file-handoff protocol → must resolve before B11; (2) A3 (`--no-verify`) already designed in **plan 017** (`gitSafety`, PENDING) → P4 must coordinate/subsume; (3) plan 049 is the false-positive canary → every P3 design needs the DoD's false-positive analysis; (4) RTK-disabled lesson → block-with-message, never auto-rewrite Bash. Next actionable: **P2** (substrate map, depends P1).
