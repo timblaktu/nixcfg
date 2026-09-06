@@ -94,6 +94,19 @@ let
         "scripts/pipeline-watch.sh" = ./skills/ci-pipeline-monitoring/scripts/pipeline-watch.sh;
       };
     };
+    jira-bulk-issues = {
+      name = "jira-bulk-issues";
+      description = "Turn a Jira XML issue export into a validated bulk-import file (CSV or Jira importer JSON) that matches the team's real fields, custom field IDs, and allowed values. Use whenever someone wants to create, stage, or update Jira issues in bulk, has a Jira XML export to build from, or asks to turn a backlog or plan or spreadsheet into Jira tickets.";
+      files = {
+        "SKILL.md" = ./skills/jira-bulk-issues/SKILL.md;
+        "references/csv-format.md" = ./skills/jira-bulk-issues/references/csv-format.md;
+        "references/json-format.md" = ./skills/jira-bulk-issues/references/json-format.md;
+        "references/rich-text.md" = ./skills/jira-bulk-issues/references/rich-text.md;
+        "scripts/inventory_export.py" = ./skills/jira-bulk-issues/scripts/inventory_export.py;
+        "scripts/md_to_wiki.py" = ./skills/jira-bulk-issues/scripts/md_to_wiki.py;
+        "scripts/validate_import.py" = ./skills/jira-bulk-issues/scripts/validate_import.py;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -407,6 +420,17 @@ in
           an event-driven GitLab/glab watcher that wakes on job transitions and
           failures, heartbeats during long deploy/test jobs, and drives validating
           artifacts as they land instead of polling for completion.
+        '';
+      };
+      jira-bulk-issues = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the Jira bulk-issues skill: turn a Jira XML search export (a
+          schema oracle) into a validated bulk-import file (CSV or the Jira
+          importer's JSON) matching the instance's real fields, custom field IDs,
+          and allowed select values. Ships helper scripts (inventory_export.py,
+          md_to_wiki.py, validate_import.py) and CSV/JSON/rich-text references.
         '';
       };
     };
