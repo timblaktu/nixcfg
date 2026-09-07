@@ -443,6 +443,160 @@ into the built hook script, assert exit status (2 = blocked, 0 = allowed) and, f
 the instructive message. The clean-feature-branch commit (`exit 0`) is the mandatory no-false-positive assertion
 the P4 DoD names.
 
+## P5 findings — the hard process-gates (feasibility + prototype design)
+
+Researched 2026-09-07 (P5). **Artifact-producing → Present/STOP for Tim's sign-off before COMPLETE.** This
+section is the research deliverable; the prototype DESIGNS below are proposed default-off and are NOT yet
+implemented in `hooks.nix` (implementation waits on P5 sign-off, mirroring the P3→P4 split). No host adopts.
+
+### P5.0 — the runtime-contract facts that decide everything (verified 2026-09-07)
+
+Verified against the official Claude Code hooks reference (`https://code.claude.com/docs/en/hooks`, "Exit
+code 2 behavior per event" + "Exit code 0" tables) and cross-checked with memory `cc-sessionstart-hook-contract`.
+These are the load-bearing facts; the whole P5 design turns on them:
+
+| Event | Fires when | exit 2 blocks? | On exit 2 | exit-0 stdout injects as context? |
+|---|---|---|---|---|
+| **PreToolUse** | before a tool runs | **YES** | tool blocked; stderr → Claude | no (debug log) |
+| **PostToolUse** | after a tool ran (success) | **NO** | tool already ran; **stderr still shown to Claude** | no (debug log) |
+| **UserPromptSubmit** | before a prompt reaches the model | **YES** | prompt blocked+erased; stderr → user only | **YES** |
+| **Stop / SubagentStop** | **each time the agent finishes a turn** | **YES** | stop blocked, conversation **continues**; stderr → Claude | no (debug log) |
+| **SessionEnd** | session terminates | **NO** (not in the table) | cleanup-only; cannot gate | no (debug log) |
+
+Two consequences dominate P5:
+1. **There is NO blockable "the session is about to end" event.** `SessionEnd` fires but **cannot block**
+   (cleanup-only); `Stop` **can** block but fires on **EVERY turn**, not just the last one. So a hook cannot
+   single out "the final stop" and gate it — blocking `Stop` would demand the gated action after *every*
+   assistant response. This directly refutes the seed-inventory / P1-B11 assumption ("Stop/SessionEnd:
+   block/nag if HANDOFF stale") — neither event can cleanly gate the *session-ending* moment.
+2. **The `TASK:COMPLETE` marking is a normal Edit**, and PreToolUse Edit **can** block it, with the pre-edit
+   `old_string`/new post-edit `new_string` BOTH on stdin (`.tool_input.{file_path,old_string,new_string}`;
+   `.content` for Write). So P5a/P5c — which the seed inventory filed as Class-C "needs session-state
+   inference" — are actually gate-able at the **edit** that performs the transition, not only inferable
+   post-hoc at Stop. They are MORE enforceable than P1 predicted.
+
+Loop-prevention note: a blocking `Stop` hook risks an infinite loop (block → continue → finish → block …).
+The doc excerpt did NOT confirm a `stop_hook_active` stdin guard field (the guide agent could not cite it);
+so any blocking-`Stop` design would rest on an **unverified** loop-guard. **The P5b prototype therefore
+avoids blocking `Stop` entirely** — sidestepping both the per-turn problem AND the unverified guard.
+
+### P5a — Present/STOP-before-COMPLETE  → FEASIBLE (PreToolUse Edit gate), soft residue = the review itself
+
+**Rule / incident:** memory `next-task-present-stop-artifact-gate` (plan 055 PM): a `/next-task` session
+self-certified COMPLETE + committed without a review conversation; the skipped review would have caught real
+defects. **What a hook CAN enforce:** the *edit* that writes `TASK:COMPLETE` into a plan file is a clean
+textual predicate — a **PreToolUse** hook (`matcher = "Edit|MultiEdit|Write"`) that fires when
+`.tool_input.file_path` matches `.claude/user-plans/.*\.md` AND `.tool_input.new_string`/`.content`
+introduces `TASK:COMPLETE` that was NOT already in `.tool_input.old_string` (a genuine transition, not a
+re-write of an already-complete row) can **block** it (`exit 2`). **What is irreducibly soft:** whether a
+real review/sign-off actually happened — a hook cannot read the human approval out of the conversation. The
+design bridges this with an **attestation marker**: the block lifts only when the operator sets
+`CLAUDE_TASK_SIGNOFF=1` (the same zero-friction env-var pattern as `CLAUDE_HOOKS_BYPASS`). The marker does
+not *prove* a review occurred, but it converts a silently-skippable convention into a **deliberate act** —
+which is the entire point (soft "suggestion" → hard "process step"). Residual soft edge: a session could set
+the marker reflexively; that is the operator's honor-boundary, identical in kind to the bypass.
+
+- **Prototype (proposed, default OFF):** `hooks.planIntegrity.requireSignoffBeforeComplete`.
+  ```
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  fp="$(jq -r '.tool_input.file_path // empty')"; case "$fp" in */.claude/user-plans/*.md) ;; *) exit 0 ;; esac
+  new="$(jq -r '.tool_input.new_string // .tool_input.content // empty')"
+  old="$(jq -r '.tool_input.old_string // empty')"
+  echo "$new" | grep -q 'TASK:COMPLETE' || exit 0
+  echo "$old" | grep -q 'TASK:COMPLETE' && exit 0        # already-complete row rewrite — not a transition
+  [ -n "$CLAUDE_TASK_SIGNOFF" ] && exit 0                # operator attested sign-off
+  echo "🚫 planIntegrity: marking a task TASK:COMPLETE requires a Present/STOP review first (memory next-task-present-stop-artifact-gate). Present the artifact + defaults, get Tim's sign-off, then: export CLAUDE_TASK_SIGNOFF=1. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+  exit 2
+  ```
+- **FP analysis (plan 049 canary):** matcher is doubly narrow — plan-file path AND a real
+  PENDING/IN_PROGRESS→COMPLETE transition — so it never fires on ordinary edits. It DOES fire on this very
+  plan's status edits (that is the intended behavior); the marker/bypass is the one-env-var release. Default
+  OFF because it changes the `/next-task` ergonomics and P6 must decide whether the marker is the right
+  sign-off channel.
+
+### P5b — mandatory-handoff-before-stop  → LARGELY SOFT (no blockable session-end event); feasible artifact = default-off SessionEnd audit-warn
+
+**Rule / incident:** global "Session Handoff Protocol (NEVER SKIP)" + plan 044 concurrency incident. **What a
+hook CANNOT do (the P5.0 finding):** force a handoff at session end — `SessionEnd` cannot block, and `Stop`
+fires per-turn so blocking it would demand a fresh handoff after every single response. **What a hook CAN
+do:** at `SessionEnd`, *detect and record* staleness — `.claude/active-plan` unset/empty OR `.claude/HANDOFF.md`
+absent or older than the tip commit (`git log -1 --format=%ct` vs the file mtime). But because `SessionEnd`
+exit-0 stdout goes to the **debug log only** (Claude never sees it, and the session is ending regardless),
+this is **advisory/audit-only** — it cannot change behavior in-session. **Irreducibly soft (unchanged from
+P1-B11):** even a blocking variant could only enforce THAT a fresh file exists, never that its CONTENT is a
+meaningful distilled summary — composing the handoff is model-only (a `touch HANDOFF.md` defeats any
+mtime check). 
+
+- **Prototype (proposed, default OFF):** `hooks.planIntegrity.handoffReminderOnSessionEnd` — a `SessionEnd`
+  hook, `continueOnError = true`, that writes a one-line staleness warning to stderr (debug log) and, so the
+  signal is not lost, appends a timestamped line to `$CLAUDE_PROJECT_DIR/.claude/handoff-audit.log` when
+  `active-plan` is unset or `HANDOFF.md` is stale. **Explicitly documented as advisory** — it is the best a
+  mechanical hook can do and is NOT a gate. 
+- **Rejected alternative (recorded so P6 need not re-derive):** a blocking `Stop` handoff-gate — rejected on
+  two grounds: (1) `Stop` is per-turn, so it would block ordinary mid-session turns, not just the last; (2)
+  loop-prevention would depend on the **unverified** `stop_hook_active` field. Not worth the FP/loop risk for
+  a gate that still cannot compose the summary.
+- **CLAUDE.md conflict to resolve at P6 (from P1 correction #1):** project CLAUDE.md "End of Session" still
+  mandates the **clipboard** (`clip.exe`) handoff, which contradicts the global **file**-channel protocol
+  (`.claude/HANDOFF.md` + `.claude/active-plan`) this prototype checks. The prototype gates the FILE channel;
+  P6 should fix the stale project-CLAUDE.md prose (the edit itself is out of 056's hook scope).
+
+### P5c — plan-status-transition integrity  → FEASIBLE (PreToolUse Edit textual gate), soft residue = DoD-met
+
+**Rule / incident:** the `/next-task` protocol requires PENDING→IN_PROGRESS→COMPLETE ordering, COMPLETE only
+with a date; memory `plan-next-task-cursor-ordering` shows status-hygiene matters. **What a hook CAN enforce**
+(pure textual predicates on the Edit `old_string`→`new_string`, same shape as the A5 emdash check): (1) an
+**illegal skip** — `old` shows a row `TASK:PENDING` that `new` flips straight to `TASK:COMPLETE` (bypassing
+IN_PROGRESS); (2) **COMPLETE without a date** — `new` introduces `TASK:COMPLETE` with no adjacent
+`(20\d\d-\d\d-\d\d)`. Both are mechanically decidable at PreToolUse. **Irreducibly soft:** whether the task's
+DoD is actually met — the hook enforces the transition's SHAPE, never its correctness.
+
+- **Prototype (proposed, default OFF):** `hooks.planIntegrity.enforceStatusTransitions` — PreToolUse
+  `Edit|MultiEdit`, plan-file path gate, block (`exit 2`) on a PENDING→COMPLETE skip or a dateless COMPLETE,
+  with the instructive message + `CLAUDE_HOOKS_BYPASS` release. Shares the `planIntegrity` category and the
+  plan-file-path helper with P5a. Default OFF (P6 decides warn-vs-block).
+- **FP analysis:** narrow (plan-file path + specific transition shapes). Residual: multi-row MultiEdit that
+  legitimately advances one row IN_PROGRESS→COMPLETE while another goes PENDING→IN_PROGRESS in the same
+  `new_string` — the regex must test per-row, not whole-blob (P4's bashSafety per-segment lesson applies).
+
+### P5 — proposed category shape (one new category, three default-off sub-toggles)
+
+```nix
+hooks.planIntegrity = {
+  enable                       = mkOption { default = true;  … };  # category master (sub-rules still default OFF)
+  requireSignoffBeforeComplete = mkOption { default = false; … };  # P5a — PreToolUse Edit gate + CLAUDE_TASK_SIGNOFF
+  enforceStatusTransitions     = mkOption { default = false; … };  # P5c — PreToolUse Edit textual gate
+  handoffReminderOnSessionEnd  = mkOption { default = false; … };  # P5b — SessionEnd advisory audit-warn (non-blocking)
+};
+```
+Unlike `gitSafety`/`bashSafety` (safety-critical → default block), the P5 sub-rules default **OFF**: they are
+workflow-discipline gates with softer predicates and real ergonomic cost, so P6 opts them in per-rule after a
+warn-first trial. Same authoring conventions as P4 (jq-stdin, Nix-store binaries, `CLAUDE_HOOKS_BYPASS`,
+`lib.optionalAttrs (cat.enable && subtoggle)`, unioned into `mergeHookSets`).
+
+### P5 — the "irreducibly soft / keep soft" list (a hook can only approximate; do NOT convert)
+
+- **Composing the handoff summary content** — only the model can distill what mattered (P5b; global protocol
+  already says this).
+- **Proving a real review happened** for P5a beyond the honor-marker — the marker attests, it does not verify.
+- **Whether a task's DoD is truly met** (P5c) — semantic, model-judgment.
+- **"Confirm merge to main / never auto-merge"** (C18) — a `git merge`-into-main PreToolUse *could* block, but
+  "confirm with Tim" is an approval, not a mechanical predicate; keep soft (or fold into `gitSafety` as a
+  reminder at P6, not a P5 gate).
+- **ONE TASK PER SESSION** (C19) — a Stop hook counting `TASK:COMPLETE` transitions this session is an
+  approximation and rides the per-turn-Stop problem; keep soft.
+- **All C20/C21 pure-judgment rules** (commit-message content quality, conservative-completion, validation≠fixing,
+  stop-and-summarize, rapid-iteration=check-ins, local-first research, mcp-nixos-before-changes, auth-help, …) —
+  context nudges at best; keep soft (some are candidate UserPromptSubmit reminders, but that is out of 056 scope).
+
+### P5 — what remains before COMPLETE
+Research done; feasibility + prototype designs + keep-soft list delivered (DoD bullet 1 + 3). DoD bullet 2
+("working prototypes, default-off") = implement the `planIntegrity` category per the shapes above — **held for
+Tim's sign-off on the designs/defaults first** (Present/STOP; the marker mechanism for P5a and the
+advisory-only verdict for P5b are decisions worth a yes before writing the code). On sign-off, implement the
+three default-off sub-rules + a logic test (nix-eval-extract the generated scripts, drive the transition/marker
+matrix, as in P4) + `nix flake check --no-build` green, then mark COMPLETE.
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate.
@@ -476,6 +630,27 @@ the P4 DoD names.
 Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, branch `plan-056-session-workflow-hooks`). The plan file is tracked on this branch. When P4/P6 land module changes, they merge to `main` like any feature branch. Related durable context lives in auto-memory: `next-task-present-stop-artifact-gate`, `project_ai_attribution_leak`, `cc-sessionstart-hook-contract`, `nixcfg-precommit-flakecheck-timeout`. Prior hook-infra work: plan 044 (resume hook / dual-channel resume), plan 046 (T5 hook-events model + T11 RTK), plan 050 (tmux command-status source).
 
 ## Session log
+- 2026-09-07 — **P5 RESEARCH DONE (awaiting Tim sign-off on prototype designs; status IN_PROGRESS).** Wrote the
+  "P5 findings" section. Verified the runtime hook contract against the official CC hooks reference + memory
+  `cc-sessionstart-hook-contract` (P5.0 table). **Two facts reshape the design:** (1) there is NO blockable
+  "session is ending" event — `SessionEnd` cannot block (cleanup-only), `Stop` CAN block but fires PER-TURN, so
+  neither can single out and gate the final stop (refutes the seed/P1-B11 "Stop/SessionEnd nag on stale HANDOFF"
+  assumption); (2) the `TASK:COMPLETE` marking is a normal Edit and PreToolUse Edit can block it with
+  `old_string`/`new_string` both on stdin — so P5a/P5c are gate-able at the transition EDIT, MORE enforceable
+  than P1's Class-C prediction. **Verdicts:** P5a Present/STOP-before-COMPLETE = FEASIBLE (PreToolUse Edit gate
+  on `.claude/user-plans/*.md`, block a real →COMPLETE transition unless `CLAUDE_TASK_SIGNOFF=1` attests
+  sign-off; soft residue = proving a real review happened → honor-marker). P5b handoff-before-stop = LARGELY
+  SOFT (no blockable session-end; best mechanical artifact = default-off SessionEnd *advisory* audit-warn on
+  stale `HANDOFF.md`/unset `active-plan` — cannot force, cannot compose the summary; rejected a blocking-Stop
+  gate: per-turn + unverified `stop_hook_active` loop-guard). P5c status-transition integrity = FEASIBLE
+  (PreToolUse Edit textual gate: block PENDING→COMPLETE skip + dateless COMPLETE; soft residue = DoD-met is
+  semantic). Proposed ONE new `planIntegrity` category, three sub-toggles, all **default-OFF** (workflow gates
+  with ergonomic cost → P6 opts in warn-first). Delivered the explicit "keep soft" list (compose-summary,
+  prove-review, DoD-met, confirm-merge-to-main C18, one-task-per-session C19, C20/C21 judgment rules). **DoD
+  bullets 1+3 done (feasibility analysis + keep-soft list); bullet 2 (implement the default-off prototypes) HELD
+  for Present/STOP sign-off** on the designs/defaults (the P5a marker mechanism + the P5b advisory-only verdict
+  are decisions worth a yes before writing code — memory `next-task-present-stop-artifact-gate`). Next: Tim
+  sign-off → implement `planIntegrity` + logic test + flake check → mark P5 COMPLETE; then P6.
 - 2026-09-04 — Plan created. Worktree `/home/tim/src/nixcfg-session-hooks` + branch `plan-056-session-workflow-hooks` cut from `main` (7e2ab33). Motivated by plan 055 task PM, where a `/next-task` session blew past soft Present/STOP conventions; Tim asked to generalize "suggestions in context" into "hard clear processes to follow". Surveyed the existing hook substrate (`modules/programs/claude-code/_hm/hooks.nix`): mature declarative categorized+custom hook API, `mkHook`, `exit 2` PreToolUse-block convention, module-global settings.json (Nix build output), VM-test harness for hooks. Locked decisions (Tim): dedicated worktree off main; both enforceable + hard-gate scope, phased; per-rule enforcement with safety-critical defaulting to block. Seed inventory of soft→hard candidates drafted (AI-attribution, no-main-commit, rm-i hazard as Class-A; handoff + Present/STOP as harder gates). Next actionable: **P1** (audit & classify all soft rules).
 - 2026-09-05 — **P1 COMPLETE.** Audited global + project CLAUDE.md, all 28 auto-memory entries, and every active plan's Guardrails (050-054, 056). Produced the definitive A/B/C/D classification (see "P1 findings" section, supersedes seed inventory): 5 Class-A hard-block targets (A1 attribution, A2 no-main, A3 no-verify, A4 git-add-f, A5 emdash), 2 Class-A/B block-not-rewrite (rm-i, grep/find), 9 Class-B detect/warn, 5 Class-C soft, plus Class-D already-done. Confirmed category surface in `hooks.nix` (no attribution/no-main/no-verify/rm-i/emdash/handoff options exist yet — all NEW). Key findings: (1) project CLAUDE.md "clipboard handoff" rule stale-conflicts with global file-handoff protocol → must resolve before B11; (2) A3 (`--no-verify`) already designed in **plan 017** (`gitSafety`, PENDING) → P4 must coordinate/subsume; (3) plan 049 is the false-positive canary → every P3 design needs the DoD's false-positive analysis; (4) RTK-disabled lesson → block-with-message, never auto-rewrite Bash. Next actionable: **P2** (substrate map, depends P1).
 - 2026-09-07 — **P2 COMPLETE.** Wrote the "P2 substrate map" section (grounded with `path:line` citations into `_hm/hooks.nix`, `claude-code.nix`, `_hm/lib.nix`, `vm-tests.nix`). Documents: the option surface table (10 categories + `custom` + `tmuxStatus`), the `mkHook` builder (`continueOnError=false`/`ifFilter` for blocks), the `mergeHookSets = zipAttrsWith concatLists` union assembly (NOT right-biased `//`), exit-code/JSON-stdin conventions (PreToolUse `exit 2`+`continueOnError=false` blocks; input is `.tool_input.*` via jq-stdin, NOT `$1`), the serialization path (Nix build-output settings.json → runtime coalesce), the module-global caveat, and the `mkHmContainerTest` VM harness (no CC hook test exists yet). Delivered the gaps table: each Class-A/B rule tagged "expressible now (custom/existing)" vs "NEW toggle". Key findings: (1) A1-A4 group into ONE new `gitSafety` category that SUBSUMES plan 017's `--no-verify` design (P4 implements 017 I1 + folds in attribution/no-main/add-f, not a parallel hook); (2) A/B6 rm-i → new `bashSafety` category (block-with-message, never rewrite); (3) A5/B12 reuse the `security`-category path/content-block template; (4) **correction to plan 017 R1** — its "existing hooks use `$1` and may not work" worry is STALE, the module was fixed to jq-stdin (plan 046 T5 era). Next actionable: **P3** (design P3a/P3b/P3c Class-A interlocks; artifact-producing → Present/STOP for sign-off before COMPLETE).
