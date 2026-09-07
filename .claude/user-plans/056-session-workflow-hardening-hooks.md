@@ -261,6 +261,167 @@ one is a PreToolUse hook parsing `.tool_input.*` via jq-stdin, exit 2 + `continu
 the `mergeHookSets` list behind a `lib.optionalAttrs cfg.hooks.<cat>.enable` guard, with a narrow
 `matcher`/`ifFilter` and per-rule false-positive analysis.
 
+## P3 design — Class-A interlocks (`gitSafety` + `bashSafety` categories)
+
+Designed 2026-09-07 (P3). Presented for sign-off before COMPLETE (artifact-producing, per Guardrails).
+Grounds every choice in the P2 substrate map. **No host adopts here** — P4 implements + VM-tests, P6 enables.
+
+### 0. Shared conventions (apply to ALL rules below)
+
+Every rule is a **PreToolUse** hook authored via `mkHook` and appended to the `mergeHookSets [ … ]` list
+(`hooks.nix:584-600`) behind a `lib.optionalAttrs cfg.hooks.<cat>.<subtoggle> { PreToolUse = [ (mkHook {…}) ]; }`
+block — so it UNIONS with existing PreToolUse hooks (security, rtk) rather than clobbering them (P2 §3). All
+blocking rules set:
+- **`matcher = "Bash"`** (git/rm rules) or **`"Edit|Write|MultiEdit"`** (content rules, not in P3) — the coarse tool gate.
+- **`ifFilter`** to narrow blast radius where useful (serializes to the reserved `"if"` key, `hooks.nix:101`).
+- **`continueOnError = false`** — REQUIRED for `exit 2` to actually block (P2 §4; the security template is the model, `hooks.nix:519`).
+- **Input via jq-stdin:** `cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"` — the command is at `.tool_input.command`, NEVER `$1` (P2 §4; the `$1` worry in plan 017 R1 is stale, fixed in commit `4f3488c`). Trailing `exit 0` on no-match to avoid a spurious non-blocking-error notice.
+- **Nix store paths** for every binary (`${pkgs.jq}`, `${pkgs.gnugrep}`, `${pkgs.git}`) — never bare commands.
+- **Uniform escape hatch:** each block first checks `[ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0`. This is the operator's per-session override (`export CLAUDE_HOOKS_BYPASS=1`) so a bad matcher can NEVER lock Tim out of committing mid-plan (directly satisfies the Guardrail). It requires no rebuild and is logged to stderr when taken. **Design decision surfaced for P6:** whether the bypass is a plain env var (chosen here for zero-friction recovery) or something harder to trip accidentally.
+
+**Two new categories** (per P2 §7 grouping — do NOT scatter these into `hooks.custom`):
+
+```nix
+hooks.gitSafety = {
+  enable            = mkOption { type = bool; default = true;  … };  # category master switch
+  blockNoVerify     = mkOption { type = bool; default = true;  … };  # A3 — SUBSUMES plan 017 I1
+  blockAttribution  = mkOption { type = bool; default = true;  … };  # A1 / P3a
+  blockCommitOnMain = mkOption { type = bool; default = true;  … };  # A2 / P3b
+  blockAddForce     = mkOption { type = bool; default = true;  … };  # A4 (sketch; P4 folds in)
+};
+hooks.bashSafety = {
+  enable      = mkOption { type = bool; default = true; … };         # category master switch
+  blockBareRm = mkOption { type = bool; default = true; … };         # A/B6 / P3c
+};
+```
+
+Each sub-rule fires only when BOTH `cfg.hooks.<cat>.enable` AND its own sub-toggle are true, e.g.
+`lib.optionalAttrs (cfg.hooks.gitSafety.enable && cfg.hooks.gitSafety.blockAttribution) { … }`. This gives the
+per-rule individual toggleability the enforcement stance requires (§Decisions), while a single `enable=false`
+disables the whole category. Safety-critical rules default `true` (block); the category is shipped disabled on
+the live host until P6 (defaults are for the eventual adoption, not for pre-P6 enablement).
+
+### P3a — AI-attribution block (`gitSafety.blockAttribution`, default block)
+
+**Rule / incident:** No AI attribution in commits/PRs. REAL: memory `project_ai_attribution_leak` — 11 public
+nixcfg commits leaked `Co-Authored-By` trailers, listing Claude as a repo contributor. Highest-value block.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, `ifFilter = "Bash(git commit*)"` (narrow to commit invocations).
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '^[[:space:]]*git|[;&|][[:space:]]*git' || exit 0   # only git commands
+  # attribution signature — the LEAK forms, not bare brand mentions (see FP analysis)
+  if echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE \
+       'co-authored-by:|generated with (\[)?claude|claude\.ai/code|noreply@anthropic\.com|🤖'; then
+    echo "🚫 gitSafety: commit carries an AI-attribution marker (Co-Authored-By / 'Generated with Claude' / claude.ai / anthropic noreply / 🤖). Remove it — commits must appear solely human-authored (memory project_ai_attribution_leak). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  exit 0
+  ```
+- **New option:** `hooks.gitSafety.blockAttribution` (default `true`).
+- **FALSE-POSITIVE analysis (plan 049 is the canary):** The matcher deliberately targets the **leak signature**
+  (`Co-Authored-By:` trailer form, the `Generated with [Claude Code]` boilerplate, `claude.ai/code`, the anthropic
+  noreply address, the 🤖 emoji) and NOT bare `Claude`/`Anthropic` — because THIS repo's commit messages mention
+  Claude/Anthropic constantly (this very plan), so a bare-brand matcher would false-positive on nearly every
+  commit. Residual FP: a meta-commit whose message literally quotes `Co-Authored-By:` (e.g. `git commit -m "docs:
+  ban Co-Authored-By trailers"`) is blocked — rare, and the operator reword/bypass path is cheap. **Coverage
+  limitation (documented, not a defect):** the hook only sees the command STRING, so it catches `-m`/`-F`/heredoc
+  and `--trailer` forms; a commit that opens `$EDITOR` (bare `git commit`) hides its message from the hook. That
+  is the residual soft edge — but CC's leak vector was always the auto-appended `-m`/heredoc trailer, which IS covered.
+- **VM-test assertion:** invoke the built hook script with crafted stdin — `{"tool_input":{"command":"git commit -m $'x\\n\\nCo-Authored-By: Claude <noreply@anthropic.com>'"}}` asserts `exit 2`; a clean `{"tool_input":{"command":"git commit -m 'plan 056: ...'"}}` asserts `exit 0`; a non-git Bash command asserts `exit 0`.
+
+### P3b — No commit/push on main/master (`gitSafety.blockCommitOnMain`, default block)
+
+**Rule / incident:** project CLAUDE.md CRITICAL "NEVER WORK ON MAIN OR MASTER"; plan Guardrails "confirm merge
+to main". Latent (no logged incident) but high blast radius if it happens on a public repo.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, `ifFilter = "Bash(git commit*)"` — plus the script itself also matches `git push` (ifFilter is a single coarse pattern; the script does the precise commit|push discrimination).
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  # only intercept commit / push (NOT status/log/diff/etc.)
+  echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+(commit|push)\b' || exit 0
+  branch="$(${pkgs.git}/bin/git symbolic-ref --short HEAD 2>/dev/null)"
+  case "$branch" in
+    main|master)
+      echo "🚫 gitSafety: refusing 'git ${cmd}' on protected branch '$branch'. Create/switch to a feature branch first (project CRITICAL: NEVER WORK ON MAIN). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+      exit 2 ;;
+  esac
+  exit 0
+  ```
+- **New option:** `hooks.gitSafety.blockCommitOnMain` (default `true`).
+- **FALSE-POSITIVE analysis:** Uses `git symbolic-ref --short HEAD` on the hook's cwd (which is the Bash tool's
+  project cwd), so it reflects the ACTUAL branch, not a guess — zero FP on branch detection. Real FP surface:
+  (1) a repo whose legitimate working branch IS `main` (throwaway/personal scratch repos); since hooks are
+  module-global this fires for EVERY repo on the host. (2) `git -C /other/repo commit` targets a different repo
+  than cwd — the branch check reads cwd, so it could mis-evaluate; acceptable (rare, and bypass covers it).
+  Mitigation for both: the `CLAUDE_HOOKS_BYPASS` env var is the intended, documented recovery. **This rule has the
+  largest blast radius of the three — flagged as the primary P6 decision:** confirm default-block is desired
+  host-wide vs. warn-tier, given it forbids ALL main-branch commits across every repo and account. Detached-HEAD
+  (`symbolic-ref` fails, `branch` empty) falls through to `exit 0` (allow) — safe default.
+- **VM-test assertion:** in the test's git repo, checkout `main` and assert the hook script `exit 2` on a
+  `git commit` stdin; checkout a feature branch and assert `exit 0`; assert `git status` (non-commit) `exit 0`
+  even on main. Cheapest deterministic form: drive `git symbolic-ref` against a real temp repo inside `testScript`.
+
+### P3c — `rm -i`/`cp -i`/`mv -i` hang hazard (`bashSafety.blockBareRm`, default block-with-message)
+
+**Rule / incident:** global CLAUDE.md CRITICAL — the user's shell aliases `rm`→`rm -i` (also `cp -i`, `mv -i`),
+which HANGS in non-interactive tool subshells waiting for a prompt that never comes. REAL: has hung sessions.
+Per memory `rtk-grep-false-negative-disabled`: **block with an instructive message, NEVER auto-rewrite** (the RTK
+rewrite experiment silently corrupted output and was disabled host-wide).
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, no `ifFilter` (the command discrimination is in the script).
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  # a bare rm/cp/mv as a COMMAND head (start, or after ; && || | ( ), lacking -f/--force.
+  # rmdir is excluded by the trailing word-boundary; long-opt --force is honored.
+  if echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[;&|(][[:space:]]*)(rm|cp|mv)([[:space:]]|$)' \
+     && ! echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[;&|(][[:space:]]*)(rm|cp|mv)([[:space:]]+-[[:alnum:]]*f|[[:space:]]+--force)'; then
+    echo "🚫 bashSafety: bare 'rm/cp/mv' detected. Your shell aliases these to -i (interactive), which HANGS in non-interactive tool shells. Re-run WITH -f (e.g. 'rm -f', 'cp -f', 'mv -f'). Not auto-rewritten by design (RTK lesson). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  exit 0
+  ```
+- **New option:** `hooks.bashSafety.blockBareRm` (default `true`).
+- **FALSE-POSITIVE analysis:** This is the FP-riskiest of the three (Class **A/B**, not clean-A). Known residual FPs:
+  (1) `rm`/`cp`/`mv` appearing as a substring of another token is avoided by anchoring to command-head positions
+  (start or after `;`/`&&`/`||`/`|`/`(`), but a `mv` inside an unusual construct (backticks, `$(…)`, xargs) may
+  slip the anchor either way (false-negative more likely than false-positive). (2) combined short flags — `rm -rf`
+  and `rm -fr` are allowed (the `-[[:alnum:]]*f` sub-pattern matches `f` anywhere in a short-flag cluster); `rm -i`
+  explicit is still blocked (no `f`) which is CORRECT (it would hang). (3) `cp`/`mv` frequently DON'T need `-f`
+  and requiring it changes overwrite semantics — so for cp/mv the block is more debatable than for rm. **Design
+  decision surfaced for P6:** P3c may be better as **warn-tier** (`continueOnError = true`, reminder-only) than a
+  hard block, precisely because the alias-hang is a hang (recoverable, annoying) not a data-loss/leak (unlike P3a/P3b),
+  and the matcher's FP surface is wider. Recommendation: ship P3c default-block BUT explicitly ask Tim at P6 whether
+  to demote to warn; the two git rules (P3a/P3b) stay hard-block. The `blockBareRm` naming keeps rm as the anchor
+  case even though cp/mv share the alias.
+- **VM-test assertion:** hook script `exit 2` on `{"command":"rm foo"}`, `{"command":"cp a b"}`, `{"command":"echo x && mv a b"}`; `exit 0` on `{"command":"rm -f foo"}`, `{"command":"rm -rf dir"}`, `{"command":"rmdir d"}`, `{"command":"git rm --cached f"}` (git rm is a different command — verify the anchor doesn't catch it), and a non-matching `{"command":"ls"}`.
+
+### P3 — folded-in / referenced rules (designed elsewhere, land in the same categories at P4)
+
+- **A3 `--no-verify` (`gitSafety.blockNoVerify`):** already fully designed in **plan 017 I1** (regex + the
+  `-n`/`-an`/`git push -n`=dry-run edge-case matrix, 017:122-160). P4 implements 017's I1 AS `gitSafety.blockNoVerify`
+  (NOT a parallel category) and updates plan 017 status to reflect the merge. No re-design here — 017 is the spec.
+- **A4 `git add -f`/`--force` (`gitSafety.blockAddForce`):** trivial sibling — `grep -qE 'git[[:space:]]+add\b'`
+  AND has `-f`/`--force` → exit 2 ("respect .gitignore; never force-add"). Same template as P3a. Included in the
+  category for completeness; full P4 implementation, brief sketch only here.
+
+### P3 VM-test approach (shared; feeds P4)
+
+All assertions use **direct hook-script invocation with crafted stdin JSON** (the cheaper, deterministic form per
+P2 §6) inside a `mkHmContainerTest` `testScript`, NOT a live CC session. P4 must FIRST add
+`self.modules.homeManager.claude-code` to the test's `hmModules` — **never done before** (P2 §6 P4 RISK) — and
+smoke-assert that the module activates in nspawn and emits a `settings.json` containing the new hooks (grep/`jq`
+over the deployed file) BEFORE asserting block behavior. Then per rule: pipe the crafted `{"tool_input":{"command":…}}`
+into the built hook script, assert exit status (2 = blocked, 0 = allowed) and, for a spot-check, that stderr carries
+the instructive message. The clean-feature-branch commit (`exit 0`) is the mandatory no-false-positive assertion
+the P4 DoD names.
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate.
