@@ -204,6 +204,102 @@ in
       autoCommit = mkEnableOption "automatically commit changes";
     };
 
+    # Plan 056 P4 — Class-A git-safety interlocks. Each sub-rule is a PreToolUse
+    # Bash hook that parses `.tool_input.command` (jq stdin) and `exit 2`
+    # (continueOnError=false) to BLOCK a dangerous git invocation, feeding an
+    # instructive message back to the model. Every block honors the uniform
+    # `CLAUDE_HOOKS_BYPASS` env-var escape hatch so a bad matcher can never lock
+    # the operator out of committing mid-session. A sub-rule fires only when BOTH
+    # `gitSafety.enable` AND its own sub-toggle are true (per-rule toggleability).
+    # Subsumes plan 017's `--no-verify` design as `blockNoVerify` (do NOT author a
+    # parallel hook). Hooks are MODULE-GLOBAL (deploy to every enabled account) —
+    # see the false-positive analysis in plan 056's "P3 design" section. Defaults
+    # are for the eventual P6 adoption; the category is not enabled on the live
+    # host until then.
+    gitSafety = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Master switch for the git-safety PreToolUse interlocks (Plan 056).
+          When true, each individually-toggleable sub-rule below (that is itself
+          true) installs a blocking Bash hook. Set false to disable the whole
+          category regardless of the sub-toggles.
+        '';
+      };
+      blockNoVerify = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Block `git commit`/`git push --no-verify` (and the `-n`/combined
+          short forms on `git commit`, where `-n` = --no-verify; NOT on
+          `git push`, where `-n` = --dry-run). Subsumes plan 017 I1. Prevents
+          skipping pre-commit/pre-push hooks under flake-check-timeout pressure.
+        '';
+      };
+      blockAttribution = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Block `git commit` whose message carries an AI-attribution LEAK
+          signature (`Co-Authored-By:` trailer, `Generated with [Claude Code]`,
+          `claude.ai/code`, the anthropic noreply address, or the 🤖 emoji).
+          Deliberately does NOT match bare `Claude`/`Anthropic` — this repo's
+          commit messages mention them constantly, so a brand matcher would
+          false-positive on nearly every commit. Real incident: 11 public
+          commits leaked Co-Authored-By trailers (memory
+          project_ai_attribution_leak).
+        '';
+      };
+      blockCommitOnMain = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Block `git commit`/`git push` when the current branch (from
+          `git symbolic-ref --short HEAD` in the tool cwd) is `main` or
+          `master`. Detached HEAD falls through to allow. Enforces the project
+          CRITICAL "NEVER WORK ON MAIN OR MASTER" rule mechanically. Largest
+          blast radius of the category (fires host-wide for every repo/account);
+          throwaway-on-main repos use the bypass env var.
+        '';
+      };
+      blockAddForce = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Block `git add -f`/`--force` (respect .gitignore; never force-add).
+        '';
+      };
+    };
+
+    # Plan 056 P4 — Class-A/B bash-safety interlock. Blocks with an instructive
+    # message; NEVER auto-rewrites the command (the RTK rewrite experiment
+    # silently corrupted output and was disabled host-wide — memory
+    # rtk-grep-false-negative-disabled). Same PreToolUse Bash + jq-stdin + exit 2
+    # + `CLAUDE_HOOKS_BYPASS` conventions as gitSafety.
+    bashSafety = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Master switch for the bash-safety PreToolUse interlocks (Plan 056).
+        '';
+      };
+      blockBareRm = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Block a bare `rm`/`cp`/`mv` (no `-f`/`--force`) in any `;`/`&&`/`||`/`|`
+          segment of a Bash command. The user's shell aliases these to the
+          interactive `-i` form, which HANGS in non-interactive tool subshells
+          waiting for a prompt that never comes. The block message tells the
+          model to re-run WITH `-f`; the command is NOT auto-rewritten (RTK
+          lesson). Per-segment head-word test — `rmdir`, `git rm`, `xargs rm`,
+          `sudo rm`, `find -exec rm` are NOT caught (their head word differs).
+        '';
+      };
+    };
+
     testing = {
       enable = mkEnableOption "test automation hooks";
       sourcePattern = mkOption {
@@ -522,6 +618,146 @@ in
         ];
       };
 
+      # Plan 056 P4 — git-safety interlocks (Class A). Each sub-rule is a
+      # PreToolUse Bash block: jq-stdin `.tool_input.command`, `exit 2` +
+      # continueOnError=false, uniform `CLAUDE_HOOKS_BYPASS` escape hatch, Nix
+      # store paths for every binary. `ifFilter` narrows blast radius but
+      # correctness rests on the in-script grep (matcher="Bash" + discrimination)
+      # since runtime honoring of the `"if"` predicate is unverified in-tree. All
+      # four sub-rules union onto PreToolUse via lib.optional. See plan 056 "P3
+      # design" for the per-rule false-positive analysis.
+      gitSafetyHooks = lib.optionalAttrs cfg.hooks.gitSafety.enable {
+        PreToolUse =
+          # blockNoVerify — subsumes plan 017 I1. --no-verify on commit|push,
+          # and -n/combined short forms on commit ONLY (on push -n=--dry-run).
+          (lib.optional cfg.hooks.gitSafety.blockNoVerify (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(git *)";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+(commit|push)\b[^;&|]*--no-verify'; then
+                echo "🚫 gitSafety: --no-verify is not allowed (pre-commit/pre-push hooks must run). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              # -n / combined short forms (e.g. -an) on git commit only.
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+commit\b[^;&|]*[[:space:]]-[a-zA-Z]*n'; then
+                echo "🚫 gitSafety: -n (--no-verify) is not allowed on git commit. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+          # blockAttribution — leak-signature only (NOT bare brand words).
+          ++ (lib.optional cfg.hooks.gitSafety.blockAttribution (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(git commit*)";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              # only intercept when a git command is present
+              printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[;&|])[[:space:]]*git[[:space:]]' || exit 0
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE 'co-authored-by:|generated with (\[)?claude|claude\.ai/code|noreply@anthropic\.com|🤖'; then
+                echo "🚫 gitSafety: commit carries an AI-attribution marker (Co-Authored-By / 'Generated with Claude' / claude.ai / anthropic noreply / 🤖). Remove it — commits must appear solely human-authored (memory project_ai_attribution_leak). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+          # blockCommitOnMain — reads the ACTUAL branch of the tool cwd.
+          ++ (lib.optional cfg.hooks.gitSafety.blockCommitOnMain (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(git *)";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+(commit|push)\b' || exit 0
+              branch="$(${pkgs.git}/bin/git symbolic-ref --short HEAD 2>/dev/null)"
+              case "$branch" in
+                main|master)
+                  echo "🚫 gitSafety: refusing a commit/push on protected branch '$branch'. Create/switch to a feature branch first (NEVER WORK ON MAIN OR MASTER). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                  exit 2 ;;
+              esac
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+          # blockAddForce — respect .gitignore; never force-add.
+          ++ (lib.optional cfg.hooks.gitSafety.blockAddForce (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(git add*)";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+add\b[^;&|]*([[:space:]]-[a-zA-Z]*f\b|[[:space:]]--force\b)'; then
+                echo "🚫 gitSafety: 'git add -f/--force' is not allowed (respect .gitignore). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }));
+      };
+
+      # Plan 056 P4 — bash-safety interlock (Class A/B). Block-with-message,
+      # NEVER rewrite (RTK lesson). Per-segment head-word test so a force flag in
+      # one segment cannot mask a bare rm/cp/mv in another. POSIX-only (no
+      # bashisms): split on shell separators via `tr`, iterate in a `{ … }` group
+      # whose exit status the parent re-raises (avoids the `cmd | while` subshell
+      # gotcha where an inner `exit 2` cannot terminate the parent).
+      bashSafetyHooks = lib.optionalAttrs cfg.hooks.bashSafety.enable {
+        PreToolUse = lib.optional cfg.hooks.bashSafety.blockBareRm (mkHook {
+          matcher = "Bash";
+          command = ''
+            [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+            cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+            [ -z "$cmd" ] && exit 0
+            # Split on ; & | (single chars — this also breaks && and || into
+            # empty-plus-real segments, which is harmless). Examine each segment
+            # independently. The trailing \n is REQUIRED: without it `read` drops
+            # the final (only) segment of a separator-less command like `rm foo`.
+            printf '%s\n' "$cmd" | ${pkgs.coreutils}/bin/tr ';&|' '\n' | {
+              while IFS= read -r seg; do
+                # first whitespace-delimited word of the segment
+                # shellcheck disable=SC2086
+                set -- $seg
+                head=$1
+                case "$head" in
+                  rm|cp|mv)
+                    forced=0
+                    for tok in "$@"; do
+                      case "$tok" in
+                        --force|-*f*) forced=1 ;;
+                      esac
+                    done
+                    if [ "$forced" -eq 0 ]; then
+                      echo "🚫 bashSafety: bare '$head' detected. Your shell aliases rm/cp/mv to the interactive -i form, which HANGS in non-interactive tool shells. Re-run WITH -f. Not auto-rewritten by design (RTK lesson). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                      exit 2
+                    fi
+                    ;;
+                esac
+              done
+              exit 0
+            }
+            status=$?
+            [ "$status" -eq 2 ] && exit 2
+            exit 0
+          '';
+          continueOnError = false;
+          timeout = 5;
+        });
+      };
+
       loggingHooks = lib.optionalAttrs cfg.hooks.logging.enable {
         PostToolUse = [
           (mkHook {
@@ -587,6 +823,8 @@ in
       (lib.genAttrs hookEvents (_: [ ]))
       developmentHooks
       securityHooks
+      gitSafetyHooks
+      bashSafetyHooks
       loggingHooks
       resumeHooks
       rtkHooks

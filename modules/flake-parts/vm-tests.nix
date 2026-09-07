@@ -1051,6 +1051,100 @@ in
           '';
         };
 
+        # Plan 056 P4 — Class-A session-workflow interlocks (gitSafety + bashSafety).
+        # FIRST VM test to evaluate + activate self.modules.homeManager.claude-code
+        # in the nspawn harness (see plan 056 P2 §6 "P4 RISK"). Strategy: (1) SMOKE —
+        # prove the CC module activates and emits a per-account settings.json before
+        # asserting any block behavior; (2) BLOCK — extract each generated hook
+        # command from that settings.json and drive it with crafted stdin JSON,
+        # asserting exit 2 (blocked) / exit 0 (allowed). The hook scripts reference
+        # every binary by absolute /nix/store path, so they run regardless of the
+        # container PATH. nixcfgPath is pointed at the test user's home dir (exists +
+        # writable) to satisfy the module's activation preconditions; runtimePath then
+        # resolves under it and the account settings.json lands at the path below.
+        vm-claude-code-safety-hooks = mkHmContainerTest {
+          name = "claude-code-safety-hooks";
+          hmModules = [
+            self.modules.homeManager.claude-code
+          ];
+          hmConfig = {
+            programs.claude-code.enable = true;
+            programs.claude-code.accounts.max.enable = true;
+            # displayName has no default — activation forces it (unlike the pure
+            # eval-tests in tests.nix, which only read .skills.custom lazily).
+            programs.claude-code.accounts.max.displayName = "Claude Max (VM test)";
+            # Satisfy the activation preconditions (dir must exist + be writable).
+            programs.claude-code.nixcfgPath = "/home/${testUsername}";
+          };
+          testScript = ''
+            import json
+
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
+
+            jq = "${pkgs.jq}/bin/jq"
+            git = "${pkgs.git}/bin/git"
+            settings = "/home/${testUsername}/claude-runtime/.claude-max/settings.json"
+
+            # === SMOKE: module activated + emitted a settings.json with the hooks ===
+            machine.succeed(f"test -f {settings}")
+            machine.succeed(f"{jq} -e '.hooks.PreToolUse' {settings}")
+            machine.succeed(f"grep -q gitSafety {settings}")
+            machine.succeed(f"grep -q bashSafety {settings}")
+
+            def extract(sig, dest):
+                machine.succeed(
+                    f"{jq} -r '.hooks.PreToolUse[].hooks[].command // empty "
+                    f"| select(contains(\"{sig}\"))' {settings} > {dest}"
+                )
+                machine.succeed(f"test -s {dest}")
+
+            def run_hook(dest, command, expected, cwd="/tmp"):
+                payload = json.dumps({"tool_input": {"command": command}})
+                machine.succeed(f"printf %s {json.dumps(payload)} > /tmp/payload.json")
+                rc, _out = machine.execute(f"cd {cwd} && bash {dest} < /tmp/payload.json")
+                assert rc == expected, (
+                    f"{dest} on {command!r} (cwd={cwd}): got exit {rc}, want {expected}"
+                )
+
+            # === Extract each generated hook script ===
+            extract("attribution", "/tmp/h_attr.sh")
+            extract("protected branch", "/tmp/h_main.sh")
+            extract("bashSafety", "/tmp/h_rm.sh")
+
+            # === BLOCK (a): AI-attribution-trailer commit is rejected ===
+            run_hook("/tmp/h_attr.sh",
+                     'git commit -m "x Co-Authored-By: Claude <noreply@anthropic.com>"', 2)
+            # ...and a clean commit message is allowed by the attribution rule
+            run_hook("/tmp/h_attr.sh", 'git commit -m "plan 056: real work"', 0)
+
+            # === BLOCK (b): a commit on main is rejected; (c) on a feature branch allowed ===
+            machine.succeed(
+                f"rm -rf /tmp/mainrepo && mkdir /tmp/mainrepo && cd /tmp/mainrepo "
+                f"&& {git} init -q -b main "
+                f"&& {git} -c user.email=t@t -c user.name=t commit -q --allow-empty -m init"
+            )
+            run_hook("/tmp/h_main.sh", "git commit -m x", 2, cwd="/tmp/mainrepo")
+            machine.succeed(f"cd /tmp/mainrepo && {git} checkout -q -b feature")
+            run_hook("/tmp/h_main.sh", "git commit -m x", 0, cwd="/tmp/mainrepo")
+            # a non-commit git command on main is NOT blocked
+            machine.succeed(f"cd /tmp/mainrepo && {git} checkout -q main")
+            run_hook("/tmp/h_main.sh", "git status", 0, cwd="/tmp/mainrepo")
+
+            # === bashSafety: bare rm blocked, forced rm allowed ===
+            run_hook("/tmp/h_rm.sh", "rm foo", 2)
+            run_hook("/tmp/h_rm.sh", "rm -f foo", 0)
+
+            # === bypass escape hatch overrides every block ===
+            rc, _ = machine.execute(
+                f"cd /tmp/mainrepo && CLAUDE_HOOKS_BYPASS=1 "
+                f"{jq} -n --arg c 'git commit -m x' '{{tool_input:{{command:$c}}}}' "
+                f"| CLAUDE_HOOKS_BYPASS=1 bash /tmp/h_main.sh"
+            )
+            assert rc == 0, f"bypass did not override the main-branch block: exit {rc}"
+          '';
+        };
+
         # Development tools VM test: validates the development-tools HM module with
         # default flag settings. Tests language toolchains (Rust, Node, Python, Go, C/C++),
         # build utilities, enhanced CLI tools, and Claude dev utilities.
