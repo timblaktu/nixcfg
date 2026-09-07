@@ -280,7 +280,7 @@ Every rule is a **PreToolUse** hook authored via `mkHook` and appended to the `m
 block — so it UNIONS with existing PreToolUse hooks (security, rtk) rather than clobbering them (P2 §3). All
 blocking rules set:
 - **`matcher = "Bash"`** (git/rm rules) or **`"Edit|Write|MultiEdit"`** (content rules, not in P3) — the coarse tool gate.
-- **`ifFilter`** to narrow blast radius where useful (serializes to the reserved `"if"` key, `hooks.nix:101`).
+- **`ifFilter`** to narrow blast radius where useful (serializes to the reserved `"if"` key, `hooks.nix:101`). **CAVEAT (unverified):** the module MODELS this field, but whether Claude Code actually honors an `"if"` predicate on a hook entry at runtime is NOT verified in-tree (no live test). Therefore correctness does NOT rest on it — every script below RE-checks the command with its own `grep` (matcher `"Bash"` + in-script discrimination is the real gate; `ifFilter` is a best-effort optimization only). P4's VM test exercises the SCRIPT directly, so an inert `"if"` cannot cause a false-allow.
 - **`continueOnError = false`** — REQUIRED for `exit 2` to actually block (P2 §4; the security template is the model, `hooks.nix:519`).
 - **Input via jq-stdin:** `cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"` — the command is at `.tool_input.command`, NEVER `$1` (P2 §4; the `$1` worry in plan 017 R1 is stale, fixed in commit `4f3488c`). Trailing `exit 0` on no-match to avoid a spurious non-blocking-error notice.
 - **Nix store paths** for every binary (`${pkgs.jq}`, `${pkgs.gnugrep}`, `${pkgs.git}`) — never bare commands.
@@ -381,32 +381,46 @@ Per memory `rtk-grep-false-negative-disabled`: **block with an instructive messa
 rewrite experiment silently corrupted output and was disabled host-wide).
 
 - **Event / matcher:** PreToolUse, `matcher = "Bash"`, no `ifFilter` (the command discrimination is in the script).
-- **Script pseudocode:**
-  ```bash
-  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
-  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
-  # a bare rm/cp/mv as a COMMAND head (start, or after ; && || | ( ), lacking -f/--force.
-  # rmdir is excluded by the trailing word-boundary; long-opt --force is honored.
-  if echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[;&|(][[:space:]]*)(rm|cp|mv)([[:space:]]|$)' \
-     && ! echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[;&|(][[:space:]]*)(rm|cp|mv)([[:space:]]+-[[:alnum:]]*f|[[:space:]]+--force)'; then
-    echo "🚫 bashSafety: bare 'rm/cp/mv' detected. Your shell aliases these to -i (interactive), which HANGS in non-interactive tool shells. Re-run WITH -f (e.g. 'rm -f', 'cp -f', 'mv -f'). Not auto-rewritten by design (RTK lesson). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-    exit 2
-  fi
+- **Script pseudocode (PER-SEGMENT — a single global regex is insufficient, see below):**
+  ```
+  bypass: [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd = jq -r '.tool_input.command // empty'
+  # Split cmd into segments on the shell separators ; && || | . Examine each
+  # segment INDEPENDENTLY: a force flag in ONE segment must NOT mask a bare
+  # rm/cp/mv in ANOTHER (e.g. `rm foo && cp -f a b` — the rm is still bare).
+  for seg in split(cmd, on /[;&|]+/):
+      head = first whitespace-delimited word of seg
+      if head in { rm, cp, mv }:                       # exact word — excludes rmdir, git rm (head is `git`)
+          # force flag present ANYWHERE in THIS segment? honor:
+          #   -f | -rf | -fr | -r -f (separated) | --force
+          # token test:  ^--force$  OR  ^-[[:alnum:]]*f[[:alnum:]]*$  (f anywhere in a short cluster)
+          if any token of seg matches (-[[:alnum:]]*f[[:alnum:]]*|--force): continue   # forced — safe
+          stderr: "🚫 bashSafety: bare '<head>' detected. Your shell aliases rm/cp/mv to -i
+                   (interactive), which HANGS in non-interactive tool shells. Re-run WITH -f.
+                   Not auto-rewritten by design (RTK lesson). Override: export CLAUDE_HOOKS_BYPASS=1."
+          exit 2
   exit 0
   ```
+  **P4 implementation note:** iterate segments WITHOUT a `cmd | while read` pipe — the pipe runs the loop in a
+  subshell so its `exit 2` cannot terminate the parent (classic bash gotcha); use a `for`/here-string
+  (`while … done <<< "$segments"`) or a sentinel file. The force-flag token test `-[[:alnum:]]*f[[:alnum:]]*`
+  matches `f` ANYWHERE in a short cluster (`-f`,`-rf`,`-fr`) and, applied per-token, also passes the separated
+  `rm -r -f` form.
 - **New option:** `hooks.bashSafety.blockBareRm` (default `true`).
-- **FALSE-POSITIVE analysis:** This is the FP-riskiest of the three (Class **A/B**, not clean-A). Known residual FPs:
-  (1) `rm`/`cp`/`mv` appearing as a substring of another token is avoided by anchoring to command-head positions
-  (start or after `;`/`&&`/`||`/`|`/`(`), but a `mv` inside an unusual construct (backticks, `$(…)`, xargs) may
-  slip the anchor either way (false-negative more likely than false-positive). (2) combined short flags — `rm -rf`
-  and `rm -fr` are allowed (the `-[[:alnum:]]*f` sub-pattern matches `f` anywhere in a short-flag cluster); `rm -i`
-  explicit is still blocked (no `f`) which is CORRECT (it would hang). (3) `cp`/`mv` frequently DON'T need `-f`
-  and requiring it changes overwrite semantics — so for cp/mv the block is more debatable than for rm. **Design
-  decision surfaced for P6:** P3c may be better as **warn-tier** (`continueOnError = true`, reminder-only) than a
-  hard block, precisely because the alias-hang is a hang (recoverable, annoying) not a data-loss/leak (unlike P3a/P3b),
-  and the matcher's FP surface is wider. Recommendation: ship P3c default-block BUT explicitly ask Tim at P6 whether
-  to demote to warn; the two git rules (P3a/P3b) stay hard-block. The `blockBareRm` naming keeps rm as the anchor
-  case even though cp/mv share the alias.
+- **FALSE-POSITIVE analysis:** This is the FP-riskiest of the three (Class **A/B**, not clean-A). The per-segment
+  design above is a CORRECTION to an earlier single-regex sketch that only inspected the flag immediately after the
+  command word — that sketch false-positived on `rm -r -f foo` (force present but not adjacent) and false-negatived
+  on `rm foo && cp -f a b` (adjacent-only or global checks both fail here). Known residual edges after the fix:
+  (1) `rm`/`cp`/`mv` reached indirectly — `xargs rm`, `find … -exec rm`, backtick/`$(…)` subshells, `sudo rm` —
+  the head-word test does NOT see them (`xargs`/`find`/`sudo` is the head), so these are FALSE-NEGATIVES (hook
+  stays silent, command runs; the alias-hang risk there is the operator's to catch). Chosen deliberately: broadening
+  the head test to "any rm/cp/mv anywhere" would re-introduce substring/masking false-positives. (2) `cp`/`mv`
+  frequently DON'T need `-f`, and requiring it changes overwrite semantics — so for cp/mv the block is more
+  debatable than for rm; the message tells the model to add `-f`, which is the correct de-hang action regardless.
+  (3) `rm -i` explicit is still blocked (no `f`) — CORRECT, it would hang. **[DECISION] Tim 2026-09-07:** ship P3c
+  as a **hard block** (not warn) — the bypass env var covers the rare FP; the two git rules stay hard-block too.
+  (Rationale retained: the alias-hang is recoverable, not data-loss/leak, and the FP surface is the widest of the
+  three — but Tim chose block for consistency and because the bypass makes recovery one env-var away.)
 - **VM-test assertion:** hook script `exit 2` on `{"command":"rm foo"}`, `{"command":"cp a b"}`, `{"command":"echo x && mv a b"}`; `exit 0` on `{"command":"rm -f foo"}`, `{"command":"rm -rf dir"}`, `{"command":"rmdir d"}`, `{"command":"git rm --cached f"}` (git rm is a different command — verify the anchor doesn't catch it), and a non-matching `{"command":"ls"}`.
 
 ### P3 — folded-in / referenced rules (designed elsewhere, land in the same categories at P4)
