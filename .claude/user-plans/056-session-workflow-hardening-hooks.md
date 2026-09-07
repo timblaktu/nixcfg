@@ -129,17 +129,24 @@ is a set of per-category toggles plus one freeform escape hatch:
 
 | Category | Key options | Default | Event(s) it drives |
 |---|---|---|---|
-| `formatting` | `enable`, `commands` (attrs by ext) | enable=**true** | PostToolUse (via development) |
-| `linting` | `enable`, `commands` | enable=false | (declared; not wired into the merge) |
-| `security` | `enable`, `blockedPatterns` (list) | enable=**true** | PreToolUse Read/Edit/Write **block** (`hooks.nix:498-523`) |
-| `git` | `enable`, `autoStage`, `autoCommit` | autoStage=**true** | PostToolUse auto-stage (`hooks.nix:480-495`) |
-| `testing` | `enable`, `sourcePattern`, `command` | enable=false | (declared; not wired) |
-| `logging` | `enable`, `logPath`, `verbose` | enable=**true** | PostToolUse log (`hooks.nix:525-537`) |
-| `notifications` | `enable`, `matcher`, `title`, `message` | enable=false | Notification |
-| `development` | `enable`, `flakeCheck`, `autoFormat` | enable=**true** | PreToolUse format + PostToolUse flake-check (`hooks.nix:440-496`) |
-| `resume` | `enable` | enable=**true** | SessionStart rehydration (`hooks.nix:543-552`) |
-| `rtk` | `enable`, `package`, `contextFile` | enable=false | PreToolUse Bash (DISABLED host-wide; `hooks.nix:557-566`) |
-| `custom` | `attrsOf` keyed by event name | genAttrs hookEvents `[]` | any event, any entry type (`hooks.nix:272-295`) |
+| `formatting` | `enable`, `commands` (attrs by ext) | enable=**true** | **NONE — vestigial.** 0 refs in `hooks.nix`; the actual pre-edit formatter is inline in `development.autoFormat` (`hooks.nix:442-460`), NOT driven by this category |
+| `linting` | `enable`, `commands` | enable=false | **NONE for hooks** — `enable` only adds linter pkgs to PATH (`claude-code.nix:1653`); no hook group in the merge |
+| `security` | `enable`, `blockedPatterns` (list) | enable=**true** | PreToolUse Read/Edit/Write **block** (`hooks.nix:498-523`) — WIRED |
+| `git` | `enable`, `autoStage`, `autoCommit` | autoStage=**true** | PostToolUse auto-stage, WIRED **inside developmentHooks** (`hooks.nix:480-495`); `git.enable`/`autoCommit` are declared-only (not wired) |
+| `testing` | `enable`, `sourcePattern`, `command` | enable=false | **NONE — declared, not wired** |
+| `logging` | `enable`, `logPath`, `verbose` | enable=**true** | PostToolUse log (`hooks.nix:525-537`) — WIRED |
+| `notifications` | `enable`, `matcher`, `title`, `message` | enable=false | **NONE for hooks** — `enable` only adds `libnotify` to PATH + fires an assertion (`claude-code.nix:1657,1966`); no Notification hook group is generated |
+| `development` | `enable`, `flakeCheck`, `autoFormat` | enable=**true** | PreToolUse format + PostToolUse flake-check (`hooks.nix:440-496`) — WIRED |
+| `resume` | `enable` | enable=**true** | SessionStart rehydration (`hooks.nix:543-552`) — WIRED |
+| `rtk` | `enable`, `package`, `contextFile` | enable=false | PreToolUse Bash (DISABLED host-wide; `hooks.nix:557-566`) — WIRED-but-off |
+| `custom` | `attrsOf` keyed by event name | genAttrs hookEvents `[]` | any event, any entry type (`hooks.nix:272-295`) — WIRED (merged last) |
+
+**Which categories actually emit a hook (verified by `cfg.hooks.<cat>` ref-count in `hooks.nix`):** only
+`security`, `logging`, `development` (+ `git.autoStage` folded inside development), `resume`, `rtk`,
+`tmuxStatus`, and `custom`. `formatting`, `linting`, `testing`, `notifications` are declared options that do
+NOT contribute to the hook merge — do NOT treat them as live templates when authoring a new interlock; the
+working templates to copy are `security` (PreToolUse block) and `development` (PreToolUse/PostToolUse
+command).
 
 Plus a sibling namespace `options.programs.claude-code.tmuxStatus.{enable,events}` (`hooks.nix:376-423`)
 that maps CC lifecycle events to a tmux marker. **No** category today expresses attribution / no-main /
@@ -176,8 +183,9 @@ Inner conditional hooks use `lib.optional` (a 0|1-length list), never list-embed
   Edit/Write carry the path at `.tool_input.file_path`. Every live hook parses it with
   `${pkgs.jq}/bin/jq -r '.tool_input.<field> // empty'` (`hooks.nix:449,485,510`). **Correction to plan 017
   R1's "Important Discovery":** its worry that "existing hooks use `$1` and may never have worked" is now
-  STALE — the module was fixed (plan 046 T5 era) to read `tool_input` via jq stdin across development,
-  security, and auto-stage hooks. P3/P4 use the jq-stdin pattern with confidence.
+  STALE — the module was fixed in commit `4f3488c` ("fix(claude-code/hooks): read tool_input.file_path
+  from stdin JSON, not $1") to read `tool_input` via jq stdin across development, security, and auto-stage
+  hooks. P3/P4 use the jq-stdin pattern with confidence.
 - **PreToolUse `exit 2` BLOCKS** the tool call and feeds stderr back to the model; `exit 0` allows;
   any other non-zero is a *non-blocking* error (the security hook's comment at `hooks.nix:504-509` records
   that the old `exit 1` was a bug — it printed "blocked" yet let the edit through). The block only takes
@@ -214,6 +222,12 @@ holds.
   file) and (b) the block fires — either by invoking the hook script directly with a crafted stdin JSON and
   asserting `exit 2`, or by driving a real `git commit` and asserting rejection. Direct-script invocation is
   the cheaper, more deterministic assertion.
+- **P4 RISK (verified):** `self.modules.homeManager.claude-code` is **never** referenced by any current VM
+  test (`rg 'claude-code' modules/flake-parts/vm-tests.nix` → none; only `which claudevloop`-style PATH
+  checks in the dev-shell test). So P4 will be the FIRST time the CC HM module is evaluated in the nspawn
+  harness — budget for module-eval fallout (missing deps, activation-script assumptions, config-dir paths)
+  that is unrelated to the hook logic itself. Consider a minimal "does the CC module even activate in
+  nspawn + emit a settings.json" smoke assertion as the first sub-step before asserting block behavior.
 
 ### 7. Gaps — Class-A/B rule vs current option surface
 
@@ -255,8 +269,8 @@ the `mergeHookSets` list behind a `lib.optionalAttrs cfg.hooks.<cat>.enable` gua
 |----|------|------|---------|--------|
 | P1 | Audit & classify ALL soft rules across global+project CLAUDE.md, auto-memory `feedback` entries, and every active plan's Guardrails. Produce the definitive classification table (A/B/C) with, per rule, the target hook event + one-line mechanism sketch + whether the current option surface already supports it. Correct/extend the seed inventory above. | analysis | — | TASK:COMPLETE (2026-09-05) |
 | P2 | Map the existing hook substrate & gaps: document (in-plan) the `programs.claude-code.hooks` API, `mkHook`, exit-code/injection conventions, module-global caveat, and the VM-test harness; enumerate which Class-A/B conversions the current options already express vs. which need NEW toggle options. | analysis | P1 | TASK:COMPLETE (2026-09-07) |
-| P3 | **Design** the high-confidence Class-A interlocks — P3a AI-attribution block, P3b no-commit/push-on-main, P3c `rm -i`/`cp -i`/`mv -i` hazard. Per rule: hook event, matcher, script logic, exit code, new toggle option (default safety=block), FALSE-POSITIVE analysis, and VM-test approach. No adoption. | design (artifact → Present/STOP) | P2 | TASK:PENDING |
-| P4 | **Implement + VM-test** the Class-A interlocks: add the toggle options + hooks to the claude-code module (safety-critical default block, individually toggleable), wire via `mkHook`/`custom`. Add/extend a VM test proving each block FIRES (attribution-trailer commit rejected; commit on main rejected) and does NOT false-positive on a clean commit. | implementation (artifact → Present/STOP + review) | P3 | TASK:PENDING |
+| P3 | **Design** the high-confidence Class-A interlocks — P3a AI-attribution block, P3b no-commit/push-on-main, P3c `rm -i`/`cp -i`/`mv -i` hazard. **Adopt the P2 gaps-table grouping (§7): P3a/P3b belong in ONE new `gitSafety` category that SUBSUMES plan 017's `--no-verify` design (do not author a parallel hook); P3c belongs in a new `bashSafety` category (block-with-message, NEVER rewrite — RTK lesson). Copy the `security`/`development` templates, not the vestigial `formatting`/`notifications` ones (P2 §1).** Per rule: hook event, matcher (+`ifFilter` to narrow), script pseudocode (jq-stdin `.tool_input.command`, exit 2, `continueOnError=false`), new toggle option (default safety=block), FALSE-POSITIVE analysis (plan 049 is the canary), and VM-test approach. No adoption. | design (artifact → Present/STOP) | P2 | TASK:PENDING |
+| P4 | **Implement + VM-test** the Class-A interlocks per the P3 design: add the `gitSafety` + `bashSafety` categories (safety-critical default block, individually toggleable) to `hooks.nix`, appended to the `mergeHookSets` list behind `lib.optionalAttrs cfg.hooks.<cat>.enable` (P2 §3). **Fold plan 017's I1 (`--no-verify`) into `gitSafety` and update plan 017's status to reflect the merge.** Add a VM test — **first add `self.modules.homeManager.claude-code` to a `mkHmContainerTest` `hmModules` (never done before → see P2 §6 P4 RISK; smoke-assert the module activates + emits settings.json first)**, then prove each block FIRES (attribution-trailer commit rejected; commit on main rejected) and does NOT false-positive on a clean feature-branch commit. | implementation (artifact → Present/STOP + review) | P3 | TASK:PENDING |
 | P5 | **Research the hard process-gates** — P5a Present/STOP-before-COMPLETE, P5b mandatory-handoff-before-stop, P5c plan-status-transition integrity. Investigate feasible PARTIAL enforcement (e.g. a Stop hook that flags a `TASK:COMPLETE` + commit with no review marker; a SessionEnd hook that gates on stale `HANDOFF.md`/unset `active-plan`). Prototype behind default-off flags where feasible; produce an explicit "irreducibly soft" list. | research + experiment (artifact → Present/STOP) | P2 | TASK:PENDING |
 | P6 | **Decision & rollout:** per-rule enforcement defaults, which (if any) hard-gates from P5 to adopt, and rollout order (warn-first vs block). Record a dated decision in this plan; enable on the host via `home-manager switch` and confirm the interlocks fire live. | Interactive DECISION | P4, P5 | TASK:PENDING |
 
@@ -283,3 +297,4 @@ Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, bra
 - 2026-09-04 — Plan created. Worktree `/home/tim/src/nixcfg-session-hooks` + branch `plan-056-session-workflow-hooks` cut from `main` (7e2ab33). Motivated by plan 055 task PM, where a `/next-task` session blew past soft Present/STOP conventions; Tim asked to generalize "suggestions in context" into "hard clear processes to follow". Surveyed the existing hook substrate (`modules/programs/claude-code/_hm/hooks.nix`): mature declarative categorized+custom hook API, `mkHook`, `exit 2` PreToolUse-block convention, module-global settings.json (Nix build output), VM-test harness for hooks. Locked decisions (Tim): dedicated worktree off main; both enforceable + hard-gate scope, phased; per-rule enforcement with safety-critical defaulting to block. Seed inventory of soft→hard candidates drafted (AI-attribution, no-main-commit, rm-i hazard as Class-A; handoff + Present/STOP as harder gates). Next actionable: **P1** (audit & classify all soft rules).
 - 2026-09-05 — **P1 COMPLETE.** Audited global + project CLAUDE.md, all 28 auto-memory entries, and every active plan's Guardrails (050-054, 056). Produced the definitive A/B/C/D classification (see "P1 findings" section, supersedes seed inventory): 5 Class-A hard-block targets (A1 attribution, A2 no-main, A3 no-verify, A4 git-add-f, A5 emdash), 2 Class-A/B block-not-rewrite (rm-i, grep/find), 9 Class-B detect/warn, 5 Class-C soft, plus Class-D already-done. Confirmed category surface in `hooks.nix` (no attribution/no-main/no-verify/rm-i/emdash/handoff options exist yet — all NEW). Key findings: (1) project CLAUDE.md "clipboard handoff" rule stale-conflicts with global file-handoff protocol → must resolve before B11; (2) A3 (`--no-verify`) already designed in **plan 017** (`gitSafety`, PENDING) → P4 must coordinate/subsume; (3) plan 049 is the false-positive canary → every P3 design needs the DoD's false-positive analysis; (4) RTK-disabled lesson → block-with-message, never auto-rewrite Bash. Next actionable: **P2** (substrate map, depends P1).
 - 2026-09-07 — **P2 COMPLETE.** Wrote the "P2 substrate map" section (grounded with `path:line` citations into `_hm/hooks.nix`, `claude-code.nix`, `_hm/lib.nix`, `vm-tests.nix`). Documents: the option surface table (10 categories + `custom` + `tmuxStatus`), the `mkHook` builder (`continueOnError=false`/`ifFilter` for blocks), the `mergeHookSets = zipAttrsWith concatLists` union assembly (NOT right-biased `//`), exit-code/JSON-stdin conventions (PreToolUse `exit 2`+`continueOnError=false` blocks; input is `.tool_input.*` via jq-stdin, NOT `$1`), the serialization path (Nix build-output settings.json → runtime coalesce), the module-global caveat, and the `mkHmContainerTest` VM harness (no CC hook test exists yet). Delivered the gaps table: each Class-A/B rule tagged "expressible now (custom/existing)" vs "NEW toggle". Key findings: (1) A1-A4 group into ONE new `gitSafety` category that SUBSUMES plan 017's `--no-verify` design (P4 implements 017 I1 + folds in attribution/no-main/add-f, not a parallel hook); (2) A/B6 rm-i → new `bashSafety` category (block-with-message, never rewrite); (3) A5/B12 reuse the `security`-category path/content-block template; (4) **correction to plan 017 R1** — its "existing hooks use `$1` and may not work" worry is STALE, the module was fixed to jq-stdin (plan 046 T5 era). Next actionable: **P3** (design P3a/P3b/P3c Class-A interlocks; artifact-producing → Present/STOP for sign-off before COMPLETE).
+- 2026-09-07 — **P2 accuracy pass** (post-review self-audit prompted by Tim). Verified claims against source and corrected THREE defects in the just-written substrate map: (1) the option-surface table overstated wiring — `cfg.hooks.formatting/linting/testing/notifications` have 0 hook-merge refs (`formatting` is vestigial; `linting`/`notifications` `enable` only add pkgs to PATH), so the table now marks each row WIRED vs NONE and names `security`/`development` as the only copy-worthy templates; (2) replaced the guessed "plan 046 T5 era" jq-stdin provenance with the actual commit `4f3488c`; (3) added a verified P4 RISK — `homeManager.claude-code` is never in any VM test, so P4 is the first to eval it in nspawn (smoke-assert activation before block behavior). Also WIRED the P2 findings into the P3/P4 task rows (gitSafety-subsumes-017 + bashSafety grouping, template guidance, VM-harness-first-use) so the next `/next-task` session executes against them instead of rediscovering them.
