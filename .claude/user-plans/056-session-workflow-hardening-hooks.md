@@ -496,6 +496,18 @@ not *prove* a review occurred, but it converts a silently-skippable convention i
 which is the entire point (soft "suggestion" → hard "process step"). Residual soft edge: a session could set
 the marker reflexively; that is the operator's honor-boundary, identical in kind to the bypass.
 
+> **UNVERIFIED ASSUMPTION (must confirm before implementing P5a — same status as `stop_hook_active`):** the
+> anti-self-certification value of an *env-var* marker rests on the model being UNABLE to set it mid-session.
+> Reasoned from process semantics (a Bash-tool `export` dies with its subshell; hooks fork from `claude`'s
+> LAUNCH env, so a mid-session `export` never reaches a later hook) → therefore only Tim, at launch, can set
+> `CLAUDE_TASK_SIGNOFF`, which makes it a **session-global** opt-out (green-lights every completion that
+> session), NOT per-task. If instead the model CAN make a hook see a mid-session env var, the marker is
+> model-settable → the gate reopens the exact plan-055-PM self-approval hole and the env-var choice is wrong.
+> A **sentinel file** is per-task but is model-settable by construction (same hole) unless the creating act is
+> Tim's. **Verify empirically** (throwaway hook echoing its env + a mid-session `export`) before building P5a;
+> the marker mechanism is an OPEN P6-adjacent decision (Tim: "need more context" — context delivered 2026-09-08,
+> awaiting his call).
+
 - **Prototype (proposed, default OFF):** `hooks.planIntegrity.requireSignoffBeforeComplete`.
   ```
   [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
