@@ -329,7 +329,7 @@ in
       };
       requireSignoffBeforeComplete = mkOption {
         type = types.bool;
-        default = false;
+        default = true;
         description = ''
           P5a — block an Edit/MultiEdit/Write that flips a task in a
           `.claude/user-plans/*.md` file to `TASK:COMPLETE` (a net-new
@@ -340,19 +340,32 @@ in
           self-certify; only the operator can attest a Present/STOP review
           happened. Enforces memory `next-task-present-stop-artifact-gate`
           mechanically. Trade-off: session-global (green-lights every completion
-          that session), not per-task. Default OFF.
+          that session), not per-task.
+
+          Default `true` since Plan 056 P6 ([DECISION] Tim 2026-09-09: enable
+          both P5 gates as hard blocks). MODULE-GLOBAL CAVEAT: this fires for
+          every account/consumer of this module, including the shared dev-team
+          images (plan 052). Consumers who do NOT use the `/next-task`
+          Present/STOP workflow should set this false in their own config, since
+          it will otherwise block every plan-file `TASK:COMPLETE` edit unless
+          `CLAUDE_TASK_SIGNOFF` was exported at launch.
         '';
       };
       enforceStatusTransitions = mkOption {
         type = types.bool;
-        default = false;
+        default = true;
         description = ''
           P5c — block an Edit/MultiEdit/Write on a `.claude/user-plans/*.md` file
           that (a) skips `TASK:PENDING`→`TASK:COMPLETE` directly (mark
           IN_PROGRESS first) or (b) introduces a `TASK:COMPLETE` with no
           `(YYYY-MM-DD)` completion date. Pure textual predicates on the edit;
           enforces the transition SHAPE, not whether the DoD is truly met.
-          Default OFF.
+
+          Default `true` since Plan 056 P6 ([DECISION] Tim 2026-09-09: enable
+          both P5 gates as hard blocks). Low false-positive surface (plan-file
+          path + specific transition shapes). MODULE-GLOBAL: fires for every
+          account/consumer; consumers who do not use the numbered-plan
+          `TASK:` cursor can set this false.
         '';
       };
     };

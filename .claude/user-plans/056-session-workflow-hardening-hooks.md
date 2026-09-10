@@ -628,6 +628,57 @@ non-plan / non-completion / already-complete rewrite / MultiEdit shape; P5c: blo
 dateless COMPLETE, allow IN_PROGRESS→COMPLETE-dated / multi-row-with-IN_PROGRESS / pending→in_progress /
 bypass / non-plan). (2) `nix flake check --no-build` GREEN. NOT enabled on any live host (that is P6).
 
+## P6 decision & rollout
+
+Interactive decision gate (depends P4+P5, both COMPLETE). Tim's decisions collected via `/next-task`
+on 2026-09-09.
+
+### [DECISION] Tim 2026-09-09 — per-rule enforcement defaults + adopted gates + rollout
+
+1. **P4 `gitSafety` + `bashSafety` = keep default-BLOCK (all five).** `blockNoVerify`,
+   `blockAttribution`, `blockCommitOnMain`, `blockAddForce`, `blockBareRm` all stay `default = true`
+   (`exit 2`), with `CLAUDE_HOOKS_BYPASS` as the per-session escape hatch. No warn-first trial — these
+   are safety-critical with the signed-off P3 defaults. No code change needed (already default-block).
+2. **P5 `planIntegrity` = enable BOTH gates as hard block.** `requireSignoffBeforeComplete` (P5a) and
+   `enforceStatusTransitions` (P5c) flipped from `default = false` to `default = true` in
+   `modules/programs/claude-code/_hm/hooks.nix`. P5b (SessionEnd handoff warn) remains not-shipped
+   (kept fully soft per the 2026-09-08 decision — `SessionEnd` cannot block and its stdout is invisible
+   to Claude).
+3. **Rollout = decisions-only this session; live enablement driven by Tim.** The option defaults +
+   this decision block land in the `nixcfg-session-hooks` worktree now. Live enablement on
+   `tim@pa161878-nixos` flows through the **nixcfg-work** flake.lock pin (cross-repo, main-touching per
+   memory `plan-044-resume-hook-built-not-deployed`), so Tim drives the nixcfg-work lock-bump +
+   `home-manager switch` + live block demonstration himself. **P6 stays IN_PROGRESS** until that live
+   demo lands (P6 DoD requires an on-host demonstration that each adopted block fires and clean commits
+   are unaffected).
+4. **Stale project-CLAUDE.md clipboard-handoff prose = FIXED in this worktree.** The
+   `nixcfg-session-hooks` project `CLAUDE.md` "End of Session (MANDATORY)" section previously mandated
+   `clip.exe` clipboard handoff, contradicting the global file-channel protocol (`.claude/HANDOFF.md` +
+   `.claude/active-plan`) that P5b referenced (P1 correction #1). Rewritten to mandate the per-worktree
+   file channel, matching the global protocol; clipboard demoted to single-session last-resort.
+
+### MODULE-GLOBAL caveat carried into the nixcfg-work rollout (for Tim)
+
+Flipping the P5 defaults to `true` is **module-wide** — every account/consumer of
+`self.modules.homeManager.claude-code` inherits them, including the shared dev-team images (plan 052).
+The P4 safety blocks (attribution, no-main, no-verify, add-f, bare-rm) are sensible team-wide defaults.
+But **P5a `requireSignoffBeforeComplete` is specific to Tim's `/next-task` Present/STOP workflow**: it
+blocks EVERY plan-file `TASK:COMPLETE` edit unless `CLAUDE_TASK_SIGNOFF` was exported at `claude`
+launch. Team members who don't use that env var / workflow would find plan-file completions blocked.
+**Recommendation for the nixcfg-work rollout:** if the dev-team images should NOT inherit P5a, scope
+`programs.claude-code.hooks.planIntegrity.requireSignoffBeforeComplete = false` for team accounts (or
+gate it to Tim's accounts) in the nixcfg-work config rather than relying on the module default. This is
+noted in the option `description` in `hooks.nix` too.
+
+### P6 remaining (live demo — Tim-driven, keeps P6 IN_PROGRESS)
+
+1. Bump the nixcfg-work flake.lock pin to a nixcfg revision carrying this branch's P4+P5 hooks.
+2. `home-manager switch` on `tim@pa161878-nixos`.
+3. Demonstrate live: an attribution-trailer commit is rejected (`exit 2`); a commit on `main` is
+   rejected; a plan-file `TASK:COMPLETE` edit without `CLAUDE_TASK_SIGNOFF` is rejected; a
+   PENDING→COMPLETE skip is rejected; and a clean feature-branch commit + a properly-attested/dated
+   completion are UNAFFECTED. Then mark P6 COMPLETE with the date.
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate.
@@ -661,6 +712,21 @@ bypass / non-plan). (2) `nix flake check --no-build` GREEN. NOT enabled on any l
 Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, branch `plan-056-session-workflow-hooks`). The plan file is tracked on this branch. When P4/P6 land module changes, they merge to `main` like any feature branch. Related durable context lives in auto-memory: `next-task-present-stop-artifact-gate`, `project_ai_attribution_leak`, `cc-sessionstart-hook-contract`, `nixcfg-precommit-flakecheck-timeout`. Prior hook-infra work: plan 044 (resume hook / dual-channel resume), plan 046 (T5 hook-events model + T11 RTK), plan 050 (tmux command-status source).
 
 ## Session log
+- 2026-09-09 — **P6 decisions recorded; status IN_PROGRESS (live demo Tim-driven).** Collected Tim's four
+  decisions via `/next-task` (see the "P6 decision & rollout" section's dated `[DECISION]` block):
+  (1) keep P4 `gitSafety`+`bashSafety` default-BLOCK for all five rules (no code change — already
+  default-block); (2) enable BOTH P5 `planIntegrity` gates as hard block — flipped
+  `requireSignoffBeforeComplete` (P5a) and `enforceStatusTransitions` (P5c) defaults `false`→`true` in
+  `hooks.nix`, with a module-global dev-team caveat added to each option `description` (P5a is
+  Tim-`/next-task`-specific; recommend nixcfg-work scopes it off for team accounts); (3) rollout =
+  decisions-only this session, Tim drives the cross-repo nixcfg-work lock-bump + live `home-manager
+  switch` + block demonstration (P6 DoD's on-host demo is what keeps P6 IN_PROGRESS); (4) FIXED the stale
+  project `CLAUDE.md` "End of Session" clipboard-handoff prose (P1 correction #1) — rewrote it to mandate
+  the per-worktree file channel (`.claude/HANDOFF.md` + `.claude/active-plan`), clipboard demoted to
+  single-session last-resort. `nix flake check --no-build` GREEN (backgrounded + polled). Commits on
+  branch `plan-056-session-workflow-hooks`. **Next: the Tim-driven live demo** (bump nixcfg-work lock →
+  switch on `tim@pa161878-nixos` → demonstrate each adopted block fires + clean commits unaffected →
+  mark P6 COMPLETE).
 - 2026-09-09 — **P5 COMPLETE.** Tim signed off the P5 designs/defaults (decisions recorded 2026-09-08) and
   authorized implement-and-finish. **Verify-first (his choice) done EMPIRICALLY on the real binary
   (claude-code 2.1.191):** a throwaway `--settings` env-dumping PreToolUse hook + a `claude -p` driven through
