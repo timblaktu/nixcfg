@@ -496,17 +496,20 @@ not *prove* a review occurred, but it converts a silently-skippable convention i
 which is the entire point (soft "suggestion" → hard "process step"). Residual soft edge: a session could set
 the marker reflexively; that is the operator's honor-boundary, identical in kind to the bypass.
 
-> **UNVERIFIED ASSUMPTION (must confirm before implementing P5a — same status as `stop_hook_active`):** the
-> anti-self-certification value of an *env-var* marker rests on the model being UNABLE to set it mid-session.
-> Reasoned from process semantics (a Bash-tool `export` dies with its subshell; hooks fork from `claude`'s
-> LAUNCH env, so a mid-session `export` never reaches a later hook) → therefore only Tim, at launch, can set
-> `CLAUDE_TASK_SIGNOFF`, which makes it a **session-global** opt-out (green-lights every completion that
-> session), NOT per-task. If instead the model CAN make a hook see a mid-session env var, the marker is
-> model-settable → the gate reopens the exact plan-055-PM self-approval hole and the env-var choice is wrong.
-> A **sentinel file** is per-task but is model-settable by construction (same hole) unless the creating act is
-> Tim's. **Verify empirically** (throwaway hook echoing its env + a mid-session `export`) before building P5a;
-> the marker mechanism is an OPEN P6-adjacent decision (Tim: "need more context" — context delivered 2026-09-08,
-> awaiting his call).
+> **VERIFIED 2026-09-08 (real binary, claude-code 2.1.191).** The anti-self-certification value of the
+> env-var marker rests on the model being UNABLE to set it mid-session. **Empirical test (honoring Tim's
+> "verify first" decision):** a throwaway `--settings` PreToolUse Bash hook dumped its own `env` per firing;
+> a `claude -p` run was driven through TWO sequential Bash tool calls, the first doing
+> `export P5A_TOOLCALL=set_by_model`, with `P5A_LAUNCH=set_at_launch` exported BEFORE launch. Result across
+> the 2 hook firings: `P5A_LAUNCH` present in **both** (launch-env propagates to hooks — re-confirms the
+> 2026-06-21 finding on 2.1.191), `P5A_TOOLCALL` present in **zero** (a mid-session tool-call `export` is
+> INVISIBLE to a later hook, because a Bash-tool subshell cannot mutate `claude`'s env and hooks fork from
+> that unchanged launch env). A pure process-topology model reproduced the same result. **Consequence:** only
+> the operator, at launch, can set `CLAUDE_TASK_SIGNOFF` → the model cannot self-certify (the plan-055-PM hole
+> stays closed); the cost is that the marker is **session-global** (green-lights every completion that
+> session), not per-task. A sentinel file was rejected (per-task but model-settable → reopens the hole).
+> **[DECISION] Tim 2026-09-08:** P5a marker = the session-global `CLAUDE_TASK_SIGNOFF` env var (option 1);
+> verify-first satisfied.
 
 - **Prototype (proposed, default OFF):** `hooks.planIntegrity.requireSignoffBeforeComplete`.
   ```
@@ -601,13 +604,29 @@ warn-first trial. Same authoring conventions as P4 (jq-stdin, Nix-store binaries
   stop-and-summarize, rapid-iteration=check-ins, local-first research, mcp-nixos-before-changes, auth-help, …) —
   context nudges at best; keep soft (some are candidate UserPromptSubmit reminders, but that is out of 056 scope).
 
-### P5 — what remains before COMPLETE
-Research done; feasibility + prototype designs + keep-soft list delivered (DoD bullet 1 + 3). DoD bullet 2
-("working prototypes, default-off") = implement the `planIntegrity` category per the shapes above — **held for
-Tim's sign-off on the designs/defaults first** (Present/STOP; the marker mechanism for P5a and the
-advisory-only verdict for P5b are decisions worth a yes before writing the code). On sign-off, implement the
-three default-off sub-rules + a logic test (nix-eval-extract the generated scripts, drive the transition/marker
-matrix, as in P4) + `nix flake check --no-build` green, then mark COMPLETE.
+### P5 — implementation (signed off 2026-09-08, done 2026-09-09)
+
+**[DECISIONS] Tim 2026-09-08:** (1) P5a marker = session-global `CLAUDE_TASK_SIGNOFF` env var (verify-first
+satisfied — see the VERIFIED block in P5a); (2) P5b = **keep fully soft** — do NOT ship the SessionEnd
+advisory-warn (it cannot change behavior: `SessionEnd` can't block and its stdout is invisible to Claude);
+(3) implement P5a + P5c now, all default-OFF, and finish P5.
+
+Implemented in `modules/programs/claude-code/_hm/hooks.nix`: a new **`planIntegrity`** category
+(`enable` default true; `requireSignoffBeforeComplete` P5a + `enforceStatusTransitions` P5c both default
+**OFF**), hook binding `planIntegrityHooks` appended to the `mergeHookSets` list. Both sub-rules are
+PreToolUse `Edit|MultiEdit|Write` hooks that read stdin ONCE (`input="$(cat)"` — jq is invoked 3× and each
+read would otherwise drain the pipe; **this bug was caught by the logic test** — the first `jq` for
+`file_path` consumed the whole stdin, leaving `new`/`old` empty and the gate silently allowing). The jq
+normalises across the three tool shapes (Edit `.new_string`/`.old_string`, Write `.content`, MultiEdit
+`.edits[].*`); "net-new completion" = more `TASK:COMPLETE` lines in new than old. `exit 2` +
+`continueOnError=false`; uniform `CLAUDE_HOOKS_BYPASS`; P5a additionally releases on `CLAUDE_TASK_SIGNOFF`.
+
+**Validation (all green):** (1) logic test — nix-eval-extracted the REAL generated command strings via
+`extendModules { …planIntegrity.* = true; }` on `homeConfigurations."tim@thinky-nixos"`, drove a 14-case
+matrix: **14/14 pass** (P5a: block net-new-complete-without-signoff, allow with SIGNOFF/BYPASS, allow
+non-plan / non-completion / already-complete rewrite / MultiEdit shape; P5c: block PENDING→COMPLETE skip +
+dateless COMPLETE, allow IN_PROGRESS→COMPLETE-dated / multi-row-with-IN_PROGRESS / pending→in_progress /
+bypass / non-plan). (2) `nix flake check --no-build` GREEN. NOT enabled on any live host (that is P6).
 
 ## Progress tracking
 
@@ -619,7 +638,7 @@ matrix, as in P4) + `nix flake check --no-build` green, then mark COMPLETE.
 | P2 | Map the existing hook substrate & gaps: document (in-plan) the `programs.claude-code.hooks` API, `mkHook`, exit-code/injection conventions, module-global caveat, and the VM-test harness; enumerate which Class-A/B conversions the current options already express vs. which need NEW toggle options. | analysis | P1 | TASK:COMPLETE (2026-09-07) |
 | P3 | **Design** the high-confidence Class-A interlocks — P3a AI-attribution block, P3b no-commit/push-on-main, P3c `rm -i`/`cp -i`/`mv -i` hazard. **Adopt the P2 gaps-table grouping (§7): P3a/P3b belong in ONE new `gitSafety` category that SUBSUMES plan 017's `--no-verify` design (do not author a parallel hook); P3c belongs in a new `bashSafety` category (block-with-message, NEVER rewrite — RTK lesson). Copy the `security`/`development` templates, not the vestigial `formatting`/`notifications` ones (P2 §1).** Per rule: hook event, matcher (+`ifFilter` to narrow), script pseudocode (jq-stdin `.tool_input.command`, exit 2, `continueOnError=false`), new toggle option (default safety=block), FALSE-POSITIVE analysis (plan 049 is the canary), and VM-test approach. No adoption. | design (artifact → Present/STOP) | P2 | TASK:COMPLETE (2026-09-07) |
 | P4 | **Implement + VM-test** the Class-A interlocks per the P3 design: add the `gitSafety` + `bashSafety` categories (safety-critical default block, individually toggleable) to `hooks.nix`, appended to the `mergeHookSets` list behind `lib.optionalAttrs cfg.hooks.<cat>.enable` (P2 §3). **Fold plan 017's I1 (`--no-verify`) into `gitSafety` and update plan 017's status to reflect the merge.** Add a VM test — **first add `self.modules.homeManager.claude-code` to a `mkHmContainerTest` `hmModules` (never done before → see P2 §6 P4 RISK; smoke-assert the module activates + emits settings.json first)**, then prove each block FIRES (attribution-trailer commit rejected; commit on main rejected) and does NOT false-positive on a clean feature-branch commit. | implementation (artifact → Present/STOP + review) | P3 | TASK:COMPLETE (2026-09-07) |
-| P5 | **Research the hard process-gates** — P5a Present/STOP-before-COMPLETE, P5b mandatory-handoff-before-stop, P5c plan-status-transition integrity. Investigate feasible PARTIAL enforcement (e.g. a Stop hook that flags a `TASK:COMPLETE` + commit with no review marker; a SessionEnd hook that gates on stale `HANDOFF.md`/unset `active-plan`). Prototype behind default-off flags where feasible; produce an explicit "irreducibly soft" list. | research + experiment (artifact → Present/STOP) | P2 | TASK:IN_PROGRESS |
+| P5 | **Research the hard process-gates** — P5a Present/STOP-before-COMPLETE, P5b mandatory-handoff-before-stop, P5c plan-status-transition integrity. Investigate feasible PARTIAL enforcement (e.g. a Stop hook that flags a `TASK:COMPLETE` + commit with no review marker; a SessionEnd hook that gates on stale `HANDOFF.md`/unset `active-plan`). Prototype behind default-off flags where feasible; produce an explicit "irreducibly soft" list. | research + experiment (artifact → Present/STOP) | P2 | TASK:COMPLETE (2026-09-09) |
 | P6 | **Decision & rollout:** per-rule enforcement defaults, which (if any) hard-gates from P5 to adopt, and rollout order (warn-first vs block). Record a dated decision in this plan; enable on the host via `home-manager switch` and confirm the interlocks fire live. | Interactive DECISION | P4, P5 | TASK:PENDING |
 
 ## Definition of Done (per task)
@@ -642,6 +661,23 @@ matrix, as in P4) + `nix flake check --no-build` green, then mark COMPLETE.
 Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, branch `plan-056-session-workflow-hooks`). The plan file is tracked on this branch. When P4/P6 land module changes, they merge to `main` like any feature branch. Related durable context lives in auto-memory: `next-task-present-stop-artifact-gate`, `project_ai_attribution_leak`, `cc-sessionstart-hook-contract`, `nixcfg-precommit-flakecheck-timeout`. Prior hook-infra work: plan 044 (resume hook / dual-channel resume), plan 046 (T5 hook-events model + T11 RTK), plan 050 (tmux command-status source).
 
 ## Session log
+- 2026-09-09 — **P5 COMPLETE.** Tim signed off the P5 designs/defaults (decisions recorded 2026-09-08) and
+  authorized implement-and-finish. **Verify-first (his choice) done EMPIRICALLY on the real binary
+  (claude-code 2.1.191):** a throwaway `--settings` env-dumping PreToolUse hook + a `claude -p` driven through
+  two sequential Bash tool calls proved a mid-session `export` is INVISIBLE to a later hook while a pre-launch
+  export IS visible → `CLAUDE_TASK_SIGNOFF` is model-unsettable (only Tim, at launch), so the P5a env-var
+  marker's anti-self-certification property holds (session-global cost accepted). **Implemented** the new
+  `planIntegrity` category in `hooks.nix`: `requireSignoffBeforeComplete` (P5a) + `enforceStatusTransitions`
+  (P5c), both default-OFF, PreToolUse `Edit|MultiEdit|Write`, unioned into `mergeHookSets`. **P5b kept fully
+  soft** ([DECISION] Tim): no SessionEnd warn shipped — `SessionEnd` can't block and its stdout is invisible to
+  Claude, so it cannot enforce anything; rely on CLAUDE.md discipline + the plan-044 resume hook. **Logic test
+  caught a real bug:** the scripts invoke `jq` 3× and the first read drained stdin (leaving `new`/`old` empty →
+  gate silently allowed); fixed with `input="$(cat)"` read-once. 14/14 matrix cases pass on the nix-eval-
+  extracted REAL generated scripts; `nix flake check --no-build` GREEN. NOT enabled on any live host (P6).
+  Also flagged+VERIFIED the previously-unverified env-non-propagation assumption (was same status as
+  `stop_hook_active`). **Next: P6** (Interactive decision/rollout gate — now unblocked, depends P4+P5): fix
+  per-rule enforcement defaults for BOTH the P4 safety blocks and the P5 gates, resolve the stale project
+  CLAUDE.md clipboard-handoff prose, live `home-manager switch` + demonstrate the blocks fire.
 - 2026-09-07 — **P5 RESEARCH DONE (awaiting Tim sign-off on prototype designs; status IN_PROGRESS).** Wrote the
   "P5 findings" section. Verified the runtime hook contract against the official CC hooks reference + memory
   `cc-sessionstart-hook-contract` (P5.0 table). **Two facts reshape the design:** (1) there is NO blockable

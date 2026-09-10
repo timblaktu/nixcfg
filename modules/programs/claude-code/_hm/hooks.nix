@@ -300,6 +300,63 @@ in
       };
     };
 
+    # Plan 056 P5 — session-workflow process-gates (the "hard process-gates"
+    # research). Unlike gitSafety/bashSafety (safety-critical → default block),
+    # these are WORKFLOW-discipline gates with softer predicates and real
+    # ergonomic cost, so each sub-rule defaults OFF: P6 opts them in (warn-first)
+    # after a trial. Both implemented sub-rules are PreToolUse Edit|MultiEdit|Write
+    # hooks that inspect a plan-file status transition (`.tool_input.file_path`
+    # under `.claude/user-plans/`, `.new_string`/`.content`/`.edits[].new_string`
+    # vs `.old_string`/`.edits[].old_string`, all via jq-stdin) and `exit 2`
+    # (continueOnError=false) to BLOCK, honoring the uniform `CLAUDE_HOOKS_BYPASS`
+    # escape hatch. See plan 056 "P5 findings" for the full feasibility analysis.
+    #
+    # DELIBERATELY NOT IMPLEMENTED — P5b mandatory-handoff-before-stop: there is
+    # NO blockable "session is ending" event (SessionEnd cannot block; Stop fires
+    # per-turn), and a SessionEnd advisory-warn cannot change behavior (its stdout
+    # goes to the debug log, invisible to Claude). [DECISION] Tim 2026-09-08:
+    # keep handoff-before-stop SOFT — rely on CLAUDE.md discipline + the plan-044
+    # SessionStart resume hook. (Full rationale in plan 056 "P5 findings" P5b.)
+    planIntegrity = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Master switch for the Plan 056 P5 session-workflow process-gates.
+          Each sub-rule below defaults OFF and installs its blocking hook only
+          when both this master switch AND the sub-toggle are true.
+        '';
+      };
+      requireSignoffBeforeComplete = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          P5a — block an Edit/MultiEdit/Write that flips a task in a
+          `.claude/user-plans/*.md` file to `TASK:COMPLETE` (a net-new
+          completion) UNLESS the `CLAUDE_TASK_SIGNOFF` env var is set. That var
+          can only be set at `claude` LAUNCH time (verified 2026-09-08: a
+          mid-session `export` in a Bash tool call is INVISIBLE to a later hook,
+          because hooks fork from claude's launch env) — so the model cannot
+          self-certify; only the operator can attest a Present/STOP review
+          happened. Enforces memory `next-task-present-stop-artifact-gate`
+          mechanically. Trade-off: session-global (green-lights every completion
+          that session), not per-task. Default OFF.
+        '';
+      };
+      enforceStatusTransitions = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          P5c — block an Edit/MultiEdit/Write on a `.claude/user-plans/*.md` file
+          that (a) skips `TASK:PENDING`→`TASK:COMPLETE` directly (mark
+          IN_PROGRESS first) or (b) introduces a `TASK:COMPLETE` with no
+          `(YYYY-MM-DD)` completion date. Pure textual predicates on the edit;
+          enforces the transition SHAPE, not whether the DoD is truly met.
+          Default OFF.
+        '';
+      };
+    };
+
     testing = {
       enable = mkEnableOption "test automation hooks";
       sourcePattern = mkOption {
@@ -758,6 +815,72 @@ in
         });
       };
 
+      # Plan 056 P5 — session-workflow process-gates. Both sub-rules are
+      # PreToolUse Edit|MultiEdit|Write hooks that gate a plan-file status
+      # transition. The jq expression normalises across the three tool shapes:
+      # new text = .new_string (Edit) // .content (Write) // .edits[].new_string
+      # (MultiEdit); old text = .old_string // .edits[].old_string. "Net-new
+      # completion" = new has MORE TASK:COMPLETE lines than old (so re-writing an
+      # already-complete row does not trip the gate). Default OFF (P6 opts in).
+      planIntegrityHooks = lib.optionalAttrs cfg.hooks.planIntegrity.enable {
+        PreToolUse =
+          # requireSignoffBeforeComplete (P5a) — CLAUDE_TASK_SIGNOFF attestation.
+          (lib.optional cfg.hooks.planIntegrity.requireSignoffBeforeComplete (mkHook {
+            matcher = "Edit|MultiEdit|Write";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              # Read stdin ONCE — jq is invoked 3x below and each read would
+              # otherwise drain the pipe, leaving later reads empty.
+              input="$(cat)"
+              fp="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+              case "$fp" in */.claude/user-plans/*.md) ;; *) exit 0 ;; esac
+              new="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.new_string // empty, .tool_input.content // empty, (.tool_input.edits[]?.new_string // empty)] | join("\n")' 2>/dev/null)"
+              old="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.old_string // empty, (.tool_input.edits[]?.old_string // empty)] | join("\n")' 2>/dev/null)"
+              cn="$(printf '%s' "$new" | ${pkgs.gnugrep}/bin/grep -c 'TASK:COMPLETE')"
+              co="$(printf '%s' "$old" | ${pkgs.gnugrep}/bin/grep -c 'TASK:COMPLETE')"
+              [ "$cn" -gt "$co" ] || exit 0            # not a net-new completion
+              [ -n "$CLAUDE_TASK_SIGNOFF" ] && exit 0  # operator attested sign-off (launch-time only)
+              echo "🚫 planIntegrity: marking a task TASK:COMPLETE requires a Present/STOP review first (memory next-task-present-stop-artifact-gate). Present the artifact + defaults, get Tim's sign-off, then re-launch with CLAUDE_TASK_SIGNOFF=1 set. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+              exit 2
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+          # enforceStatusTransitions (P5c) — legal shape: no PENDING→COMPLETE
+          # skip; a new COMPLETE must carry a (YYYY-MM-DD) date.
+          ++ (lib.optional cfg.hooks.planIntegrity.enforceStatusTransitions (mkHook {
+            matcher = "Edit|MultiEdit|Write";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              # Read stdin ONCE (jq invoked 3x — see requireSignoffBeforeComplete).
+              input="$(cat)"
+              fp="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+              case "$fp" in */.claude/user-plans/*.md) ;; *) exit 0 ;; esac
+              new="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.new_string // empty, .tool_input.content // empty, (.tool_input.edits[]?.new_string // empty)] | join("\n")' 2>/dev/null)"
+              old="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.old_string // empty, (.tool_input.edits[]?.old_string // empty)] | join("\n")' 2>/dev/null)"
+              cn="$(printf '%s' "$new" | ${pkgs.gnugrep}/bin/grep -c 'TASK:COMPLETE')"
+              co="$(printf '%s' "$old" | ${pkgs.gnugrep}/bin/grep -c 'TASK:COMPLETE')"
+              [ "$cn" -gt "$co" ] || exit 0            # no net-new completion → nothing to check
+              # (a) illegal skip: old had PENDING and NO IN_PROGRESS (so this edit
+              # jumps a pending row straight to complete). The no-IN_PROGRESS guard
+              # avoids FP on multi-row edits that legitimately advance another row.
+              if printf '%s' "$old" | ${pkgs.gnugrep}/bin/grep -q 'TASK:PENDING' \
+                 && ! printf '%s' "$old" | ${pkgs.gnugrep}/bin/grep -q 'TASK:IN_PROGRESS'; then
+                echo "🚫 planIntegrity: illegal status skip PENDING→COMPLETE. Mark TASK:IN_PROGRESS first, then COMPLETE. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              # (b) dateless COMPLETE.
+              if ! printf '%s' "$new" | ${pkgs.gnugrep}/bin/grep -qE '\(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)'; then
+                echo "🚫 planIntegrity: a new TASK:COMPLETE must record a date, e.g. (2026-09-09). Add the completion date. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }));
+      };
+
       loggingHooks = lib.optionalAttrs cfg.hooks.logging.enable {
         PostToolUse = [
           (mkHook {
@@ -825,6 +948,7 @@ in
       securityHooks
       gitSafetyHooks
       bashSafetyHooks
+      planIntegrityHooks
       loggingHooks
       resumeHooks
       rtkHooks
