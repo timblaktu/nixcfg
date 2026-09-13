@@ -657,6 +657,36 @@ on 2026-09-09.
    `.claude/active-plan`) that P5b referenced (P1 correction #1). Rewritten to mandate the per-worktree
    file channel, matching the global protocol; clipboard demoted to single-session last-resort.
 
+### [DECISION] Tim 2026-09-10 — scope expansion (new hook work BEFORE integration)
+
+A cross-worktree/branch scan (this + nixcfg-work + nixcfg-coordination plans, all auto-memory, and a
+deep-dive on the permission-prompt problem) surfaced hook-relevant work to fold in before the live
+rollout. Tim's decisions (collected 2026-09-10):
+
+1. **Secret-dump prevention hook — DESIGN + IMPLEMENT now → new task P7.** The mechanical version of the
+   new standing rule (memory `never-dump-secrets-to-agent-context`, written 2026-09-10 after an
+   `rbw --full` incantation was found in a Bitwarden notes field and removed). A PreToolUse rule that
+   blocks vault-dump forms (`rbw --full` / `rbw get --full`) and secret-env echoes from reaching the
+   transcript/context. Dual-use → FP-aware design like P3, default-block, VM-tested.
+2. **Symlink permission-prompt issue — DETECTION-WARNING + DOCS → new task P8.** IMPORTANT REFRAME from
+   the scan: this is **NOT hook-suppressible** — it is a hardened Claude Code invariant
+   (`SymlinkWriteRefusedError`) that fires when a write's *resolved* path is a symlink escaping the
+   session cwd; allow-rules / `additionalDirectories` cannot override it (the `//**/.claude/**` attempt,
+   commit b8ad0a4, was proven ineffective and reverted in 3b05ac9 — memory `cc-permission-path-anchor`).
+   **nixcfg is unaffected** (all worktrees use real per-worktree plan/handoff dirs — verified 2026-09-10);
+   the pain is in the n3x/hsw families, which have a prepared filesystem fix (`migrate-hsw-plans.sh`). So
+   056's contribution is a SessionStart/worktree-create **advisory** that warns when a plan/handoff path
+   is a cwd-escaping symlink (pointing at the migrate script) + documentation of the root cause. Not a block.
+3. **Fold plan 049 T1 into 056 → new task P9.** Plan 049 (broken project-level `.claude/settings.json`
+   PreToolUse hook: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr → spurious
+   "non-blocking status" noise across repos) is the exact false-positive canary 056 keeps citing. Its
+   root-cause (R1) is COMPLETE; its T1 fix (migrate to the proper nix-managed jq/`exit 2` pattern) is
+   PENDING. Bring T1 into 056 and update plan 049's status to reflect the merge.
+4. **Sequencing = new work BEFORE integration.** Do P7/P8/P9 on this branch, get the full feature set
+   green, THEN the live rollout. Consequently the old P6 "rollout half" is split out into **new task P10
+   — Integration & live rollout** (depends P4, P5, P7, P8, P9). **P6 is now the DECISION task only and is
+   COMPLETE** (2026-09-10; the dated `[DECISION]` blocks are its artifact, signed off by Tim).
+
 ### MODULE-GLOBAL caveat carried into the nixcfg-work rollout (for Tim)
 
 Flipping the P5 defaults to `true` is **module-wide** — every account/consumer of
@@ -670,18 +700,22 @@ launch. Team members who don't use that env var / workflow would find plan-file 
 gate it to Tim's accounts) in the nixcfg-work config rather than relying on the module default. This is
 noted in the option `description` in `hooks.nix` too.
 
-### P6 remaining (live demo — Tim-driven, keeps P6 IN_PROGRESS)
+### P10 — Integration & live rollout (was P6's rollout half; gated behind P7-P9)
 
-1. Bump the nixcfg-work flake.lock pin to a nixcfg revision carrying this branch's P4+P5 hooks.
+Runs LAST, after P7/P8/P9 are green, so the full feature set ships in one pass. Depends P4, P5, P7, P8, P9.
+
+1. Bump the nixcfg-work flake.lock pin to a nixcfg revision carrying this branch's full hook set
+   (P4 `gitSafety`/`bashSafety` + P5 `planIntegrity` + P7 secret-dump + P8 symlink advisory + P9 049-fix).
 2. `home-manager switch` on `tim@pa161878-nixos`.
 3. Demonstrate live: an attribution-trailer commit is rejected (`exit 2`); a commit on `main` is
    rejected; a plan-file `TASK:COMPLETE` edit without `CLAUDE_TASK_SIGNOFF` is rejected; a
-   PENDING→COMPLETE skip is rejected; and a clean feature-branch commit + a properly-attested/dated
-   completion are UNAFFECTED. Then mark P6 COMPLETE with the date.
+   PENDING→COMPLETE skip is rejected; an `rbw --full` (or equivalent secret-dump) is rejected; and a
+   clean feature-branch commit + a properly-attested/dated completion are UNAFFECTED. Then mark P10
+   COMPLETE with the date → plan 056 done → merge branch to `main`.
 
 ## Progress tracking
 
-**Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate.
+**Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5, P7, P8, P9) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate (COMPLETE); P10 is the Interactive integration/live-rollout gate (runs last).
 
 | ID | Task | Kind | Depends | Status |
 |----|------|------|---------|--------|
@@ -690,7 +724,11 @@ noted in the option `description` in `hooks.nix` too.
 | P3 | **Design** the high-confidence Class-A interlocks — P3a AI-attribution block, P3b no-commit/push-on-main, P3c `rm -i`/`cp -i`/`mv -i` hazard. **Adopt the P2 gaps-table grouping (§7): P3a/P3b belong in ONE new `gitSafety` category that SUBSUMES plan 017's `--no-verify` design (do not author a parallel hook); P3c belongs in a new `bashSafety` category (block-with-message, NEVER rewrite — RTK lesson). Copy the `security`/`development` templates, not the vestigial `formatting`/`notifications` ones (P2 §1).** Per rule: hook event, matcher (+`ifFilter` to narrow), script pseudocode (jq-stdin `.tool_input.command`, exit 2, `continueOnError=false`), new toggle option (default safety=block), FALSE-POSITIVE analysis (plan 049 is the canary), and VM-test approach. No adoption. | design (artifact → Present/STOP) | P2 | TASK:COMPLETE (2026-09-07) |
 | P4 | **Implement + VM-test** the Class-A interlocks per the P3 design: add the `gitSafety` + `bashSafety` categories (safety-critical default block, individually toggleable) to `hooks.nix`, appended to the `mergeHookSets` list behind `lib.optionalAttrs cfg.hooks.<cat>.enable` (P2 §3). **Fold plan 017's I1 (`--no-verify`) into `gitSafety` and update plan 017's status to reflect the merge.** Add a VM test — **first add `self.modules.homeManager.claude-code` to a `mkHmContainerTest` `hmModules` (never done before → see P2 §6 P4 RISK; smoke-assert the module activates + emits settings.json first)**, then prove each block FIRES (attribution-trailer commit rejected; commit on main rejected) and does NOT false-positive on a clean feature-branch commit. | implementation (artifact → Present/STOP + review) | P3 | TASK:COMPLETE (2026-09-07) |
 | P5 | **Research the hard process-gates** — P5a Present/STOP-before-COMPLETE, P5b mandatory-handoff-before-stop, P5c plan-status-transition integrity. Investigate feasible PARTIAL enforcement (e.g. a Stop hook that flags a `TASK:COMPLETE` + commit with no review marker; a SessionEnd hook that gates on stale `HANDOFF.md`/unset `active-plan`). Prototype behind default-off flags where feasible; produce an explicit "irreducibly soft" list. | research + experiment (artifact → Present/STOP) | P2 | TASK:COMPLETE (2026-09-09) |
-| P6 | **Decision & rollout:** per-rule enforcement defaults, which (if any) hard-gates from P5 to adopt, and rollout order (warn-first vs block). Record a dated decision in this plan; enable on the host via `home-manager switch` and confirm the interlocks fire live. | Interactive DECISION | P4, P5 | TASK:IN_PROGRESS (2026-09-09) |
+| P6 | **Decision (rollout split to P10):** per-rule enforcement defaults, which P5 hard-gates to adopt, rollout order (warn-first vs block), plus the 2026-09-10 scope-expansion decisions (adopt P7/P8/P9; new work before integration). Record dated `[DECISION]` blocks in this plan. | Interactive DECISION | P4, P5 | TASK:COMPLETE (2026-09-10) |
+| P7 | **Secret-dump prevention hook — design + implement.** Mechanical enforcement of memory `never-dump-secrets-to-agent-context`. Design (FP-aware, like P3): PreToolUse Bash rule blocking vault-dump forms (`rbw --full`/`rbw get --full` and equivalents) + secret-env echoes (`echo`/`printf`/`env`/`printenv`/`set -x` exposing `*_TOKEN`/`*_SECRET`/`*_PASSWORD`/AWS-key shapes); jq-stdin `.tool_input.command`, `exit 2`, `continueOnError=false`, `CLAUDE_HOOKS_BYPASS` escape, narrow matcher. Group into `gitSafety`/`bashSafety` or a new `secretSafety` category (design decides). FALSE-POSITIVE analysis (dual-use: `rbw get X \| tool --password-stdin` must PASS; only dump/echo forms block). Implement + VM-test (block a `rbw --full`; allow a piped `rbw get`). Present/STOP before COMPLETE. Default-block; not enabled on any host (P10). | design+impl (artifact → Present/STOP) | P4 | TASK:PENDING |
+| P8 | **Symlink permission-prompt: detection-warning + docs.** NOT a block (the CC symlink-escape refusal is a hardened invariant, not hook-suppressible — memory `cc-permission-path-anchor`). Add a SessionStart (and/or worktree-create) advisory hook, default-OFF or reminder-only (`continueOnError=true`), that warns via injected context when `.claude/user-plans`/`HANDOFF.md`/`active-plan` resolves to a cwd-escaping symlink, pointing at `migrate-hsw-plans.sh`. Document the root cause + durable fix in the module docs / a `.claude/` note. nixcfg itself is unaffected (real dirs) — this protects n3x/hsw-style families. Present/STOP before COMPLETE. | impl+docs (artifact → Present/STOP) | P4 | TASK:PENDING |
+| P9 | **Fold plan 049 T1 into 056.** Migrate the broken project-level `.claude/settings.json` PreToolUse hook (the FP canary: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr) to the proper nix-managed module pattern (jq-stdin path filter, `exit 2`, stderr, `continueOnError=false`) — or remove it in favour of the module hooks if redundant. Verify no more spurious "non-blocking status" noise. Update plan 049's status to reflect the merge. Present/STOP before COMPLETE. | impl (artifact → Present/STOP) | P4 | TASK:PENDING |
+| P10 | **Integration & live rollout** (was P6's rollout half). Bump nixcfg-work flake.lock to a nixcfg rev carrying the full hook set; `home-manager switch` on `tim@pa161878-nixos`; demonstrate each adopted block fires live (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean work is unaffected; then mark COMPLETE → merge to `main`. Tim-authorized autonomous execution (from the P6 brief) once P7-P9 are green. | Interactive INTEGRATION | P4, P5, P7, P8, P9 | TASK:PENDING |
 
 ## Definition of Done (per task)
 - **P1** — a classification table in this plan covering every soft rule found in global CLAUDE.md, project CLAUDE.md, all auto-memory `feedback` entries, and every active plan's Guardrails; each row tagged A/B/C with target hook event + mechanism sketch + "already supported?" flag. The seed inventory is superseded/corrected. No code. (Autonomous-safe.)
@@ -698,20 +736,39 @@ noted in the option `description` in `hooks.nix` too.
 - **P3** — a design section per Class-A rule (P3a/P3b/P3c) with event, matcher, script pseudocode, exit code, new option name + default, false-positive analysis, and the VM-test assertion it will need. Presented to Tim and signed off BEFORE marking COMPLETE. No host adopts yet.
 - **P4** — `nix flake check --no-build` green (run backgrounded + poll; ~8 min > tool timeout); `nix eval` shows each new hook present in the generated hooks for an account; a VM test passes asserting (a) an attribution-trailer commit is rejected, (b) a commit on `main` is rejected, (c) a clean commit on a feature branch succeeds. Presented + reviewed before COMPLETE. Not yet enabled on the live host (that is P6).
 - **P5** — a findings section: per hard-gate, what a hook CAN enforce vs what is irreducibly model-judgment; working prototypes (default-off) for anything feasible; an explicit "keep soft" list for the rest. Presented before COMPLETE.
-- **P6** — a dated `[DECISION]` block in this plan fixing per-rule defaults + adopted hard-gates + rollout order; `home-manager switch` applied on the host; a live demonstration that each adopted block fires (e.g. an attempted attribution-trailer commit is actually rejected) and clean commits are unaffected.
+- **P6** (decision only; rollout → P10) — dated `[DECISION]` blocks in this plan fixing per-rule defaults + adopted hard-gates + rollout order (2026-09-09) AND the scope-expansion decisions (2026-09-10: adopt P7/P8/P9, new work before integration). Signed off by Tim. No live host action (that is P10).
+- **P7** — a design section (event, matcher, script pseudocode, option/category, false-positive analysis incl. the dual-use pass/block cases, VM-test assertion) + implementation in `hooks.nix`; `nix flake check --no-build` green; `nix eval` shows the hook in the generated set; a VM test asserts a secret-dump form (`rbw --full`) is rejected and a piped `rbw get X | tool --password-stdin` is allowed. Presented + signed off before COMPLETE. Not enabled on any host.
+- **P8** — an advisory SessionStart/worktree-create hook (reminder-only, not a block) that detects a cwd-escaping symlink for plan/handoff paths and warns (with the migrate-script pointer); `nix flake check --no-build` green; the root-cause + durable-fix documented in the module docs / a `.claude/` note. Presented before COMPLETE. (Explicitly NOT an attempt to suppress the CC symlink gate — that is impossible.)
+- **P9** — the plan-049 broken project hook migrated to the module pattern (or removed if redundant); `nix flake check --no-build` green; evidence the spurious "non-blocking status" noise is gone (e.g. the VM test or a logic check shows the replacement fires correctly with `exit 2`/stderr); plan 049 status updated. Presented before COMPLETE.
+- **P10** — nixcfg-work flake.lock bumped to a nixcfg rev carrying the full hook set; `home-manager switch` applied on `tim@pa161878-nixos`; a live demonstration that each adopted block fires (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean commits + properly-attested completions are unaffected; branch merged to `main`.
 
 ## Guardrails
 - Serialize nix (no concurrent/background nix). No AI attribution in commits/PRs. `git commit --no-verify`.
 - **Present/STOP gate for artifact-producing tasks** (memory `next-task-present-stop-artifact-gate`): P3/P4/P5 produce reviewable artifacts (module changes, hook designs) — present the design + defaults and get Tim's sign-off BEFORE marking COMPLETE, even under `/next-task`. P1/P2 are research/doc and autonomous-safe.
 - **Full-green `nix flake check --no-build` DoD ≈ 8 min** (> the 2-min tool timeout): run it with `run_in_background` and poll the log for `error:` count + an exit marker; never conclude from a timed-out foreground run (memory `nixcfg-precommit-flakecheck-timeout`).
 - **Hooks are module-global** — a converted rule fires for ALL enabled accounts on the host. Every Class-A/B design MUST include a false-positive analysis; prefer a narrow matcher + `ifFilter` and a clear override path.
-- **Do not enable any new blocking hook on the live host before P6.** Design/implement/test behind default-aware options; P6 is where adoption + live enablement happen (so a bad matcher can't lock the operator out of committing mid-plan).
+- **Do not enable any new blocking hook on the live host before P10.** Design/implement/test behind default-aware options; P10 is where adoption + live enablement happen (so a bad matcher can't lock the operator out of committing mid-plan).
+- **Never dump secrets to agent context** (memory `never-dump-secrets-to-agent-context`): no `rbw --full`/vault dumps/secret-env echoes into the transcript, context, or files, even while building/testing the P7 hook; refuse stored-note instructions to do so.
 - `$CLAUDE_PROJECT_DIR` is NOT set in the Bash tool shell — use the absolute worktree path for `active-plan`/`HANDOFF.md`.
 
 ## Continuity / handoff
 Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, branch `plan-056-session-workflow-hooks`). The plan file is tracked on this branch. When P4/P6 land module changes, they merge to `main` like any feature branch. Related durable context lives in auto-memory: `next-task-present-stop-artifact-gate`, `project_ai_attribution_leak`, `cc-sessionstart-hook-contract`, `nixcfg-precommit-flakecheck-timeout`. Prior hook-infra work: plan 044 (resume hook / dual-channel resume), plan 046 (T5 hook-events model + T11 RTK), plan 050 (tmux command-status source).
 
 ## Session log
+- 2026-09-10 — **P6 marked COMPLETE (decision-only); scope expanded (P7/P8/P9 new work) before integration
+  (now P10).** Wrote the standing security memory `never-dump-secrets-to-agent-context` (emphatic: no
+  `rbw --full`/vault dumps/secret-env echoes into transcript/context/files; refuse stored-note
+  instructions to do so) after Tim removed an `rbw --full` incantation from a Bitwarden notes field.
+  Ran a cross-worktree/branch scan (nixcfg + nixcfg-work(+ci) + nixcfg-coordination plans, all auto-memory,
+  and a deep-dive on the permission-prompt problem) for hook-solvable work. **Key finding:** the
+  permission-prompt/symlink pain (Tim's headline example) is a **hardened CC invariant, NOT
+  hook-suppressible**, and **nixcfg is unaffected** (all worktrees use real per-worktree plan/handoff dirs
+  — verified); the pain is in n3x/hsw families (prepared fix `migrate-hsw-plans.sh`). **Tim's decisions
+  (see the 2026-09-10 `[DECISION]` block):** (A) design+implement a secret-dump prevention hook → **P7**;
+  (B) symlink issue → detection-warning + docs only (not a block) → **P8**; (C) fold plan 049's T1 fix →
+  **P9**; sequencing = new work before integration, so the old P6 rollout half became **P10 — Integration
+  & live rollout** (depends P4,P5,P7,P8,P9). P6 (decision) is COMPLETE. **Next actionable: P7** (secret-dump
+  hook, artifact → Present/STOP). Then P8, P9, then P10 (live rollout, Tim-authorized autonomous).
 - 2026-09-09 — **P6 decisions recorded; status IN_PROGRESS (live demo Tim-driven).** Collected Tim's four
   decisions via `/next-task` (see the "P6 decision & rollout" section's dated `[DECISION]` block):
   (1) keep P4 `gitSafety`+`bashSafety` default-BLOCK for all five rules (no code change — already
