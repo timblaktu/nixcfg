@@ -84,6 +84,32 @@ concept:
 Be transparent that these are the current design ideas, not immutable law - but do
 not omit them. A reader should finish the description knowing roughly how to start.
 
+## Lead with the visual: surface the map early
+
+A wall of text loses a newcomer before the first link. If a diagram or overview
+exists - or can be made - put it where the reader sees it *first*.
+
+- **Open with a prominent callout, above the prose.** A `{panel:title=Start here}`
+  box linking the overview diagram + README, before the thesis, so the reader sees
+  "here's the map" and can click it in one move. Do not bury the diagram link at
+  the end.
+- **Prefer a real embedded image where it renders reliably.** Jira renders
+  `!attachment.png!` (an image attached to the issue) dependably; an external
+  `!https://.../img.svg!` usually does NOT (private-repo auth, SVG sanitization,
+  host allowlist). Attach a PNG render rather than linking a repo SVG.
+- **Embed once on the parent, link from the children.** For a set of stories under
+  an epic/feature, embed the canonical diagram on the parent (its natural home) and
+  give each child the top callout linking it - do not duplicate a large image N
+  times.
+- **Make the diagram exist if it doesn't, and specialize it per story.** A feature
+  usually has (or deserves) one system / block / interaction diagram. Beyond the
+  static whole-system view on the parent, the strongest aid is a per-story variant
+  that overlays a highlight/callout on the exact area that story implements - so the
+  reader sees the whole system AND how the work decomposes onto it. Create these
+  when the payoff warrants (prior art: the aircraft-data-simulator feature's
+  per-story diagram overlays). This is an enhancement - do not block shipping the
+  text on it.
+
 ## Jira wiki markup quick reference
 
 Descriptions render as **Jira wiki markup** (the importer and the REST v2
