@@ -31,8 +31,9 @@ buries the point, and repeats itself. Instead:
    have called "Deliverables" into it: each bullet is a deliverable phrased as a
    checkable done-condition.
 
-That is the whole structure: two-to-three short prose paragraphs, a light pointer
-line, and one `h3. Acceptance Criteria` list. Less scaffolding, more signal.
+That is the whole structure: the one-line diagram/README reference (see "Lead with
+the visual"), two-to-three short prose paragraphs, and one `h3. Acceptance Criteria`
+list. Less scaffolding, more signal.
 
 ## Voice: write for a newcomer, gloss every term of art
 
@@ -60,9 +61,10 @@ convention and the easiest to under-do.
   hyphenating. Anchors for headings containing `&` or `->` are unreliable (extra
   hyphens) - link to a nearby clean-titled heading instead, or verify the anchor.
 - Verify link targets exist on the branch you point at (usually `main`) before
-  shipping - `git cat-file -e origin/main:<path>` for in-repo files.
-- A light closing pointer ("For the whole picture, see the [README|...] and the
-  [architecture diagram|...]") is fine for the entry point and the big picture.
+  shipping - `git cat-file -e origin/main:<path>` for in-repo files. Also verify
+  heading anchors resolve (compute them, or check the rendered doc).
+- Surface the overview map with the concise first-line reference described under
+  "Lead with the visual" below - do not bury a diagram/README pointer at the end.
 
 ## Be a solutioning artifact: state the implementation approach
 
@@ -101,8 +103,8 @@ exists - or can be made - put it where the reader sees it *first*.
   host allowlist). Attach a PNG render rather than linking a repo SVG.
 - **Embed once on the parent, link from the children.** For a set of stories under
   an epic/feature, embed the canonical diagram on the parent (its natural home) and
-  give each child the top callout linking it - do not duplicate a large image N
-  times.
+  give each child the one-line reference linking it - do not duplicate a large
+  image N times.
 - **Make the diagram exist if it doesn't, and specialize it per story.** A feature
   usually has (or deserves) one system / block / interaction diagram. Beyond the
   static whole-system view on the parent, the strongest aid is a per-story variant
@@ -133,8 +135,9 @@ Embedded newlines inside a quoted CSV cell are preserved as line breaks.
 ## Worked example
 
 `CONVSW-7055` ("labDevices Nix source of truth and generators", a child of the
-CONVSW-4165 HIL feature) is the canonical example of this convention: an unheaded
-thesis + context intro with concept links inline, a "how we plan to build it"
-paragraph linking both repos, the prescriptive path, two prior-work pattern
-examples and the current-state file, a README + diagram pointer, and a single
-`h3. Acceptance Criteria` list of done-conditions. Mirror its shape.
+CONVSW-4165 HIL feature) is the canonical example of this convention: a concise
+first-line diagram+README reference, an unheaded thesis + context intro with
+concept links inline, a "how we plan to build it" paragraph linking both repos,
+the prescriptive path, two prior-work pattern examples and the current-state file,
+and a single `h3. Acceptance Criteria` list of done-conditions. Mirror its shape.
+Its whole sibling set (CONVSW-7055..7070) follows the same shape.
