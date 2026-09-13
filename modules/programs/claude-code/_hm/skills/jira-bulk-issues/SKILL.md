@@ -104,6 +104,16 @@ importer writes Jira wiki markup, not Markdown, and the two disagree about
 asterisks in a way that imports cleanly and reads wrong. Content already in
 Markdown goes through `scripts/md_to_wiki.py`.
 
+**Before writing any description text, read `references/description-conventions.md`.**
+Getting the *mechanics* right (wiki markup) is not the same as writing a
+description a newcomer can use. The conventions there are mandatory unless the
+person says otherwise: open with flowing prose (thesis first, no header), gloss
+every term of art inline, link generously and inline (concepts to their doc
+sections, repos and paths to their URLs, patterns to real example files), state
+the implementation approach transparently since filing is part of solutioning,
+and end with a single `h3. Acceptance Criteria` list (H3 max; never "DoD"). A
+flat, headed, jargon-dense description is a defect even if it imports cleanly.
+
 For anything nontrivial, write a small generator script alongside the output
 rather than emitting the CSV by hand. The person will want to regenerate after
 changing one field, and a script makes that a one-line edit instead of a re-read
@@ -178,6 +188,12 @@ task, and the field inventory from step 2 is still the right input to it.
 - `references/rich-text.md` — formatted descriptions and comments: the renderer
   requirement, the wiki-markup-versus-Markdown trap, a wiki markup cheat sheet,
   newlines inside CSV cells. Read before writing any formatted body text.
+- `references/description-conventions.md` — how to write a description a newcomer
+  can actually use: flowing-prose-first shape, one `h3. Acceptance Criteria`
+  section, gloss jargon inline, link generously and inline, and state the
+  implementation approach (repos/paths/prior-work examples). Read before writing
+  any description text; the mechanics in `rich-text.md` are necessary but not
+  sufficient.
 
 ## Scripts
 
