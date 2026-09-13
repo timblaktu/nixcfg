@@ -89,10 +89,12 @@ not omit them. A reader should finish the description knowing roughly how to sta
 A wall of text loses a newcomer before the first link. If a diagram or overview
 exists - or can be made - put it where the reader sees it *first*.
 
-- **Open with a prominent callout, above the prose.** A `{panel:title=Start here}`
-  box linking the overview diagram + README, before the thesis, so the reader sees
-  "here's the map" and can click it in one move. Do not bury the diagram link at
-  the end.
+- **Open with one concise reference line, above the prose.** A single plain first
+  line pointing at the overview diagram and the most useful doc section, e.g.
+  `Refer to the [architecture diagram|...] and [README|...#authoritative-design] for context.`
+  Keep it quiet and helpful - do NOT use a `{panel}`/callout box or "Start here" /
+  "New here?" language, and do not bury the diagram link at the end. Anchor the
+  doc link to its most useful section, not just the file top.
 - **Prefer a real embedded image where it renders reliably.** Jira renders
   `!attachment.png!` (an image attached to the issue) dependably; an external
   `!https://.../img.svg!` usually does NOT (private-repo auth, SVG sanitization,
