@@ -721,6 +721,151 @@ Runs LAST, after P7/P8/P9 are green, so the full feature set ships in one pass. 
    clean feature-branch commit + a properly-attested/dated completion are UNAFFECTED. Then mark P10
    COMPLETE with the date → plan 056 done → merge branch to `main`.
 
+## P7 design — secret-dump prevention hook (`secretSafety` category)
+
+Designed 2026-09-13 (P7). Grounds every choice in the P2 substrate map and mirrors the P3/P4
+`gitSafety`/`bashSafety` conventions verified in `modules/programs/claude-code/_hm/hooks.nix`. Mechanical
+enforcement of the standing rule memory `never-dump-secrets-to-agent-context` ("no `rbw --full`/vault
+dumps/secret-env echoes into the transcript, context, or files"). **Artifact-producing → Present/STOP for
+Tim's sign-off before COMPLETE.** No host adopts here (P10).
+
+### 0. Category placement — new `secretSafety` (NOT folded into bash/gitSafety)
+
+A new **`secretSafety`** category, parallel to `gitSafety`/`bashSafety`, with a `enable` master switch and
+two individually-toggleable default-**block** sub-rules. Rationale: these are neither git-command safety nor
+the rm/cp/mv interactive-hang class; they are a distinct concern (secret material reaching the agent
+context). A first-class category matches the plan's per-rule enforcement stance and keeps the false-positive
+surface auditable per rule. Both sub-rules are **PreToolUse Bash** hooks parsing `.tool_input.command` via
+jq-stdin, `exit 2` + `continueOnError=false`, uniform `CLAUDE_HOOKS_BYPASS` escape, Nix-store binary paths
+(`${pkgs.jq}`, `${pkgs.gnugrep}`), appended to the `mergeHookSets [ … ]` list behind
+`lib.optionalAttrs (cfg.hooks.secretSafety.enable && <subtoggle>)` — coexisting (union) with the existing
+PreToolUse hooks (P2 §3).
+
+```nix
+hooks.secretSafety = {
+  enable             = mkOption { type = bool; default = true; … };  # category master switch
+  blockVaultDump     = mkOption { type = bool; default = true; … };  # rbw --full / unpiped rbw get|code
+  blockSecretEnvEcho = mkOption { type = bool; default = true; … };  # echo/printf/printenv of a secret-named var
+};
+```
+
+### P7a — vault-dump block (`secretSafety.blockVaultDump`, default block)
+
+**Rule / incident:** memory `never-dump-secrets-to-agent-context` — an `rbw --full` incantation was found in
+a Bitwarden notes field and removed (2026-09-10). `rbw --full` / `rbw get --full` dumps ALL fields of an
+entry (including the notes field) to stdout → straight into the transcript/context. **Dual-use requirement
+(the load-bearing FP constraint):** `rbw get X | tool --password-stdin` must PASS — the piped-to-a-consumer
+form is the legitimate way to feed a secret to a command without it landing in context.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, `ifFilter = "Bash(rbw *)"` (best-effort narrowing;
+  the script re-checks, per the P3 §0 ifFilter caveat — correctness rests on the in-script `grep`, not `if`).
+- **Predicate (FP-aware):**
+  1. If the command contains no `rbw` token → allow (`exit 0`).
+  2. If it contains `--full` (any position) → **block** unconditionally. A full-entry dump has no legitimate
+     pipe-to-tool use; it exists to render everything to view. Highest-confidence rule, the exact incident form.
+  3. Else, for a **retrieval** subcommand that emits secret material — `rbw get …` or `rbw code …` (TOTP) —
+     **block IFF the output is NOT piped to a consumer.** "Piped" = a `|` appears after the `rbw` token in the
+     command. Unpiped `rbw get X` renders the password to the transcript; `rbw get X > file` writes a secret
+     to a file (both banned by the memory). Piped `rbw get X | tool` is the allowed dual-use form.
+  4. Non-retrieval management subcommands (`rbw sync`/`lock`/`unlock`/`login`/`list`/`generate`/…) → allow.
+     (`rbw list` prints entry NAMES, not secrets; `unlock` prompts but does not dump.)
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  [ -z "$cmd" ] && exit 0
+  printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])rbw([[:space:]]|$)' || exit 0   # only rbw commands
+  if printf '%s' "$cmd" | grep -qE '(^|[[:space:]])--full([[:space:]]|=|$)'; then
+    echo "🚫 secretSafety: 'rbw --full' dumps every field (incl. notes) into the agent context. Never dump vault contents to the transcript/context/files (memory never-dump-secrets-to-agent-context). Pipe a single field to the consumer instead: rbw get NAME | tool --password-stdin. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  # retrieval subcommands that emit secret material
+  if printf '%s' "$cmd" | grep -qE 'rbw[[:space:]]+(get|code)\b'; then
+    # allowed ONLY when the rbw output is piped to a consumer (dual-use)
+    printf '%s' "$cmd" | grep -qE 'rbw[[:space:]]+(get|code)\b[^|]*\|' && exit 0
+    echo "🚫 secretSafety: unpiped 'rbw get/code' prints the secret into the agent context (or a file via '>'). Pipe it to the consumer instead: rbw get NAME | tool --password-stdin. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  exit 0
+  ```
+- **FALSE-POSITIVE analysis (plan 049 canary):** Matcher is `rbw`-only (near-zero blast radius — `rbw` is a
+  narrow binary). (1) `--full` is unconditional; residual FP = a legit "show me everything to eyeball it"
+  which is exactly what the rule forbids reaching context — bypass covers a deliberate human-driven view.
+  (2) The pipe test `rbw get…[^|]*\|` is a heuristic: it treats ANY following `|` as "consumed". Edge:
+  `rbw get X | tee secrets.txt` is technically allowed by the pipe test yet writes to a file — accepted
+  residual (piping to `tee`/redirect-after-pipe is rare and operator-driven; broadening to inspect the pipe
+  target re-introduces FP). (3) `rbw get X` with a trailing `> /tmp/f` (no pipe) is correctly **blocked**
+  (file dump). (4) Management subcommands are untouched. (5) A subshell form `X=$(rbw get Y)` assigns to a
+  var without printing to the transcript — NOT matched by `get|code …|` (no pipe) so it would BLOCK; but
+  `$(rbw get Y)` capturing into a var is a legitimate non-leaking use → **flagged as a decision point**
+  (see "P7 decision points"). The conservative default blocks it (the command string shows `rbw get` with no
+  pipe); the operator bypasses, OR we extend the allow to `$(rbw get…)`/backtick capture.
+- **VM-test assertion:** hook `exit 2` on `{"command":"rbw --full mysecret"}`, `{"command":"rbw get mysecret"}`,
+  `{"command":"rbw get X > /tmp/s"}`; `exit 0` on `{"command":"rbw get mysecret | tool --password-stdin"}`,
+  `{"command":"rbw sync"}`, `{"command":"rbw list"}`, and a non-rbw `{"command":"ls"}`.
+
+### P7b — secret-env echo block (`secretSafety.blockSecretEnvEcho`, default block)
+
+**Rule / incident:** memory `never-dump-secrets-to-agent-context` (the "secret-env echoes" half) + the
+inverse of `feedback_git_push_auth` (the auth-token prefix is a legitimate NON-echo use). `echo $GH_TOKEN`,
+`printf '%s' "$AWS_SECRET_ACCESS_KEY"`, `printenv GITHUB_TOKEN` render a secret's VALUE into the transcript.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, no `ifFilter` (discrimination in-script).
+- **Secret-name regex (case-insensitive):** a variable whose name contains
+  `(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL|SESSION_TOKEN)`.
+  Covers `GH_TOKEN`/`GITHUB_TOKEN`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN`/`*_API_KEY` etc.
+- **Predicate:** block when an `echo`/`printf`/`printenv` command references such a variable **as a shell
+  variable** — `$NAME` or `${NAME}` for echo/printf, or a bare `NAME` argument for `printenv`. Matching on the
+  `$`-prefixed reference (not a literal word) is what keeps FP near-zero: `echo "token refresh complete"`
+  (literal text) does NOT match; `echo "$GH_TOKEN"` does.
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  [ -z "$cmd" ] && exit 0
+  SECRE='(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL)'
+  # echo/printf referencing $SECRETVAR or ${SECRETVAR}
+  if printf '%s' "$cmd" | grep -qiE '(^|[;&|[:space:]])(echo|printf)\b[^;&|]*\$\{?[A-Za-z_]*'"$SECRE"; then
+    echo "🚫 secretSafety: echo/printf of a secret-shaped variable leaks its value into the agent context (memory never-dump-secrets-to-agent-context). Pass it directly to the consumer (e.g. GH_TOKEN=\$(gh auth token) git push) instead of echoing it. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  # printenv NAME where NAME is secret-shaped
+  if printf '%s' "$cmd" | grep -qiE '(^|[;&|[:space:]])printenv\b[^;&|]*[A-Za-z_]*'"$SECRE"; then
+    echo "🚫 secretSafety: printenv of a secret-shaped variable leaks its value into the agent context. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  exit 0
+  ```
+- **FALSE-POSITIVE analysis (plan 049 canary):** (1) Matching on a `$`-prefixed variable reference (echo/printf)
+  or a `printenv` argument means literal text ("token", "password reset") never trips it — only real variable
+  reads do. (2) **Dual-use PASSES:** `GH_TOKEN=$(gh auth token) git push` is a command-PREFIX assignment, not an
+  `echo`/`printf`/`printenv`, so it is NOT matched (satisfies memory `feedback_git_push_auth`). (3) `export
+  GH_TOKEN=…` (assignment) is not matched. (4) Residual FP: `echo "Set your GITHUB_TOKEN in the env"` — a
+  literal mention that happens to sit after `echo` AND contains a `$`? No: without a `$` prefix it won't match;
+  a genuine `$GITHUB_TOKEN` in an instructional echo is rare and bypass-able. (5) **Deliberately NOT included
+  (decision point):** bare `env`/`printenv` with no argument (dumps ALL env incl. secrets) and `set -x` (traces
+  secret assignments) — both are very common in legitimate debugging and would carry real FP; the task named
+  them, so they are flagged below rather than shipped by default.
+- **VM-test assertion:** hook `exit 2` on `{"command":"echo $GH_TOKEN"}`,
+  `{"command":"printf '%s' \"$AWS_SECRET_ACCESS_KEY\""}`, `{"command":"printenv GITHUB_TOKEN"}`; `exit 0` on
+  `{"command":"GH_TOKEN=$(gh auth token) git push"}`, `{"command":"echo hello world"}`,
+  `{"command":"echo \"token refresh done\""}`.
+
+### P7 — decision points for Present/STOP sign-off
+
+1. **Category placement:** new `secretSafety` category (recommended) vs folding the two rules into
+   `bashSafety`. Recommendation: new category (distinct concern, auditable FP surface).
+2. **`$(rbw get …)` command-substitution capture** (P7a residual): the conservative default BLOCKS an unpiped
+   `rbw get` even inside `$(…)`/backticks (the string shows no `|`), though capturing into a var does not print
+   to the transcript. Options: (a) keep conservative-block (bypass for the rare capture); (b) extend the allow
+   to `$(rbw get…)`/backtick capture forms. Recommendation: (a) — simpler, lower FP-of-omission; capture is rare.
+3. **Breadth of P7b env-echo matching:** ship NARROW (only `$SECRETVAR` refs in echo/printf + `printenv
+   SECRETVAR`, recommended) vs BROAD (also block bare `env`/`printenv` full dumps and `set -x`). Recommendation:
+   NARROW — bare `env`/`set -x` are common in legit debugging (high FP); the memory's named incident is the
+   explicit-secret form.
+4. **Defaults = block, category-global:** confirm `secretSafety.*` default `true` (block) like `gitSafety`,
+   with `CLAUDE_HOOKS_BYPASS` as the escape. (Module-global: fires for every account; sensible team-wide.)
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5, P7, P8, P9) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate (COMPLETE); P10 is the Interactive integration/live-rollout gate (runs last).
