@@ -32,7 +32,8 @@ def warn(lineno, msg):
 def convert_inline(text, lineno=0):
     """Inline spans. Code spans are pulled out first so their contents are not
     reinterpreted, then restored at the end."""
-    holds = []       # restored verbatim at the end
+    holds = []  # restored verbatim at the end
+
     def hold(m):
         holds.append("{{" + m.group(1) + "}}")
         return f"\x00{len(holds) - 1}\x00"
@@ -41,6 +42,7 @@ def convert_inline(text, lineno=0):
 
     # Images before links: both use bracket syntax, image wins on the leading !
     text = re.sub(r"!\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)", r"!\2!", text)
+
     # [label](url) -> [label|url]; bare [url](url) collapses to [url]
     def link(m):
         label, url = m.group(1), m.group(2)
@@ -59,20 +61,24 @@ def convert_inline(text, lineno=0):
         holds.append(s)
         return f"\x00{len(holds) - 1}\x00"
 
-    text = re.sub(r"\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*",
-                  lambda m: park(f"_*{m.group(1)}*_"), text)
-    text = re.sub(r"\*\*(?=\S)(.+?)(?<=\S)\*\*",
-                  lambda m: park(f"*{m.group(1)}*"), text)
-    text = re.sub(r"__(?=\S)(.+?)(?<=\S)__",
-                  lambda m: park(f"*{m.group(1)}*"), text)
+    text = re.sub(
+        r"\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*", lambda m: park(f"_*{m.group(1)}*_"), text
+    )
+    text = re.sub(
+        r"\*\*(?=\S)(.+?)(?<=\S)\*\*", lambda m: park(f"*{m.group(1)}*"), text
+    )
+    text = re.sub(r"__(?=\S)(.+?)(?<=\S)__", lambda m: park(f"*{m.group(1)}*"), text)
     # Then single-marker italics -> underscore form.
     text = re.sub(r"(?<![\*\w])\*(?=\S)([^\*]+?)(?<=\S)\*(?![\*\w])", r"_\1_", text)
     text = re.sub(r"(?<![_\w])_(?=\S)([^_]+?)(?<=\S)_(?![_\w])", r"_\1_", text)
 
     text = re.sub(r"~~(?=\S)(.+?)(?<=\S)~~", r"-\1-", text)
 
-    for i, parked in enumerate(holds):
-        text = text.replace(f"\x00{i}\x00", parked)
+    # Restore highest index first: a parked emphasis span (higher index) can
+    # embed an earlier code-span placeholder (lower index), so descending order
+    # ensures that re-injected inner placeholder is still resolved afterward.
+    for i in range(len(holds) - 1, -1, -1):
+        text = text.replace(f"\x00{i}\x00", holds[i])
     return text
 
 
@@ -171,8 +177,9 @@ def convert(md):
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("input", nargs="?", help="Markdown file, or - for stdin")
     p.add_argument("-o", "--output", help="Write here instead of stdout")
     p.add_argument("--inline", help="Convert this string instead of a file")
