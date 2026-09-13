@@ -1135,6 +1135,30 @@ in
             run_hook("/tmp/h_rm.sh", "rm foo", 2)
             run_hook("/tmp/h_rm.sh", "rm -f foo", 0)
 
+            # === secretSafety (Plan 056 P7): vault-dump + secret-env-echo ===
+            machine.succeed(f"grep -q secretSafety {settings}")
+            extract("rbw --full", "/tmp/h_vault.sh")
+            extract("SECRE=", "/tmp/h_env.sh")
+
+            # P7a vault-dump: rbw --full and unpiped/uncaptured rbw get block;
+            # a piped `rbw get X | tool` and a `$(rbw get X)` capture PASS.
+            run_hook("/tmp/h_vault.sh", "rbw --full mysecret", 2)
+            run_hook("/tmp/h_vault.sh", "rbw get mysecret", 2)
+            run_hook("/tmp/h_vault.sh", "rbw get X > /tmp/s", 2)
+            run_hook("/tmp/h_vault.sh", "rbw get mysecret | tool --password-stdin", 0)
+            run_hook("/tmp/h_vault.sh", "X=$(rbw get Y)", 0)
+            run_hook("/tmp/h_vault.sh", "rbw sync", 0)
+            run_hook("/tmp/h_vault.sh", "rbw list", 0)
+            run_hook("/tmp/h_vault.sh", "ls -la", 0)
+
+            # P7b secret-env-echo: echo/printf/printenv of a secret-shaped var block;
+            # a command-prefix `GH_TOKEN=$(gh auth token) git push` PASSES.
+            run_hook("/tmp/h_env.sh", "echo $GH_TOKEN", 2)
+            run_hook("/tmp/h_env.sh", "printenv GITHUB_TOKEN", 2)
+            run_hook("/tmp/h_env.sh", "GH_TOKEN=$(gh auth token) git push", 0)
+            run_hook("/tmp/h_env.sh", "echo hello world", 0)
+            run_hook("/tmp/h_env.sh", "printenv PATH", 0)
+
             # === bypass escape hatch overrides every block ===
             rc, _ = machine.execute(
                 f"cd /tmp/mainrepo && CLAUDE_HOOKS_BYPASS=1 "

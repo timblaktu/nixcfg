@@ -729,6 +729,16 @@ enforcement of the standing rule memory `never-dump-secrets-to-agent-context` ("
 dumps/secret-env echoes into the transcript, context, or files"). **Artifact-producing → Present/STOP for
 Tim's sign-off before COMPLETE.** No host adopts here (P10).
 
+**[DECISION] Tim, 2026-09-13 (P7 sign-off):** (1) **New `secretSafety` category** (not folded into
+bashSafety) — distinct concern, auditable per-rule FP surface. (2) **Allow `$(rbw get …)`/backtick capture**
+— extend the P7a allow beyond just the pipe form: a command-substitution capture (`X=$(rbw get Y)`) does not
+print to the transcript, so it PASSES; only bare display and a `> file` redirect block. (3) **Narrow P7b
+env-echo** — block only explicit secret-variable references (`$SECRETVAR`/`printenv SECRETVAR`); bare
+`env`/`printenv`/`set -x` are NOT blocked (too common in legit debugging → high FP). (4) **Default-block,
+category-global** like `gitSafety`, `CLAUDE_HOOKS_BYPASS` escape; not enabled on any live host until P10.
+All four confirm the design below; the "decision points" list at the end of this section is now RESOLVED
+(kept for rationale). Implemented + logic-tested (26/26 on the real generated scripts) + VM-test asserted.
+
 ### 0. Category placement — new `secretSafety` (NOT folded into bash/gitSafety)
 
 A new **`secretSafety`** category, parallel to `gitSafety`/`bashSafety`, with a `enable` master switch and
@@ -764,9 +774,10 @@ form is the legitimate way to feed a secret to a command without it landing in c
   2. If it contains `--full` (any position) → **block** unconditionally. A full-entry dump has no legitimate
      pipe-to-tool use; it exists to render everything to view. Highest-confidence rule, the exact incident form.
   3. Else, for a **retrieval** subcommand that emits secret material — `rbw get …` or `rbw code …` (TOTP) —
-     **block IFF the output is NOT piped to a consumer.** "Piped" = a `|` appears after the `rbw` token in the
-     command. Unpiped `rbw get X` renders the password to the transcript; `rbw get X > file` writes a secret
-     to a file (both banned by the memory). Piped `rbw get X | tool` is the allowed dual-use form.
+     **block UNLESS the output is consumed** — either piped to a command (`rbw get X | tool`) OR captured via
+     a command substitution (`$(rbw get X)` / backticks). Both consumed forms PASS ([DECISION] Tim 2026-09-13:
+     capture allowed — it does not print to the transcript). What blocks: bare `rbw get X` (renders the
+     password to the transcript) and `rbw get X > file` (writes a secret to a file) — both banned by the memory.
   4. Non-retrieval management subcommands (`rbw sync`/`lock`/`unlock`/`login`/`list`/`generate`/…) → allow.
      (`rbw list` prints entry NAMES, not secrets; `unlock` prompts but does not dump.)
 - **Script pseudocode:**
@@ -794,12 +805,12 @@ form is the legitimate way to feed a secret to a command without it landing in c
   (2) The pipe test `rbw get…[^|]*\|` is a heuristic: it treats ANY following `|` as "consumed". Edge:
   `rbw get X | tee secrets.txt` is technically allowed by the pipe test yet writes to a file — accepted
   residual (piping to `tee`/redirect-after-pipe is rare and operator-driven; broadening to inspect the pipe
-  target re-introduces FP). (3) `rbw get X` with a trailing `> /tmp/f` (no pipe) is correctly **blocked**
-  (file dump). (4) Management subcommands are untouched. (5) A subshell form `X=$(rbw get Y)` assigns to a
-  var without printing to the transcript — NOT matched by `get|code …|` (no pipe) so it would BLOCK; but
-  `$(rbw get Y)` capturing into a var is a legitimate non-leaking use → **flagged as a decision point**
-  (see "P7 decision points"). The conservative default blocks it (the command string shows `rbw get` with no
-  pipe); the operator bypasses, OR we extend the allow to `$(rbw get…)`/backtick capture.
+  target re-introduces FP). (3) `rbw get X` with a trailing `> /tmp/f` (no pipe/capture) is correctly
+  **blocked** (file dump). (4) Management subcommands are untouched. (5) A command-substitution capture
+  `X=$(rbw get Y)` / backtick form is **allowed** ([DECISION] Tim 2026-09-13) — capturing into a var does not
+  print to the transcript; the `[$]\(…rbw…(get|code)` / backtick allow-checks match it. The initial
+  rbw-detection uses a word boundary (`(^|[^[:alnum:]_])rbw`) so `$(rbw --full …)` is STILL caught by the
+  unconditional `--full` block even inside a capture.
 - **VM-test assertion:** hook `exit 2` on `{"command":"rbw --full mysecret"}`, `{"command":"rbw get mysecret"}`,
   `{"command":"rbw get X > /tmp/s"}`; `exit 0` on `{"command":"rbw get mysecret | tool --password-stdin"}`,
   `{"command":"rbw sync"}`, `{"command":"rbw list"}`, and a non-rbw `{"command":"ls"}`.
@@ -855,10 +866,9 @@ inverse of `feedback_git_push_auth` (the auth-token prefix is a legitimate NON-e
 
 1. **Category placement:** new `secretSafety` category (recommended) vs folding the two rules into
    `bashSafety`. Recommendation: new category (distinct concern, auditable FP surface).
-2. **`$(rbw get …)` command-substitution capture** (P7a residual): the conservative default BLOCKS an unpiped
-   `rbw get` even inside `$(…)`/backticks (the string shows no `|`), though capturing into a var does not print
-   to the transcript. Options: (a) keep conservative-block (bypass for the rare capture); (b) extend the allow
-   to `$(rbw get…)`/backtick capture forms. Recommendation: (a) — simpler, lower FP-of-omission; capture is rare.
+2. **`$(rbw get …)` command-substitution capture** (P7a): options — (a) conservative-block even inside
+   `$(…)`/backticks; (b) extend the allow to `$(rbw get…)`/backtick capture forms. **RESOLVED — Tim chose (b)**
+   (capture does not print to the transcript, so it PASSES; only bare display + `> file` block).
 3. **Breadth of P7b env-echo matching:** ship NARROW (only `$SECRETVAR` refs in echo/printf + `printenv
    SECRETVAR`, recommended) vs BROAD (also block bare `env`/`printenv` full dumps and `set -x`). Recommendation:
    NARROW — bare `env`/`set -x` are common in legit debugging (high FP); the memory's named incident is the

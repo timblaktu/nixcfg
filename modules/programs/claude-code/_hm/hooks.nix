@@ -300,6 +300,56 @@ in
       };
     };
 
+    # Plan 056 P7 — secret-dump prevention interlocks. Mechanical enforcement of
+    # the standing rule memory `never-dump-secrets-to-agent-context` (no
+    # `rbw --full`/vault dumps/secret-env echoes into the transcript, context, or
+    # files). Same PreToolUse Bash + jq-stdin + exit 2 + `CLAUDE_HOOKS_BYPASS`
+    # conventions as gitSafety/bashSafety; safety-critical → default block. The
+    # design is FP-aware (DUAL-USE): a piped `rbw get X | tool --password-stdin`
+    # and a `$(rbw get X)` capture PASS; only forms that render a secret into the
+    # transcript/context/a file block. See plan 056 "P7 design" for the full
+    # false-positive analysis + the [DECISION] Tim 2026-09-13 block.
+    secretSafety = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Master switch for the secret-dump prevention PreToolUse interlocks
+          (Plan 056 P7). Each sub-rule below installs its blocking hook only when
+          both this master switch AND the sub-toggle are true.
+        '';
+      };
+      blockVaultDump = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          P7a — block `rbw` invocations that render vault contents into the agent
+          context/files: `rbw --full`/`rbw get --full` (dumps every field incl.
+          notes — the exact incident form) is blocked unconditionally; a
+          retrieval `rbw get`/`rbw code` is blocked only when its output is NOT
+          consumed by a pipe (`rbw get X | tool`) or a command substitution
+          (`$(rbw get X)`/backticks) — i.e. bare display or a `> file` redirect.
+          Dual-use `rbw get X | tool --password-stdin` PASSES. Management
+          subcommands (`sync`/`lock`/`unlock`/`login`/`list`/`generate`) are
+          untouched.
+        '';
+      };
+      blockSecretEnvEcho = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          P7b — block `echo`/`printf` of a secret-shaped shell variable
+          (`$NAME`/`''${NAME}` where NAME matches TOKEN/SECRET/PASSWORD/PASSPHRASE/
+          API_KEY/ACCESS_KEY/PRIVATE_KEY/CREDENTIAL) and `printenv SECRETVAR`.
+          Matching on the `$`-prefixed variable reference keeps false positives
+          near-zero (literal text like "token refresh done" is not matched). The
+          legitimate auth-token prefix `GH_TOKEN=$(gh auth token) git push` is a
+          command-prefix assignment, NOT an echo, so it PASSES. Bare `env`/`set -x`
+          are deliberately NOT blocked (too common in legit debugging).
+        '';
+      };
+    };
+
     # Plan 056 P5 — session-workflow process-gates (the "hard process-gates"
     # research). Unlike gitSafety/bashSafety (safety-critical → default block),
     # these are WORKFLOW-discipline gates with softer predicates and real
@@ -828,6 +878,67 @@ in
         });
       };
 
+      # Plan 056 P7 — secret-dump prevention interlocks. PreToolUse Bash hooks,
+      # jq-stdin `.tool_input.command`, exit 2 + continueOnError=false, uniform
+      # `CLAUDE_HOOKS_BYPASS` escape. FP-aware (dual-use): a piped/`$(...)`-captured
+      # `rbw get` and a `GH_TOKEN=$(gh auth token) git push` prefix PASS; only forms
+      # that render a secret into the transcript/context/a file block.
+      secretSafetyHooks = lib.optionalAttrs cfg.hooks.secretSafety.enable {
+        PreToolUse =
+          # blockVaultDump (P7a) — rbw --full always; unpiped/uncaptured rbw get|code.
+          (lib.optional cfg.hooks.secretSafety.blockVaultDump (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(rbw *)";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              # only intercept rbw commands (word boundary handles $(rbw…/`rbw…/; rbw…)
+              printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[^[:alnum:]_])rbw([[:space:]]|$)' || exit 0
+              # --full dumps every field (incl. notes) — blocked unconditionally
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[[:space:]])--full([[:space:]]|=|$)'; then
+                echo "🚫 secretSafety: 'rbw --full' dumps every field (incl. notes) into the agent context. Never dump vault contents to the transcript/context/files (memory never-dump-secrets-to-agent-context). Pipe a single field to the consumer instead: rbw get NAME | tool --password-stdin. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              # retrieval subcommands that emit secret material
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'rbw[[:space:]]+(get|code)\b'; then
+                # ALLOW when consumed: piped to a command, or captured via $(...)/backticks
+                printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'rbw[[:space:]]+(get|code)\b[^|]*[|]' && exit 0
+                printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '[$]\([^)]*rbw[[:space:]]+(get|code)\b' && exit 0
+                printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '`[^`]*rbw[[:space:]]+(get|code)\b' && exit 0
+                echo "🚫 secretSafety: unpiped 'rbw get/code' prints the secret into the agent context (or a file via '>'). Pipe it to the consumer instead: rbw get NAME | tool --password-stdin (or capture with \$(rbw get NAME)). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+          # blockSecretEnvEcho (P7b) — echo/printf of $SECRETVAR, printenv SECRETVAR.
+          ++ (lib.optional cfg.hooks.secretSafety.blockSecretEnvEcho (mkHook {
+            matcher = "Bash";
+            command = ''
+              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              SECRE='(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL)'
+              # echo/printf referencing $SECRETVAR or ''${SECRETVAR}
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE '(^|[;&|[:space:]])(echo|printf)\b[^;&|]*[$][{]?[A-Za-z_]*'"$SECRE"; then
+                echo "🚫 secretSafety: echo/printf of a secret-shaped variable leaks its value into the agent context (memory never-dump-secrets-to-agent-context). Pass it directly to the consumer (e.g. GH_TOKEN=\$(gh auth token) git push) instead of echoing it. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              # printenv NAME where NAME is secret-shaped
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE '(^|[;&|[:space:]])printenv\b[^;&|]*[A-Za-z_]*'"$SECRE"; then
+                echo "🚫 secretSafety: printenv of a secret-shaped variable leaks its value into the agent context. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                exit 2
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }));
+      };
+
       # Plan 056 P5 — session-workflow process-gates. Both sub-rules are
       # PreToolUse Edit|MultiEdit|Write hooks that gate a plan-file status
       # transition. The jq expression normalises across the three tool shapes:
@@ -961,6 +1072,7 @@ in
       securityHooks
       gitSafetyHooks
       bashSafetyHooks
+      secretSafetyHooks
       planIntegrityHooks
       loggingHooks
       resumeHooks
