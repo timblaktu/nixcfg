@@ -1014,6 +1014,29 @@ Steps 1-4 of the RESUME HERE checklist ran clean; step 5 (final Present) is this
 Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, branch `plan-056-session-workflow-hooks`). The plan file is tracked on this branch. When P4/P6 land module changes, they merge to `main` like any feature branch. Related durable context lives in auto-memory: `next-task-present-stop-artifact-gate`, `project_ai_attribution_leak`, `cc-sessionstart-hook-contract`, `nixcfg-precommit-flakecheck-timeout`. Prior hook-infra work: plan 044 (resume hook / dual-channel resume), plan 046 (T5 hook-events model + T11 RTK), plan 050 (tmux command-status source).
 
 ## Session log
+- 2026-09-14 — **[DECISION] Tim: keep-the-core, trim-the-ceremony (strategic rescope of `.claude/user-plans`).**
+  Prompted by Tim's "is user-plans still earning its keep over native CC/OpenCode continuity?" I verified the
+  native surface via `claude-code-guide` (authoritative, current). **Finding:** native CC has NO durable
+  cross-session task cursor, NO unattended task-by-task burndown, NO *distilled* handoff resume (native
+  `--resume` = full-transcript replay). Those three + multi-worktree/multi-session concurrency coordination
+  are the **load-bearing core** with no native equivalent. What native HAS overtaken: single-session task
+  tracking (native session todos) and research→present→approve (native Plan Mode). The old "tool-agnostic /
+  works for OpenCode" justification is now weak (CC-centric since 2026-06-24; OC dormant).
+  **Tim accepted the recommendation FULLY:** (1) KEEP the core — `active-plan` + `HANDOFF.md` + distilled
+  SessionStart resume + the burndown driver + reliable `TASK:` cursor integrity; (2) TRIM redundant ceremony
+  — stop using `.claude/user-plans` as a single-session todo / present-approve wrapper (lean on native todos +
+  Plan Mode there); (3) SIMPLIFY opportunistically as we go; (4) **keep the higher-level "Claude session hooks"
+  scope front-of-mind — actively look for hook integrations that streamline/harden/improve the user-plans
+  implementation** (reduce the manual-discipline surface CLAUDE.md currently enforces by nagging).
+  **Impact on remaining 056 scope — re-audit P9/P10 through the keep-core-vs-ceremony lens:**
+  • **P9** (fold plan 049 T1 — fix the broken project-level PreToolUse hook) = hardening/cleanup of a fragile
+    edge → **still aligned** (it removes ceremony/noise, doesn't add it).
+  • **P10** live rollout: the safety hooks (`gitSafety`/`bashSafety`/`secretSafety`) are general SESSION
+    safety, not user-plans ceremony → keep. The `planIntegrity`/Present-STOP gates (P5) are user-plans-specific
+    → **re-audit which are burndown-ESSENTIAL (well-formed `TASK:` transitions the driver depends on) vs.
+    human-attended ceremony**; adopt only the essential ones live. (No code change decided yet — flagged for
+    the P10 decision + any future simplification pass.)
+  This decision governs how we finish 056 and any follow-on. See memory `keep-core-trim-ceremony-userplans`.
 - 2026-09-13 — **P7 COMPLETE.** Designed + implemented the new **`secretSafety`** hook category
   (mechanical enforcement of memory `never-dump-secrets-to-agent-context`). **Design presented + signed
   off (Tim, [DECISION] 2026-09-13 in the "P7 design" section):** (1) new `secretSafety` category (not
