@@ -1035,8 +1035,27 @@ clean, nixcfg-scoped cleanup requiring no corp action. `nix flake check` unaffec
    its non-hook settings), or drop the file if confirmed-unused?
 3. **Plan 049 status** update to record the merge into 056 P9 once (1)/(2) are decided.
 
-No nixcfg module change is needed (the `security` category is already the correct pattern). No host/corp change
-made this session — held for your decision.
+No nixcfg module change is needed (the `security` category is already the correct pattern).
+
+### [DECISION] Tim 2026-09-14 (P9 sign-off) + resolution
+
+- **(1) Corp hook = REMOVE, close out (no corp MR).** The redundant/illusory PreToolUse+PostToolUse hooks in
+  the `iaas/hsw` `.claude/settings.json` should be removed (keep SessionStart), but — mirroring the P8
+  close-out — **no corp MR is opened from here** (the nixcfg module already covers Tim; the hook is
+  noisy-not-dangerous; opening a corp MR would be a personal-convention touch on a shared team repo). The
+  removal recommendation is recorded for the team; no corp repo touched this session.
+- **(2) nixcfg relic = STRIP dead hook blocks.** DONE — removed the dead `PreToolUse` (`$1`/`exit 1`
+  antipattern) and `PostToolUse` (logging relic) blocks from the tracked
+  `claude-runtime/.claude/settings.json`, keeping the empty `SessionStart`/`Stop` and all non-hook settings
+  (`model`/`permissions`/`projectOverrides`/`statusLine`). `jq -e` valid; `rg` confirms zero
+  `matchPaths`/`exit 1`/`$1` antipattern remaining. Not a nix file → `nix flake check` unaffected.
+- **(3) Plan 049 status updated** to record the merge into 056 P9 (T1 resolved via the recommendation +
+  close-out; T3 Interactive decision resolved = option (b) remove).
+
+**Evidence the "non-blocking status" noise is addressed:** the correct replacement (`exit 2`/stderr path
+filter) already exists as the module `security` hook; the nixcfg-tracked relic that carried the noisy
+`exit 1` shape is stripped; the remaining instance is the corp repo, whose fix is the recorded remove
+recommendation (close-out, per Tim).
 
 ## Progress tracking
 
@@ -1052,7 +1071,7 @@ made this session — held for your decision.
 | P6 | **Decision (rollout split to P10):** per-rule enforcement defaults, which P5 hard-gates to adopt, rollout order (warn-first vs block), plus the 2026-09-10 scope-expansion decisions (adopt P7/P8/P9; new work before integration). Record dated `[DECISION]` blocks in this plan. | Interactive DECISION | P4, P5 | TASK:COMPLETE (2026-09-10) |
 | P7 | **Secret-dump prevention hook — design + implement.** Mechanical enforcement of memory `never-dump-secrets-to-agent-context`. Design (FP-aware, like P3): PreToolUse Bash rule blocking vault-dump forms (`rbw --full`/`rbw get --full` and equivalents) + secret-env echoes (`echo`/`printf`/`env`/`printenv`/`set -x` exposing `*_TOKEN`/`*_SECRET`/`*_PASSWORD`/AWS-key shapes); jq-stdin `.tool_input.command`, `exit 2`, `continueOnError=false`, `CLAUDE_HOOKS_BYPASS` escape, narrow matcher. Group into `gitSafety`/`bashSafety` or a new `secretSafety` category (design decides). FALSE-POSITIVE analysis (dual-use: `rbw get X \| tool --password-stdin` must PASS; only dump/echo forms block). Implement + VM-test (block a `rbw --full`; allow a piped `rbw get`). Present/STOP before COMPLETE. Default-block; not enabled on any host (P10). | design+impl (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-13) |
 | P8 | **Symlink permission-prompt: full from-here fix, TRANSITIONAL/SUNSET.** NOT hook-suppressible (hardened CC invariant — memory `cc-permission-path-anchor`). Sub-steps: (a) empirically test the untested PreToolUse `permissionDecision:allow` vector (settle whether ANY from-here config fix exists; expected-dead); (b) **eradicate all existing cases** — enumerate every personal worktree with a cwd-escaping `.claude/{user-plans,HANDOFF.md,active-plan}` symlink and migrate them (use `migrate-hsw-plans.sh`; do not over-engineer); (c) **fix the source** that creates the symlink pattern so no new cases arise; (d) minimal reminder-only advisory (`continueOnError=true`) + concise docs. **This is throwaway scaffolding for a personal-only pattern being eliminated — the migrate tooling + advisory MUST be removed once cases==0 and the source is fixed (memory `sunset-transitional-scaffolding`); do not build permanent infra.** Present/STOP before COMPLETE. | eradicate+sunset (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-14 — Tim signed off on the final Present. Batch-migrated all 77 cwd-escaping `.claude/user-plans` symlinks → real in-cwd dirs (re-scan = 0 escapes; gitignored, git-status clean, store untouched/reversible). Source-fix (c) = rule 5a written into n3x + hsw CLAUDE.md; Tim reviewing in-browser, then landing to fresh doc branches (me). Docs (d) = the rule-5a text (no CC module hook — minimal). Sunset teardown done: throwaway `/tmp/p8-migrate-*.sh` + `migrate-{hsw-,}plans.sh` deleted. See the "✅ EXECUTED" block in the P8 progress section.) |
-| P9 | **Fold plan 049 T1 into 056.** Migrate the broken project-level `.claude/settings.json` PreToolUse hook (the FP canary: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr) to the proper nix-managed module pattern (jq-stdin path filter, `exit 2`, stderr, `continueOnError=false`) — or remove it in favour of the module hooks if redundant. Verify no more spurious "non-blocking status" noise. Update plan 049's status to reflect the merge. Present/STOP before COMPLETE. | impl (artifact → Present/STOP) | P4 | TASK:IN_PROGRESS (2026-09-14 — analysis done, see "P9 analysis" section; Present/STOP awaiting Tim's decision on remove-vs-fix + corp-MR-vs-relocate) |
+| P9 | **Fold plan 049 T1 into 056.** Migrate the broken project-level `.claude/settings.json` PreToolUse hook (the FP canary: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr) to the proper nix-managed module pattern (jq-stdin path filter, `exit 2`, stderr, `continueOnError=false`) — or remove it in favour of the module hooks if redundant. Verify no more spurious "non-blocking status" noise. Update plan 049's status to reflect the merge. Present/STOP before COMPLETE. | impl (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-14 — Tim signed off. No nixcfg module change needed: `hooks.security` is already the correct jq-stdin/`exit 2`/stderr pattern; project hooks are redundant+broken. Corp `iaas/hsw` hook = REMOVE recommendation recorded, closed out with NO corp MR (P8 precedent). nixcfg relic `claude-runtime/.claude/settings.json` = dead PreToolUse/PostToolUse antipattern blocks STRIPPED (jq-valid, non-hook settings kept, 0 antipattern remaining). Plan 049 status updated. See "P9 analysis" + [DECISION] block.) |
 | P10 | **Integration & live rollout** (was P6's rollout half). Bump nixcfg-work flake.lock to a nixcfg rev carrying the full hook set; `home-manager switch` on `tim@pa161878-nixos`; demonstrate each adopted block fires live (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean work is unaffected; then mark COMPLETE → merge to `main`. Tim-authorized autonomous execution (from the P6 brief) once P7-P9 are green. | Interactive INTEGRATION | P4, P5, P7, P8, P9 | TASK:PENDING |
 
 ## Definition of Done (per task)
