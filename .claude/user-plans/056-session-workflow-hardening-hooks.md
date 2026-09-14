@@ -905,21 +905,48 @@ carries `**/.claude/user-plans/` (line 139) so converting a symlink to a real di
 **Throwaway migration helper:** `/tmp/p8-migrate-worktree.sh` (Option A, idempotent, per-worktree; NOT
 committed — sunset scaffolding). Verifies post-migration realpath stays in-cwd and is not a symlink.
 
-**CANARY DONE:** `n3x-origin-amd-machine-split` (branch `feat/amd-machine-split`, idle 102 days). Symlink →
-real dir seeded with 164 files; `git check-ignore` confirms ignored; `git status` clean (no user-plans
-entries); idempotent re-run = no-op; store intact. **Presented to Tim; awaiting sign-off to batch the
-remaining 76 + do (c)/(d).**
+**CANARY DONE + SIGNED OFF (Tim 2026-09-14):** `n3x-origin-amd-machine-split` (branch
+`feat/amd-machine-split`, idle 102 days). Symlink → real dir seeded with 164 files; `git check-ignore`
+confirms ignored; `git status` clean (no user-plans entries); idempotent re-run = no-op; store intact.
+**Tim approved the approach and the batch — no further per-step sign-off needed until the FINAL Present
+before marking P8 COMPLETE.**
 
-### (c) source-fix — PENDING (post-canary)
-Source = a **manual** worktree-create habit (no tool creates the symlinks; existing `migrate-*.sh` use the
-old insufficient move-out-of-`.claude/` approach). Fix = stop hand-symlinking; a new worktree either gets no
-`.claude/user-plans` (gitignored, harmless) or a real dir + copy when it needs plans. Concrete mechanism TBD
-at batch time (candidate: a one-liner in the worktree-create helper / n3x+hsw CLAUDE.md rule).
+### ▶ RESUME HERE (deterministic next actions for a fresh `/next-task` — P8 is IN_PROGRESS)
+Tim has APPROVED all of the below (2026-09-14). Do them in order, then Present the full P8 result for the
+COMPLETE sign-off (Present/STOP applies only to the final COMPLETE, not to these approved steps):
 
-### (d) advisory + docs — PENDING (post-canary)
-Minimal reminder-only (`continueOnError=true`) advisory + concise docs, each carrying an explicit
-**sunset/removal note** (memory `sunset-transitional-scaffolding`). **Sunset criterion:** once cases==0 and
-the source is fixed, remove `/tmp/p8-migrate-*.sh` and the advisory — do not carry as permanent infra.
+1. **Batch-migrate the remaining 76 worktrees** (the canary is already done; the loop is idempotent,
+   reversible, and content-identical at the migration instant, so it is safe even on active worktrees — a
+   live session keeps reading the same plan files, its future edits just become worktree-local, which is the
+   intended new model). Self-contained command (does NOT depend on the throwaway `/tmp` helper surviving):
+   ```bash
+   for base in /home/tim/src/n3x*/ /home/tim/src/hsw*/; do
+     wt="${base%/}"; up="$wt/.claude/user-plans"
+     [ -L "$up" ] || continue                              # only escaping symlinks; real dirs are no-ops
+     tgt="$(readlink -f "$up" 2>/dev/null)"; [ -d "$tgt" ] || { echo "WARN unresolved $wt"; continue; }
+     rm -f "$up"; mkdir -p "$up"; cp -a "$tgt"/. "$up"/    # store never modified (reversible)
+     real="$(readlink -f "$up")"; case "$real" in "$wt"/*) echo "OK $wt";; *) echo "FAIL $wt $real";; esac
+   done
+   # verify zero remaining: the §3 enumeration scan must report 0 ESCAPES-CWD afterward
+   ```
+2. **(c) source-fix — DECIDED (Tim 2026-09-14, approved rec).** The "source" is a **manual worktree-create
+   habit** (no tool creates the symlinks; the existing `migrate-*.sh` are the OLD insufficient approach). The
+   durable, no-new-infra fix = **document the habit change in the n3x and hsw repo `CLAUDE.md`** (their
+   worktree/plan-sharing rule): *"a worktree's `.claude/user-plans` must be a REAL dir seeded from the family
+   plan store (`/home/tim/src/{n3x,hsw}-plans`), NEVER a symlink — Claude Code refuses symlink-escaping
+   writes (`SymlinkWriteRefusedError`)."* `**/.claude/user-plans/` is already gitignored in both repos, so a
+   new worktree simply has no plan dir until one is created as a real dir. (These are WORK repos — edit their
+   CLAUDE.md directly; that is the intended scope of sub-step c.)
+3. **(d) advisory + docs — DECIDED minimal (Tim 2026-09-14).** Keep it minimal: a concise note lives in the
+   same n3x/hsw CLAUDE.md rule (step 2). **A CC module hook advisory is NOT added** — nixcfg is unaffected and
+   a module-global reminder would be over-engineering for a being-sunset pattern (DoD line: "(d) if kept at
+   all"). Docs = the CLAUDE.md rule only.
+4. **Sunset teardown (part of DoD).** Once §3 re-scan shows **cases==0** and step-2 source-fix is in place:
+   delete the throwaway helpers `/tmp/p8-migrate-worktree.sh` (+ any `/tmp/p8-migrate-*.sh`) and the stale
+   `/home/tim/src/migrate-hsw-plans.sh` / `migrate-plans.sh` (old insufficient approach — superseded). Do NOT
+   carry migrate tooling forward (memory `sunset-transitional-scaffolding`).
+5. **Final Present → COMPLETE.** Present the result (cases==0 re-scan, source-fix landed, teardown done) to
+   Tim, then mark P8 `TASK:COMPLETE` + date. Next actionable becomes **P9**.
 
 ## Progress tracking
 
@@ -934,7 +961,7 @@ the source is fixed, remove `/tmp/p8-migrate-*.sh` and the advisory — do not c
 | P5 | **Research the hard process-gates** — P5a Present/STOP-before-COMPLETE, P5b mandatory-handoff-before-stop, P5c plan-status-transition integrity. Investigate feasible PARTIAL enforcement (e.g. a Stop hook that flags a `TASK:COMPLETE` + commit with no review marker; a SessionEnd hook that gates on stale `HANDOFF.md`/unset `active-plan`). Prototype behind default-off flags where feasible; produce an explicit "irreducibly soft" list. | research + experiment (artifact → Present/STOP) | P2 | TASK:COMPLETE (2026-09-09) |
 | P6 | **Decision (rollout split to P10):** per-rule enforcement defaults, which P5 hard-gates to adopt, rollout order (warn-first vs block), plus the 2026-09-10 scope-expansion decisions (adopt P7/P8/P9; new work before integration). Record dated `[DECISION]` blocks in this plan. | Interactive DECISION | P4, P5 | TASK:COMPLETE (2026-09-10) |
 | P7 | **Secret-dump prevention hook — design + implement.** Mechanical enforcement of memory `never-dump-secrets-to-agent-context`. Design (FP-aware, like P3): PreToolUse Bash rule blocking vault-dump forms (`rbw --full`/`rbw get --full` and equivalents) + secret-env echoes (`echo`/`printf`/`env`/`printenv`/`set -x` exposing `*_TOKEN`/`*_SECRET`/`*_PASSWORD`/AWS-key shapes); jq-stdin `.tool_input.command`, `exit 2`, `continueOnError=false`, `CLAUDE_HOOKS_BYPASS` escape, narrow matcher. Group into `gitSafety`/`bashSafety` or a new `secretSafety` category (design decides). FALSE-POSITIVE analysis (dual-use: `rbw get X \| tool --password-stdin` must PASS; only dump/echo forms block). Implement + VM-test (block a `rbw --full`; allow a piped `rbw get`). Present/STOP before COMPLETE. Default-block; not enabled on any host (P10). | design+impl (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-13) |
-| P8 | **Symlink permission-prompt: full from-here fix, TRANSITIONAL/SUNSET.** NOT hook-suppressible (hardened CC invariant — memory `cc-permission-path-anchor`). Sub-steps: (a) empirically test the untested PreToolUse `permissionDecision:allow` vector (settle whether ANY from-here config fix exists; expected-dead); (b) **eradicate all existing cases** — enumerate every personal worktree with a cwd-escaping `.claude/{user-plans,HANDOFF.md,active-plan}` symlink and migrate them (use `migrate-hsw-plans.sh`; do not over-engineer); (c) **fix the source** that creates the symlink pattern so no new cases arise; (d) minimal reminder-only advisory (`continueOnError=true`) + concise docs. **This is throwaway scaffolding for a personal-only pattern being eliminated — the migrate tooling + advisory MUST be removed once cases==0 and the source is fixed (memory `sunset-transitional-scaffolding`); do not build permanent infra.** Present/STOP before COMPLETE. | eradicate+sunset (artifact → Present/STOP) | P4 | TASK:IN_PROGRESS (2026-09-14 — Tim decisions: Q1=Option A minimal real per-worktree dirs; Q2=empirical test (a) DROPPED, final fix has no symlink dependency so the `permissionDecision:allow` vector is moot; Q3=canary-first on a >2wk-idle worktree; 77 escaping cases enumerated = n3x×71 + hsw×23) |
+| P8 | **Symlink permission-prompt: full from-here fix, TRANSITIONAL/SUNSET.** NOT hook-suppressible (hardened CC invariant — memory `cc-permission-path-anchor`). Sub-steps: (a) empirically test the untested PreToolUse `permissionDecision:allow` vector (settle whether ANY from-here config fix exists; expected-dead); (b) **eradicate all existing cases** — enumerate every personal worktree with a cwd-escaping `.claude/{user-plans,HANDOFF.md,active-plan}` symlink and migrate them (use `migrate-hsw-plans.sh`; do not over-engineer); (c) **fix the source** that creates the symlink pattern so no new cases arise; (d) minimal reminder-only advisory (`continueOnError=true`) + concise docs. **This is throwaway scaffolding for a personal-only pattern being eliminated — the migrate tooling + advisory MUST be removed once cases==0 and the source is fixed (memory `sunset-transitional-scaffolding`); do not build permanent infra.** Present/STOP before COMPLETE. | eradicate+sunset (artifact → Present/STOP) | P4 | TASK:IN_PROGRESS (2026-09-14 — canary `n3x-origin-amd-machine-split` DONE + **Tim signed off**; Q1=Option A minimal real dirs, Q2=test (a) dropped-as-moot, Q3=canary-first; 77 cases enumerated = n3x×71+hsw×23. **Batch of remaining 76 + source-fix (c) + docs (d) all APPROVED — see the "▶ RESUME HERE" checklist in the P8 progress section for the exact deterministic next steps; no further sign-off until the final Present before COMPLETE**) |
 | P9 | **Fold plan 049 T1 into 056.** Migrate the broken project-level `.claude/settings.json` PreToolUse hook (the FP canary: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr) to the proper nix-managed module pattern (jq-stdin path filter, `exit 2`, stderr, `continueOnError=false`) — or remove it in favour of the module hooks if redundant. Verify no more spurious "non-blocking status" noise. Update plan 049's status to reflect the merge. Present/STOP before COMPLETE. | impl (artifact → Present/STOP) | P4 | TASK:PENDING |
 | P10 | **Integration & live rollout** (was P6's rollout half). Bump nixcfg-work flake.lock to a nixcfg rev carrying the full hook set; `home-manager switch` on `tim@pa161878-nixos`; demonstrate each adopted block fires live (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean work is unaffected; then mark COMPLETE → merge to `main`. Tim-authorized autonomous execution (from the P6 brief) once P7-P9 are green. | Interactive INTEGRATION | P4, P5, P7, P8, P9 | TASK:PENDING |
 
