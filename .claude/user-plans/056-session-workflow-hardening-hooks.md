@@ -948,6 +948,30 @@ COMPLETE sign-off (Present/STOP applies only to the final COMPLETE, not to these
 5. **Final Present → COMPLETE.** Present the result (cases==0 re-scan, source-fix landed, teardown done) to
    Tim, then mark P8 `TASK:COMPLETE` + date. Next actionable becomes **P9**.
 
+### ✅ EXECUTED 2026-09-14 — all sub-steps done; AWAITING FINAL COMPLETE SIGN-OFF (status stays IN_PROGRESS)
+Steps 1-4 of the RESUME HERE checklist ran clean; step 5 (final Present) is this record. Outcomes:
+- **Step 1 — batch migration: DONE.** Pre-scan showed **77** escaping symlinks (one more than the projected
+  76 — a worktree was created since enumeration; irrelevant, loop is idempotent). Ran the inline batch loop:
+  **77/77 → OK** (real in-cwd dir, seeded by `cp -a`, store untouched/reversible). Re-scan: **TOTAL
+  ESCAPES-CWD: 0**. Spot-check (`n3x-staging`, `hsw`): real dir (not symlink), `git check-ignore` confirms
+  `.claude/user-plans/` ignored, `git status` clean (0 user-plans lines). **DoD (b) met: zero remaining cases.**
+- **Step 2 — source-fix (c): edits made, NOT committed.** Added rule **5a** ("a worktree's
+  `.claude/user-plans` must be a REAL dir, NEVER a symlink — `SymlinkWriteRefusedError`; seed by copy from the
+  family plan store") to **both** `/home/tim/src/n3x/CLAUDE.md` and `/home/tim/src/hsw/CLAUDE.md`.
+  **⚠️ LEFT UNCOMMITTED in the work trees by design:** n3x's main clone is on `main` (hard "NEVER commit on
+  main" rule forbids me committing there) and hsw is on unrelated feature branch `CONVSW-3856` (committing
+  would pollute it). Tim scoped sub-step (c) to "edit their CLAUDE.md directly"; **Tim to land these two edits
+  via each work repo's normal MR flow.** They persist as working-tree changes until then.
+- **Step 3 — advisory + docs (d): DONE (minimal).** The rule-5a CLAUDE.md text IS the doc. No CC module hook
+  advisory added (nixcfg unaffected; over-engineering for a sunset pattern) — matches the DECIDED-minimal plan.
+- **Step 4 — sunset teardown: DONE.** Deleted `/tmp/p8-migrate-worktree.sh`,
+  `/home/tim/src/migrate-hsw-plans.sh`, `/home/tim/src/migrate-plans.sh` (superseded old approach). No migrate
+  tooling carried forward (memory `sunset-transitional-scaffolding`). **Note:** memory
+  `cc-permission-path-anchor` still points at the now-deleted `migrate-hsw-plans.sh` → update it at session end.
+- **nix flake check:** N/A — P8 touched no nix files (Tim resource-preservation preference).
+
+**AWAITING:** Tim's sign-off on this Present → then flip P8 to `TASK:COMPLETE (2026-09-14)`. Next actionable P9.
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5, P7, P8, P9) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate (COMPLETE); P10 is the Interactive integration/live-rollout gate (runs last).
