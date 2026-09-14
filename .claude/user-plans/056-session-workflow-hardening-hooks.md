@@ -876,6 +876,51 @@ inverse of `feedback_git_push_auth` (the auth-token prefix is a legitimate NON-e
 4. **Defaults = block, category-global:** confirm `secretSafety.*` default `true` (block) like `gitSafety`,
    with `CLAUDE_HOOKS_BYPASS` as the escape. (Module-global: fires for every account; sensible team-wide.)
 
+## P8 progress — symlink eradication (Option A, minimal real dirs)
+
+IN_PROGRESS 2026-09-14. **[DECISION] Tim 2026-09-14:** Q1 = **Option A** (replace each cwd-escaping
+`.claude/user-plans` symlink with a plain real in-cwd dir seeded from the current shared store — zero new
+infra, sunset-consistent; live cross-worktree sharing dropped per Finding B, which is fine since burndown is
+commit-based/single-writer-per-plan). Q2 = **empirical test (a) DROPPED** — the final fix has no symlink
+dependency at all, so the untested `permissionDecision:allow` vector is moot (deep-research Finding A already
+proved a real in-cwd non-symlink path is the ONLY durable fix; no config knob disables
+`SymlinkWriteRefusedError`). Q3 = **canary-first** on a worktree idle >2 weeks (avoid conflicting with live
+session work).
+
+### (a) empirical test — RESOLVED as moot (not run)
+Recorded per Tim's Q2: the `permissionDecision:allow` PreToolUse vector is expected-dead (gate sits below the
+permission layer) and, more decisively, **irrelevant** — Option A removes the symlink entirely, so no
+permission-layer override is needed. Deep research (`/home/tim/src/worktree-plan-sharing-FINDINGS.md`,
+Finding A) is authoritative. No fresh interactive test performed.
+
+### (b) existing cases — ENUMERATED (2026-09-14)
+**77 worktrees** carry a cwd-escaping `.claude/user-plans` symlink, all in the **n3x (71 dirs) / hsw (23
+dirs)** work families, pointing at plain-dir shared stores `/home/tim/src/{n3x,hsw}-plans` (some via a second
+hop through `{n3x,hsw}/.claude/user-plans`). **nixcfg is clean** (real per-worktree dirs). Topology: the
+families are **git worktrees** of two main clones (`/home/tim/src/{n3x,hsw}`); the repo `.gitignore` already
+carries `**/.claude/user-plans/` (line 139) so converting a symlink to a real dir leaves the seeded `*.md`
+**gitignored → no leak into feature history** (verified). The shared store is never modified by the migration
+(fully reversible: recreate the symlink).
+
+**Throwaway migration helper:** `/tmp/p8-migrate-worktree.sh` (Option A, idempotent, per-worktree; NOT
+committed — sunset scaffolding). Verifies post-migration realpath stays in-cwd and is not a symlink.
+
+**CANARY DONE:** `n3x-origin-amd-machine-split` (branch `feat/amd-machine-split`, idle 102 days). Symlink →
+real dir seeded with 164 files; `git check-ignore` confirms ignored; `git status` clean (no user-plans
+entries); idempotent re-run = no-op; store intact. **Presented to Tim; awaiting sign-off to batch the
+remaining 76 + do (c)/(d).**
+
+### (c) source-fix — PENDING (post-canary)
+Source = a **manual** worktree-create habit (no tool creates the symlinks; existing `migrate-*.sh` use the
+old insufficient move-out-of-`.claude/` approach). Fix = stop hand-symlinking; a new worktree either gets no
+`.claude/user-plans` (gitignored, harmless) or a real dir + copy when it needs plans. Concrete mechanism TBD
+at batch time (candidate: a one-liner in the worktree-create helper / n3x+hsw CLAUDE.md rule).
+
+### (d) advisory + docs — PENDING (post-canary)
+Minimal reminder-only (`continueOnError=true`) advisory + concise docs, each carrying an explicit
+**sunset/removal note** (memory `sunset-transitional-scaffolding`). **Sunset criterion:** once cases==0 and
+the source is fixed, remove `/tmp/p8-migrate-*.sh` and the advisory — do not carry as permanent infra.
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5, P7, P8, P9) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate (COMPLETE); P10 is the Interactive integration/live-rollout gate (runs last).
