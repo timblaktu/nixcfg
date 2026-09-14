@@ -955,13 +955,18 @@ Steps 1-4 of the RESUME HERE checklist ran clean; step 5 (final Present) is this
   **77/77 → OK** (real in-cwd dir, seeded by `cp -a`, store untouched/reversible). Re-scan: **TOTAL
   ESCAPES-CWD: 0**. Spot-check (`n3x-staging`, `hsw`): real dir (not symlink), `git check-ignore` confirms
   `.claude/user-plans/` ignored, `git status` clean (0 user-plans lines). **DoD (b) met: zero remaining cases.**
-- **Step 2 — source-fix (c): edits made, NOT committed.** Added rule **5a** ("a worktree's
-  `.claude/user-plans` must be a REAL dir, NEVER a symlink — `SymlinkWriteRefusedError`; seed by copy from the
-  family plan store") to **both** `/home/tim/src/n3x/CLAUDE.md` and `/home/tim/src/hsw/CLAUDE.md`.
-  **⚠️ LEFT UNCOMMITTED in the work trees by design:** n3x's main clone is on `main` (hard "NEVER commit on
-  main" rule forbids me committing there) and hsw is on unrelated feature branch `CONVSW-3856` (committing
-  would pollute it). Tim scoped sub-step (c) to "edit their CLAUDE.md directly"; **Tim to land these two edits
-  via each work repo's normal MR flow.** They persist as working-tree changes until then.
+- **Step 2 — source-fix (c): RELOCATED to the user-global CLAUDE.md (2026-09-14, Tim-approved).** Initial
+  approach (edit n3x + hsw work-repo CLAUDE.md, MR each) was reversed after a machine-wide audit revealed:
+  (1) the actual hazard is **already 100% closed** — 117 `.claude/user-plans` dirs machine-wide, ALL real,
+  **zero symlinks anywhere** (P8 handled the only cases, in n3x/hsw); (2) `n3x`, `hsw`, `hsw-fresh` are three
+  clones of **one shared corp repo** `iaas/hsw` (same root commit `139b01e`), NOT two repos → at most one MR;
+  (3) that repo's only extension layer (`.claude/rules/`) is **team-tracked**, so landing a personal
+  worktree convention there would impose it on the hsw team and leak local paths into corp code. **Correct
+  home = the user-global CLAUDE.md** (applies to EVERY repo on this machine — matching Tim's "should apply to
+  the whole computer" instinct — with no corp MR, no team imposition). Rule added to the Nix template
+  `modules/programs/claude-code/_hm/claude-code-user-memory-template.md` (Git Worktree Workflow section). The
+  two parked work-repo edits were **reverted** (`git restore`; both clones clean; no active session in those
+  exact dirs — verified). **No corp-repo MR needed.** See the machine-wide audit (`/tmp/claude-md-audit-report.md`).
 - **Step 3 — advisory + docs (d): DONE (minimal).** The rule-5a CLAUDE.md text IS the doc. No CC module hook
   advisory added (nixcfg unaffected; over-engineering for a sunset pattern) — matches the DECIDED-minimal plan.
 - **Step 4 — sunset teardown: DONE.** Deleted `/tmp/p8-migrate-worktree.sh`,
@@ -970,10 +975,10 @@ Steps 1-4 of the RESUME HERE checklist ran clean; step 5 (final Present) is this
   `cc-permission-path-anchor` still points at the now-deleted `migrate-hsw-plans.sh` → update it at session end.
 - **nix flake check:** N/A — P8 touched no nix files (Tim resource-preservation preference).
 
-**SIGNED OFF (Tim 2026-09-14):** P8 → `TASK:COMPLETE`. Q2 landing decision: Tim reviews the rule-5a edits
-in-browser, then I commit them to a fresh doc branch in each work repo (n3x, hsw) — NOT to main / not to the
-active feature branch. Next actionable: **P9** (fold plan 049 T1; hardening/cleanup — aligned with the
-keep-core/trim-ceremony decision).
+**SIGNED OFF (Tim 2026-09-14):** P8 → `TASK:COMPLETE`. Q2 landing decision **superseded** by the machine-wide
+audit: source-fix relocated to the **user-global CLAUDE.md template** (one edit, machine-wide, no corp MR);
+work-repo edits reverted. See the updated "Step 2" bullet above. Next actionable: **P9** (fold plan 049 T1;
+hardening/cleanup — aligned with the keep-core/trim-ceremony decision).
 
 ## Progress tracking
 
