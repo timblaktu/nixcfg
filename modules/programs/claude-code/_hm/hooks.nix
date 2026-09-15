@@ -790,7 +790,11 @@ in
             continueOnError = false;
             timeout = 5;
           }))
-          # blockCommitOnMain — reads the ACTUAL branch of the tool cwd.
+          # blockCommitOnMain — checks the branch of the directory the git command
+          # TARGETS, not the session's launch cwd. Resolving the target dir is what
+          # lets a cross-worktree commit (`cd DIR && git …` or `git -C DIR …`)
+          # check DIR's branch; before this it always read the session cwd and
+          # false-blocked commits into a feature-branch worktree from a main cwd.
           ++ (lib.optional cfg.hooks.gitSafety.blockCommitOnMain (mkHook {
             matcher = "Bash";
             ifFilter = "Bash(git *)";
@@ -799,10 +803,23 @@ in
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
               printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+(commit|push)\b' || exit 0
-              branch="$(${pkgs.git}/bin/git symbolic-ref --short HEAD 2>/dev/null)"
+              # Resolve the directory the git command operates in, so the branch
+              # test follows the command instead of the session cwd. Precedence:
+              # `git -C DIR` (most explicit) > a leading `cd DIR` > the hook's cwd.
+              # If DIR cannot be resolved, `git -C` fails and branch is empty →
+              # fall through to allow (fail-open: never lock the operator out).
+              dir="."
+              cdarg="$(printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -oE '\bcd[[:space:]]+[^[:space:]&;|]+' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.gnused}/bin/sed -E 's/^cd[[:space:]]+//')"
+              [ -n "$cdarg" ] && dir="$cdarg"
+              carg="$(printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -oE 'git[[:space:]]+-C[[:space:]]+[^[:space:]&;|]+' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.gnused}/bin/sed -E 's/^git[[:space:]]+-C[[:space:]]+//')"
+              [ -n "$carg" ] && dir="$carg"
+              # strip surrounding quotes; expand a leading ~ (a quoted arg is not
+              # tilde-expanded by the shell, so we do it explicitly).
+              dir="$(printf '%s' "$dir" | ${pkgs.coreutils}/bin/tr -d "\"'" | ${pkgs.gnused}/bin/sed "s|^~|$HOME|")"
+              branch="$(${pkgs.git}/bin/git -C "$dir" symbolic-ref --short HEAD 2>/dev/null)"
               case "$branch" in
                 main|master)
-                  echo "🚫 gitSafety: refusing a commit/push on protected branch '$branch'. Create/switch to a feature branch first (NEVER WORK ON MAIN OR MASTER). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+                  echo "🚫 gitSafety: refusing a commit/push — the repo at '$dir' is on protected branch '$branch'. WHY: the NEVER-WORK-ON-MAIN rule. TO PROCEED NOW: switch that repo to a feature branch (git -C '$dir' switch -c my-feature), OR if this is a false positive relaunch claude with CLAUDE_HOOKS_BYPASS=1, OR run the commit yourself via the ! prefix (which does not pass through this hook). TO AVOID IN FUTURE: launch the session from the worktree you intend to commit in." >&2
                   exit 2 ;;
               esac
               exit 0
