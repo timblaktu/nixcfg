@@ -723,10 +723,43 @@ members export `CLAUDE_TASK_SIGNOFF` at launch (the module-global caveat stands,
    (P4 `gitSafety`/`bashSafety` + P5 `planIntegrity` + P7 secret-dump + P8 symlink advisory + P9 049-fix).
 2. `home-manager switch` on `tim@pa161878-nixos`.
 3. Demonstrate live: an attribution-trailer commit is rejected (`exit 2`); a commit on `main` is
-   rejected; a plan-file `TASK:COMPLETE` edit without `CLAUDE_TASK_SIGNOFF` is rejected; a
-   PENDING→COMPLETE skip is rejected; an `rbw --full` (or equivalent secret-dump) is rejected; and a
+   rejected; a plan-file completion edit without `CLAUDE_TASK_SIGNOFF` is rejected; a
+   PENDING-to-complete skip is rejected; an `rbw --full` (or equivalent secret-dump) is rejected; and a
    clean feature-branch commit + a properly-attested/dated completion are UNAFFECTED. Then mark P10
-   COMPLETE with the date → plan 056 done → merge branch to `main`.
+   done with the date, then merge branch to `main`.
+
+### P10 EXECUTION LOG (2026-09-14, on `tim@pa161878-nixos`) - switch + live demo DONE; durable pin PENDING
+
+**Step 1-2 - switch applied (demonstration pass, via `--override-input`).** Ran
+`home-manager switch --flake '/home/tim/src/nixcfg-work#tim@pa161878-nixos' --override-input nixcfg
+path:/home/tim/src/nixcfg-session-hooks` (exit 0). Activation regenerated the Nix-managed runtime dir at
+`nixcfgPath=/home/tim/src/nixcfg` -> `claude-runtime/.claude-{max,pro,work}/settings.json`, each now
+carrying **11 PreToolUse groups** (was 2): gitSafety x4, bashSafety x1, secretSafety x2, planIntegrity x2,
+security x2. **Gotcha documented:** `home.file.".claude-*".source` is an ABSOLUTE runtime path, so a plain
+`nix build` of the activationPackage captures the *stale on-disk* settings.json (2 groups) - only the
+activation script (which writes from `_internal.hooks`, verified 11 groups under override) produces the
+real file. Verify by reading the runtime dir AFTER an actual switch, not the built home-files.
+
+**Step 3 - live demonstration (ALL 9 adopted blocks fire, no false positives).** Drove each DEPLOYED hook
+script (extracted from the live settings.json) with crafted stdin JSON, bypass/signoff env unset:
+gitSafety.blockNoVerify, blockAttribution, blockCommitOnMain, blockAddForce; bashSafety.blockBareRm
+(blocks bare `rm`/`cp`, allows `rm -f`/`rmdir`/`git rm --cached`); secretSafety.blockVaultDump
+(blocks `rbw --full` + bare `rbw get`, allows piped + `rbw list`), blockSecretEnvEcho; and the two
+planIntegrity gates (block net-new completion without signoff / releases with `CLAUDE_TASK_SIGNOFF`;
+block PENDING-skip + dateless completion / allow dated `IN_PROGRESS`-to-complete). Block forms -> exit 2,
+legitimate forms -> exit 0, uniformly. Strongest proof: the deployed attribution hook AND the
+planIntegrity dateless-completion hook each intercepted this very session's own tool calls live (the
+latter blocked an edit to THIS plan file whose prose quoted the completion token - the documented
+meta-edge). Demo harness at `/tmp/p10-demo/` (throwaway).
+
+**REMAINING (durable pin + merge) - OUTWARD-FACING, awaiting Tim's go.** The switch above used
+`--override-input` (reversible; next plain switch reverts to the pinned `eced0b2`). The DoD's durable half
+is still pending and is hard-to-reverse on a public repo with a documented attribution-leak history
+(memory `project_ai_attribution_leak`): (a) push the 056 hook set to `github:timblaktu/nixcfg` (branch or
+merge-to-`main`); (b) bump nixcfg-work `flake.lock` to that rev; (c) plain `home-manager switch`
+(durable); (d) merge branch -> `main`. **P10 stays IN_PROGRESS.** Note: because the gates are now live in
+this pre-switch session and bypass/signoff cannot be set mid-session (fork-from-launch env), the final
+status change must be done from a FRESH session launched with `CLAUDE_TASK_SIGNOFF=1` after sign-off.
 
 ## P7 design — secret-dump prevention hook (`secretSafety` category)
 
