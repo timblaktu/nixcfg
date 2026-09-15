@@ -728,7 +728,7 @@ members export `CLAUDE_TASK_SIGNOFF` at launch (the module-global caveat stands,
    clean feature-branch commit + a properly-attested/dated completion are UNAFFECTED. Then mark P10
    done with the date, then merge branch to `main`.
 
-### P10 EXECUTION LOG (2026-09-14, on `tim@pa161878-nixos`) - switch + live demo DONE; durable pin PENDING
+### P10 EXECUTION LOG (2026-09-14, on `tim@pa161878-nixos`) - switch + live demo + DURABLE LOCAL PIN done; public merge + formal marking deferred
 
 **Step 1-2 - switch applied (demonstration pass, via `--override-input`).** Ran
 `home-manager switch --flake '/home/tim/src/nixcfg-work#tim@pa161878-nixos' --override-input nixcfg
@@ -752,14 +752,26 @@ planIntegrity dateless-completion hook each intercepted this very session's own 
 latter blocked an edit to THIS plan file whose prose quoted the completion token - the documented
 meta-edge). Demo harness at `/tmp/p10-demo/` (throwaway).
 
-**REMAINING (durable pin + merge) - OUTWARD-FACING, awaiting Tim's go.** The switch above used
-`--override-input` (reversible; next plain switch reverts to the pinned `eced0b2`). The DoD's durable half
-is still pending and is hard-to-reverse on a public repo with a documented attribution-leak history
-(memory `project_ai_attribution_leak`): (a) push the 056 hook set to `github:timblaktu/nixcfg` (branch or
-merge-to-`main`); (b) bump nixcfg-work `flake.lock` to that rev; (c) plain `home-manager switch`
-(durable); (d) merge branch -> `main`. **P10 stays IN_PROGRESS.** Note: because the gates are now live in
-this pre-switch session and bypass/signoff cannot be set mid-session (fork-from-launch env), the final
-status change must be done from a FRESH session launched with `CLAUDE_TASK_SIGNOFF=1` after sign-off.
+**Step 4 - DURABLE rollout via LOCAL PINNING (Tim's directive, 2026-09-14).** Instead of a public push +
+merge-to-`main` (outward-facing, hard-to-reverse on a public repo with a documented attribution-leak
+history - memory `project_ai_attribution_leak`), Tim chose the **local-pinning workflow**: keep the nixcfg
+056 changes LOCAL and pin nixcfg-work to them. Executed:
+`nix flake lock --override-input nixcfg 'git+file:///home/tim/src/nixcfg-session-hooks?ref=plan-056-session-workflow-hooks'`
+-> nixcfg-work `flake.lock` now pins nixcfg to local 056 rev `3688606` (git+file, pins the SHA so later
+worktree edits do not drift it). The lock change is **uncommitted / machine-local** (must NOT be committed
+to nixcfg-work - a local `git+file` pin would break the colleague images + CI; revert it when 056 lands
+public). A plain `home-manager switch --flake '.#tim@pa161878-nixos'` (NO `--override-input`) then produced
+**11 PreToolUse groups for all three accounts** - proving the pin is durable across ordinary switches
+(reverts only if Tim re-locks / bumps to a github rev). Verified deployed:
+`.claude-{max,pro,work}/settings.json` each = 11 groups (gitSafety 5, secretSafety 4, planIntegrity 3).
+
+**STILL DEFERRED (not blocking; Tim-driven):** (a) the public path - push 056 to `github:timblaktu/nixcfg`
++ bump nixcfg-work lock to a github rev + merge branch -> `main` - is intentionally postponed (local pin
+covers the live host now); (b) the formal P10 status marking. **P10 stays IN_PROGRESS.** Both must be done
+from a FRESH session launched with `CLAUDE_TASK_SIGNOFF=1` (and, for the public push, `CLAUDE_HOOKS_BYPASS=1`
+or a non-main HEAD), because the gates are now live and bypass/signoff cannot be set mid-session
+(fork-from-launch env). Dogfooding note: during this very session the deployed attribution hook AND the
+planIntegrity dateless-completion hook each intercepted this session's own tool calls - working as designed.
 
 ## P7 design — secret-dump prevention hook (`secretSafety` category)
 
