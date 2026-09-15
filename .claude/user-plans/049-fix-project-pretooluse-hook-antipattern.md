@@ -79,7 +79,10 @@ broken project hooks. Original task text preserved below for reference.
 Create a small dedicated branch off the n3x default branch, apply the Section-3 corrected `.claude/settings.json`, open an MR. Keep it isolated (hooks-only change; no plan/task refs in the tracked commit per repo rules).
 **DoD:** MR open; the corrected file passes `jq -e .`; the three hook self-tests from Section 3 pass (normal->exit0 silent, secret->exit2+stderr); a reviewer/owner note that merging propagates to all worktrees on subsequent merge. Reference the technical root cause in the commit body, NOT this plan number.
 
-### T2 - Immediate relief for currently-active worktrees `TASK:PENDING`
+### T2 - Immediate relief for currently-active worktrees `TASK:SUPERSEDED (2026-09-14) by the T3 remove/no-MR decision`
+SUPERSEDED: T2 was the stopgap for T1's durable fix. With T3 = option (b) remove and the corp copy closed out
+with NO corp MR (per 056 P9 / P8 precedent), there is no Section-3 edit to apply locally. The noisy corp hook
+is a recorded remove-recommendation, not an active migration. No per-worktree action pursued. Original below.
 For each worktree the owner is actively using (not all 34), apply the Section-3 edit locally so the prompt stops now without waiting for a default-branch merge. Idempotent: skip a worktree whose `.claude/settings.json` already lacks `matchPaths`/`exit 1`.
 **DoD:** `rg -l 'matchPaths|exit 1' <active-worktrees>/.claude/settings.json` returns empty for the active set. Depends on: none (independent of T1; T1 is the durable fix, T2 is the stopgap).
 
@@ -91,6 +94,10 @@ per the P8 precedent). Original option text below.
 The GLOBAL nixcfg hooks (`_hm/hooks.nix`) ALREADY do secret-blocking + auto-format correctly. The project hooks duplicate that (badly). Options: (a) fix-in-place (Section 3) so the protection is portable for non-Tim contributors who lack the global hooks; (b) remove the project hooks entirely and rely on global (simpler, but drops protection for other contributors/CI). Owner decides. If (a) stays, the fixed project hook and the global hook both run (harmless - both no-op on non-secrets).
 **DoD:** owner records the decision; if (b), a follow-up removes the project PreToolUse/PostToolUse blocks (keep SessionStart).
 
-### T4 (optional) - Build detection into the user-global context `TASK:PENDING`
+### T4 (optional) - Build detection into the user-global context `TASK:CLOSED (2026-09-14) — optional, not pursued`
+CLOSED: with 056 P9 the antipattern is eliminated at the source (project hooks removed/redundant; the module
+`hooks.security` is already the correct pattern), so the auto-detection gotcha is marginal. Left unpursued to
+keep plan 049 fully non-actionable (determinism). The antipattern is documented in this plan (§2) + 056 P9 if
+a future session needs the reference; may be re-opened as a fresh small task if desired. Original text below.
 Add a concise gotcha to the user-global CLAUDE.md source (in `modules/programs/claude-code/_hm/`) so future sessions auto-recognize + fix this antipattern: "A project `.claude/settings.json` hook using `matchPaths` and/or `exit 1` is buggy - `matchPaths` is ignored (filter path in-script via `jq -r '.tool_input.file_path'`) and `exit 1` triggers a spurious non-blocking-error prompt on every edit; block with `exit 2`+stderr, else `exit 0`." Keep it one gotcha, not a narrative.
 **DoD:** the gotcha is in the CLAUDE.md SoT, rebuilt via home-manager, visible in `claude-runtime/.claude-max/CLAUDE.md`.
