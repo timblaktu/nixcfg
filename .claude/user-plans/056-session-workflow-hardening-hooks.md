@@ -7,13 +7,24 @@ Working branch: **plan-056-session-workflow-hooks** (worktree `/home/tim/src/nix
 Mode: **A only (human-attended `/next-task`).** NOT burndown-eligible — no `Burndown: SAFE` marker. Hook changes are artifact-producing (they alter every account's generated `settings.json`) and several tasks are design/decision gates, so autonomous stop-the-run execution is inappropriate.
 
 ---
-## ▶ RESUME POINTER — read FIRST (updated 2026-09-14, late)
+## ▶ RESUME POINTER — read FIRST (updated 2026-09-15)
 
-**NEXT ACTIONABLE = P11 (PENDING). Do P11.** This is mechanically deterministic: there is NO `IN_PROGRESS`
-task; P1-P9 are COMPLETE; P10 is `PENDING` but declares P11 as a dependency (so it is BLOCKED-BY-DEP and
-`/next-task` skips it); P11's deps (P4, P5, P7, P8, P9) are all COMPLETE. So the first non-blocked PENDING
-in row order is P11 — `/next-task` lands on it directly. (P10 was intentionally moved IN_PROGRESS→PENDING
-so the gated public-merge step cannot be auto-resumed.) Do NOT attempt the merge until P11 is COMPLETE.
+**NEXT ACTIONABLE = P11 (IN_PROGRESS — awaiting Tim's Present/STOP sign-off).** All six workstreams are
+IMPLEMENTED this session (2026-09-15); the three design decisions Tim needed (P11.2 block-vs-ask hybrid,
+P11.4 = remove pre-commit flake-check, P11.6 = ship directly + observability) are RECORDED as dated
+`[DECISION]` blocks in the "P11 EXECUTION LOG" section. `nix flake check --no-build` is GREEN; a standalone
+shell harness passed 16/16 (it surfaced + verified the fix for the `git -C DIR commit` detection defect).
+**What remains to mark P11 COMPLETE:** Tim reviews the artifact set (below) and signs off; then a session
+launched with `CLAUDE_TASK_SIGNOFF=1` marks P11 `TASK:COMPLETE`. Do NOT self-certify — this is a
+Present/STOP artifact gate. After P11 COMPLETE, the P10 public merge becomes actionable. Do NOT attempt the
+merge until P11 is COMPLETE.
+
+**Artifact set for sign-off (all committed on `plan-056-session-workflow-hooks`):**
+`modules/programs/claude-code/_hm/hooks.nix` (shared `guardrailPrelude`: 4-part messages + bypass + `gr_log`
+observability + `gr_gate` ask-hybrid; `gitGlobalOpts` detection fix; all 9 hooks + security hook rewritten),
+`modules/programs/git/git.nix` (flake-check removed from pre-commit), `modules/flake-parts/vm-tests.nix`
+(P11.5 adversarial matrix), `docs/claude-code-session-guardrails.md` (ask/NONINTERACTIVE/guardrail-log),
+and this plan's "P11 EXECUTION LOG".
 
 **P11 is a NEW end-user design & robustness review phase** (see the "P11 spec" section for the full,
 self-contained brief with six workstreams + per-workstream DoD). It exists because two end-user failures
