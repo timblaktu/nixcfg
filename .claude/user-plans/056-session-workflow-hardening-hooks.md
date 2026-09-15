@@ -16,19 +16,23 @@ local-pin workflow (nixcfg-work `flake.lock` pins nixcfg → local rev `3688606`
 `home-manager switch` reproduces 11 PreToolUse groups × 3 accounts; all 9 hooks demonstrated firing).
 See the "P10 EXECUTION LOG" section for the full record.
 
-**ONLY TWO things remain, BOTH require the right LAUNCH ENV (the gates are now LIVE and env can NOT be
-set mid-session — hooks fork from claude's launch env):**
-1. **Formal marking of P10 as done** — REQUIRES launching this session with **`CLAUDE_TASK_SIGNOFF=1`**
-   (after Tim's sign-off). Without it, the live `planIntegrity` hook BLOCKS the completion edit and the
-   session cannot finish P10. This is mandatory.
-2. **(Optional, Tim-driven) public path** — push 056 to `github:timblaktu/nixcfg`, bump nixcfg-work lock
-   to the github rev, merge branch → `main`, then revert the local `flake.lock` pin. The push/merge is
-   conflict-free (verified). Do the push from THIS `plan-056` worktree (HEAD ≠ main, so `blockCommitOnMain`
-   allows it) OR launch with `CLAUDE_HOOKS_BYPASS=1`.
+**[DECISION] Tim 2026-09-14 (this session, launched with `CLAUDE_TASK_SIGNOFF=1`): DO NOT mark P10 done on
+the local-pin state alone. Keep P10 IN_PROGRESS until the PUBLIC MERGE happens.** The completion is now
+gated on the public path (item 2 below), NOT on formal marking of the durable local pin. So a future
+`/next-task` should NOT default to marking P10 complete — the remaining trigger is the public merge, which
+is a Tim-driven, outward-facing action (never auto-initiated by `/next-task`).
 
-**So: to finish cleanly, launch the next session as `CLAUDE_TASK_SIGNOFF=1 claude` (add
-`CLAUDE_HOOKS_BYPASS=1` too if doing the public push in the same session), THEN run `/next-task`.**
-A plain `claude` + `/next-task` will correctly resume P10 but will be BLOCKED at the completion step.
+**The remaining trigger — the public path (Tim-driven, outward-facing; the completion gate):**
+push 056 to `github:timblaktu/nixcfg`, bump nixcfg-work lock to the github rev, merge branch → `main`,
+then revert the local `flake.lock` pin. The push/merge is conflict-free (verified). CAUTION: this repo has
+a documented attribution-leak history (memory `project_ai_attribution_leak`) — treat the public push as
+confirm-first. Do the push from THIS `plan-056` worktree (HEAD ≠ main, so `blockCommitOnMain` allows the
+branch push) but the merge COMMIT lands on `main`, so launch with **`CLAUDE_HOOKS_BYPASS=1`** (plus
+`CLAUDE_TASK_SIGNOFF=1` to mark P10 done in the same session). Only AFTER the public merge does P10 → done.
+
+**So: when Tim is ready for the public merge, launch as `CLAUDE_TASK_SIGNOFF=1 CLAUDE_HOOKS_BYPASS=1 claude`,
+confirm the outward-facing push, do the merge, revert the local pin, THEN mark P10 done.** Until then P10
+stays IN_PROGRESS by deliberate decision — the LIVE+durable local-pin rollout already covers this host.
 ---
 
 ## Core idea
@@ -1149,7 +1153,7 @@ recommendation (close-out, per Tim).
 | P7 | **Secret-dump prevention hook — design + implement.** Mechanical enforcement of memory `never-dump-secrets-to-agent-context`. Design (FP-aware, like P3): PreToolUse Bash rule blocking vault-dump forms (`rbw --full`/`rbw get --full` and equivalents) + secret-env echoes (`echo`/`printf`/`env`/`printenv`/`set -x` exposing `*_TOKEN`/`*_SECRET`/`*_PASSWORD`/AWS-key shapes); jq-stdin `.tool_input.command`, `exit 2`, `continueOnError=false`, `CLAUDE_HOOKS_BYPASS` escape, narrow matcher. Group into `gitSafety`/`bashSafety` or a new `secretSafety` category (design decides). FALSE-POSITIVE analysis (dual-use: `rbw get X \| tool --password-stdin` must PASS; only dump/echo forms block). Implement + VM-test (block a `rbw --full`; allow a piped `rbw get`). Present/STOP before COMPLETE. Default-block; not enabled on any host (P10). | design+impl (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-13) |
 | P8 | **Symlink permission-prompt: full from-here fix, TRANSITIONAL/SUNSET.** NOT hook-suppressible (hardened CC invariant — memory `cc-permission-path-anchor`). Sub-steps: (a) empirically test the untested PreToolUse `permissionDecision:allow` vector (settle whether ANY from-here config fix exists; expected-dead); (b) **eradicate all existing cases** — enumerate every personal worktree with a cwd-escaping `.claude/{user-plans,HANDOFF.md,active-plan}` symlink and migrate them (use `migrate-hsw-plans.sh`; do not over-engineer); (c) **fix the source** that creates the symlink pattern so no new cases arise; (d) minimal reminder-only advisory (`continueOnError=true`) + concise docs. **This is throwaway scaffolding for a personal-only pattern being eliminated — the migrate tooling + advisory MUST be removed once cases==0 and the source is fixed (memory `sunset-transitional-scaffolding`); do not build permanent infra.** Present/STOP before COMPLETE. | eradicate+sunset (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-14 — Tim signed off on the final Present. Batch-migrated all 77 cwd-escaping `.claude/user-plans` symlinks → real in-cwd dirs (re-scan = 0 escapes; gitignored, git-status clean, store untouched/reversible). Source-fix (c) = rule 5a written into n3x + hsw CLAUDE.md; Tim reviewing in-browser, then landing to fresh doc branches (me). Docs (d) = the rule-5a text (no CC module hook — minimal). Sunset teardown done: throwaway `/tmp/p8-migrate-*.sh` + `migrate-{hsw-,}plans.sh` deleted. See the "✅ EXECUTED" block in the P8 progress section.) |
 | P9 | **Fold plan 049 T1 into 056.** Migrate the broken project-level `.claude/settings.json` PreToolUse hook (the FP canary: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr) to the proper nix-managed module pattern (jq-stdin path filter, `exit 2`, stderr, `continueOnError=false`) — or remove it in favour of the module hooks if redundant. Verify no more spurious "non-blocking status" noise. Update plan 049's status to reflect the merge. Present/STOP before COMPLETE. | impl (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-14 — Tim signed off. No nixcfg module change needed: `hooks.security` is already the correct jq-stdin/`exit 2`/stderr pattern; project hooks are redundant+broken. Corp `iaas/hsw` hook = REMOVE recommendation recorded, closed out with NO corp MR (P8 precedent). nixcfg relic `claude-runtime/.claude/settings.json` = dead PreToolUse/PostToolUse antipattern blocks STRIPPED (jq-valid, non-hook settings kept, 0 antipattern remaining). Plan 049 status updated. See "P9 analysis" + [DECISION] block.) |
-| P10 | **Integration & live rollout** (was P6's rollout half). Bump nixcfg-work flake.lock to a nixcfg rev carrying the full hook set; `home-manager switch` on `tim@pa161878-nixos`; demonstrate each adopted block fires live (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean work is unaffected; then mark COMPLETE → merge to `main`. Tim-authorized autonomous execution (from the P6 brief) once P7-P9 are green. | Interactive INTEGRATION | P4, P5, P7, P8, P9 | TASK:IN_PROGRESS (2026-09-14; rollout LIVE + durable via local pin — REMAINING: formal marking [MUST launch with `CLAUDE_TASK_SIGNOFF=1`] + optional public merge. See ▶ RESUME POINTER at top of plan.) |
+| P10 | **Integration & live rollout** (was P6's rollout half). Bump nixcfg-work flake.lock to a nixcfg rev carrying the full hook set; `home-manager switch` on `tim@pa161878-nixos`; demonstrate each adopted block fires live (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean work is unaffected; then mark COMPLETE → merge to `main`. Tim-authorized autonomous execution (from the P6 brief) once P7-P9 are green. | Interactive INTEGRATION | P4, P5, P7, P8, P9 | TASK:IN_PROGRESS (rollout LIVE + durable via local pin. **[DECISION] Tim 2026-09-14: HELD OPEN by choice — completion is gated on the PUBLIC MERGE, not on the local-pin state; do NOT mark done until 056 lands on public `main`.** Public merge is Tim-driven + outward-facing (never auto-initiated). See ▶ RESUME POINTER.) |
 
 ## Definition of Done (per task)
 - **P1** — a classification table in this plan covering every soft rule found in global CLAUDE.md, project CLAUDE.md, all auto-memory `feedback` entries, and every active plan's Guardrails; each row tagged A/B/C with target hook event + mechanism sketch + "already supported?" flag. The seed inventory is superseded/corrected. No code. (Autonomous-safe.)
