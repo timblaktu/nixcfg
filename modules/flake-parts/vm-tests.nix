@@ -1131,6 +1131,60 @@ in
             machine.succeed(f"cd /tmp/mainrepo && {git} checkout -q main")
             run_hook("/tmp/h_main.sh", "git status", 0, cwd="/tmp/mainrepo")
 
+            # === Plan 056 P11.5 — adversarial / multi-worktree matrix ===
+            # A second worktree-like repo on a feature branch, used to prove the
+            # branch check follows the TARGET dir of the git command, not the cwd.
+            machine.succeed(
+                f"rm -rf /tmp/featrepo && mkdir /tmp/featrepo && cd /tmp/featrepo "
+                f"&& {git} init -q -b main "
+                f"&& {git} -c user.email=t@t -c user.name=t commit -q --allow-empty -m init "
+                f"&& {git} checkout -q -b feature"
+            )
+            machine.succeed(f"cd /tmp/mainrepo && {git} checkout -q main")
+            # (i) cross-worktree: `git -C mainrepo commit` from a NON-repo cwd — the
+            # -C target (main) must be checked. This is the exact form the b5aefa0
+            # fix + P11.3/P11.5 detection-broadening make work (previously slipped).
+            run_hook("/tmp/h_main.sh", "git -C /tmp/mainrepo commit -m x", 2, cwd="/tmp")
+            # (ii) global option -c before the subcommand still resolves + blocks
+            run_hook("/tmp/h_main.sh", "git -C /tmp/mainrepo -c a=b commit -m x", 2, cwd="/tmp")
+            # (iii) `git -C featrepo commit` targets a FEATURE branch → allowed even
+            # though the cwd (mainrepo) is on main
+            run_hook("/tmp/h_main.sh", "git -C /tmp/featrepo commit -m x", 0, cwd="/tmp/mainrepo")
+            # (iv) `cd DIR && git commit` precedence: -C wins, else cd, else cwd
+            run_hook("/tmp/h_main.sh", "cd /tmp/featrepo && git commit -m x", 0, cwd="/tmp/mainrepo")
+            # (v) precision: 'commit' as a substring of a branch name is NOT a
+            # commit subcommand — must NOT block on main
+            run_hook("/tmp/h_main.sh", "git branch commit-feature", 0, cwd="/tmp/mainrepo")
+            # (vi) fail-safe: with no controlling tty (the container case), the
+            # judgment gate HARD-BLOCKS rather than emitting an ask, and prints NO
+            # permissionDecision JSON.
+            machine.succeed(
+                f"cd /tmp/mainrepo && {jq} -n --arg c 'git commit -m x' "
+                f"'{{tool_input:{{command:$c}}}}' > /tmp/payload.json"
+            )
+            rc, out = machine.execute("cd /tmp/mainrepo && bash /tmp/h_main.sh < /tmp/payload.json")
+            assert rc == 2, f"headless judgment gate should hard-block: exit {rc}"
+            assert "permissionDecision" not in out, (
+                f"headless gate must not emit an ask decision: {out!r}"
+            )
+            # (vii) CLAUDE_HOOKS_NONINTERACTIVE=1 forces the hard block deterministically
+            rc, _ = machine.execute(
+                "cd /tmp/mainrepo && CLAUDE_HOOKS_NONINTERACTIVE=1 "
+                "bash /tmp/h_main.sh < /tmp/payload.json"
+            )
+            assert rc == 2, f"NONINTERACTIVE=1 should hard-block: exit {rc}"
+            # (viii) P11.6 observability: a block appends a line to $CLAUDE_GUARDRAIL_LOG
+            rc, _ = machine.execute(
+                "cd /tmp/mainrepo && rm -f /tmp/gr.log && CLAUDE_GUARDRAIL_LOG=/tmp/gr.log "
+                "CLAUDE_HOOKS_NONINTERACTIVE=1 bash /tmp/h_main.sh < /tmp/payload.json"
+            )
+            machine.succeed("grep -qE 'BLOCK.gitSafety[.]blockCommitOnMain' /tmp/gr.log")
+            # (ix) bashSafety multi-segment: a force flag in one segment must not
+            # mask a bare rm in another
+            run_hook("/tmp/h_rm.sh", "rm foo && cp -f a b", 2)
+            run_hook("/tmp/h_rm.sh", "rm -r -f foo", 0)
+            run_hook("/tmp/h_rm.sh", "rmdir d", 0)
+
             # === bashSafety: bare rm blocked, forced rm allowed ===
             run_hook("/tmp/h_rm.sh", "rm foo", 2)
             run_hook("/tmp/h_rm.sh", "rm -f foo", 0)

@@ -10,7 +10,9 @@ A few of our working conventions are important enough that a gentle reminder in 
 
 ## When you hit a block
 
-A blocked action looks like a short message beginning with a category name (for example `gitSafety:` or `secretSafety:`) explaining what was refused and how to proceed. Claude will normally read that message and correct course on its own (switch to a feature branch, re-run a command with the right flag, pipe a secret instead of printing it).
+A blocked action looks like a short message beginning with a category name (for example `gitSafety:` or `secretSafety:`). Every message follows the same shape so you can act on it quickly: what was refused, then **WHY** (the rule behind it), then **TO PROCEED NOW** (one to three concrete options), then **TO AVOID IN FUTURE** (the durable change that stops it recurring). Each message ends with a pointer to this guide. Claude will normally read the message and correct course on its own (switch to a feature branch, re-run a command with the right flag, pipe a secret instead of printing it).
+
+**Some guardrails ask instead of hard-blocking.** The two "judgment" guardrails - committing on `main` and marking a plan task complete - behave differently depending on whether a person is at the keyboard. When you are in an interactive session, instead of refusing outright they surface Claude Code's normal approval prompt, so you can allow the one action in the moment without ending the session. When Claude is running unattended (a headless or burndown run with no terminal), there is nobody to answer that prompt, so the same guardrails fall back to a hard block. This gives you in-the-moment control when you are present and safe, deterministic behavior when you are not. (An unattended launcher can also force the hard-block path explicitly by setting `CLAUDE_HOOKS_NONINTERACTIVE=1`.)
 
 You have two escape hatches, and both are set when you launch `claude`, not in the middle of a session:
 
@@ -21,6 +23,10 @@ These have to be set at launch because the guardrails inherit the environment Cl
 
 Every rule is also individually switchable in your Home Manager config (see "Turning a rule off" at the end), so if a guardrail is wrong for how you work, you can disable just that one permanently rather than bypassing everything each session.
 
+### Seeing what fired
+
+Every time a guardrail acts - whether it hard-blocks or routes an action to an approval prompt - it appends one line to a log so you can see, after the fact, which guardrail fired and when. By default the log lives at `<your Claude config dir>/logs/guardrails.log` (set `CLAUDE_GUARDRAIL_LOG` to put it elsewhere). Each line is just a timestamp, the verdict (`BLOCK` or `ASK`), and the rule name, so a quick `tail` tells you whether a guardrail is getting in your way more than you expected.
+
 ## The four categories, in plain terms
 
 ### Git safety (`gitSafety`)
@@ -29,7 +35,7 @@ Keeps common git mistakes from reaching a remote.
 
 - **Won't skip pre-commit / pre-push checks** (`gitSafety.blockNoVerify`). A `git commit --no-verify` or `git push --no-verify` (and the `-n` short form on commit) is refused, so the checks that are supposed to run before code lands actually run.
 - **Won't leak AI attribution into a commit** (`gitSafety.blockAttribution`). A commit message containing an attribution signature - a `Co-Authored-By:` trailer, "Generated with Claude Code", a `claude.ai` link, the Anthropic noreply address, or the robot emoji - is refused. Commits must read as solely human-authored. Note this matches only those leak signatures; simply mentioning "Claude" or "Anthropic" in a message is fine.
-- **Won't commit or push on `main`/`master`** (`gitSafety.blockCommitOnMain`). Do your work on a feature branch. This is the guardrail with the widest reach - it applies to every repository on the machine - so a scratch repo where committing straight to `main` is fine is a good candidate for a launch-time bypass.
+- **Won't commit or push on `main`/`master`** (`gitSafety.blockCommitOnMain`). Do your work on a feature branch. This checks the branch of the repository the command actually targets, so committing into another worktree (`git -C other-worktree commit`, or `cd other-worktree && git commit`) is judged against that worktree, not wherever you launched Claude. This is the guardrail with the widest reach - it applies to every repository on the machine - and it is one of the two that ask for approval in an interactive session rather than refusing outright (see "When you hit a block"). A scratch repo where committing straight to `main` is fine is a good candidate for a launch-time bypass.
 - **Won't force-add ignored files** (`gitSafety.blockAddForce`). A `git add -f` is refused so `.gitignore` is respected.
 
 ### Bash safety (`bashSafety`)
@@ -47,7 +53,7 @@ Stops a password or token from ending up in the chat transcript, where it would 
 
 Protects the discipline behind our numbered plan files (the ones under `.claude/user-plans/`).
 
-- **Won't mark a task complete without your sign-off** (`planIntegrity.requireSignoffBeforeComplete`). Flipping a task to `TASK:COMPLETE` is refused unless the session was launched with `CLAUDE_TASK_SIGNOFF=1`. That variable is your attestation, as the human, that you reviewed the work and the "present it and stop for review" step actually happened. Because it can only be set at launch, Claude cannot sign off on its own behalf. One thing to know: the sign-off is per session, not per task - once set, it green-lights every completion marked in that session.
+- **Won't mark a task complete without your sign-off** (`planIntegrity.requireSignoffBeforeComplete`). Flipping a task to `TASK:COMPLETE` needs your attestation that the "present it and stop for review" step actually happened. In an interactive session this guardrail asks you to approve the completion in the moment; unattended, or when launched with `CLAUDE_TASK_SIGNOFF=1`, it uses that launch-time variable as the attestation instead. Either way Claude cannot sign off purely on its own - a person either approves the prompt or set the variable at launch. One thing to know: the launch variable is per session, not per task - once set, it green-lights every completion marked in that session.
 - **Won't allow a malformed status change** (`planIntegrity.enforceStatusTransitions`). A task cannot jump straight from `TASK:PENDING` to `TASK:COMPLETE` (it has to pass through `IN_PROGRESS` first), and a completion has to record a date like `(2026-09-14)`. This enforces the shape of a status change, not whether the underlying work is truly finished - that judgment is still yours.
 
 ## Turning a rule off

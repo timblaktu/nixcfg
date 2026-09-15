@@ -1171,6 +1171,92 @@ These are design gaps, not slips. P11 hardens the whole system against this clas
 ### [DECISION] Tim 2026-09-14 — add P11 as the public-merge gate
 The public merge is no longer the immediate next step. Two end-user failures in one session (above) showed the hook set needs a design/robustness pass built around the person who hits a block. P11 is inserted as that pass and the merge is gated on it. `blockCommitOnMain` context-fix already landed (`b5aefa0`) and is LIVE on `tim@pa161878-nixos` (re-pinned nixcfg-work lock → `b5aefa0` + `home-manager switch`, 2026-09-14).
 
+## P11 EXECUTION LOG (2026-09-15 — IN_PROGRESS, artifacts pending Tim sign-off)
+
+Design decisions collected this session (Present/STOP gates):
+- **[DECISION] Tim 2026-09-15 (P11.2/P11.6 block-vs-ask):** judgment gates (`blockCommitOnMain`,
+  `requireSignoffBeforeComplete`) become `ask` (interactive operator prompt) **when a controlling TTY is
+  present AND not burndown/headless**; otherwise hard-block. Leak/secret/mechanical gates stay hard-block.
+- **[DECISION] Tim 2026-09-15 (P11.4):** Option 2 — **remove** `nix flake check` from the module-global
+  pre-commit hook; rely on CI (`.#ci.matrix` builds every check on every PR). Removes the
+  `blockNoVerify`×8-min-flake-check wedge at the root (a normal `.nix` commit now completes instantly).
+- **[DECISION] Tim 2026-09-15 (P11.6 rollout):** ship the P11 changes **directly** (they only soften/clarify
+  already-live gates) + add observability (a per-activation guardrail log). No warn-first trial needed.
+
+### P11.1 — block-message contract (DONE, pending sign-off)
+All PreToolUse block strings rewritten to the four-part template `WHAT · WHY · TO PROCEED NOW · TO AVOID IN
+FUTURE`, each ending `See docs/claude-code-session-guardrails.md`. Covers all 9 Plan-056 hooks (11 message
+strings) **plus** the pre-existing `security.blockedPattern` hook (now also uses the shared prelude). Delivered
+via a shared `guardrailPrelude` (`hooks.nix`) so the contract, the bypass, the observability log, and the
+ask/gate emitters are defined once. DoD (grep-checkable `WHY:` + `TO PROCEED NOW:` in every block) met.
+
+### P11.2 — hard-block vs. interactive `ask` (capability finding + decision)
+Capability finding (claude-code-guide vs current CC docs, **verified v2.1+**): a PreToolUse hook CAN return
+`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow|deny|ask","permissionDecisionReason":"…"}}`
+on stdout (exit 0). `"ask"` **is supported** and surfaces CC's normal operator approval prompt mid-session.
+Caveats: (a) the `permissionDecisionReason` text is **not reliably surfaced** with `ask` (the operator sees the
+standard prompt, not our WHY); (b) `ask` in headless/`-p` and burndown Mode B is **undocumented and likely
+errors/hangs** — closest headless value is `"defer"`. Decision → the `gr_gate` hybrid: emit `ask` **only** on a
+positively-detected writable `/dev/tty` with `CLAUDE_HOOKS_NONINTERACTIVE` unset; else fall back to `gr_block`
+(exit 2). Fails SAFE — a false "no TTY" just keeps the proven hard-block; it never risks a headless hang. The
+`/dev/tty` probe returns "no" in the tool shell (verified this session), so unattended runs hard-block
+deterministically. **The live `ask` path (interactive exit-0 + JSON) needs runtime verification at P10.**
+
+Per-rule block-vs-ask table:
+
+| Rule | Mode | Rationale |
+|---|---|---|
+| gitSafety.blockCommitOnMain | **ask** (interactive) / block (headless) | judgment: a deliberate main commit is legitimate; operator decides in-the-moment |
+| planIntegrity.requireSignoffBeforeComplete | **ask** (interactive) / block (headless) | judgment: the Present/STOP sign-off IS an operator approval; `ask` is the natural fit |
+| gitSafety.blockAttribution | hard-block | leak signature — never a judgment call |
+| gitSafety.blockNoVerify | hard-block | mechanical; skipping hooks is never wanted |
+| gitSafety.blockAddForce | hard-block | mechanical |
+| bashSafety.blockBareRm | hard-block | mechanical de-hang; `-f` is always the answer |
+| secretSafety.blockVaultDump / blockSecretEnvEcho | hard-block | secret exposure — never a judgment call |
+| planIntegrity.enforceStatusTransitions | hard-block | pure format/shape rule |
+| security.blockedPattern | hard-block | sensitive-file access — never a judgment call |
+
+### P11.3 — context-correctness audit (one row per hook)
+After the `b5aefa0` fix, no hook judges from incidental session state; every hook reads the actual
+`.tool_input`. Audit + the ONE material defect found (and fixed) this session:
+
+| Hook | Reads | Verdict | Fix / note |
+|---|---|---|---|
+| blockNoVerify | `.tool_input.command` | correct | detection broadened for `git -C DIR …` global-option forms (P11.3 fix) |
+| blockAttribution | `.tool_input.command` | correct | `$EDITOR`-message form is an accepted blind spot (documented) |
+| blockCommitOnMain | target-dir branch (`git -C`>`cd`>cwd) | **defect FOUND+FIXED** | detection grep required `commit` to immediately follow `git`, so `git -C DIR commit` on main slipped past (the b5aefa0 dir-resolution was dead code for `-C`). Fixed with the `gitGlobalOpts` prefix; proven by the shell test + new VM cases |
+| blockAddForce | `.tool_input.command` | correct | same `gitGlobalOpts` broadening applied |
+| blockBareRm | per-segment head word | correct | xargs/sudo/find FNs documented |
+| blockVaultDump | `.tool_input.command` | correct | `rbw get \| tee f` FN (minor) |
+| blockSecretEnvEcho | `.tool_input.command` | correct | `ACCESS_KEY_ID` (non-secret) minor FP |
+| requireSignoffBeforeComplete | edit content + `CLAUDE_TASK_SIGNOFF` | correct | judges edit, not session state |
+| enforceStatusTransitions | edit content | correct | date check coarse on full-file `Write` (documented) |
+| security.blockedPattern | `.tool_input.file_path` | correct | now shares the prelude |
+
+### P11.4 — deadlock root-fix (DONE, pending sign-off)
+Root cause: `modules/programs/git/git.nix` pre-commit hook ran `nix flake check --no-build` (~8 min / ~16 GB
+RSS on this repo) on every staged `.nix`/`flake.lock`, blowing the 2-min tool timeout; `blockNoVerify` forbade
+the `--no-verify` that would skip it. Fix (Tim's Option 2): removed the flake-check block from the pre-commit
+hook (auto-format retained); CI is the authoritative eval+build gate. A normal `.nix` commit now completes
+instantly — the wedge is gone.
+
+### P11.5 — false-positive test matrix (DONE, pending VM run)
+Extended the P4 VM test (`vm-tests.nix` `vm-claude-code-safety-hooks`) with the multi-worktree matrix:
+cross-worktree `git -C mainrepo commit` (block), `-c` global option (block), `git -C featrepo commit` from a
+main cwd (allow), `cd feat && git commit` from a main cwd (allow), `git branch commit-feature` precision
+(allow), headless-fail-safe (hard-block, no `permissionDecision` emitted), `CLAUDE_HOOKS_NONINTERACTIVE=1`
+(block), observability-log assertion, and bashSafety multi-segment. A standalone shell harness mirroring the
+generated scripts passed **16/16** locally this session (it is what surfaced the P11.3 `git -C` defect).
+
+### P11.6 — warn-first + observability (DONE, pending sign-off)
+Decision recorded above (ship directly; already-live gates only softened/clarified). Observability built:
+`gr_log` in the shared prelude appends `<iso-ts>\t<verdict>\t<rule>` to `$CLAUDE_GUARDRAIL_LOG` (default
+`<config-or-home>/logs/guardrails.log`) on every BLOCK and ASK, best-effort (never affects the decision).
+Documented in `docs/claude-code-session-guardrails.md` ("Seeing what fired").
+
+**Remaining before P11 COMPLETE:** Tim's Present/STOP sign-off on this artifact set; full `nix flake check`
+green (running); the VM test executed on a KVM host (or accepted as authored, per prior P4/P7 precedent).
+
 ## Progress tracking
 
 **Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5, P7, P8, P9) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate (COMPLETE); P10 is the Interactive integration/live-rollout gate (runs last).

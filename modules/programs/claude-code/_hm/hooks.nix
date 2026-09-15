@@ -146,6 +146,65 @@ let
     ''
   );
 
+  # Plan 056 P11.3/P11.5 — git global-option prefix. A `git` subcommand can be
+  # preceded by global options that take an argument (`git -C DIR commit`,
+  # `git -c k=v push`, `git --git-dir=D commit`, `git --work-tree=W commit`).
+  # The original detection greps required the subcommand to IMMEDIATELY follow
+  # `git`, so `git -C DIR commit` on main slipped past blockCommitOnMain (the
+  # b5aefa0 fix resolved the -C dir but the detection never fired for it — the
+  # exact cross-worktree case P11 audits). Interpolating this fragment right
+  # after `git[[:space:]]+` tolerates ONLY these recognized global options (each
+  # consuming its argument), so `git branch commit-x` / `git commit -m "add -f"`
+  # do NOT false-match while `git -C DIR commit` does. Kept deliberately narrow
+  # (real global-option shapes, not a blanket `.*`) to avoid message-content FPs.
+  gitGlobalOpts = "(-C[[:space:]]+[^[:space:]]+[[:space:]]+|-c[[:space:]]+[^[:space:]]+[[:space:]]+|--git-dir[=[:space:]][^[:space:]]+[[:space:]]+|--work-tree[=[:space:]][^[:space:]]+[[:space:]]+)*";
+
+  # Plan 056 P11 — shared prelude prepended to every blocking session-workflow
+  # hook. Unifies three concerns the P11 review standardized:
+  #   * the uniform CLAUDE_HOOKS_BYPASS launch-time escape hatch (unchanged);
+  #   * gr_log (P11.6 observability) — appends one tab-separated line per
+  #     guardrail activation (`<iso-ts>\t<verdict>\t<rule>`) to
+  #     $CLAUDE_GUARDRAIL_LOG (default <config-or-home>/logs/guardrails.log), so
+  #     an operator can inspect which guardrail fired and why. Best-effort: any
+  #     logging failure is swallowed and never affects the block decision;
+  #   * gr_block (hard block: exit 2 + the message on stderr, fed back to the
+  #     model — the exit-2 convention needs continueOnError=false at the group);
+  #   * gr_gate (P11.2 judgment-gate) — for the two JUDGMENT rules (commit-on-main,
+  #     task-complete sign-off) emit a structured permissionDecision:"ask" so the
+  #     OPERATOR approves the call in-the-moment when an interactive controlling
+  #     terminal is present, instead of a hard block that needs a launch-time env
+  #     var. Fails SAFE: it only asks when it POSITIVELY detects a writable
+  #     /dev/tty AND CLAUDE_HOOKS_NONINTERACTIVE is unset — otherwise it degrades
+  #     to gr_block. A headless/burndown launcher (no operator) has no controlling
+  #     tty, so it hard-blocks deterministically; such launchers may also set
+  #     CLAUDE_HOOKS_NONINTERACTIVE=1 to force hard-block even if a tty leaks.
+  #     NOTE: whether CC honors "ask" identically across versions is verified for
+  #     v2.1+ (plan 056 P11.2); the /dev/tty probe is verified live at P10.
+  # Every gr_block/gr_gate message follows the four-part contract
+  # (WHAT / WHY / TO PROCEED NOW / TO AVOID IN FUTURE) and links the guide
+  # docs/claude-code-session-guardrails.md.
+  guardrailPrelude = ''
+    [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+    __gr_log="''${CLAUDE_GUARDRAIL_LOG:-''${CLAUDE_CONFIG_DIR:-$HOME}/logs/guardrails.log}"
+    gr_log() {
+      { ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$__gr_log")" \
+          && printf '%s\t%s\t%s\n' "$(${pkgs.coreutils}/bin/date -Iseconds 2>/dev/null)" "$2" "$1" >> "$__gr_log"; } 2>/dev/null || true
+    }
+    gr_block() {
+      gr_log "$1" BLOCK
+      printf '%s\n' "$2" >&2
+      exit 2
+    }
+    gr_gate() {
+      if [ -z "$CLAUDE_HOOKS_NONINTERACTIVE" ] && { true >/dev/tty; } 2>/dev/null; then
+        gr_log "$1" ASK
+        ${pkgs.jq}/bin/jq -cn --arg r "$2" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+        exit 0
+      fi
+      gr_block "$1" "$2"
+    }
+  '';
+
 in
 {
   options.programs.claude-code.hooks = {
@@ -261,6 +320,16 @@ in
           CRITICAL "NEVER WORK ON MAIN OR MASTER" rule mechanically. Largest
           blast radius of the category (fires host-wide for every repo/account);
           throwaway-on-main repos use the bypass env var.
+
+          Plan 056 P11.2 — this is a JUDGMENT gate: when an interactive
+          controlling terminal is present it emits a structured
+          permissionDecision:"ask" so the operator approves the commit
+          in-the-moment (no relaunch needed), and falls back to a hard block
+          when headless or when CLAUDE_HOOKS_NONINTERACTIVE=1 is set (burndown /
+          any no-operator launcher). P11.3/P11.5 — the detection tolerates git
+          global options, so `git -C DIR commit`/`git -c k=v commit` on main are
+          caught (previously they slipped past). Every activation is recorded to
+          $CLAUDE_GUARDRAIL_LOG (P11.6 observability).
         '';
       };
       blockAddForce = mkOption {
@@ -399,6 +468,13 @@ in
           Present/STOP workflow should set this false in their own config, since
           it will otherwise block every plan-file `TASK:COMPLETE` edit unless
           `CLAUDE_TASK_SIGNOFF` was exported at launch.
+
+          Plan 056 P11.2 — this is a JUDGMENT gate: with an interactive
+          controlling terminal it emits permissionDecision:"ask" so the operator
+          can approve the completion in-the-moment after a Present/STOP review;
+          headless or CLAUDE_HOOKS_NONINTERACTIVE=1 (burndown) falls back to the
+          hard block, preserving the launch-time `CLAUDE_TASK_SIGNOFF`
+          attestation. Activations are logged to $CLAUDE_GUARDRAIL_LOG.
         '';
       };
       enforceStatusTransitions = mkOption {
@@ -721,13 +797,13 @@ in
               # this hook silently never matched). Exit 2 is the CC convention
               # that BLOCKS a PreToolUse call and feeds stderr back to the model;
               # the old `exit 1` was a bug — a non-blocking error that printed
-              # "Access blocked" yet let the edit through. Clean `exit 0` on no
-              # match avoids the spurious non-blocking-error notice.
+              # "Access blocked" yet let the edit through. Plan 056 P11: adopt the
+              # shared prelude (bypass + gr_log observability + four-part message).
+              ${guardrailPrelude}
               file_path="$(${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
               for pattern in ${toString cfg.hooks.security.blockedPatterns}; do
-                if echo "$file_path" | grep -qE "$pattern"; then
-                  echo "🚫 Security: Access blocked to sensitive file pattern: $pattern" >&2
-                  exit 2
+                if echo "$file_path" | ${pkgs.gnugrep}/bin/grep -qE "$pattern"; then
+                  gr_block "security.blockedPattern" "🚫 security: refusing to touch '$file_path' — it matches the sensitive-file pattern '$pattern'. WHY: secrets/keys must never be read into or written from the agent context. TO PROCEED NOW: work with a non-sensitive file; if this is a false match, narrow programs.claude-code.hooks.security.blockedPatterns, or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: keep secrets out of the paths the agent operates on. See docs/claude-code-session-guardrails.md."
                 fi
               done
               exit 0
@@ -754,17 +830,15 @@ in
             matcher = "Bash";
             ifFilter = "Bash(git *)";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
-              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+(commit|push)\b[^;&|]*--no-verify'; then
-                echo "🚫 gitSafety: --no-verify is not allowed (pre-commit/pre-push hooks must run). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}(commit|push)\b[^;&|]*--no-verify'; then
+                gr_block "gitSafety.blockNoVerify" "🚫 gitSafety: refusing 'git commit/push --no-verify'. WHY: it skips the pre-commit/pre-push hooks that keep the tree valid. TO PROCEED NOW: run the command without --no-verify; if a hook is genuinely broken, fix it at its source, or relaunch claude with CLAUDE_HOOKS_BYPASS=1 for a one-off. TO AVOID IN FUTURE: keep the hooks fast enough to run every time (plan 056 P11.4 removed the slow flake-check from pre-commit). See docs/claude-code-session-guardrails.md."
               fi
               # -n / combined short forms (e.g. -an) on git commit only.
-              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+commit\b[^;&|]*[[:space:]]-[a-zA-Z]*n'; then
-                echo "🚫 gitSafety: -n (--no-verify) is not allowed on git commit. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}commit\b[^;&|]*[[:space:]]-[a-zA-Z]*n'; then
+                gr_block "gitSafety.blockNoVerify" "🚫 gitSafety: refusing '-n' (--no-verify) on git commit. WHY: it skips the pre-commit hooks that keep the tree valid. TO PROCEED NOW: drop -n and commit normally, or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: prefer long flags so intent is explicit and hooks always run. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';
@@ -776,14 +850,13 @@ in
             matcher = "Bash";
             ifFilter = "Bash(git commit*)";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
               # only intercept when a git command is present
               printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[;&|])[[:space:]]*git[[:space:]]' || exit 0
               if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE 'co-authored-by:|generated with (\[)?claude|claude\.ai/code|noreply@anthropic\.com|🤖'; then
-                echo "🚫 gitSafety: commit carries an AI-attribution marker (Co-Authored-By / 'Generated with Claude' / claude.ai / anthropic noreply / 🤖). Remove it — commits must appear solely human-authored (memory project_ai_attribution_leak). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+                gr_block "gitSafety.blockAttribution" "🚫 gitSafety: this commit carries an AI-attribution marker (Co-Authored-By / 'Generated with Claude' / claude.ai / anthropic noreply / 🤖). WHY: commits must appear solely human-authored — 11 public commits once leaked Co-Authored-By trailers and listed Claude as a repo contributor (memory project_ai_attribution_leak). TO PROCEED NOW: remove the trailer/boilerplate from the message and re-commit; for a deliberate meta-commit that quotes the marker, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: never add attribution trailers to commit messages. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';
@@ -799,10 +872,10 @@ in
             matcher = "Bash";
             ifFilter = "Bash(git *)";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
-              printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+(commit|push)\b' || exit 0
+              printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}(commit|push)\b' || exit 0
               # Resolve the directory the git command operates in, so the branch
               # test follows the command instead of the session cwd. Precedence:
               # `git -C DIR` (most explicit) > a leading `cd DIR` > the hook's cwd.
@@ -819,8 +892,7 @@ in
               branch="$(${pkgs.git}/bin/git -C "$dir" symbolic-ref --short HEAD 2>/dev/null)"
               case "$branch" in
                 main|master)
-                  echo "🚫 gitSafety: refusing a commit/push — the repo at '$dir' is on protected branch '$branch'. WHY: the NEVER-WORK-ON-MAIN rule. TO PROCEED NOW: switch that repo to a feature branch (git -C '$dir' switch -c my-feature), OR if this is a false positive relaunch claude with CLAUDE_HOOKS_BYPASS=1, OR run the commit yourself via the ! prefix (which does not pass through this hook). TO AVOID IN FUTURE: launch the session from the worktree you intend to commit in." >&2
-                  exit 2 ;;
+                  gr_gate "gitSafety.blockCommitOnMain" "🚫 gitSafety: refusing a commit/push — the repo at '$dir' is on protected branch '$branch'. WHY: the NEVER-WORK-ON-MAIN rule. TO PROCEED NOW: approve at the prompt if this is intentional, OR switch that repo to a feature branch (git -C '$dir' switch -c my-feature), OR run the commit yourself via the ! prefix (which does not pass through this hook), OR relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: launch the session from the worktree you intend to commit in. See docs/claude-code-session-guardrails.md." ;;
               esac
               exit 0
             '';
@@ -832,12 +904,11 @@ in
             matcher = "Bash";
             ifFilter = "Bash(git add*)";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
-              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+add\b[^;&|]*([[:space:]]-[a-zA-Z]*f\b|[[:space:]]--force\b)'; then
-                echo "🚫 gitSafety: 'git add -f/--force' is not allowed (respect .gitignore). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}add\b[^;&|]*([[:space:]]-[a-zA-Z]*f\b|[[:space:]]--force\b)'; then
+                gr_block "gitSafety.blockAddForce" "🚫 gitSafety: refusing 'git add -f/--force'. WHY: it overrides .gitignore and can stage build output, secrets, or runtime state that must never be tracked. TO PROCEED NOW: stage only the intended paths (git add <path>); if a file is wrongly ignored, fix .gitignore instead, or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: never force-add — adjust .gitignore rather than overriding it. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';
@@ -856,7 +927,7 @@ in
         PreToolUse = lib.optional cfg.hooks.bashSafety.blockBareRm (mkHook {
           matcher = "Bash";
           command = ''
-            [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+            ${guardrailPrelude}
             cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
             [ -z "$cmd" ] && exit 0
             # Split on ; & | (single chars — this also breaks && and || into
@@ -878,8 +949,7 @@ in
                       esac
                     done
                     if [ "$forced" -eq 0 ]; then
-                      echo "🚫 bashSafety: bare '$head' detected. Your shell aliases rm/cp/mv to the interactive -i form, which HANGS in non-interactive tool shells. Re-run WITH -f. Not auto-rewritten by design (RTK lesson). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                      exit 2
+                      gr_block "bashSafety.blockBareRm" "🚫 bashSafety: bare '$head' detected (no -f). WHY: your shell aliases rm/cp/mv to the interactive -i form, which HANGS in a non-interactive tool shell waiting for a prompt that never comes. TO PROCEED NOW: re-run WITH -f (e.g. $head -f ...) — it is NOT auto-rewritten by design (RTK lesson); if this is a false positive, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: always pass -f to rm/cp/mv in tool commands. See docs/claude-code-session-guardrails.md."
                     fi
                     ;;
                 esac
@@ -907,15 +977,14 @@ in
             matcher = "Bash";
             ifFilter = "Bash(rbw *)";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
               # only intercept rbw commands (word boundary handles $(rbw…/`rbw…/; rbw…)
               printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[^[:alnum:]_])rbw([[:space:]]|$)' || exit 0
               # --full dumps every field (incl. notes) — blocked unconditionally
               if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '(^|[[:space:]])--full([[:space:]]|=|$)'; then
-                echo "🚫 secretSafety: 'rbw --full' dumps every field (incl. notes) into the agent context. Never dump vault contents to the transcript/context/files (memory never-dump-secrets-to-agent-context). Pipe a single field to the consumer instead: rbw get NAME | tool --password-stdin. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+                gr_block "secretSafety.blockVaultDump" "🚫 secretSafety: 'rbw --full' dumps every field (including notes) into the agent context. WHY: vault contents must never reach the transcript/context/files (memory never-dump-secrets-to-agent-context). TO PROCEED NOW: retrieve one field and pipe it straight to the consumer — rbw get NAME | tool --password-stdin; relaunch claude with CLAUDE_HOOKS_BYPASS=1 only if unavoidable. TO AVOID IN FUTURE: never render secrets; always pipe or capture them. See docs/claude-code-session-guardrails.md."
               fi
               # retrieval subcommands that emit secret material
               if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'rbw[[:space:]]+(get|code)\b'; then
@@ -923,8 +992,7 @@ in
                 printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'rbw[[:space:]]+(get|code)\b[^|]*[|]' && exit 0
                 printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '[$]\([^)]*rbw[[:space:]]+(get|code)\b' && exit 0
                 printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '`[^`]*rbw[[:space:]]+(get|code)\b' && exit 0
-                echo "🚫 secretSafety: unpiped 'rbw get/code' prints the secret into the agent context (or a file via '>'). Pipe it to the consumer instead: rbw get NAME | tool --password-stdin (or capture with \$(rbw get NAME)). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+                gr_block "secretSafety.blockVaultDump" "🚫 secretSafety: unpiped 'rbw get/code' prints the secret into the agent context (or into a file via '>'). WHY: secrets must never be rendered to the transcript/context/files (memory never-dump-secrets-to-agent-context). TO PROCEED NOW: pipe it to the consumer — rbw get NAME | tool --password-stdin — or capture it with \$(rbw get NAME); relaunch claude with CLAUDE_HOOKS_BYPASS=1 to override. TO AVOID IN FUTURE: always consume rbw output via a pipe or command-substitution. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';
@@ -935,19 +1003,17 @@ in
           ++ (lib.optional cfg.hooks.secretSafety.blockSecretEnvEcho (mkHook {
             matcher = "Bash";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
               SECRE='(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL)'
               # echo/printf referencing $SECRETVAR or ''${SECRETVAR}
               if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE '(^|[;&|[:space:]])(echo|printf)\b[^;&|]*[$][{]?[A-Za-z_]*'"$SECRE"; then
-                echo "🚫 secretSafety: echo/printf of a secret-shaped variable leaks its value into the agent context (memory never-dump-secrets-to-agent-context). Pass it directly to the consumer (e.g. GH_TOKEN=\$(gh auth token) git push) instead of echoing it. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+                gr_block "secretSafety.blockSecretEnvEcho" "🚫 secretSafety: echo/printf of a secret-shaped variable leaks its value into the agent context. WHY: secrets must never be rendered to the transcript/context (memory never-dump-secrets-to-agent-context). TO PROCEED NOW: pass it straight to the consumer instead of echoing it (e.g. GH_TOKEN=\$(gh auth token) git push); relaunch claude with CLAUDE_HOOKS_BYPASS=1 to override. TO AVOID IN FUTURE: never echo secret-shaped variables. See docs/claude-code-session-guardrails.md."
               fi
               # printenv NAME where NAME is secret-shaped
               if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE '(^|[;&|[:space:]])printenv\b[^;&|]*[A-Za-z_]*'"$SECRE"; then
-                echo "🚫 secretSafety: printenv of a secret-shaped variable leaks its value into the agent context. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+                gr_block "secretSafety.blockSecretEnvEcho" "🚫 secretSafety: printenv of a secret-shaped variable leaks its value into the agent context. WHY: secrets must never be rendered to the transcript/context (memory never-dump-secrets-to-agent-context). TO PROCEED NOW: reference the variable directly in the consuming command instead of printing it; relaunch claude with CLAUDE_HOOKS_BYPASS=1 to override. TO AVOID IN FUTURE: never printenv secret-shaped variables. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';
@@ -969,7 +1035,7 @@ in
           (lib.optional cfg.hooks.planIntegrity.requireSignoffBeforeComplete (mkHook {
             matcher = "Edit|MultiEdit|Write";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               # Read stdin ONCE — jq is invoked 3x below and each read would
               # otherwise drain the pipe, leaving later reads empty.
               input="$(cat)"
@@ -981,8 +1047,7 @@ in
               co="$(printf '%s' "$old" | ${pkgs.gnugrep}/bin/grep -c 'TASK:COMPLETE')"
               [ "$cn" -gt "$co" ] || exit 0            # not a net-new completion
               [ -n "$CLAUDE_TASK_SIGNOFF" ] && exit 0  # operator attested sign-off (launch-time only)
-              echo "🚫 planIntegrity: marking a task TASK:COMPLETE requires a Present/STOP review first (memory next-task-present-stop-artifact-gate). Present the artifact + defaults, get Tim's sign-off, then re-launch with CLAUDE_TASK_SIGNOFF=1 set. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-              exit 2
+              gr_gate "planIntegrity.requireSignoffBeforeComplete" "🚫 planIntegrity: marking a task TASK:COMPLETE needs a Present/STOP review first (memory next-task-present-stop-artifact-gate). WHY: artifact-producing tasks must be shown to the operator before they are certified done. TO PROCEED NOW: approve this completion at the prompt if you have already reviewed the artifact; otherwise present it + the defaults, get sign-off, and relaunch with CLAUDE_TASK_SIGNOFF=1 (or CLAUDE_HOOKS_BYPASS=1 to override). TO AVOID IN FUTURE: launch task-completing sessions with CLAUDE_TASK_SIGNOFF=1 only after the Present/STOP review. See docs/claude-code-session-guardrails.md."
             '';
             continueOnError = false;
             timeout = 5;
@@ -992,7 +1057,7 @@ in
           ++ (lib.optional cfg.hooks.planIntegrity.enforceStatusTransitions (mkHook {
             matcher = "Edit|MultiEdit|Write";
             command = ''
-              [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+              ${guardrailPrelude}
               # Read stdin ONCE (jq invoked 3x — see requireSignoffBeforeComplete).
               input="$(cat)"
               fp="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
@@ -1007,13 +1072,11 @@ in
               # avoids FP on multi-row edits that legitimately advance another row.
               if printf '%s' "$old" | ${pkgs.gnugrep}/bin/grep -q 'TASK:PENDING' \
                  && ! printf '%s' "$old" | ${pkgs.gnugrep}/bin/grep -q 'TASK:IN_PROGRESS'; then
-                echo "🚫 planIntegrity: illegal status skip PENDING→COMPLETE. Mark TASK:IN_PROGRESS first, then COMPLETE. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+                gr_block "planIntegrity.enforceStatusTransitions" "🚫 planIntegrity: illegal status skip PENDING→COMPLETE. WHY: a task must pass through TASK:IN_PROGRESS so the plan cursor and audit trail stay consistent. TO PROCEED NOW: mark the row TASK:IN_PROGRESS first, then TASK:COMPLETE in a later edit; relaunch claude with CLAUDE_HOOKS_BYPASS=1 to override. TO AVOID IN FUTURE: follow the PENDING→IN_PROGRESS→COMPLETE sequence. See docs/claude-code-session-guardrails.md."
               fi
               # (b) dateless COMPLETE.
               if ! printf '%s' "$new" | ${pkgs.gnugrep}/bin/grep -qE '\(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)'; then
-                echo "🚫 planIntegrity: a new TASK:COMPLETE must record a date, e.g. (2026-09-09). Add the completion date. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
-                exit 2
+                gr_block "planIntegrity.enforceStatusTransitions" "🚫 planIntegrity: a new TASK:COMPLETE must record a date, e.g. (2026-09-15). WHY: completion dates are the plan's audit trail. TO PROCEED NOW: add the (YYYY-MM-DD) date next to COMPLETE; relaunch claude with CLAUDE_HOOKS_BYPASS=1 to override. TO AVOID IN FUTURE: always stamp a completion date when marking a task complete. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';
