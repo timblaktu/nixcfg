@@ -1051,6 +1051,178 @@ in
           '';
         };
 
+        # Plan 056 P4 — Class-A session-workflow interlocks (gitSafety + bashSafety).
+        # FIRST VM test to evaluate + activate self.modules.homeManager.claude-code
+        # in the nspawn harness (see plan 056 P2 §6 "P4 RISK"). Strategy: (1) SMOKE —
+        # prove the CC module activates and emits a per-account settings.json before
+        # asserting any block behavior; (2) BLOCK — extract each generated hook
+        # command from that settings.json and drive it with crafted stdin JSON,
+        # asserting exit 2 (blocked) / exit 0 (allowed). The hook scripts reference
+        # every binary by absolute /nix/store path, so they run regardless of the
+        # container PATH. nixcfgPath is pointed at the test user's home dir (exists +
+        # writable) to satisfy the module's activation preconditions; runtimePath then
+        # resolves under it and the account settings.json lands at the path below.
+        vm-claude-code-safety-hooks = mkHmContainerTest {
+          name = "claude-code-safety-hooks";
+          hmModules = [
+            self.modules.homeManager.claude-code
+          ];
+          hmConfig = {
+            programs.claude-code.enable = true;
+            programs.claude-code.accounts.max.enable = true;
+            # displayName has no default — activation forces it (unlike the pure
+            # eval-tests in tests.nix, which only read .skills.custom lazily).
+            programs.claude-code.accounts.max.displayName = "Claude Max (VM test)";
+            # Satisfy the activation preconditions (dir must exist + be writable).
+            programs.claude-code.nixcfgPath = "/home/${testUsername}";
+          };
+          testScript = ''
+            import json
+
+            machine.wait_for_unit("multi-user.target")
+            machine.wait_for_unit("home-manager-${testUsername}.service")
+
+            jq = "${pkgs.jq}/bin/jq"
+            git = "${pkgs.git}/bin/git"
+            settings = "/home/${testUsername}/claude-runtime/.claude-max/settings.json"
+
+            # === SMOKE: module activated + emitted a settings.json with the hooks ===
+            machine.succeed(f"test -f {settings}")
+            machine.succeed(f"{jq} -e '.hooks.PreToolUse' {settings}")
+            machine.succeed(f"grep -q gitSafety {settings}")
+            machine.succeed(f"grep -q bashSafety {settings}")
+
+            def extract(sig, dest):
+                machine.succeed(
+                    f"{jq} -r '.hooks.PreToolUse[].hooks[].command // empty "
+                    f"| select(contains(\"{sig}\"))' {settings} > {dest}"
+                )
+                machine.succeed(f"test -s {dest}")
+
+            def run_hook(dest, command, expected, cwd="/tmp"):
+                payload = json.dumps({"tool_input": {"command": command}})
+                machine.succeed(f"printf %s {json.dumps(payload)} > /tmp/payload.json")
+                rc, _out = machine.execute(f"cd {cwd} && bash {dest} < /tmp/payload.json")
+                assert rc == expected, (
+                    f"{dest} on {command!r} (cwd={cwd}): got exit {rc}, want {expected}"
+                )
+
+            # === Extract each generated hook script ===
+            extract("attribution", "/tmp/h_attr.sh")
+            extract("protected branch", "/tmp/h_main.sh")
+            extract("bashSafety", "/tmp/h_rm.sh")
+
+            # === BLOCK (a): AI-attribution-trailer commit is rejected ===
+            run_hook("/tmp/h_attr.sh",
+                     'git commit -m "x Co-Authored-By: Claude <noreply@anthropic.com>"', 2)
+            # ...and a clean commit message is allowed by the attribution rule
+            run_hook("/tmp/h_attr.sh", 'git commit -m "plan 056: real work"', 0)
+
+            # === BLOCK (b): a commit on main is rejected; (c) on a feature branch allowed ===
+            machine.succeed(
+                f"rm -rf /tmp/mainrepo && mkdir /tmp/mainrepo && cd /tmp/mainrepo "
+                f"&& {git} init -q -b main "
+                f"&& {git} -c user.email=t@t -c user.name=t commit -q --allow-empty -m init"
+            )
+            run_hook("/tmp/h_main.sh", "git commit -m x", 2, cwd="/tmp/mainrepo")
+            machine.succeed(f"cd /tmp/mainrepo && {git} checkout -q -b feature")
+            run_hook("/tmp/h_main.sh", "git commit -m x", 0, cwd="/tmp/mainrepo")
+            # a non-commit git command on main is NOT blocked
+            machine.succeed(f"cd /tmp/mainrepo && {git} checkout -q main")
+            run_hook("/tmp/h_main.sh", "git status", 0, cwd="/tmp/mainrepo")
+
+            # === Plan 056 P11.5 — adversarial / multi-worktree matrix ===
+            # A second worktree-like repo on a feature branch, used to prove the
+            # branch check follows the TARGET dir of the git command, not the cwd.
+            machine.succeed(
+                f"rm -rf /tmp/featrepo && mkdir /tmp/featrepo && cd /tmp/featrepo "
+                f"&& {git} init -q -b main "
+                f"&& {git} -c user.email=t@t -c user.name=t commit -q --allow-empty -m init "
+                f"&& {git} checkout -q -b feature"
+            )
+            machine.succeed(f"cd /tmp/mainrepo && {git} checkout -q main")
+            # (i) cross-worktree: `git -C mainrepo commit` from a NON-repo cwd — the
+            # -C target (main) must be checked. This is the exact form the b5aefa0
+            # fix + P11.3/P11.5 detection-broadening make work (previously slipped).
+            run_hook("/tmp/h_main.sh", "git -C /tmp/mainrepo commit -m x", 2, cwd="/tmp")
+            # (ii) global option -c before the subcommand still resolves + blocks
+            run_hook("/tmp/h_main.sh", "git -C /tmp/mainrepo -c a=b commit -m x", 2, cwd="/tmp")
+            # (iii) `git -C featrepo commit` targets a FEATURE branch → allowed even
+            # though the cwd (mainrepo) is on main
+            run_hook("/tmp/h_main.sh", "git -C /tmp/featrepo commit -m x", 0, cwd="/tmp/mainrepo")
+            # (iv) `cd DIR && git commit` precedence: -C wins, else cd, else cwd
+            run_hook("/tmp/h_main.sh", "cd /tmp/featrepo && git commit -m x", 0, cwd="/tmp/mainrepo")
+            # (v) precision: 'commit' as a substring of a branch name is NOT a
+            # commit subcommand — must NOT block on main
+            run_hook("/tmp/h_main.sh", "git branch commit-feature", 0, cwd="/tmp/mainrepo")
+            # (vi) fail-safe: with no controlling tty (the container case), the
+            # judgment gate HARD-BLOCKS rather than emitting an ask, and prints NO
+            # permissionDecision JSON.
+            machine.succeed(
+                f"cd /tmp/mainrepo && {jq} -n --arg c 'git commit -m x' "
+                f"'{{tool_input:{{command:$c}}}}' > /tmp/payload.json"
+            )
+            rc, out = machine.execute("cd /tmp/mainrepo && bash /tmp/h_main.sh < /tmp/payload.json")
+            assert rc == 2, f"headless judgment gate should hard-block: exit {rc}"
+            assert "permissionDecision" not in out, (
+                f"headless gate must not emit an ask decision: {out!r}"
+            )
+            # (vii) CLAUDE_HOOKS_NONINTERACTIVE=1 forces the hard block deterministically
+            rc, _ = machine.execute(
+                "cd /tmp/mainrepo && CLAUDE_HOOKS_NONINTERACTIVE=1 "
+                "bash /tmp/h_main.sh < /tmp/payload.json"
+            )
+            assert rc == 2, f"NONINTERACTIVE=1 should hard-block: exit {rc}"
+            # (viii) P11.6 observability: a block appends a line to $CLAUDE_GUARDRAIL_LOG
+            rc, _ = machine.execute(
+                "cd /tmp/mainrepo && rm -f /tmp/gr.log && CLAUDE_GUARDRAIL_LOG=/tmp/gr.log "
+                "CLAUDE_HOOKS_NONINTERACTIVE=1 bash /tmp/h_main.sh < /tmp/payload.json"
+            )
+            machine.succeed("grep -qE 'BLOCK.gitSafety[.]blockCommitOnMain' /tmp/gr.log")
+            # (ix) bashSafety multi-segment: a force flag in one segment must not
+            # mask a bare rm in another
+            run_hook("/tmp/h_rm.sh", "rm foo && cp -f a b", 2)
+            run_hook("/tmp/h_rm.sh", "rm -r -f foo", 0)
+            run_hook("/tmp/h_rm.sh", "rmdir d", 0)
+
+            # === bashSafety: bare rm blocked, forced rm allowed ===
+            run_hook("/tmp/h_rm.sh", "rm foo", 2)
+            run_hook("/tmp/h_rm.sh", "rm -f foo", 0)
+
+            # === secretSafety (Plan 056 P7): vault-dump + secret-env-echo ===
+            machine.succeed(f"grep -q secretSafety {settings}")
+            extract("rbw --full", "/tmp/h_vault.sh")
+            extract("SECRE=", "/tmp/h_env.sh")
+
+            # P7a vault-dump: rbw --full and unpiped/uncaptured rbw get block;
+            # a piped `rbw get X | tool` and a `$(rbw get X)` capture PASS.
+            run_hook("/tmp/h_vault.sh", "rbw --full mysecret", 2)
+            run_hook("/tmp/h_vault.sh", "rbw get mysecret", 2)
+            run_hook("/tmp/h_vault.sh", "rbw get X > /tmp/s", 2)
+            run_hook("/tmp/h_vault.sh", "rbw get mysecret | tool --password-stdin", 0)
+            run_hook("/tmp/h_vault.sh", "X=$(rbw get Y)", 0)
+            run_hook("/tmp/h_vault.sh", "rbw sync", 0)
+            run_hook("/tmp/h_vault.sh", "rbw list", 0)
+            run_hook("/tmp/h_vault.sh", "ls -la", 0)
+
+            # P7b secret-env-echo: echo/printf/printenv of a secret-shaped var block;
+            # a command-prefix `GH_TOKEN=$(gh auth token) git push` PASSES.
+            run_hook("/tmp/h_env.sh", "echo $GH_TOKEN", 2)
+            run_hook("/tmp/h_env.sh", "printenv GITHUB_TOKEN", 2)
+            run_hook("/tmp/h_env.sh", "GH_TOKEN=$(gh auth token) git push", 0)
+            run_hook("/tmp/h_env.sh", "echo hello world", 0)
+            run_hook("/tmp/h_env.sh", "printenv PATH", 0)
+
+            # === bypass escape hatch overrides every block ===
+            rc, _ = machine.execute(
+                f"cd /tmp/mainrepo && CLAUDE_HOOKS_BYPASS=1 "
+                f"{jq} -n --arg c 'git commit -m x' '{{tool_input:{{command:$c}}}}' "
+                f"| CLAUDE_HOOKS_BYPASS=1 bash /tmp/h_main.sh"
+            )
+            assert rc == 0, f"bypass did not override the main-branch block: exit {rc}"
+          '';
+        };
+
         # Development tools VM test: validates the development-tools HM module with
         # default flag settings. Tests language toolchains (Rust, Node, Python, Go, C/C++),
         # build utilities, enhanced CLI tools, and Claude dev utilities.

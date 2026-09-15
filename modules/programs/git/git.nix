@@ -145,22 +145,19 @@ in
                 echo "✅ Rust code formatted"
               fi
 
-              # Run flake check only when .nix files or flake.lock are staged
-              # (avoids ~8 GB eval for non-Nix commits)
-              if [ -f flake.nix ] && command -v nix >/dev/null 2>&1; then
-                if git diff --cached --name-only | grep -qE '\.(nix)$|^flake\.lock$'; then
-                  echo "🔍 Running flake check..."
-                  if ! nix flake check --no-build 2>/dev/null; then
-                    echo "⚠️  Flake check failed - consider running 'nix flake check' manually"
-                    echo "💡 To skip this check: git commit --no-verify"
-                    echo "💡 To include GitHub Actions: Enable in github-actions.nix"
-                    exit 1
-                  fi
-                  echo "✅ Flake check passed"
-                else
-                  echo "ℹ️  No .nix files staged, skipping flake check"
-                fi
-              fi
+              # Plan 056 P11.4 — flake check REMOVED from pre-commit.
+              # It ran `nix flake check --no-build` on every staged .nix/flake.lock
+              # change, costing ~8 min / ~16 GB RSS on this repo — far beyond the
+              # 2-min Claude Code Bash-tool timeout. That forced every .nix commit to
+              # either wait out an 8-min background poll or use `git commit --no-verify`,
+              # which the `gitSafety.blockNoVerify` guardrail forbids: the two safety
+              # mechanisms wedged each other (plan 056 P11.4 deadlock). CI is the
+              # authoritative eval+build gate — `.github/workflows/ci.yml` builds every
+              # `.#checks.<system>.<name>` from `.#ci.matrix` on every PR — so a local
+              # synchronous pre-commit check is redundant with it. This hook now only
+              # auto-formats; eval breakage is caught by CI on push (and, for flake.nix
+              # edits, by the Claude Code PostToolUse dev hook). [DECISION] Tim
+              # 2026-09-15 (plan 056 P11.4): remove; rely on CI.
             '';
           };
         };

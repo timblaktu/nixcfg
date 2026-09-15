@@ -205,6 +205,7 @@ let
       "vm-hm-module-isolation"
       "vm-development-tools"
       "vm-monitoring"
+      "vm-claude-code-safety-hooks"
     ])
     (grp qemuPr [
       "vm-boot-minimal"

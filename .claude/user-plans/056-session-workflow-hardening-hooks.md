@@ -1,0 +1,1476 @@
+# Plan 056 — Harden session-workflow conventions into mechanical hook interlocks
+
+Status: ACTIVE (investigation + phased implementation; human-attended)
+Owner: Tim
+Created: 2026-09-04
+Working branch: **plan-056-session-workflow-hooks** (worktree `/home/tim/src/nixcfg-session-hooks`, cut from `main`)
+Mode: **A only (human-attended `/next-task`).** NOT burndown-eligible — no `Burndown: SAFE` marker. Hook changes are artifact-producing (they alter every account's generated `settings.json`) and several tasks are design/decision gates, so autonomous stop-the-run execution is inappropriate.
+
+---
+## ▶ RESUME POINTER — read FIRST (updated 2026-09-15)
+
+**P11 is COMPLETE (2026-09-15, Tim signed off).** The only task left is **P10 — the public merge — and it is
+Tim-driven, outward-facing, and must NEVER be auto-initiated.** So `/next-task` in a fresh session lands on
+P10 (the first non-blocked PENDING) and MUST output `USER_INPUT_REQUIRED`: the merge requires Tim's explicit
+go-ahead AND a session launched with `CLAUDE_TASK_SIGNOFF=1 CLAUDE_HOOKS_BYPASS=1` (this repo has an
+attribution-leak history — memory `project_ai_attribution_leak` — so the outward-facing push is confirm-first).
+Do NOT push, merge, or bump any lock without Tim in the loop.
+
+**The P10 public-merge sequence (run only when Tim says go, launched `CLAUDE_TASK_SIGNOFF=1
+CLAUDE_HOOKS_BYPASS=1 claude`):** (1) push `plan-056-session-workflow-hooks` → `github:timblaktu/nixcfg`
+(confirm the outward-facing push first); (2) bump nixcfg-work `flake.lock` nixcfg input to the pushed github
+rev; (3) merge branch → `main` (conflict-free — verified: main touched skills.nix/jira, 056 touched
+hooks.nix — disjoint); (4) revert the local `flake.lock` pin in nixcfg-work; (5) THEN mark P10
+`TASK:COMPLETE (YYYY-MM-DD)`. Only step 5 is a plan edit; steps 1-4 are the outward-facing work.
+
+**Everything through P11 is DONE + committed on `plan-056-session-workflow-hooks`** (HEAD includes `c1c775a`
+the P11 code+docs). The hook set is LIVE + durable on `tim@pa161878-nixos` via the nixcfg-work local-pin
+(nixcfg→`b5aefa0`); the P11 changes are committed but NOT yet switched — live rollout of the P11 refinements
+folds into the P10 switch/merge. One thing to verify live at P10: the interactive `ask` prompt for the two
+judgment gates (this session only proved the headless hard-block fallback; `/dev/tty` reads "no" in the tool
+shell).
+
+**P11 is a NEW end-user design & robustness review phase** (see the "P11 spec" section for the full,
+self-contained brief with six workstreams + per-workstream DoD). It exists because two end-user failures
+surfaced in one session on 2026-09-14 (a `blockCommitOnMain` cross-worktree FALSE POSITIVE, now fixed in
+`b5aefa0` and LIVE; and a `blockNoVerify`×slow-pre-commit-flake-check DEADLOCK). P11 hardens the whole hook
+set around the person who hits a block, and the public merge is gated on it. P11 is human-attended
+(Mode A), each workstream Present/STOP-gated. Launch a P11 session as plain `claude` (no special env
+needed — P11 does not mark completions or commit on main; it produces reviewable artifacts).
+
+**P10 status:** SUBSTANTIALLY DONE — the full hook set is LIVE + durable on `tim@pa161878-nixos` via the
+local-pin workflow (nixcfg-work `flake.lock` now pins nixcfg → local rev `b5aefa0`, uncommitted; plain
+`home-manager switch` reproduces 11 PreToolUse groups × 3 accounts; all 9 hooks demonstrated firing; the
+`blockCommitOnMain` fix verified live on all 3 accounts). See the "P10 EXECUTION LOG" section.
+
+**[DECISION] Tim 2026-09-14 (late): DO NOT proceed to the public merge yet.** Insert P11 (design/robustness
+review) and gate the merge on it. P10 stays IN_PROGRESS. So a future `/next-task` should work P11, NOT
+mark P10 done or initiate the merge — the merge is a Tim-driven, outward-facing action, now additionally
+gated behind P11 COMPLETE.
+
+**The remaining trigger — the public path (Tim-driven, outward-facing; the completion gate):**
+push 056 to `github:timblaktu/nixcfg`, bump nixcfg-work lock to the github rev, merge branch → `main`,
+then revert the local `flake.lock` pin. The push/merge is conflict-free (verified). CAUTION: this repo has
+a documented attribution-leak history (memory `project_ai_attribution_leak`) — treat the public push as
+confirm-first. Do the push from THIS `plan-056` worktree (HEAD ≠ main, so `blockCommitOnMain` allows the
+branch push) but the merge COMMIT lands on `main`, so launch with **`CLAUDE_HOOKS_BYPASS=1`** (plus
+`CLAUDE_TASK_SIGNOFF=1` to mark P10 done in the same session). Only AFTER the public merge does P10 → done.
+
+**So: when Tim is ready for the public merge, launch as `CLAUDE_TASK_SIGNOFF=1 CLAUDE_HOOKS_BYPASS=1 claude`,
+confirm the outward-facing push, do the merge, revert the local pin, THEN mark P10 done.** Until then P10
+stays IN_PROGRESS by deliberate decision — the LIVE+durable local-pin rollout already covers this host.
+---
+
+## Core idea
+Today most session-workflow discipline lives as **soft "suggestions in context"**: CLAUDE.md CRITICAL rules, auto-memory `feedback` entries, and per-plan Guardrails. These only *bias* the model — they are advisory, silently skippable, and (as seen in plan 055 task PM on 2026-09-04) a session can blow straight past them. This plan finds the subset of those conventions that can become **hard "processes to follow"**: declarative Claude Code hooks that mechanically enforce the rule (block a tool call, inject required context, gate a stop) rather than merely reminding.
+
+The move is not new to this repo — it has precedent:
+- the **nix-guard** wrapper replaced the soft "serialize nix / no concurrent evals" rule with a real cgroup interlock (`modules/lib/nix-guarded.nix`, documented in project CLAUDE.md);
+- the **security hook** already blocks reads/edits of sensitive-file patterns via the PreToolUse `exit 2` convention (`modules/programs/claude-code/_hm/hooks.nix`);
+- the **plan-resume SessionStart hook** (plan 044) already pushes the active plan's next task into every fresh session.
+
+056 systematizes that pattern: audit the soft rules, classify by mechanical-enforceability, and convert the high-value ones.
+
+## Decisions locked at creation (Tim, 2026-09-04)
+- **Placement:** dedicated worktree off `main` (this one). Keeps hook changes on a clean, reviewable branch.
+- **Scope:** BOTH cleanly-enforceable interlocks AND the harder judgment-based process-gates, **phased** — ship the high-confidence blockers first, then research/experiment on the hard gates.
+- **Enforcement stance:** **per-rule, safety-critical = block by default.** Each converted rule is an individually-toggleable option; safety-critical rules (AI-attribution, commit-on-main) default to hard-block (`exit 2`), workflow rules default to warn / inject-reminder. This mirrors the existing categorized-hooks pattern (each category has its own `enable`).
+
+## Background: the hook substrate this repo already has (so a fresh session need not rediscover)
+All of this is in `modules/programs/claude-code/` — read `_hm/hooks.nix` first.
+
+- **`settings.json` is Nix build output**, regenerated by `home-manager switch`; it is gitignored (see project CLAUDE.md "Filesystem View"). Hooks are therefore authored **declaratively in Nix**, never hand-edited into `settings.json`.
+- **Declarative hook API:** `programs.claude-code.hooks.*` — categorized toggles (`formatting`, `linting`, `security`, `git`, `testing`, `logging`, `notifications`, `development`, `resume`, `rtk`) PLUS `hooks.custom`, a freeform `attrsOf` keyed by CC hook event name (any entry type: command/http/mcp_tool/prompt/agent).
+- **`mkHook { matcher; type?; command?; ifFilter?; timeout?; continueOnError?; ... }`** builds one hook group; per-event lists are unioned across all contributors via `mergeHookSets = zipAttrsWith concatLists` (so a new category coexists with existing hooks on the same event — do NOT use a right-biased `//` merge, it silently drops all but the last).
+- **Exit-code conventions (verified in-tree):** a **PreToolUse** hook `exit 2` **BLOCKS** the tool call and feeds its stderr back to the model (the security hook relies on this; note the in-code comment that `exit 1` was a bug — non-blocking). `exit 0` = allow. `continueOnError = false` is what lets a non-zero exit actually block; workflow/warn hooks set `continueOnError = true`.
+- **Context-injecting hooks:** `SessionStart` / `UserPromptSubmit` hooks inject stdout as session context (plan 044 resume hook + memory `cc-sessionstart-hook-contract`: `additionalContext` and plain stdout both inject; stdin carries `transcript_path`).
+- **`hookEvents` canonical list** in `_hm/hooks.nix` enumerates every event the module models (PreToolUse, PostToolUse, Stop, SubagentStop, UserPromptSubmit, SessionStart, SessionEnd, PreCompact, Notification, TaskCreated/TaskCompleted, WorktreeCreate/Remove, ...). Add-a-string extends the whole module.
+- **Module-global caveat:** the SAME `settings.json` hooks block deploys to EVERY enabled account on the host (see the `rtk`/`tmuxStatus` notes in `hooks.nix`). A converted rule fires for all accounts — false positives are high-cost, hence the design DoD requires an explicit false-positive analysis per rule.
+- **VM-test harness for hooks exists:** `modules/flake-parts/vm-tests.nix` already asserts HM-generated hook artifacts (e.g. `git config core.hooksPath` + an executable `pre-commit`). New interlocks get a VM test asserting the block actually fires.
+
+## Seed inventory: soft rules and their candidate conversions
+(P1 completes and corrects this; it is the starting audit, not the final classification.)
+
+| Soft rule (source) | Real incident? | Candidate hook | Class |
+|---|---|---|---|
+| **No AI attribution** in commits/PRs (global CLAUDE.md CRITICAL) | YES — memory `project_ai_attribution_leak`: 11 public commits leaked `Co-Authored-By` | PreToolUse on `git commit`: scan message/`-m`/`COMMIT_EDITMSG` for `Co-Authored-By`/Claude/Anthropic/"Generated with"/claude.ai → `exit 2` | A (block) |
+| **Never work/commit on main/master** (project CLAUDE.md CRITICAL) | latent | PreToolUse on `git commit`\|`git push`: if `git symbolic-ref --short HEAD` ∈ {main,master} → `exit 2` | A (block) |
+| **`rm -i`/`cp -i`/`mv -i` hang** in non-interactive shells (global CLAUDE.md) | YES — hangs sessions | PreToolUse on Bash: detect bare `rm`/`cp`/`mv` (user alias adds `-i`) → block with a "use `-f`" message, or auto-rewrite | A/B |
+| **Stage changes before nix commands** (global CLAUDE.md) | recurring | PreToolUse on Bash `nix *`: warn if tracked `.nix`/`flake.lock` are unstaged; or extend existing `git.autoStage` | B (warn) |
+| **`git commit --no-verify`** because pre-commit flake-check times out (memory `nixcfg-precommit-flakecheck-timeout`) | YES | PostToolUse/UserPromptSubmit reminder, or a wrapper; mostly informational | B/C |
+| **Mandatory session handoff** before stop (global CLAUDE.md "NEVER SKIP") | YES — plan 044 concurrency incident | Stop/SessionEnd: block/nag if `.claude/HANDOFF.md` older than the last commit OR `.claude/active-plan` unset (cannot COMPOSE the summary — only the model can — so at best it enforces *that* a fresh handoff exists) | B (nag/gate) |
+| **Present/STOP before marking artifact-producing tasks COMPLETE** (memory `next-task-present-stop-artifact-gate`, 2026-09-04) | YES — plan 055 PM | HARD: infer "a `TASK:COMPLETE` edit + a commit landed this session without an intervening review marker". Approximate only; needs session-state inference | C (research) |
+| **Serialize nix / no concurrent evals** (global CLAUDE.md) | already DONE | — (nix-guard already enforces) | (done) |
+| **Sensitive-file access** | already DONE | — (security hook already blocks) | (done) |
+
+Class key: **A** = cleanly hook-enforceable as a hard block; **B** = partially enforceable (detect/warn, some judgment); **C** = inherently soft / needs model judgment (a hook can only approximate).
+
+## P1 findings — definitive soft-rule classification (supersedes the seed inventory above)
+
+Completed 2026-09-05. Sources audited in full: global CLAUDE.md (`.claude-max`), project CLAUDE.md (nixcfg), all 28 auto-memory entries (behavioral/`feedback`-tagged ones read in detail), and the Guardrails of every active plan (050-054, 056; plans 013-049 without a Guardrails heading contribute their CRITICAL-rule prose, already captured by the CLAUDE.md rows). Category surface confirmed against `modules/programs/claude-code/_hm/hooks.nix`: enable-toggles are `formatting, linting, security, git {autoStage, autoCommit}, testing, logging, notifications, development, resume, rtk` plus freeform `hooks.custom`. **No** first-class option today for attribution / no-main / no-verify / git-add-f / rm-i / emdash / handoff-gate — each Class-A/B row below that says "NEW" needs a new toggle (though `hooks.custom` could express any of them ad hoc).
+
+Class key extended: **D** = already enforced mechanically or superseded (excluded from conversion — listed for completeness).
+
+### Class A — cleanly enforceable hard blocks (highest value; P3/P4 targets)
+
+| # | Rule | Source(s) | Real incident? | Target event + mechanism | Option status |
+|---|---|---|---|---|---|
+| A1 | **No AI attribution** in commits/PRs | global CRITICAL; memory `project_ai_attribution_leak`; EVERY active plan's Guardrails | YES — 11 public commits leaked `Co-Authored-By` | PreToolUse Bash `git commit`: scan `-m`/`-F` arg + `COMMIT_EDITMSG` for `Co-Authored-By`/`Claude`/`Anthropic`/`Generated with`/`claude.ai` → `exit 2` | NEW toggle (default block) |
+| A2 | **Never commit/push on main/master** | project CRITICAL "NEVER WORK ON MAIN"; plan Guardrails "confirm merge to main" | latent | PreToolUse Bash `git commit`\|`git push`: `git symbolic-ref --short HEAD` ∈ {main,master} → `exit 2` | NEW toggle (default block) |
+| A3 | **No `git commit/push --no-verify`/`-n`** | memory `nixcfg-precommit-flakecheck-timeout` (the *inverse* pressure); **plan 017 already designed this** | YES — flake-check timeout tempts `--no-verify` | PreToolUse Bash: `--no-verify`/bare `-n` on `git commit`\|`git push` → `exit 2` | NEW = **plan 017's `gitSafety` category** (R1 done, I1/T1/D1 PENDING) → 056 P4 must COORDINATE/subsume, not duplicate |
+| A4 | **No `git add -f`/`--force`** | global CRITICAL "NEVER use `git add -f`" | latent | PreToolUse Bash: `git add` with `-f`/`--force` → `exit 2` | NEW toggle (default block) |
+| A5 | **No emdash (U+2014)** in file content | global CRITICAL | recurring | PreToolUse Write/Edit: `new_string`/`content` contains U+2014 → `exit 2` (purely textual, cheapest possible check, zero false positives outside legitimately emdash-bearing files) | NEW toggle |
+
+### Class A/B — enforceable but auto-rewrite is UNSAFE here (block-with-message, never silently rewrite)
+
+Both rows are cautioned by memory `rtk-grep-false-negative-disabled`: the RTK experiment that *rewrote* Bash commands (grep→rg) silently corrupted output and was disabled host-wide. Lesson for P3/P4: **detect + block with an instructive message; do NOT auto-rewrite the command.**
+
+| # | Rule | Source(s) | Real incident? | Target event + mechanism | Option status |
+|---|---|---|---|---|---|
+| A/B6 | **`rm -i`/`cp -i`/`mv -i` hang** (bare `rm`/`cp`/`mv`; user alias adds `-i`) | global CRITICAL | YES — hangs non-interactive sessions | PreToolUse Bash: bare `rm`/`cp`/`mv` lacking `-f` → block with "add `-f`" message (NOT rewrite) | NEW toggle |
+| A/B7 | **Use `rg`/`fd`, never `grep`/`find`** | global CRITICAL | — | PreToolUse Bash: top-level `grep`/`find` invocation → warn (NOT rewrite — RTK proved rewrite corrupts) | `rtk` category exists but is DISABLED/corrupting; a warn-only variant would be NEW |
+
+### Class B — partial / detect-and-warn (a hook narrows the gap; judgment remains)
+
+| # | Rule | Source(s) | Target event + mechanism | Option status |
+|---|---|---|---|---|
+| B8 | **Stage changes before nix commands** | global CRITICAL; seed | PreToolUse Bash `nix *`: tracked `.nix`/`flake.lock` unstaged → warn | PARTIAL — `git.autoStage` already auto-stages on some events; extend/repurpose vs new warn |
+| B9 | **Single-quote Nix derivation refs** | global CRITICAL | PreToolUse Bash: `nix (build\|run\|develop) .#…` unquoted → warn | NEW |
+| B10 | **Relative paths for inter-doc md links** | global CRITICAL | PreToolUse Write/Edit on `.md`: absolute in-repo link → warn | NEW |
+| B11 | **Mandatory session handoff before stop** | global "NEVER SKIP"; project "End of Session" | Stop/SessionEnd: `.claude/HANDOFF.md` older than last commit OR `.claude/active-plan` unset → nag/gate. Can enforce *that a fresh handoff exists*, NOT compose it (only the model can distill) | NEW toggle → P5b |
+| B12 | **Edit the template, not the Nix-generated file** | memory `nix-managed-context-files` | YES | PreToolUse Write/Edit: path ∈ generated set (`settings.json`, per-account `CLAUDE.md`) → block w/ pointer to template | NEW toggle |
+| B13 | **Verify process provenance before killing** | global CRITICAL | PreToolUse Bash `kill`/`pkill` → inject reminder (walk pstree, check `/proc/<pid>/cwd`) | NEW (reminder-only) |
+| B14 | **git push auth prefix** | memory `feedback_git_push_auth` | PreToolUse Bash `git push` to github remote w/o `GH_TOKEN` in env → inject reminder (`GH_TOKEN=$(gh auth token)`) | NEW (reminder-only) |
+| B15 | **No hard-wrap in files** | global CRITICAL | weak — reliable detection is hard; warn-only, low value | NEW (weak) — recommend defer |
+| B16 | **No parallel git in same worktree** | global CRITICAL | weak — cross-call race, one PreToolUse can't see concurrency | (weak) — recommend keep soft |
+
+### Class C — irreducibly soft (a hook can only approximate; P5 research or keep-soft)
+
+| # | Rule | Source(s) | Why soft / best a hook can do |
+|---|---|---|---|
+| C17 | **Present/STOP before marking artifact-task COMPLETE** | memory `next-task-present-stop-artifact-gate`; project 5-step; plan 054 Guardrail | YES-incident (plan 055 PM). Needs session-state inference: a Stop/PostToolUse hook can flag "a `TASK:COMPLETE` edit + a commit landed with no intervening review marker" — approximate only → **P5a** |
+| C18 | **Confirm merge to main / never auto-merge** | plan Guardrails 052-054 | PreToolUse `git merge` into main → could gate, but "confirm with Tim" is a judgment/approval, not a mechanical predicate → partial, P5 |
+| C19 | **ONE TASK PER SESSION** (multi-session plans) | global | Stop: >1 `TASK:COMPLETE` transition this session → nag (approx) → P5 |
+| C20 | Commit-msg technical-content-only; conservative completion; validation≠fixing; stop-and-summarize; dependency-analysis boundary; rapid-iteration=check-ins | global + project CRITICAL | pure model judgment — keep soft (context only) |
+| C21 | Don't clutter global CLAUDE.md; add docs to existing md / ask where; local-first research; use mcp-nixos before nix changes; ask for auth help; bash+zsh compat; escape shell chars; timestamp format | global + project | judgment / low-value; some (e.g. auth-help, mcp-nixos) could be UserPromptSubmit context nudges but not blocks — keep soft |
+
+### Class D — already enforced or superseded (excluded from conversion)
+
+| Rule | Status |
+|---|---|
+| Serialize nix / no concurrent evals | DONE — `nix-guard` cgroup interlock (`modules/lib/nix-guarded.nix`) |
+| Sensitive-file access | DONE — `security` hook blocks via PreToolUse `exit 2` |
+| Surface active-plan next task on session start | DONE — `resume` hook (plan 044) |
+| "NEVER sudo long-running with timeout" | SUPERSEDED — reversed by memory `long-running-sudo-timeout-ok` (was about self-imposed short timeouts) |
+| RTK rg/grep command rewrite | DISABLED host-wide (output corruption) — cautionary precedent for A/B6, A/B7 (block, don't rewrite) |
+
+### Corrections / conflicts surfaced by the audit
+
+1. **Stale conflicting rule (must resolve before B11).** Project CLAUDE.md "End of Session (MANDATORY)" still says to **pipe the continuation prompt to the clipboard via `clip.exe`**. This DIRECTLY CONTRADICTS global CLAUDE.md "Session Handoff Protocol", which mandates the per-worktree **file** channel (`.claude/HANDOFF.md` + `.claude/active-plan`) precisely because the shared Windows clipboard is a proven cross-session contamination hazard (plan 044). A B11 handoff-gate hook MUST gate on the FILE channel, and project CLAUDE.md should be updated to match (flagged; the CLAUDE.md edit itself is out of 056's hook scope but P6 should note it).
+2. **A3 overlaps plan 017.** The `--no-verify` block is not new work — plan 017 (`gitSafety` category, R1 COMPLETE, I1/T1/D1 PENDING) already specced it. 056 P4 should implement 017's I1 as part of the same category rather than a parallel hook. Recommend folding 017 into 056 (or explicitly cross-referencing) at P6.
+3. **Plan 049 is the false-positive canary.** A project-level PreToolUse hook there fired "Failed with non-blocking status code" on nearly every Edit/Write. Every Class-A/B design in P3 must carry the false-positive analysis the DoD requires, and prefer narrow matchers + `ifFilter`; 049's root-cause note is the reference for what a bad matcher does module-wide.
+4. **Seed inventory row for "`git commit --no-verify` … mostly informational (Class B/C)" is corrected to Class A (A3)** — it is a clean, mechanically-detectable flag block, already designed in plan 017.
+5. **Enforcement-priority ranking (feeds P3):** ship A1 (attribution) and A2 (no-main) first (both safety-critical, real/latent blast radius, zero-judgment predicates), then A3 (coordinate w/ 017), A4, A5 (all trivial textual/flag checks). A/B6, A/B7 next (block-not-rewrite). Class B is warn-tier for P4/P5; Class C is P5 research.
+
+## P2 substrate map — the hook API, conventions, and gaps (grounded in the module source)
+
+Completed 2026-09-05. All citations are `path:line` into this worktree. This section is the durable
+reference P3/P4 build against, so a fresh session need not re-read the module.
+
+### 1. Option surface (where a new interlock's toggle goes)
+
+`options.programs.claude-code.hooks` (declared in `modules/programs/claude-code/_hm/hooks.nix:151-367`)
+is a set of per-category toggles plus one freeform escape hatch:
+
+| Category | Key options | Default | Event(s) it drives |
+|---|---|---|---|
+| `formatting` | `enable`, `commands` (attrs by ext) | enable=**true** | **NONE — vestigial.** 0 refs in `hooks.nix`; the actual pre-edit formatter is inline in `development.autoFormat` (`hooks.nix:442-460`), NOT driven by this category |
+| `linting` | `enable`, `commands` | enable=false | **NONE for hooks** — `enable` only adds linter pkgs to PATH (`claude-code.nix:1653`); no hook group in the merge |
+| `security` | `enable`, `blockedPatterns` (list) | enable=**true** | PreToolUse Read/Edit/Write **block** (`hooks.nix:498-523`) — WIRED |
+| `git` | `enable`, `autoStage`, `autoCommit` | autoStage=**true** | PostToolUse auto-stage, WIRED **inside developmentHooks** (`hooks.nix:480-495`); `git.enable`/`autoCommit` are declared-only (not wired) |
+| `testing` | `enable`, `sourcePattern`, `command` | enable=false | **NONE — declared, not wired** |
+| `logging` | `enable`, `logPath`, `verbose` | enable=**true** | PostToolUse log (`hooks.nix:525-537`) — WIRED |
+| `notifications` | `enable`, `matcher`, `title`, `message` | enable=false | **NONE for hooks** — `enable` only adds `libnotify` to PATH + fires an assertion (`claude-code.nix:1657,1966`); no Notification hook group is generated |
+| `development` | `enable`, `flakeCheck`, `autoFormat` | enable=**true** | PreToolUse format + PostToolUse flake-check (`hooks.nix:440-496`) — WIRED |
+| `resume` | `enable` | enable=**true** | SessionStart rehydration (`hooks.nix:543-552`) — WIRED |
+| `rtk` | `enable`, `package`, `contextFile` | enable=false | PreToolUse Bash (DISABLED host-wide; `hooks.nix:557-566`) — WIRED-but-off |
+| `custom` | `attrsOf` keyed by event name | genAttrs hookEvents `[]` | any event, any entry type (`hooks.nix:272-295`) — WIRED (merged last) |
+
+**Which categories actually emit a hook (verified by `cfg.hooks.<cat>` ref-count in `hooks.nix`):** only
+`security`, `logging`, `development` (+ `git.autoStage` folded inside development), `resume`, `rtk`,
+`tmuxStatus`, and `custom`. `formatting`, `linting`, `testing`, `notifications` are declared options that do
+NOT contribute to the hook merge — do NOT treat them as live templates when authoring a new interlock; the
+working templates to copy are `security` (PreToolUse block) and `development` (PreToolUse/PostToolUse
+command).
+
+Plus a sibling namespace `options.programs.claude-code.tmuxStatus.{enable,events}` (`hooks.nix:376-423`)
+that maps CC lifecycle events to a tmux marker. **No** category today expresses attribution / no-main /
+no-verify / git-add-f / emdash / rm-i / handoff-gate — see the gaps table (§7).
+
+### 2. `mkHook` builder — the one way to author a hook group (`hooks.nix:57-109`)
+
+`mkHook { matcher; type ? "command"; command|script|args|shell|url|…; ifFilter ? null; timeout ? 60;
+continueOnError ? true; … }` returns a single hook **group** `{ matcher; hooks = [ entry ]; }`. It emits
+only the fields actually passed, so the entry matches the upstream schema for the chosen `type`
+(command/http/mcp_tool/prompt/agent). Two fields matter most for interlocks:
+- **`continueOnError`** — defaults `true` (emitted as `continueOnError = true`). A blocking hook MUST set
+  `continueOnError = false`; that is what lets a non-zero exit actually block (see §4). Warn/reminder hooks
+  keep the `true` default.
+- **`ifFilter`** — serializes to the reserved JSON key `"if"` (`hooks.nix:101`); a second, finer matcher
+  (e.g. `Bash(git commit *)`) to narrow blast radius beyond the coarse `matcher`.
+
+### 3. Assembly — union, never overwrite (`hooks.nix:436-600`)
+
+`config.programs.claude-code._internal.hooks` is built by
+`mergeHookSets = lib.zipAttrsWith (_: lib.concatLists)` over a list of per-category attrsets:
+base scaffold (`genAttrs hookEvents (_: [])`) ++ developmentHooks ++ securityHooks ++ loggingHooks ++
+resumeHooks ++ rtkHooks ++ tmuxStatusHooks ++ `cfg.hooks.custom`. **Critical:** the merge is an explicit
+list-concat union, NOT the right-biased `//` that `types.attrs` would use natively — a `//` merge silently
+drops every contributor but the last on a shared event key (the in-code comment at `hooks.nix:425-435`
+documents the prior bug where security's PreToolUse clobbered development's). A new category therefore adds
+its own `lib.optionalAttrs cfg.hooks.<cat>.enable { <Event> = [ (mkHook {…}) ]; }` block and appends it to
+the `mergeHookSets [ … ]` list — it coexists automatically with every other enabled hook on that event.
+Inner conditional hooks use `lib.optional` (a 0|1-length list), never list-embedded `mkIf`.
+
+### 4. Exit-code + input conventions (verified in-tree, corroborated by plan 017 R1)
+
+- **Input is JSON on stdin, NOT `$1`/env.** Bash tool calls carry the command at `.tool_input.command`;
+  Edit/Write carry the path at `.tool_input.file_path`. Every live hook parses it with
+  `${pkgs.jq}/bin/jq -r '.tool_input.<field> // empty'` (`hooks.nix:449,485,510`). **Correction to plan 017
+  R1's "Important Discovery":** its worry that "existing hooks use `$1` and may never have worked" is now
+  STALE — the module was fixed in commit `4f3488c` ("fix(claude-code/hooks): read tool_input.file_path
+  from stdin JSON, not $1") to read `tool_input` via jq stdin across development, security, and auto-stage
+  hooks. P3/P4 use the jq-stdin pattern with confidence.
+- **PreToolUse `exit 2` BLOCKS** the tool call and feeds stderr back to the model; `exit 0` allows;
+  any other non-zero is a *non-blocking* error (the security hook's comment at `hooks.nix:504-509` records
+  that the old `exit 1` was a bug — it printed "blocked" yet let the edit through). The block only takes
+  effect when the hook's `continueOnError = false`.
+- **Structured-JSON alternative** to `exit 2`: emit
+  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"…"}}`
+  on stdout (plan 017 R1). Either mechanism works; the in-tree convention is `exit 2` + stderr.
+- **Context injection:** SessionStart / UserPromptSubmit hooks inject stdout as session context (resume hook
+  `hooks.nix:543-552`; memory `cc-sessionstart-hook-contract`: both `additionalContext` and plain stdout
+  inject, stdin carries `transcript_path`). This is the mechanism for reminder-only (Class-B13/B14) hooks.
+
+### 5. Serialization path (Nix build output → settings.json → runtime)
+
+`mkSettingsTemplate` (`claude-code.nix:1363-1371`) computes
+`cleanHooks = filterAttrs (_n: v: v != null && v != []) cfg._internal.hooks` (drops empty event slots),
+gates on `hasHooks`, and `builtins.toJSON`s the result into each account's `settings.json` — a **Nix build
+output, gitignored**, regenerated by `home-manager switch` (never hand-edit). At runtime the launcher
+coalesces `settings.hooks` into `.claude.json` via jq (`_hm/lib.nix:~135`), so a `switch` is what makes a
+new hook live. This is why all hook authoring is declarative in Nix and why the module-global caveat below
+holds.
+
+### 6. Module-global caveat + VM-test harness
+
+- **Module-global:** the SAME `settings.json` hooks block deploys to EVERY enabled account on the host
+  (`hooks.nix:33`, and the `rtk` note at `hooks.nix:322-328`). A converted rule fires for all accounts, so
+  every Class-A/B design MUST carry a false-positive analysis and prefer a narrow `matcher` + `ifFilter`.
+  Plan 049 is the canary (a bad project-level matcher fired "non-blocking status" on nearly every Edit).
+- **VM-test harness:** `modules/flake-parts/vm-tests.nix` builds HM-in-nspawn tests via
+  `mkHmContainerTest { name; hmModules; testScript; … }` (`vm-tests.nix:234-249`; nspawn backend,
+  `requiredFeatures.kvm = false`, Python `testScript`). Precedent: the pre-commit-hook test asserts the
+  generated artifact exists and is executable (`vm-tests.nix:999-1033`). **There is no claude-code hook VM
+  test yet.** A P4 interlock test adds `self.modules.homeManager.claude-code` to `hmModules`, then asserts
+  in `testScript` that (a) the generated `settings.json` contains the new hook (grep/`jq` over the deployed
+  file) and (b) the block fires — either by invoking the hook script directly with a crafted stdin JSON and
+  asserting `exit 2`, or by driving a real `git commit` and asserting rejection. Direct-script invocation is
+  the cheaper, more deterministic assertion.
+- **P4 RISK (verified):** `self.modules.homeManager.claude-code` is **never** referenced by any current VM
+  test (`rg 'claude-code' modules/flake-parts/vm-tests.nix` → none; only `which claudevloop`-style PATH
+  checks in the dev-shell test). So P4 will be the FIRST time the CC HM module is evaluated in the nspawn
+  harness — budget for module-eval fallout (missing deps, activation-script assumptions, config-dir paths)
+  that is unrelated to the hook logic itself. Consider a minimal "does the CC module even activate in
+  nspawn + emit a settings.json" smoke assertion as the first sub-step before asserting block behavior.
+
+### 7. Gaps — Class-A/B rule vs current option surface
+
+"Expressible now" = achievable with an existing categorized option OR ad hoc via `hooks.custom` without new
+Nix option code. "NEW toggle" = warrants a first-class, individually-toggleable option (per the plan's
+per-rule enforcement stance). Most Class-A rows are PreToolUse Bash `git *` command-string blocks that
+naturally group into **one new git-safety category** (A1-A4 all parse `.tool_input.command` for a git
+subcommand); A5/B12 are Write/Edit blocks shaped exactly like the existing `security` category.
+
+| # | Rule | Expressible now? | Recommended option |
+|---|---|---|---|
+| A1 | No AI attribution in commits | `hooks.custom.PreToolUse` ad hoc; no first-class toggle | NEW `hooks.gitSafety.blockAttribution` (default block) — group with A2-A4 |
+| A2 | No commit/push on main | `hooks.custom` ad hoc | NEW `hooks.gitSafety.blockCommitOnMain` (default block) |
+| A3 | No `--no-verify`/`-n` | **already designed** = plan 017 `hooks.gitSafety.enable` (I1 PENDING) | ADOPT plan 017's `gitSafety` category as the home for A1-A4; P4 implements 017 I1 + folds A1/A2/A4 in (do NOT create a parallel category) |
+| A4 | No `git add -f`/`--force` | `hooks.custom` ad hoc | NEW `hooks.gitSafety.blockAddForce` (default block) |
+| A5 | No emdash in file content | `hooks.custom.PreToolUse` ad hoc; shape ≈ `security` | NEW `hooks.contentSafety.blockEmdash` (Write/Edit `.new_string`/`.content` scan) |
+| A/B6 | `rm -i`/`cp -i`/`mv -i` hang | `hooks.custom` ad hoc | NEW `hooks.bashSafety.blockBareRm*` (block-with-message, **never rewrite** — RTK lesson) |
+| A/B7 | `grep`/`find` → `rg`/`fd` | `rtk` category exists but is DISABLED/rewrites (corrupts) | NEW warn-only variant OR keep soft; do NOT reuse rtk's rewrite path |
+| B8 | Stage before nix | PARTIAL — `git.autoStage` auto-stages on Edit/Write PostToolUse, but that is not a pre-`nix` warn | extend `git` or NEW `hooks.gitSafety.warnUnstagedBeforeNix` (warn) |
+| B9 | Single-quote nix refs | `hooks.custom` ad hoc | NEW warn (low priority) |
+| B10 | Relative md links | `hooks.custom` ad hoc | NEW warn (low priority) |
+| B11 | Handoff before stop | not expressible with any current option | NEW `hooks.handoffGate` Stop/SessionEnd (nag/gate on stale `HANDOFF.md` / unset `active-plan`) — P5b |
+| B12 | Edit template not generated file | shape ≈ `security.blockedPatterns` (path block) | extend `security` with a generated-path set OR NEW `hooks.contentSafety.blockGeneratedFileEdit` |
+| B13 | Verify provenance before kill | `hooks.custom` ad hoc (reminder) | NEW reminder-only (inject via stderr, `continueOnError=true`) |
+| B14 | git push auth prefix | `hooks.custom` ad hoc (reminder) | NEW reminder-only |
+
+**Takeaway for P3:** the P3a/P3b/P3c targets (attribution, no-main, rm-i) split cleanly into **two new
+categories** — a `gitSafety` category (subsuming plan 017's `--no-verify` design and adding A1/A2/A4) and a
+`bashSafety` category (A/B6). A5/B12 later reuse the `security`-category path/content-block template. Every
+one is a PreToolUse hook parsing `.tool_input.*` via jq-stdin, exit 2 + `continueOnError=false`, added to
+the `mergeHookSets` list behind a `lib.optionalAttrs cfg.hooks.<cat>.enable` guard, with a narrow
+`matcher`/`ifFilter` and per-rule false-positive analysis.
+
+## P3 design — Class-A interlocks (`gitSafety` + `bashSafety` categories)
+
+Designed 2026-09-07 (P3). **Presented to Tim and signed off 2026-09-07** (artifact-producing Present/STOP gate).
+Grounds every choice in the P2 substrate map. **No host adopts here** — P4 implements + VM-tests, P6 enables.
+
+**[DECISION] Tim, 2026-09-07 (P3 sign-off):** (1) P3c bare-`rm`/`cp`/`mv` guard = **hard-block** (not warn) —
+matches P3a/P3b; the bypass env var covers the rare false positive. (2) P3b no-commit-on-main = **default-block
+everywhere** (host-wide, all repos/accounts) — strongest protection; throwaway-on-main repos use the bypass;
+live enablement still gated at P6. (3) escape hatch = **plain `CLAUDE_HOOKS_BYPASS` env var** (zero-friction
+mid-session recovery, logged to stderr; accidental-persist risk accepted). All three confirm the design defaults
+below unchanged — the "surfaced for P6" notes in P3b/P3c are now RESOLVED (kept for rationale).
+
+### 0. Shared conventions (apply to ALL rules below)
+
+Every rule is a **PreToolUse** hook authored via `mkHook` and appended to the `mergeHookSets [ … ]` list
+(`hooks.nix:584-600`) behind a `lib.optionalAttrs cfg.hooks.<cat>.<subtoggle> { PreToolUse = [ (mkHook {…}) ]; }`
+block — so it UNIONS with existing PreToolUse hooks (security, rtk) rather than clobbering them (P2 §3). All
+blocking rules set:
+- **`matcher = "Bash"`** (git/rm rules) or **`"Edit|Write|MultiEdit"`** (content rules, not in P3) — the coarse tool gate.
+- **`ifFilter`** to narrow blast radius where useful (serializes to the reserved `"if"` key, `hooks.nix:101`). **CAVEAT (unverified):** the module MODELS this field, but whether Claude Code actually honors an `"if"` predicate on a hook entry at runtime is NOT verified in-tree (no live test). Therefore correctness does NOT rest on it — every script below RE-checks the command with its own `grep` (matcher `"Bash"` + in-script discrimination is the real gate; `ifFilter` is a best-effort optimization only). P4's VM test exercises the SCRIPT directly, so an inert `"if"` cannot cause a false-allow.
+- **`continueOnError = false`** — REQUIRED for `exit 2` to actually block (P2 §4; the security template is the model, `hooks.nix:519`).
+- **Input via jq-stdin:** `cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"` — the command is at `.tool_input.command`, NEVER `$1` (P2 §4; the `$1` worry in plan 017 R1 is stale, fixed in commit `4f3488c`). Trailing `exit 0` on no-match to avoid a spurious non-blocking-error notice.
+- **Nix store paths** for every binary (`${pkgs.jq}`, `${pkgs.gnugrep}`, `${pkgs.git}`) — never bare commands.
+- **Uniform escape hatch:** each block first checks `[ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0`. This is the operator's per-session override (`export CLAUDE_HOOKS_BYPASS=1`) so a bad matcher can NEVER lock Tim out of committing mid-plan (directly satisfies the Guardrail). It requires no rebuild and is logged to stderr when taken. **Design decision surfaced for P6:** whether the bypass is a plain env var (chosen here for zero-friction recovery) or something harder to trip accidentally.
+
+**Two new categories** (per P2 §7 grouping — do NOT scatter these into `hooks.custom`):
+
+```nix
+hooks.gitSafety = {
+  enable            = mkOption { type = bool; default = true;  … };  # category master switch
+  blockNoVerify     = mkOption { type = bool; default = true;  … };  # A3 — SUBSUMES plan 017 I1
+  blockAttribution  = mkOption { type = bool; default = true;  … };  # A1 / P3a
+  blockCommitOnMain = mkOption { type = bool; default = true;  … };  # A2 / P3b
+  blockAddForce     = mkOption { type = bool; default = true;  … };  # A4 (sketch; P4 folds in)
+};
+hooks.bashSafety = {
+  enable      = mkOption { type = bool; default = true; … };         # category master switch
+  blockBareRm = mkOption { type = bool; default = true; … };         # A/B6 / P3c
+};
+```
+
+Each sub-rule fires only when BOTH `cfg.hooks.<cat>.enable` AND its own sub-toggle are true, e.g.
+`lib.optionalAttrs (cfg.hooks.gitSafety.enable && cfg.hooks.gitSafety.blockAttribution) { … }`. This gives the
+per-rule individual toggleability the enforcement stance requires (§Decisions), while a single `enable=false`
+disables the whole category. Safety-critical rules default `true` (block); the category is shipped disabled on
+the live host until P6 (defaults are for the eventual adoption, not for pre-P6 enablement).
+
+### P3a — AI-attribution block (`gitSafety.blockAttribution`, default block)
+
+**Rule / incident:** No AI attribution in commits/PRs. REAL: memory `project_ai_attribution_leak` — 11 public
+nixcfg commits leaked `Co-Authored-By` trailers, listing Claude as a repo contributor. Highest-value block.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, `ifFilter = "Bash(git commit*)"` (narrow to commit invocations).
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE '^[[:space:]]*git|[;&|][[:space:]]*git' || exit 0   # only git commands
+  # attribution signature — the LEAK forms, not bare brand mentions (see FP analysis)
+  if echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qiE \
+       'co-authored-by:|generated with (\[)?claude|claude\.ai/code|noreply@anthropic\.com|🤖'; then
+    echo "🚫 gitSafety: commit carries an AI-attribution marker (Co-Authored-By / 'Generated with Claude' / claude.ai / anthropic noreply / 🤖). Remove it — commits must appear solely human-authored (memory project_ai_attribution_leak). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  exit 0
+  ```
+- **New option:** `hooks.gitSafety.blockAttribution` (default `true`).
+- **FALSE-POSITIVE analysis (plan 049 is the canary):** The matcher deliberately targets the **leak signature**
+  (`Co-Authored-By:` trailer form, the `Generated with [Claude Code]` boilerplate, `claude.ai/code`, the anthropic
+  noreply address, the 🤖 emoji) and NOT bare `Claude`/`Anthropic` — because THIS repo's commit messages mention
+  Claude/Anthropic constantly (this very plan), so a bare-brand matcher would false-positive on nearly every
+  commit. Residual FP: a meta-commit whose message literally quotes `Co-Authored-By:` (e.g. `git commit -m "docs:
+  ban Co-Authored-By trailers"`) is blocked — rare, and the operator reword/bypass path is cheap. **Coverage
+  limitation (documented, not a defect):** the hook only sees the command STRING, so it catches `-m`/`-F`/heredoc
+  and `--trailer` forms; a commit that opens `$EDITOR` (bare `git commit`) hides its message from the hook. That
+  is the residual soft edge — but CC's leak vector was always the auto-appended `-m`/heredoc trailer, which IS covered.
+- **VM-test assertion:** invoke the built hook script with crafted stdin — `{"tool_input":{"command":"git commit -m $'x\\n\\nCo-Authored-By: Claude <noreply@anthropic.com>'"}}` asserts `exit 2`; a clean `{"tool_input":{"command":"git commit -m 'plan 056: ...'"}}` asserts `exit 0`; a non-git Bash command asserts `exit 0`.
+
+### P3b — No commit/push on main/master (`gitSafety.blockCommitOnMain`, default block)
+
+**Rule / incident:** project CLAUDE.md CRITICAL "NEVER WORK ON MAIN OR MASTER"; plan Guardrails "confirm merge
+to main". Latent (no logged incident) but high blast radius if it happens on a public repo.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, `ifFilter = "Bash(git commit*)"` — plus the script itself also matches `git push` (ifFilter is a single coarse pattern; the script does the precise commit|push discrimination).
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  # only intercept commit / push (NOT status/log/diff/etc.)
+  echo "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+(commit|push)\b' || exit 0
+  branch="$(${pkgs.git}/bin/git symbolic-ref --short HEAD 2>/dev/null)"
+  case "$branch" in
+    main|master)
+      echo "🚫 gitSafety: refusing 'git ${cmd}' on protected branch '$branch'. Create/switch to a feature branch first (project CRITICAL: NEVER WORK ON MAIN). Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+      exit 2 ;;
+  esac
+  exit 0
+  ```
+- **New option:** `hooks.gitSafety.blockCommitOnMain` (default `true`).
+- **FALSE-POSITIVE analysis:** Uses `git symbolic-ref --short HEAD` on the hook's cwd (which is the Bash tool's
+  project cwd), so it reflects the ACTUAL branch, not a guess — zero FP on branch detection. Real FP surface:
+  (1) a repo whose legitimate working branch IS `main` (throwaway/personal scratch repos); since hooks are
+  module-global this fires for EVERY repo on the host. (2) `git -C /other/repo commit` targets a different repo
+  than cwd — the branch check reads cwd, so it could mis-evaluate; acceptable (rare, and bypass covers it).
+  Mitigation for both: the `CLAUDE_HOOKS_BYPASS` env var is the intended, documented recovery. **This rule has the
+  largest blast radius of the three — flagged as the primary P6 decision:** confirm default-block is desired
+  host-wide vs. warn-tier, given it forbids ALL main-branch commits across every repo and account. Detached-HEAD
+  (`symbolic-ref` fails, `branch` empty) falls through to `exit 0` (allow) — safe default.
+- **VM-test assertion:** in the test's git repo, checkout `main` and assert the hook script `exit 2` on a
+  `git commit` stdin; checkout a feature branch and assert `exit 0`; assert `git status` (non-commit) `exit 0`
+  even on main. Cheapest deterministic form: drive `git symbolic-ref` against a real temp repo inside `testScript`.
+
+### P3c — `rm -i`/`cp -i`/`mv -i` hang hazard (`bashSafety.blockBareRm`, default block-with-message)
+
+**Rule / incident:** global CLAUDE.md CRITICAL — the user's shell aliases `rm`→`rm -i` (also `cp -i`, `mv -i`),
+which HANGS in non-interactive tool subshells waiting for a prompt that never comes. REAL: has hung sessions.
+Per memory `rtk-grep-false-negative-disabled`: **block with an instructive message, NEVER auto-rewrite** (the RTK
+rewrite experiment silently corrupted output and was disabled host-wide).
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, no `ifFilter` (the command discrimination is in the script).
+- **Script pseudocode (PER-SEGMENT — a single global regex is insufficient, see below):**
+  ```
+  bypass: [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd = jq -r '.tool_input.command // empty'
+  # Split cmd into segments on the shell separators ; && || | . Examine each
+  # segment INDEPENDENTLY: a force flag in ONE segment must NOT mask a bare
+  # rm/cp/mv in ANOTHER (e.g. `rm foo && cp -f a b` — the rm is still bare).
+  for seg in split(cmd, on /[;&|]+/):
+      head = first whitespace-delimited word of seg
+      if head in { rm, cp, mv }:                       # exact word — excludes rmdir, git rm (head is `git`)
+          # force flag present ANYWHERE in THIS segment? honor:
+          #   -f | -rf | -fr | -r -f (separated) | --force
+          # token test:  ^--force$  OR  ^-[[:alnum:]]*f[[:alnum:]]*$  (f anywhere in a short cluster)
+          if any token of seg matches (-[[:alnum:]]*f[[:alnum:]]*|--force): continue   # forced — safe
+          stderr: "🚫 bashSafety: bare '<head>' detected. Your shell aliases rm/cp/mv to -i
+                   (interactive), which HANGS in non-interactive tool shells. Re-run WITH -f.
+                   Not auto-rewritten by design (RTK lesson). Override: export CLAUDE_HOOKS_BYPASS=1."
+          exit 2
+  exit 0
+  ```
+  **P4 implementation note:** iterate segments WITHOUT a `cmd | while read` pipe — the pipe runs the loop in a
+  subshell so its `exit 2` cannot terminate the parent (classic bash gotcha); use a `for`/here-string
+  (`while … done <<< "$segments"`) or a sentinel file. The force-flag token test `-[[:alnum:]]*f[[:alnum:]]*`
+  matches `f` ANYWHERE in a short cluster (`-f`,`-rf`,`-fr`) and, applied per-token, also passes the separated
+  `rm -r -f` form.
+- **New option:** `hooks.bashSafety.blockBareRm` (default `true`).
+- **FALSE-POSITIVE analysis:** This is the FP-riskiest of the three (Class **A/B**, not clean-A). The per-segment
+  design above is a CORRECTION to an earlier single-regex sketch that only inspected the flag immediately after the
+  command word — that sketch false-positived on `rm -r -f foo` (force present but not adjacent) and false-negatived
+  on `rm foo && cp -f a b` (adjacent-only or global checks both fail here). Known residual edges after the fix:
+  (1) `rm`/`cp`/`mv` reached indirectly — `xargs rm`, `find … -exec rm`, backtick/`$(…)` subshells, `sudo rm` —
+  the head-word test does NOT see them (`xargs`/`find`/`sudo` is the head), so these are FALSE-NEGATIVES (hook
+  stays silent, command runs; the alias-hang risk there is the operator's to catch). Chosen deliberately: broadening
+  the head test to "any rm/cp/mv anywhere" would re-introduce substring/masking false-positives. (2) `cp`/`mv`
+  frequently DON'T need `-f`, and requiring it changes overwrite semantics — so for cp/mv the block is more
+  debatable than for rm; the message tells the model to add `-f`, which is the correct de-hang action regardless.
+  (3) `rm -i` explicit is still blocked (no `f`) — CORRECT, it would hang. **[DECISION] Tim 2026-09-07:** ship P3c
+  as a **hard block** (not warn) — the bypass env var covers the rare FP; the two git rules stay hard-block too.
+  (Rationale retained: the alias-hang is recoverable, not data-loss/leak, and the FP surface is the widest of the
+  three — but Tim chose block for consistency and because the bypass makes recovery one env-var away.)
+- **VM-test assertion:** hook script `exit 2` on `{"command":"rm foo"}`, `{"command":"cp a b"}`, `{"command":"echo x && mv a b"}`; `exit 0` on `{"command":"rm -f foo"}`, `{"command":"rm -rf dir"}`, `{"command":"rmdir d"}`, `{"command":"git rm --cached f"}` (git rm is a different command — verify the anchor doesn't catch it), and a non-matching `{"command":"ls"}`.
+
+### P3 — folded-in / referenced rules (designed elsewhere, land in the same categories at P4)
+
+- **A3 `--no-verify` (`gitSafety.blockNoVerify`):** already fully designed in **plan 017 I1** (regex + the
+  `-n`/`-an`/`git push -n`=dry-run edge-case matrix, 017:122-160). P4 implements 017's I1 AS `gitSafety.blockNoVerify`
+  (NOT a parallel category) and updates plan 017 status to reflect the merge. No re-design here — 017 is the spec.
+- **A4 `git add -f`/`--force` (`gitSafety.blockAddForce`):** trivial sibling — `grep -qE 'git[[:space:]]+add\b'`
+  AND has `-f`/`--force` → exit 2 ("respect .gitignore; never force-add"). Same template as P3a. Included in the
+  category for completeness; full P4 implementation, brief sketch only here.
+
+### P3 VM-test approach (shared; feeds P4)
+
+All assertions use **direct hook-script invocation with crafted stdin JSON** (the cheaper, deterministic form per
+P2 §6) inside a `mkHmContainerTest` `testScript`, NOT a live CC session. P4 must FIRST add
+`self.modules.homeManager.claude-code` to the test's `hmModules` — **never done before** (P2 §6 P4 RISK) — and
+smoke-assert that the module activates in nspawn and emits a `settings.json` containing the new hooks (grep/`jq`
+over the deployed file) BEFORE asserting block behavior. Then per rule: pipe the crafted `{"tool_input":{"command":…}}`
+into the built hook script, assert exit status (2 = blocked, 0 = allowed) and, for a spot-check, that stderr carries
+the instructive message. The clean-feature-branch commit (`exit 0`) is the mandatory no-false-positive assertion
+the P4 DoD names.
+
+## P5 findings — the hard process-gates (feasibility + prototype design)
+
+Researched 2026-09-07 (P5). **Artifact-producing → Present/STOP for Tim's sign-off before COMPLETE.** This
+section is the research deliverable; the prototype DESIGNS below are proposed default-off and are NOT yet
+implemented in `hooks.nix` (implementation waits on P5 sign-off, mirroring the P3→P4 split). No host adopts.
+
+### P5.0 — the runtime-contract facts that decide everything (verified 2026-09-07)
+
+Verified against the official Claude Code hooks reference (`https://code.claude.com/docs/en/hooks`, "Exit
+code 2 behavior per event" + "Exit code 0" tables) and cross-checked with memory `cc-sessionstart-hook-contract`.
+These are the load-bearing facts; the whole P5 design turns on them:
+
+| Event | Fires when | exit 2 blocks? | On exit 2 | exit-0 stdout injects as context? |
+|---|---|---|---|---|
+| **PreToolUse** | before a tool runs | **YES** | tool blocked; stderr → Claude | no (debug log) |
+| **PostToolUse** | after a tool ran (success) | **NO** | tool already ran; **stderr still shown to Claude** | no (debug log) |
+| **UserPromptSubmit** | before a prompt reaches the model | **YES** | prompt blocked+erased; stderr → user only | **YES** |
+| **Stop / SubagentStop** | **each time the agent finishes a turn** | **YES** | stop blocked, conversation **continues**; stderr → Claude | no (debug log) |
+| **SessionEnd** | session terminates | **NO** (not in the table) | cleanup-only; cannot gate | no (debug log) |
+
+Two consequences dominate P5:
+1. **There is NO blockable "the session is about to end" event.** `SessionEnd` fires but **cannot block**
+   (cleanup-only); `Stop` **can** block but fires on **EVERY turn**, not just the last one. So a hook cannot
+   single out "the final stop" and gate it — blocking `Stop` would demand the gated action after *every*
+   assistant response. This directly refutes the seed-inventory / P1-B11 assumption ("Stop/SessionEnd:
+   block/nag if HANDOFF stale") — neither event can cleanly gate the *session-ending* moment.
+2. **The `TASK:COMPLETE` marking is a normal Edit**, and PreToolUse Edit **can** block it, with the pre-edit
+   `old_string`/new post-edit `new_string` BOTH on stdin (`.tool_input.{file_path,old_string,new_string}`;
+   `.content` for Write). So P5a/P5c — which the seed inventory filed as Class-C "needs session-state
+   inference" — are actually gate-able at the **edit** that performs the transition, not only inferable
+   post-hoc at Stop. They are MORE enforceable than P1 predicted.
+
+Loop-prevention note: a blocking `Stop` hook risks an infinite loop (block → continue → finish → block …).
+The doc excerpt did NOT confirm a `stop_hook_active` stdin guard field (the guide agent could not cite it);
+so any blocking-`Stop` design would rest on an **unverified** loop-guard. **The P5b prototype therefore
+avoids blocking `Stop` entirely** — sidestepping both the per-turn problem AND the unverified guard.
+
+### P5a — Present/STOP-before-COMPLETE  → FEASIBLE (PreToolUse Edit gate), soft residue = the review itself
+
+**Rule / incident:** memory `next-task-present-stop-artifact-gate` (plan 055 PM): a `/next-task` session
+self-certified COMPLETE + committed without a review conversation; the skipped review would have caught real
+defects. **What a hook CAN enforce:** the *edit* that writes `TASK:COMPLETE` into a plan file is a clean
+textual predicate — a **PreToolUse** hook (`matcher = "Edit|MultiEdit|Write"`) that fires when
+`.tool_input.file_path` matches `.claude/user-plans/.*\.md` AND `.tool_input.new_string`/`.content`
+introduces `TASK:COMPLETE` that was NOT already in `.tool_input.old_string` (a genuine transition, not a
+re-write of an already-complete row) can **block** it (`exit 2`). **What is irreducibly soft:** whether a
+real review/sign-off actually happened — a hook cannot read the human approval out of the conversation. The
+design bridges this with an **attestation marker**: the block lifts only when the operator sets
+`CLAUDE_TASK_SIGNOFF=1` (the same zero-friction env-var pattern as `CLAUDE_HOOKS_BYPASS`). The marker does
+not *prove* a review occurred, but it converts a silently-skippable convention into a **deliberate act** —
+which is the entire point (soft "suggestion" → hard "process step"). Residual soft edge: a session could set
+the marker reflexively; that is the operator's honor-boundary, identical in kind to the bypass.
+
+> **VERIFIED 2026-09-08 (real binary, claude-code 2.1.191).** The anti-self-certification value of the
+> env-var marker rests on the model being UNABLE to set it mid-session. **Empirical test (honoring Tim's
+> "verify first" decision):** a throwaway `--settings` PreToolUse Bash hook dumped its own `env` per firing;
+> a `claude -p` run was driven through TWO sequential Bash tool calls, the first doing
+> `export P5A_TOOLCALL=set_by_model`, with `P5A_LAUNCH=set_at_launch` exported BEFORE launch. Result across
+> the 2 hook firings: `P5A_LAUNCH` present in **both** (launch-env propagates to hooks — re-confirms the
+> 2026-06-21 finding on 2.1.191), `P5A_TOOLCALL` present in **zero** (a mid-session tool-call `export` is
+> INVISIBLE to a later hook, because a Bash-tool subshell cannot mutate `claude`'s env and hooks fork from
+> that unchanged launch env). A pure process-topology model reproduced the same result. **Consequence:** only
+> the operator, at launch, can set `CLAUDE_TASK_SIGNOFF` → the model cannot self-certify (the plan-055-PM hole
+> stays closed); the cost is that the marker is **session-global** (green-lights every completion that
+> session), not per-task. A sentinel file was rejected (per-task but model-settable → reopens the hole).
+> **[DECISION] Tim 2026-09-08:** P5a marker = the session-global `CLAUDE_TASK_SIGNOFF` env var (option 1);
+> verify-first satisfied.
+
+- **Prototype (proposed, default OFF):** `hooks.planIntegrity.requireSignoffBeforeComplete`.
+  ```
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  fp="$(jq -r '.tool_input.file_path // empty')"; case "$fp" in */.claude/user-plans/*.md) ;; *) exit 0 ;; esac
+  new="$(jq -r '.tool_input.new_string // .tool_input.content // empty')"
+  old="$(jq -r '.tool_input.old_string // empty')"
+  echo "$new" | grep -q 'TASK:COMPLETE' || exit 0
+  echo "$old" | grep -q 'TASK:COMPLETE' && exit 0        # already-complete row rewrite — not a transition
+  [ -n "$CLAUDE_TASK_SIGNOFF" ] && exit 0                # operator attested sign-off
+  echo "🚫 planIntegrity: marking a task TASK:COMPLETE requires a Present/STOP review first (memory next-task-present-stop-artifact-gate). Present the artifact + defaults, get Tim's sign-off, then: export CLAUDE_TASK_SIGNOFF=1. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+  exit 2
+  ```
+- **FP analysis (plan 049 canary):** matcher is doubly narrow — plan-file path AND a real
+  PENDING/IN_PROGRESS→COMPLETE transition — so it never fires on ordinary edits. It DOES fire on this very
+  plan's status edits (that is the intended behavior); the marker/bypass is the one-env-var release. Default
+  OFF because it changes the `/next-task` ergonomics and P6 must decide whether the marker is the right
+  sign-off channel.
+
+### P5b — mandatory-handoff-before-stop  → LARGELY SOFT (no blockable session-end event); feasible artifact = default-off SessionEnd audit-warn
+
+**Rule / incident:** global "Session Handoff Protocol (NEVER SKIP)" + plan 044 concurrency incident. **What a
+hook CANNOT do (the P5.0 finding):** force a handoff at session end — `SessionEnd` cannot block, and `Stop`
+fires per-turn so blocking it would demand a fresh handoff after every single response. **What a hook CAN
+do:** at `SessionEnd`, *detect and record* staleness — `.claude/active-plan` unset/empty OR `.claude/HANDOFF.md`
+absent or older than the tip commit (`git log -1 --format=%ct` vs the file mtime). But because `SessionEnd`
+exit-0 stdout goes to the **debug log only** (Claude never sees it, and the session is ending regardless),
+this is **advisory/audit-only** — it cannot change behavior in-session. **Irreducibly soft (unchanged from
+P1-B11):** even a blocking variant could only enforce THAT a fresh file exists, never that its CONTENT is a
+meaningful distilled summary — composing the handoff is model-only (a `touch HANDOFF.md` defeats any
+mtime check). 
+
+- **Prototype (proposed, default OFF):** `hooks.planIntegrity.handoffReminderOnSessionEnd` — a `SessionEnd`
+  hook, `continueOnError = true`, that writes a one-line staleness warning to stderr (debug log) and, so the
+  signal is not lost, appends a timestamped line to `$CLAUDE_PROJECT_DIR/.claude/handoff-audit.log` when
+  `active-plan` is unset or `HANDOFF.md` is stale. **Explicitly documented as advisory** — it is the best a
+  mechanical hook can do and is NOT a gate. 
+- **Rejected alternative (recorded so P6 need not re-derive):** a blocking `Stop` handoff-gate — rejected on
+  two grounds: (1) `Stop` is per-turn, so it would block ordinary mid-session turns, not just the last; (2)
+  loop-prevention would depend on the **unverified** `stop_hook_active` field. Not worth the FP/loop risk for
+  a gate that still cannot compose the summary.
+- **CLAUDE.md conflict to resolve at P6 (from P1 correction #1):** project CLAUDE.md "End of Session" still
+  mandates the **clipboard** (`clip.exe`) handoff, which contradicts the global **file**-channel protocol
+  (`.claude/HANDOFF.md` + `.claude/active-plan`) this prototype checks. The prototype gates the FILE channel;
+  P6 should fix the stale project-CLAUDE.md prose (the edit itself is out of 056's hook scope).
+
+### P5c — plan-status-transition integrity  → FEASIBLE (PreToolUse Edit textual gate), soft residue = DoD-met
+
+**Rule / incident:** the `/next-task` protocol requires PENDING→IN_PROGRESS→COMPLETE ordering, COMPLETE only
+with a date; memory `plan-next-task-cursor-ordering` shows status-hygiene matters. **What a hook CAN enforce**
+(pure textual predicates on the Edit `old_string`→`new_string`, same shape as the A5 emdash check): (1) an
+**illegal skip** — `old` shows a row `TASK:PENDING` that `new` flips straight to `TASK:COMPLETE` (bypassing
+IN_PROGRESS); (2) **COMPLETE without a date** — `new` introduces `TASK:COMPLETE` with no adjacent
+`(20\d\d-\d\d-\d\d)`. Both are mechanically decidable at PreToolUse. **Irreducibly soft:** whether the task's
+DoD is actually met — the hook enforces the transition's SHAPE, never its correctness.
+
+- **Prototype (proposed, default OFF):** `hooks.planIntegrity.enforceStatusTransitions` — PreToolUse
+  `Edit|MultiEdit`, plan-file path gate, block (`exit 2`) on a PENDING→COMPLETE skip or a dateless COMPLETE,
+  with the instructive message + `CLAUDE_HOOKS_BYPASS` release. Shares the `planIntegrity` category and the
+  plan-file-path helper with P5a. Default OFF (P6 decides warn-vs-block).
+- **FP analysis:** narrow (plan-file path + specific transition shapes). Residual: multi-row MultiEdit that
+  legitimately advances one row IN_PROGRESS→COMPLETE while another goes PENDING→IN_PROGRESS in the same
+  `new_string` — the regex must test per-row, not whole-blob (P4's bashSafety per-segment lesson applies).
+
+### P5 — proposed category shape (one new category, three default-off sub-toggles)
+
+```nix
+hooks.planIntegrity = {
+  enable                       = mkOption { default = true;  … };  # category master (sub-rules still default OFF)
+  requireSignoffBeforeComplete = mkOption { default = false; … };  # P5a — PreToolUse Edit gate + CLAUDE_TASK_SIGNOFF
+  enforceStatusTransitions     = mkOption { default = false; … };  # P5c — PreToolUse Edit textual gate
+  handoffReminderOnSessionEnd  = mkOption { default = false; … };  # P5b — SessionEnd advisory audit-warn (non-blocking)
+};
+```
+Unlike `gitSafety`/`bashSafety` (safety-critical → default block), the P5 sub-rules default **OFF**: they are
+workflow-discipline gates with softer predicates and real ergonomic cost, so P6 opts them in per-rule after a
+warn-first trial. Same authoring conventions as P4 (jq-stdin, Nix-store binaries, `CLAUDE_HOOKS_BYPASS`,
+`lib.optionalAttrs (cat.enable && subtoggle)`, unioned into `mergeHookSets`).
+
+### P5 — the "irreducibly soft / keep soft" list (a hook can only approximate; do NOT convert)
+
+- **Composing the handoff summary content** — only the model can distill what mattered (P5b; global protocol
+  already says this).
+- **Proving a real review happened** for P5a beyond the honor-marker — the marker attests, it does not verify.
+- **Whether a task's DoD is truly met** (P5c) — semantic, model-judgment.
+- **"Confirm merge to main / never auto-merge"** (C18) — a `git merge`-into-main PreToolUse *could* block, but
+  "confirm with Tim" is an approval, not a mechanical predicate; keep soft (or fold into `gitSafety` as a
+  reminder at P6, not a P5 gate).
+- **ONE TASK PER SESSION** (C19) — a Stop hook counting `TASK:COMPLETE` transitions this session is an
+  approximation and rides the per-turn-Stop problem; keep soft.
+- **All C20/C21 pure-judgment rules** (commit-message content quality, conservative-completion, validation≠fixing,
+  stop-and-summarize, rapid-iteration=check-ins, local-first research, mcp-nixos-before-changes, auth-help, …) —
+  context nudges at best; keep soft (some are candidate UserPromptSubmit reminders, but that is out of 056 scope).
+
+### P5 — implementation (signed off 2026-09-08, done 2026-09-09)
+
+**[DECISIONS] Tim 2026-09-08:** (1) P5a marker = session-global `CLAUDE_TASK_SIGNOFF` env var (verify-first
+satisfied — see the VERIFIED block in P5a); (2) P5b = **keep fully soft** — do NOT ship the SessionEnd
+advisory-warn (it cannot change behavior: `SessionEnd` can't block and its stdout is invisible to Claude);
+(3) implement P5a + P5c now, all default-OFF, and finish P5.
+
+Implemented in `modules/programs/claude-code/_hm/hooks.nix`: a new **`planIntegrity`** category
+(`enable` default true; `requireSignoffBeforeComplete` P5a + `enforceStatusTransitions` P5c both default
+**OFF**), hook binding `planIntegrityHooks` appended to the `mergeHookSets` list. Both sub-rules are
+PreToolUse `Edit|MultiEdit|Write` hooks that read stdin ONCE (`input="$(cat)"` — jq is invoked 3× and each
+read would otherwise drain the pipe; **this bug was caught by the logic test** — the first `jq` for
+`file_path` consumed the whole stdin, leaving `new`/`old` empty and the gate silently allowing). The jq
+normalises across the three tool shapes (Edit `.new_string`/`.old_string`, Write `.content`, MultiEdit
+`.edits[].*`); "net-new completion" = more `TASK:COMPLETE` lines in new than old. `exit 2` +
+`continueOnError=false`; uniform `CLAUDE_HOOKS_BYPASS`; P5a additionally releases on `CLAUDE_TASK_SIGNOFF`.
+
+**Validation (all green):** (1) logic test — nix-eval-extracted the REAL generated command strings via
+`extendModules { …planIntegrity.* = true; }` on `homeConfigurations."tim@thinky-nixos"`, drove a 14-case
+matrix: **14/14 pass** (P5a: block net-new-complete-without-signoff, allow with SIGNOFF/BYPASS, allow
+non-plan / non-completion / already-complete rewrite / MultiEdit shape; P5c: block PENDING→COMPLETE skip +
+dateless COMPLETE, allow IN_PROGRESS→COMPLETE-dated / multi-row-with-IN_PROGRESS / pending→in_progress /
+bypass / non-plan). (2) `nix flake check --no-build` GREEN. NOT enabled on any live host (that is P6).
+
+## P6 decision & rollout
+
+Interactive decision gate (depends P4+P5, both COMPLETE). Tim's decisions collected via `/next-task`
+on 2026-09-09.
+
+### [DECISION] Tim 2026-09-09 — per-rule enforcement defaults + adopted gates + rollout
+
+1. **P4 `gitSafety` + `bashSafety` = keep default-BLOCK (all five).** `blockNoVerify`,
+   `blockAttribution`, `blockCommitOnMain`, `blockAddForce`, `blockBareRm` all stay `default = true`
+   (`exit 2`), with `CLAUDE_HOOKS_BYPASS` as the per-session escape hatch. No warn-first trial — these
+   are safety-critical with the signed-off P3 defaults. No code change needed (already default-block).
+2. **P5 `planIntegrity` = enable BOTH gates as hard block.** `requireSignoffBeforeComplete` (P5a) and
+   `enforceStatusTransitions` (P5c) flipped from `default = false` to `default = true` in
+   `modules/programs/claude-code/_hm/hooks.nix`. P5b (SessionEnd handoff warn) remains not-shipped
+   (kept fully soft per the 2026-09-08 decision — `SessionEnd` cannot block and its stdout is invisible
+   to Claude).
+3. **Rollout = decisions-only this session; live enablement driven by Tim.** The option defaults +
+   this decision block land in the `nixcfg-session-hooks` worktree now. Live enablement on
+   `tim@pa161878-nixos` flows through the **nixcfg-work** flake.lock pin (cross-repo, main-touching per
+   memory `plan-044-resume-hook-built-not-deployed`), so Tim drives the nixcfg-work lock-bump +
+   `home-manager switch` + live block demonstration himself. **P6 stays IN_PROGRESS** until that live
+   demo lands (P6 DoD requires an on-host demonstration that each adopted block fires and clean commits
+   are unaffected).
+4. **Stale project-CLAUDE.md clipboard-handoff prose = FIXED in this worktree.** The
+   `nixcfg-session-hooks` project `CLAUDE.md` "End of Session (MANDATORY)" section previously mandated
+   `clip.exe` clipboard handoff, contradicting the global file-channel protocol (`.claude/HANDOFF.md` +
+   `.claude/active-plan`) that P5b referenced (P1 correction #1). Rewritten to mandate the per-worktree
+   file channel, matching the global protocol; clipboard demoted to single-session last-resort.
+
+### [DECISION] Tim 2026-09-10 — scope expansion (new hook work BEFORE integration)
+
+A cross-worktree/branch scan (this + nixcfg-work + nixcfg-coordination plans, all auto-memory, and a
+deep-dive on the permission-prompt problem) surfaced hook-relevant work to fold in before the live
+rollout. Tim's decisions (collected 2026-09-10):
+
+1. **Secret-dump prevention hook — DESIGN + IMPLEMENT now → new task P7.** The mechanical version of the
+   new standing rule (memory `never-dump-secrets-to-agent-context`, written 2026-09-10 after an
+   `rbw --full` incantation was found in a Bitwarden notes field and removed). A PreToolUse rule that
+   blocks vault-dump forms (`rbw --full` / `rbw get --full`) and secret-env echoes from reaching the
+   transcript/context. Dual-use → FP-aware design like P3, default-block, VM-tested.
+2. **Symlink permission-prompt issue — FULL FROM-HERE FIX, but TRANSITIONAL/SUNSET → new task P8.**
+   IMPORTANT REFRAME from the scan: this is **NOT hook-suppressible** — it is a hardened Claude Code
+   invariant (`SymlinkWriteRefusedError`) that fires when a write's *resolved* path is a symlink escaping
+   the session cwd; allow-rules / `additionalDirectories` cannot override it (the `//**/.claude/**` attempt,
+   commit b8ad0a4, was proven ineffective and reverted in 3b05ac9 — memory `cc-permission-path-anchor`).
+   The ONLY from-here config vector never empirically tested is a PreToolUse `permissionDecision:allow`
+   hook (expected-dead — the gate sits outside the permission layer — but cheap to settle). **nixcfg is
+   unaffected** (all worktrees use real per-worktree plan/handoff dirs — verified 2026-09-10); the pain is
+   in the **n3x/hsw** families (cwd-escaping `.claude/user-plans` symlinks), for which `migrate-hsw-plans.sh`
+   exists. **[DECISION] Tim 2026-09-10 (P8 scope):** do the full from-here fix (option 2) — (a) empirically
+   test the hook-allow vector; (b) **ERADICATE all existing cases** (migrate every personal worktree that
+   uses the cwd-escaping symlink pattern); (c) **fix the source** (whatever creates the symlink pattern) so
+   no new cases arise; (d) a minimal advisory + concise docs. **BUT treat this as TRANSITIONAL SCAFFOLDING,
+   NOT permanent infrastructure:** this is a personal-only pattern being eliminated, so the migrate tooling
+   AND the advisory are throwaway — once cases == 0 and the source is fixed, **REMOVE them; do not carry the
+   baggage forward** (memory `sunset-transitional-scaffolding`). Do NOT over-invest in polishing a permanent
+   migrate tool. P8's DoD includes a removal/sunset criterion, not just an "it works" criterion.
+3. **Fold plan 049 T1 into 056 → new task P9.** Plan 049 (broken project-level `.claude/settings.json`
+   PreToolUse hook: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr → spurious
+   "non-blocking status" noise across repos) is the exact false-positive canary 056 keeps citing. Its
+   root-cause (R1) is COMPLETE; its T1 fix (migrate to the proper nix-managed jq/`exit 2` pattern) is
+   PENDING. Bring T1 into 056 and update plan 049's status to reflect the merge.
+4. **Sequencing = new work BEFORE integration.** Do P7/P8/P9 on this branch, get the full feature set
+   green, THEN the live rollout. Consequently the old P6 "rollout half" is split out into **new task P10
+   — Integration & live rollout** (depends P4, P5, P7, P8, P9). **P6 is now the DECISION task only and is
+   COMPLETE** (2026-09-10; the dated `[DECISION]` blocks are its artifact, signed off by Tim).
+
+### MODULE-GLOBAL caveat carried into the nixcfg-work rollout (for Tim)
+
+Flipping the P5 defaults to `true` is **module-wide** — every account/consumer of
+`self.modules.homeManager.claude-code` inherits them, including the shared dev-team images (plan 052).
+The P4 safety blocks (attribution, no-main, no-verify, add-f, bare-rm) are sensible team-wide defaults.
+But **P5a `requireSignoffBeforeComplete` is specific to Tim's `/next-task` Present/STOP workflow**: it
+blocks EVERY plan-file `TASK:COMPLETE` edit unless `CLAUDE_TASK_SIGNOFF` was exported at `claude`
+launch. Team members who don't use that env var / workflow would find plan-file completions blocked.
+**Recommendation for the nixcfg-work rollout:** if the dev-team images should NOT inherit P5a, scope
+`programs.claude-code.hooks.planIntegrity.requireSignoffBeforeComplete = false` for team accounts (or
+gate it to Tim's accounts) in the nixcfg-work config rather than relying on the module default. This is
+noted in the option `description` in `hooks.nix` too.
+
+### P10 — Integration & live rollout (was P6's rollout half; gated behind P7-P9)
+
+Runs LAST, after P7/P8/P9 are green, so the full feature set ships in one pass. Depends P4, P5, P7, P8, P9.
+
+**[DECISION] Tim 2026-09-14 (P10 execution gate):** (1) **Authorized autonomous execution on this host** —
+verified `hostname=pa161878-nixos`, `USER=tim`, `~/src/nixcfg-work` present. (2) **Keep BOTH P5
+`planIntegrity` gates** enabled on the live host (`requireSignoffBeforeComplete` P5a +
+`enforceStatusTransitions` P5c), per the 2026-09-09 P6 decision — no trim. (3) **Team scope: leave the
+module default (`true`) for all accounts** — do NOT scope P5a off for team accounts in nixcfg-work; team
+members export `CLAUDE_TASK_SIGNOFF` at launch (the module-global caveat stands, accepted).
+
+1. Bump the nixcfg-work flake.lock pin to a nixcfg revision carrying this branch's full hook set
+   (P4 `gitSafety`/`bashSafety` + P5 `planIntegrity` + P7 secret-dump + P8 symlink advisory + P9 049-fix).
+2. `home-manager switch` on `tim@pa161878-nixos`.
+3. Demonstrate live: an attribution-trailer commit is rejected (`exit 2`); a commit on `main` is
+   rejected; a plan-file completion edit without `CLAUDE_TASK_SIGNOFF` is rejected; a
+   PENDING-to-complete skip is rejected; an `rbw --full` (or equivalent secret-dump) is rejected; and a
+   clean feature-branch commit + a properly-attested/dated completion are UNAFFECTED. Then mark P10
+   done with the date, then merge branch to `main`.
+
+### P10 EXECUTION LOG (2026-09-14, on `tim@pa161878-nixos`) - switch + live demo + DURABLE LOCAL PIN done; public merge + formal marking deferred
+
+**Step 1-2 - switch applied (demonstration pass, via `--override-input`).** Ran
+`home-manager switch --flake '/home/tim/src/nixcfg-work#tim@pa161878-nixos' --override-input nixcfg
+path:/home/tim/src/nixcfg-session-hooks` (exit 0). Activation regenerated the Nix-managed runtime dir at
+`nixcfgPath=/home/tim/src/nixcfg` -> `claude-runtime/.claude-{max,pro,work}/settings.json`, each now
+carrying **11 PreToolUse groups** (was 2): gitSafety x4, bashSafety x1, secretSafety x2, planIntegrity x2,
+security x2. **Gotcha documented:** `home.file.".claude-*".source` is an ABSOLUTE runtime path, so a plain
+`nix build` of the activationPackage captures the *stale on-disk* settings.json (2 groups) - only the
+activation script (which writes from `_internal.hooks`, verified 11 groups under override) produces the
+real file. Verify by reading the runtime dir AFTER an actual switch, not the built home-files.
+
+**Step 3 - live demonstration (ALL 9 adopted blocks fire, no false positives).** Drove each DEPLOYED hook
+script (extracted from the live settings.json) with crafted stdin JSON, bypass/signoff env unset:
+gitSafety.blockNoVerify, blockAttribution, blockCommitOnMain, blockAddForce; bashSafety.blockBareRm
+(blocks bare `rm`/`cp`, allows `rm -f`/`rmdir`/`git rm --cached`); secretSafety.blockVaultDump
+(blocks `rbw --full` + bare `rbw get`, allows piped + `rbw list`), blockSecretEnvEcho; and the two
+planIntegrity gates (block net-new completion without signoff / releases with `CLAUDE_TASK_SIGNOFF`;
+block PENDING-skip + dateless completion / allow dated `IN_PROGRESS`-to-complete). Block forms -> exit 2,
+legitimate forms -> exit 0, uniformly. Strongest proof: the deployed attribution hook AND the
+planIntegrity dateless-completion hook each intercepted this very session's own tool calls live (the
+latter blocked an edit to THIS plan file whose prose quoted the completion token - the documented
+meta-edge). Demo harness at `/tmp/p10-demo/` (throwaway).
+
+**Step 4 - DURABLE rollout via LOCAL PINNING (Tim's directive, 2026-09-14).** Instead of a public push +
+merge-to-`main` (outward-facing, hard-to-reverse on a public repo with a documented attribution-leak
+history - memory `project_ai_attribution_leak`), Tim chose the **local-pinning workflow**: keep the nixcfg
+056 changes LOCAL and pin nixcfg-work to them. Executed:
+`nix flake lock --override-input nixcfg 'git+file:///home/tim/src/nixcfg-session-hooks?ref=plan-056-session-workflow-hooks'`
+-> nixcfg-work `flake.lock` now pins nixcfg to local 056 rev `3688606` (git+file, pins the SHA so later
+worktree edits do not drift it). The lock change is **uncommitted / machine-local** (must NOT be committed
+to nixcfg-work - a local `git+file` pin would break the colleague images + CI; revert it when 056 lands
+public). A plain `home-manager switch --flake '.#tim@pa161878-nixos'` (NO `--override-input`) then produced
+**11 PreToolUse groups for all three accounts** - proving the pin is durable across ordinary switches
+(reverts only if Tim re-locks / bumps to a github rev). Verified deployed:
+`.claude-{max,pro,work}/settings.json` each = 11 groups (gitSafety 5, secretSafety 4, planIntegrity 3).
+
+**STILL DEFERRED (not blocking; Tim-driven):** (a) the public path - push 056 to `github:timblaktu/nixcfg`
++ bump nixcfg-work lock to a github rev + merge branch -> `main` - is intentionally postponed (local pin
+covers the live host now); (b) the formal P10 status marking. **P10 stays IN_PROGRESS.** Both must be done
+from a FRESH session launched with `CLAUDE_TASK_SIGNOFF=1` (and, for the public push, `CLAUDE_HOOKS_BYPASS=1`
+or a non-main HEAD), because the gates are now live and bypass/signoff cannot be set mid-session
+(fork-from-launch env). Dogfooding note: during this very session the deployed attribution hook AND the
+planIntegrity dateless-completion hook each intercepted this session's own tool calls - working as designed.
+
+## P7 design — secret-dump prevention hook (`secretSafety` category)
+
+Designed 2026-09-13 (P7). Grounds every choice in the P2 substrate map and mirrors the P3/P4
+`gitSafety`/`bashSafety` conventions verified in `modules/programs/claude-code/_hm/hooks.nix`. Mechanical
+enforcement of the standing rule memory `never-dump-secrets-to-agent-context` ("no `rbw --full`/vault
+dumps/secret-env echoes into the transcript, context, or files"). **Artifact-producing → Present/STOP for
+Tim's sign-off before COMPLETE.** No host adopts here (P10).
+
+**[DECISION] Tim, 2026-09-13 (P7 sign-off):** (1) **New `secretSafety` category** (not folded into
+bashSafety) — distinct concern, auditable per-rule FP surface. (2) **Allow `$(rbw get …)`/backtick capture**
+— extend the P7a allow beyond just the pipe form: a command-substitution capture (`X=$(rbw get Y)`) does not
+print to the transcript, so it PASSES; only bare display and a `> file` redirect block. (3) **Narrow P7b
+env-echo** — block only explicit secret-variable references (`$SECRETVAR`/`printenv SECRETVAR`); bare
+`env`/`printenv`/`set -x` are NOT blocked (too common in legit debugging → high FP). (4) **Default-block,
+category-global** like `gitSafety`, `CLAUDE_HOOKS_BYPASS` escape; not enabled on any live host until P10.
+All four confirm the design below; the "decision points" list at the end of this section is now RESOLVED
+(kept for rationale). Implemented + logic-tested (26/26 on the real generated scripts) + VM-test asserted.
+
+### 0. Category placement — new `secretSafety` (NOT folded into bash/gitSafety)
+
+A new **`secretSafety`** category, parallel to `gitSafety`/`bashSafety`, with a `enable` master switch and
+two individually-toggleable default-**block** sub-rules. Rationale: these are neither git-command safety nor
+the rm/cp/mv interactive-hang class; they are a distinct concern (secret material reaching the agent
+context). A first-class category matches the plan's per-rule enforcement stance and keeps the false-positive
+surface auditable per rule. Both sub-rules are **PreToolUse Bash** hooks parsing `.tool_input.command` via
+jq-stdin, `exit 2` + `continueOnError=false`, uniform `CLAUDE_HOOKS_BYPASS` escape, Nix-store binary paths
+(`${pkgs.jq}`, `${pkgs.gnugrep}`), appended to the `mergeHookSets [ … ]` list behind
+`lib.optionalAttrs (cfg.hooks.secretSafety.enable && <subtoggle>)` — coexisting (union) with the existing
+PreToolUse hooks (P2 §3).
+
+```nix
+hooks.secretSafety = {
+  enable             = mkOption { type = bool; default = true; … };  # category master switch
+  blockVaultDump     = mkOption { type = bool; default = true; … };  # rbw --full / unpiped rbw get|code
+  blockSecretEnvEcho = mkOption { type = bool; default = true; … };  # echo/printf/printenv of a secret-named var
+};
+```
+
+### P7a — vault-dump block (`secretSafety.blockVaultDump`, default block)
+
+**Rule / incident:** memory `never-dump-secrets-to-agent-context` — an `rbw --full` incantation was found in
+a Bitwarden notes field and removed (2026-09-10). `rbw --full` / `rbw get --full` dumps ALL fields of an
+entry (including the notes field) to stdout → straight into the transcript/context. **Dual-use requirement
+(the load-bearing FP constraint):** `rbw get X | tool --password-stdin` must PASS — the piped-to-a-consumer
+form is the legitimate way to feed a secret to a command without it landing in context.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, `ifFilter = "Bash(rbw *)"` (best-effort narrowing;
+  the script re-checks, per the P3 §0 ifFilter caveat — correctness rests on the in-script `grep`, not `if`).
+- **Predicate (FP-aware):**
+  1. If the command contains no `rbw` token → allow (`exit 0`).
+  2. If it contains `--full` (any position) → **block** unconditionally. A full-entry dump has no legitimate
+     pipe-to-tool use; it exists to render everything to view. Highest-confidence rule, the exact incident form.
+  3. Else, for a **retrieval** subcommand that emits secret material — `rbw get …` or `rbw code …` (TOTP) —
+     **block UNLESS the output is consumed** — either piped to a command (`rbw get X | tool`) OR captured via
+     a command substitution (`$(rbw get X)` / backticks). Both consumed forms PASS ([DECISION] Tim 2026-09-13:
+     capture allowed — it does not print to the transcript). What blocks: bare `rbw get X` (renders the
+     password to the transcript) and `rbw get X > file` (writes a secret to a file) — both banned by the memory.
+  4. Non-retrieval management subcommands (`rbw sync`/`lock`/`unlock`/`login`/`list`/`generate`/…) → allow.
+     (`rbw list` prints entry NAMES, not secrets; `unlock` prompts but does not dump.)
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  [ -z "$cmd" ] && exit 0
+  printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])rbw([[:space:]]|$)' || exit 0   # only rbw commands
+  if printf '%s' "$cmd" | grep -qE '(^|[[:space:]])--full([[:space:]]|=|$)'; then
+    echo "🚫 secretSafety: 'rbw --full' dumps every field (incl. notes) into the agent context. Never dump vault contents to the transcript/context/files (memory never-dump-secrets-to-agent-context). Pipe a single field to the consumer instead: rbw get NAME | tool --password-stdin. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  # retrieval subcommands that emit secret material
+  if printf '%s' "$cmd" | grep -qE 'rbw[[:space:]]+(get|code)\b'; then
+    # allowed ONLY when the rbw output is piped to a consumer (dual-use)
+    printf '%s' "$cmd" | grep -qE 'rbw[[:space:]]+(get|code)\b[^|]*\|' && exit 0
+    echo "🚫 secretSafety: unpiped 'rbw get/code' prints the secret into the agent context (or a file via '>'). Pipe it to the consumer instead: rbw get NAME | tool --password-stdin. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  exit 0
+  ```
+- **FALSE-POSITIVE analysis (plan 049 canary):** Matcher is `rbw`-only (near-zero blast radius — `rbw` is a
+  narrow binary). (1) `--full` is unconditional; residual FP = a legit "show me everything to eyeball it"
+  which is exactly what the rule forbids reaching context — bypass covers a deliberate human-driven view.
+  (2) The pipe test `rbw get…[^|]*\|` is a heuristic: it treats ANY following `|` as "consumed". Edge:
+  `rbw get X | tee secrets.txt` is technically allowed by the pipe test yet writes to a file — accepted
+  residual (piping to `tee`/redirect-after-pipe is rare and operator-driven; broadening to inspect the pipe
+  target re-introduces FP). (3) `rbw get X` with a trailing `> /tmp/f` (no pipe/capture) is correctly
+  **blocked** (file dump). (4) Management subcommands are untouched. (5) A command-substitution capture
+  `X=$(rbw get Y)` / backtick form is **allowed** ([DECISION] Tim 2026-09-13) — capturing into a var does not
+  print to the transcript; the `[$]\(…rbw…(get|code)` / backtick allow-checks match it. The initial
+  rbw-detection uses a word boundary (`(^|[^[:alnum:]_])rbw`) so `$(rbw --full …)` is STILL caught by the
+  unconditional `--full` block even inside a capture.
+- **VM-test assertion:** hook `exit 2` on `{"command":"rbw --full mysecret"}`, `{"command":"rbw get mysecret"}`,
+  `{"command":"rbw get X > /tmp/s"}`; `exit 0` on `{"command":"rbw get mysecret | tool --password-stdin"}`,
+  `{"command":"rbw sync"}`, `{"command":"rbw list"}`, and a non-rbw `{"command":"ls"}`.
+
+### P7b — secret-env echo block (`secretSafety.blockSecretEnvEcho`, default block)
+
+**Rule / incident:** memory `never-dump-secrets-to-agent-context` (the "secret-env echoes" half) + the
+inverse of `feedback_git_push_auth` (the auth-token prefix is a legitimate NON-echo use). `echo $GH_TOKEN`,
+`printf '%s' "$AWS_SECRET_ACCESS_KEY"`, `printenv GITHUB_TOKEN` render a secret's VALUE into the transcript.
+
+- **Event / matcher:** PreToolUse, `matcher = "Bash"`, no `ifFilter` (discrimination in-script).
+- **Secret-name regex (case-insensitive):** a variable whose name contains
+  `(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL|SESSION_TOKEN)`.
+  Covers `GH_TOKEN`/`GITHUB_TOKEN`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN`/`*_API_KEY` etc.
+- **Predicate:** block when an `echo`/`printf`/`printenv` command references such a variable **as a shell
+  variable** — `$NAME` or `${NAME}` for echo/printf, or a bare `NAME` argument for `printenv`. Matching on the
+  `$`-prefixed reference (not a literal word) is what keeps FP near-zero: `echo "token refresh complete"`
+  (literal text) does NOT match; `echo "$GH_TOKEN"` does.
+- **Script pseudocode:**
+  ```bash
+  [ -n "$CLAUDE_HOOKS_BYPASS" ] && exit 0
+  cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+  [ -z "$cmd" ] && exit 0
+  SECRE='(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL)'
+  # echo/printf referencing $SECRETVAR or ${SECRETVAR}
+  if printf '%s' "$cmd" | grep -qiE '(^|[;&|[:space:]])(echo|printf)\b[^;&|]*\$\{?[A-Za-z_]*'"$SECRE"; then
+    echo "🚫 secretSafety: echo/printf of a secret-shaped variable leaks its value into the agent context (memory never-dump-secrets-to-agent-context). Pass it directly to the consumer (e.g. GH_TOKEN=\$(gh auth token) git push) instead of echoing it. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  # printenv NAME where NAME is secret-shaped
+  if printf '%s' "$cmd" | grep -qiE '(^|[;&|[:space:]])printenv\b[^;&|]*[A-Za-z_]*'"$SECRE"; then
+    echo "🚫 secretSafety: printenv of a secret-shaped variable leaks its value into the agent context. Override: export CLAUDE_HOOKS_BYPASS=1." >&2
+    exit 2
+  fi
+  exit 0
+  ```
+- **FALSE-POSITIVE analysis (plan 049 canary):** (1) Matching on a `$`-prefixed variable reference (echo/printf)
+  or a `printenv` argument means literal text ("token", "password reset") never trips it — only real variable
+  reads do. (2) **Dual-use PASSES:** `GH_TOKEN=$(gh auth token) git push` is a command-PREFIX assignment, not an
+  `echo`/`printf`/`printenv`, so it is NOT matched (satisfies memory `feedback_git_push_auth`). (3) `export
+  GH_TOKEN=…` (assignment) is not matched. (4) Residual FP: `echo "Set your GITHUB_TOKEN in the env"` — a
+  literal mention that happens to sit after `echo` AND contains a `$`? No: without a `$` prefix it won't match;
+  a genuine `$GITHUB_TOKEN` in an instructional echo is rare and bypass-able. (5) **Deliberately NOT included
+  (decision point):** bare `env`/`printenv` with no argument (dumps ALL env incl. secrets) and `set -x` (traces
+  secret assignments) — both are very common in legitimate debugging and would carry real FP; the task named
+  them, so they are flagged below rather than shipped by default.
+- **VM-test assertion:** hook `exit 2` on `{"command":"echo $GH_TOKEN"}`,
+  `{"command":"printf '%s' \"$AWS_SECRET_ACCESS_KEY\""}`, `{"command":"printenv GITHUB_TOKEN"}`; `exit 0` on
+  `{"command":"GH_TOKEN=$(gh auth token) git push"}`, `{"command":"echo hello world"}`,
+  `{"command":"echo \"token refresh done\""}`.
+
+### P7 — decision points for Present/STOP sign-off
+
+1. **Category placement:** new `secretSafety` category (recommended) vs folding the two rules into
+   `bashSafety`. Recommendation: new category (distinct concern, auditable FP surface).
+2. **`$(rbw get …)` command-substitution capture** (P7a): options — (a) conservative-block even inside
+   `$(…)`/backticks; (b) extend the allow to `$(rbw get…)`/backtick capture forms. **RESOLVED — Tim chose (b)**
+   (capture does not print to the transcript, so it PASSES; only bare display + `> file` block).
+3. **Breadth of P7b env-echo matching:** ship NARROW (only `$SECRETVAR` refs in echo/printf + `printenv
+   SECRETVAR`, recommended) vs BROAD (also block bare `env`/`printenv` full dumps and `set -x`). Recommendation:
+   NARROW — bare `env`/`set -x` are common in legit debugging (high FP); the memory's named incident is the
+   explicit-secret form.
+4. **Defaults = block, category-global:** confirm `secretSafety.*` default `true` (block) like `gitSafety`,
+   with `CLAUDE_HOOKS_BYPASS` as the escape. (Module-global: fires for every account; sensible team-wide.)
+
+## P8 progress — symlink eradication (Option A, minimal real dirs)
+
+IN_PROGRESS 2026-09-14. **[DECISION] Tim 2026-09-14:** Q1 = **Option A** (replace each cwd-escaping
+`.claude/user-plans` symlink with a plain real in-cwd dir seeded from the current shared store — zero new
+infra, sunset-consistent; live cross-worktree sharing dropped per Finding B, which is fine since burndown is
+commit-based/single-writer-per-plan). Q2 = **empirical test (a) DROPPED** — the final fix has no symlink
+dependency at all, so the untested `permissionDecision:allow` vector is moot (deep-research Finding A already
+proved a real in-cwd non-symlink path is the ONLY durable fix; no config knob disables
+`SymlinkWriteRefusedError`). Q3 = **canary-first** on a worktree idle >2 weeks (avoid conflicting with live
+session work).
+
+### (a) empirical test — RESOLVED as moot (not run)
+Recorded per Tim's Q2: the `permissionDecision:allow` PreToolUse vector is expected-dead (gate sits below the
+permission layer) and, more decisively, **irrelevant** — Option A removes the symlink entirely, so no
+permission-layer override is needed. Deep research (`/home/tim/src/worktree-plan-sharing-FINDINGS.md`,
+Finding A) is authoritative. No fresh interactive test performed.
+
+### (b) existing cases — ENUMERATED (2026-09-14)
+**77 worktrees** carry a cwd-escaping `.claude/user-plans` symlink, all in the **n3x (71 dirs) / hsw (23
+dirs)** work families, pointing at plain-dir shared stores `/home/tim/src/{n3x,hsw}-plans` (some via a second
+hop through `{n3x,hsw}/.claude/user-plans`). **nixcfg is clean** (real per-worktree dirs). Topology: the
+families are **git worktrees** of two main clones (`/home/tim/src/{n3x,hsw}`); the repo `.gitignore` already
+carries `**/.claude/user-plans/` (line 139) so converting a symlink to a real dir leaves the seeded `*.md`
+**gitignored → no leak into feature history** (verified). The shared store is never modified by the migration
+(fully reversible: recreate the symlink).
+
+**Throwaway migration helper:** `/tmp/p8-migrate-worktree.sh` (Option A, idempotent, per-worktree; NOT
+committed — sunset scaffolding). Verifies post-migration realpath stays in-cwd and is not a symlink.
+
+**CANARY DONE + SIGNED OFF (Tim 2026-09-14):** `n3x-origin-amd-machine-split` (branch
+`feat/amd-machine-split`, idle 102 days). Symlink → real dir seeded with 164 files; `git check-ignore`
+confirms ignored; `git status` clean (no user-plans entries); idempotent re-run = no-op; store intact.
+**Tim approved the approach and the batch — no further per-step sign-off needed until the FINAL Present
+before marking P8 COMPLETE.**
+
+### ▶ RESUME HERE (deterministic next actions for a fresh `/next-task` — P8 is IN_PROGRESS)
+Tim has APPROVED all of the below (2026-09-14). Do them in order, then Present the full P8 result for the
+COMPLETE sign-off (Present/STOP applies only to the final COMPLETE, not to these approved steps):
+
+1. **Batch-migrate the remaining 76 worktrees** (the canary is already done; the loop is idempotent,
+   reversible, and content-identical at the migration instant, so it is safe even on active worktrees — a
+   live session keeps reading the same plan files, its future edits just become worktree-local, which is the
+   intended new model). Self-contained command (does NOT depend on the throwaway `/tmp` helper surviving):
+   ```bash
+   for base in /home/tim/src/n3x*/ /home/tim/src/hsw*/; do
+     wt="${base%/}"; up="$wt/.claude/user-plans"
+     [ -L "$up" ] || continue                              # only escaping symlinks; real dirs are no-ops
+     tgt="$(readlink -f "$up" 2>/dev/null)"; [ -d "$tgt" ] || { echo "WARN unresolved $wt"; continue; }
+     rm -f "$up"; mkdir -p "$up"; cp -a "$tgt"/. "$up"/    # store never modified (reversible)
+     real="$(readlink -f "$up")"; case "$real" in "$wt"/*) echo "OK $wt";; *) echo "FAIL $wt $real";; esac
+   done
+   # verify zero remaining: the §3 enumeration scan must report 0 ESCAPES-CWD afterward
+   ```
+2. **(c) source-fix — DECIDED (Tim 2026-09-14, approved rec).** The "source" is a **manual worktree-create
+   habit** (no tool creates the symlinks; the existing `migrate-*.sh` are the OLD insufficient approach). The
+   durable, no-new-infra fix = **document the habit change in the n3x and hsw repo `CLAUDE.md`** (their
+   worktree/plan-sharing rule): *"a worktree's `.claude/user-plans` must be a REAL dir seeded from the family
+   plan store (`/home/tim/src/{n3x,hsw}-plans`), NEVER a symlink — Claude Code refuses symlink-escaping
+   writes (`SymlinkWriteRefusedError`)."* `**/.claude/user-plans/` is already gitignored in both repos, so a
+   new worktree simply has no plan dir until one is created as a real dir. (These are WORK repos — edit their
+   CLAUDE.md directly; that is the intended scope of sub-step c.)
+3. **(d) advisory + docs — DECIDED minimal (Tim 2026-09-14).** Keep it minimal: a concise note lives in the
+   same n3x/hsw CLAUDE.md rule (step 2). **A CC module hook advisory is NOT added** — nixcfg is unaffected and
+   a module-global reminder would be over-engineering for a being-sunset pattern (DoD line: "(d) if kept at
+   all"). Docs = the CLAUDE.md rule only.
+4. **Sunset teardown (part of DoD).** Once §3 re-scan shows **cases==0** and step-2 source-fix is in place:
+   delete the throwaway helpers `/tmp/p8-migrate-worktree.sh` (+ any `/tmp/p8-migrate-*.sh`) and the stale
+   `/home/tim/src/migrate-hsw-plans.sh` / `migrate-plans.sh` (old insufficient approach — superseded). Do NOT
+   carry migrate tooling forward (memory `sunset-transitional-scaffolding`).
+5. **Final Present → COMPLETE.** Present the result (cases==0 re-scan, source-fix landed, teardown done) to
+   Tim, then mark P8 `TASK:COMPLETE` + date. Next actionable becomes **P9**.
+
+### ✅ EXECUTED 2026-09-14 — all sub-steps done; AWAITING FINAL COMPLETE SIGN-OFF (status stays IN_PROGRESS)
+Steps 1-4 of the RESUME HERE checklist ran clean; step 5 (final Present) is this record. Outcomes:
+- **Step 1 — batch migration: DONE.** Pre-scan showed **77** escaping symlinks (one more than the projected
+  76 — a worktree was created since enumeration; irrelevant, loop is idempotent). Ran the inline batch loop:
+  **77/77 → OK** (real in-cwd dir, seeded by `cp -a`, store untouched/reversible). Re-scan: **TOTAL
+  ESCAPES-CWD: 0**. Spot-check (`n3x-staging`, `hsw`): real dir (not symlink), `git check-ignore` confirms
+  `.claude/user-plans/` ignored, `git status` clean (0 user-plans lines). **DoD (b) met: zero remaining cases.**
+- **Step 2 — source-fix (c): RELOCATED to the user-global CLAUDE.md (2026-09-14, Tim-approved).** Initial
+  approach (edit n3x + hsw work-repo CLAUDE.md, MR each) was reversed after a machine-wide audit revealed:
+  (1) the actual hazard is **already 100% closed** — 117 `.claude/user-plans` dirs machine-wide, ALL real,
+  **zero symlinks anywhere** (P8 handled the only cases, in n3x/hsw); (2) `n3x`, `hsw`, `hsw-fresh` are three
+  clones of **one shared corp repo** `iaas/hsw` (same root commit `139b01e`), NOT two repos → at most one MR;
+  (3) that repo's only extension layer (`.claude/rules/`) is **team-tracked**, so landing a personal
+  worktree convention there would impose it on the hsw team and leak local paths into corp code. **Correct
+  home = the user-global CLAUDE.md** (applies to EVERY repo on this machine — matching Tim's "should apply to
+  the whole computer" instinct — with no corp MR, no team imposition). Rule added to the Nix template
+  `modules/programs/claude-code/_hm/claude-code-user-memory-template.md` (Git Worktree Workflow section). The
+  two parked work-repo edits were **reverted** (`git restore`; both clones clean; no active session in those
+  exact dirs — verified). **No corp-repo MR needed.** See the machine-wide audit (`/tmp/claude-md-audit-report.md`).
+- **Step 3 — advisory + docs (d): DONE (minimal).** The rule-5a CLAUDE.md text IS the doc. No CC module hook
+  advisory added (nixcfg unaffected; over-engineering for a sunset pattern) — matches the DECIDED-minimal plan.
+- **Step 4 — sunset teardown: DONE.** Deleted `/tmp/p8-migrate-worktree.sh`,
+  `/home/tim/src/migrate-hsw-plans.sh`, `/home/tim/src/migrate-plans.sh` (superseded old approach). No migrate
+  tooling carried forward (memory `sunset-transitional-scaffolding`). **Note:** memory
+  `cc-permission-path-anchor` still points at the now-deleted `migrate-hsw-plans.sh` → update it at session end.
+- **nix flake check:** N/A — P8 touched no nix files (Tim resource-preservation preference).
+
+**SIGNED OFF (Tim 2026-09-14):** P8 → `TASK:COMPLETE`. Q2 landing decision **superseded** by the machine-wide
+audit: source-fix relocated to the **user-global CLAUDE.md template** (one edit, machine-wide, no corp MR);
+work-repo edits reverted. See the updated "Step 2" bullet above. Next actionable: **P9** (fold plan 049 T1;
+hardening/cleanup — aligned with the keep-core/trim-ceremony decision).
+
+## P9 analysis — fold plan 049 T1 (broken project-level PreToolUse hook)
+
+Investigated 2026-09-14 (P9). **Artifact-producing → Present/STOP for Tim's sign-off before COMPLETE**, and it
+carries plan 049's explicitly-**Interactive** T3 decision (fix-in-place vs. remove) → resolution needs Tim.
+
+### The "proper nix-managed module pattern" P9 targets ALREADY EXISTS
+
+`programs.claude-code.hooks.security` (`_hm/hooks.nix:718-737`) is already the correct pattern P9 asks the
+broken hook to be "migrated to": jq-stdin `.tool_input.file_path`, `exit 2`, message to **stderr**,
+`continueOnError=false`, clean `exit 0` on no-match. Default `blockedPatterns = [ "\\.env" "\\.secrets"
+"id_rsa" "\\.key$" ]`. This was fixed in commit `4f3488c` (P2 §4). So on any host with the nixcfg global
+hooks, secret-file blocking is already done correctly and the project-level hooks are **redundant AND broken**.
+
+### Machine-wide scan (2026-09-14) — two DISTINCT antipattern locations
+
+1. **CORP repo `iaas/hsw` (`n3x-*`/`hsw-*` worktrees), `.claude/settings.json`, git-tracked** — plan 049's
+   actual target. Confirmed present in 4+ active worktrees (`n3x-arty-fix`, `n3x-audio`, `n3x-governance-gates`,
+   `n3x-paas-services-meta`). Exactly the plan-049 bug: `PreToolUse` with `matchPaths` (silently ignored →
+   runs on EVERY edit), `exit 1` (a *non-blocking* error → spurious "Failed with non-blocking status code"
+   noise), message to **stdout** not stderr; plus a broken `PostToolUse` (`nixpkgs-fmt "$FILE_PATH"` — env var
+   CC never sets + ignored `matchPaths` → runs `nixpkgs-fmt` on empty arg every edit). **The "protection" is
+   illusory:** `exit 1` blocks nothing and `matchPaths` never path-filters — it only spams noise.
+2. **nixcfg `claude-runtime/.claude/settings.json`, git-tracked (this + parent worktree)** — a STALE committed
+   relic carrying the OLD `$1`/`exit 1` PreToolUse shape (`file_path="$1"` … `exit 1`). NOT regenerated by the
+   current module (the module writes `.claude-{account}/settings.json`, which are gitignored and already carry
+   the fixed pattern). Plan 049 §4 pre-flagged this as "verify independently; likely a different/benign match."
+   Low stakes (accounts run under `CLAUDE_CONFIG_DIR=.claude-{account}`, not `.claude/`); it is dead committed
+   state, not an active hook, but it IS the same antipattern in a tracked nixcfg file.
+
+### Resolution options (map to plan 049 T3, Interactive)
+
+For the **corp-repo** hook (location 1), the same constraint P8 hit applies: `n3x`/`hsw` are clones of ONE
+shared corp repo — landing personal conventions there imposes on the team + leaks local paths (P8 relocated
+its source-fix to the user-global CLAUDE.md, **no corp MR**).
+
+- **(b) REMOVE the PreToolUse/PostToolUse hooks (keep SessionStart)** — plan 049 T3 option (b). Stops the
+  noise team-wide, loses no REAL protection (it was illusory), imposes no personal convention. **Aligns with
+  P8 precedent + keep-core/trim-ceremony (P9 "removes noise, doesn't add it").** RECOMMENDED. Still a corp-repo
+  change (a hooks-only cleanup commit / MR on `iaas/hsw`) — an owner action.
+- **(a) FIX in place** — rewrite to jq-stdin/`exit 2` (plan 049 §3). ADDS real secret-blocking to the corp
+  repo = a personal-convention imposition on the team; contradicts the P8 precedent. NOT recommended.
+
+For the **nixcfg claude-runtime relic** (location 2): remove the dead `PreToolUse`/`PostToolUse` antipattern
+blocks from the tracked `claude-runtime/.claude/settings.json` (or drop the file if it is unused legacy) — a
+clean, nixcfg-scoped cleanup requiring no corp action. `nix flake check` unaffected (not a nix file).
+
+### Decision points for Tim (Present/STOP)
+
+1. **Corp hook:** confirm **(b) remove** vs (a) fix-in-place — and whether to do it as a corp `iaas/hsw` MR now
+   or **close it out like P8 did** (relocate/defer the corp action, since the nixcfg module already covers Tim
+   and the hook is merely noisy-not-dangerous). No corp repo touched without your go-ahead.
+2. **nixcfg relic:** OK to remove the dead antipattern blocks from `claude-runtime/.claude/settings.json` (keep
+   its non-hook settings), or drop the file if confirmed-unused?
+3. **Plan 049 status** update to record the merge into 056 P9 once (1)/(2) are decided.
+
+No nixcfg module change is needed (the `security` category is already the correct pattern).
+
+### [DECISION] Tim 2026-09-14 (P9 sign-off) + resolution
+
+- **(1) Corp hook = REMOVE, close out (no corp MR).** The redundant/illusory PreToolUse+PostToolUse hooks in
+  the `iaas/hsw` `.claude/settings.json` should be removed (keep SessionStart), but — mirroring the P8
+  close-out — **no corp MR is opened from here** (the nixcfg module already covers Tim; the hook is
+  noisy-not-dangerous; opening a corp MR would be a personal-convention touch on a shared team repo). The
+  removal recommendation is recorded for the team; no corp repo touched this session.
+- **(2) nixcfg relic = STRIP dead hook blocks.** DONE — removed the dead `PreToolUse` (`$1`/`exit 1`
+  antipattern) and `PostToolUse` (logging relic) blocks from the tracked
+  `claude-runtime/.claude/settings.json`, keeping the empty `SessionStart`/`Stop` and all non-hook settings
+  (`model`/`permissions`/`projectOverrides`/`statusLine`). `jq -e` valid; `rg` confirms zero
+  `matchPaths`/`exit 1`/`$1` antipattern remaining. Not a nix file → `nix flake check` unaffected.
+- **(3) Plan 049 status updated** to record the merge into 056 P9 (T1 resolved via the recommendation +
+  close-out; T3 Interactive decision resolved = option (b) remove).
+
+**Evidence the "non-blocking status" noise is addressed:** the correct replacement (`exit 2`/stderr path
+filter) already exists as the module `security` hook; the nixcfg-tracked relic that carried the noisy
+`exit 1` shape is stripped; the remaining instance is the corp repo, whose fix is the recorded remove
+recommendation (close-out, per Tim).
+
+## P11 spec — end-user design & robustness review (the public-merge gate)
+
+**Why this phase exists.** The hook set is mechanically correct but was not designed *for the person who hits it*. In a single session on 2026-09-14 two distinct end-user failures surfaced while merely fixing one bug:
+- **False positive (context-blindness):** `blockCommitOnMain` ran `git symbolic-ref` in the session's launch cwd, not the directory the git command targeted, so a cross-worktree commit (`cd DIR && git commit`) into a feature-branch worktree was blocked whenever the session cwd sat on `main` — the exact parent/child worktree pattern this repo uses constantly. Fixed in commit `b5aefa0`, but it shipped because the tests only covered happy-path + basic block.
+- **Guardrail deadlock (rule vs. sanctioned workaround):** `blockNoVerify` forbids `--no-verify`, but the git pre-commit hook it protects runs an ~8-min `nix flake check` that exceeds the 2-min tool timeout; the documented workaround for the slow hook (`--no-verify`) is precisely what the guardrail forbids, and neither the bypass nor the sign-off env var can be set mid-session. Two safety mechanisms cancel into a wedge.
+
+These are design gaps, not slips. P11 hardens the whole system against this class before it reaches the public. **The public merge (P10's remaining step) is GATED on P11 being COMPLETE.**
+
+**Scope — six workstreams, each with a checkable DoD. All hook edits are artifact-producing → Present/STOP for Tim's sign-off before COMPLETE.**
+
+- **P11.1 — Standardize the block-message contract.** Rewrite every adopted hook's `exit 2` message to the four-part template proven on `blockCommitOnMain`: `<category>: <what was blocked>. WHY: <rule>. TO PROCEED NOW: <1-3 concrete options>. TO AVOID IN FUTURE: <durable change>.` Each message links `docs/claude-code-session-guardrails.md`. **DoD:** every PreToolUse block string in `hooks.nix` matches the template (grep-checkable: contains `WHY:` and `TO PROCEED NOW:`); `nix flake check` green.
+- **P11.2 — Hard-block vs. interactive "ask".** Verify (via the claude-code-guide agent / current CC docs) whether PreToolUse hooks can return a structured `permissionDecision: "ask"` that routes a blocked call to the operator for in-the-moment approval, instead of a hard `exit 2` that requires a launch-time env var. If supported, decide per rule which gates become `ask` (judgment cases: commit-on-main, task-complete sign-off) vs. stay hard-block (leak-signature attribution, secret dump). This is the single biggest lever against the mid-session-bypass wedge. **DoD:** a recorded capability finding (works/does-not-work, with the exact JSON shape) + a per-rule block-vs-ask decision table signed off by Tim. Implementation may fold into P11.5.
+- **P11.3 — Context-correctness audit of every hook.** For each of the 9 hooks, confirm it judges from the actual tool input/target, not incidental session state (the `blockCommitOnMain` root cause). Enumerate what each reads and whether it can be fooled by cwd, first-match, or multi-segment commands. **DoD:** an audit table (one row per hook: "reads X → correct?/fix") in this plan; any found defects fixed or ticketed.
+- **P11.4 — Guardrail-interaction / deadlock review + root-cause fix.** Check the rule set as a *system* for cases where one rule forbids the sanctioned workaround for another. Fix the `blockNoVerify` × slow-pre-commit-flake-check deadlock at the root: make the pre-commit check fast (`--no-build`) or async so `--no-verify` is never the answer. **DoD:** an interaction matrix; the flake-check pre-commit hook no longer forces a `--no-verify` situation (demonstrated: a normal `.nix` commit completes inside the tool timeout, or the check runs async) — verified end-to-end.
+- **P11.5 — False-positive test matrix.** Extend the P4 VM test (and/or add pure-shell unit tests of the hook scripts) with adversarial cases per hook, explicitly including the multi-worktree parent/child pattern (`cd DIR && git commit`, `git -C DIR commit`), quoted/tilde paths, and multi-segment commands. **DoD:** tests cover, per hook, at least one true-positive (block fires) AND one false-positive candidate (must pass); the `blockCommitOnMain` cross-worktree case is among them; suite green.
+- **P11.6 — Warn-first rollout + observability decision.** Decide whether newly-adopted or newly-changed gates ship in a log/warn mode first (surfacing what they'd block before hard-enforcing), and how an operator inspects which guardrails are active and why one fired (tie into `hooks.logging`). **DoD:** a dated `[DECISION]` block recording the rollout stance + any observability affordance to build.
+
+**Execution note.** P11 is human-attended (Mode A). Its workstreams are individually Present/STOP-gated. It does NOT itself perform the public merge — it *unblocks* it. Only after P11 is COMPLETE does the P10 public-merge sequence (push → bump nixcfg-work lock to a github rev → merge to `main` → revert local pin → mark P10 done) become the next actionable step, launched as `CLAUDE_TASK_SIGNOFF=1 CLAUDE_HOOKS_BYPASS=1 claude`.
+
+### [DECISION] Tim 2026-09-14 — add P11 as the public-merge gate
+The public merge is no longer the immediate next step. Two end-user failures in one session (above) showed the hook set needs a design/robustness pass built around the person who hits a block. P11 is inserted as that pass and the merge is gated on it. `blockCommitOnMain` context-fix already landed (`b5aefa0`) and is LIVE on `tim@pa161878-nixos` (re-pinned nixcfg-work lock → `b5aefa0` + `home-manager switch`, 2026-09-14).
+
+## P11 EXECUTION LOG (2026-09-15 — IN_PROGRESS, artifacts pending Tim sign-off)
+
+Design decisions collected this session (Present/STOP gates):
+- **[DECISION] Tim 2026-09-15 (P11.2/P11.6 block-vs-ask):** judgment gates (`blockCommitOnMain`,
+  `requireSignoffBeforeComplete`) become `ask` (interactive operator prompt) **when a controlling TTY is
+  present AND not burndown/headless**; otherwise hard-block. Leak/secret/mechanical gates stay hard-block.
+- **[DECISION] Tim 2026-09-15 (P11.4):** Option 2 — **remove** `nix flake check` from the module-global
+  pre-commit hook; rely on CI (`.#ci.matrix` builds every check on every PR). Removes the
+  `blockNoVerify`×8-min-flake-check wedge at the root (a normal `.nix` commit now completes instantly).
+- **[DECISION] Tim 2026-09-15 (P11.6 rollout):** ship the P11 changes **directly** (they only soften/clarify
+  already-live gates) + add observability (a per-activation guardrail log). No warn-first trial needed.
+
+### P11.1 — block-message contract (DONE, pending sign-off)
+All PreToolUse block strings rewritten to the four-part template `WHAT · WHY · TO PROCEED NOW · TO AVOID IN
+FUTURE`, each ending `See docs/claude-code-session-guardrails.md`. Covers all 9 Plan-056 hooks (11 message
+strings) **plus** the pre-existing `security.blockedPattern` hook (now also uses the shared prelude). Delivered
+via a shared `guardrailPrelude` (`hooks.nix`) so the contract, the bypass, the observability log, and the
+ask/gate emitters are defined once. DoD (grep-checkable `WHY:` + `TO PROCEED NOW:` in every block) met.
+
+### P11.2 — hard-block vs. interactive `ask` (capability finding + decision)
+Capability finding (claude-code-guide vs current CC docs, **verified v2.1+**): a PreToolUse hook CAN return
+`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow|deny|ask","permissionDecisionReason":"…"}}`
+on stdout (exit 0). `"ask"` **is supported** and surfaces CC's normal operator approval prompt mid-session.
+Caveats: (a) the `permissionDecisionReason` text is **not reliably surfaced** with `ask` (the operator sees the
+standard prompt, not our WHY); (b) `ask` in headless/`-p` and burndown Mode B is **undocumented and likely
+errors/hangs** — closest headless value is `"defer"`. Decision → the `gr_gate` hybrid: emit `ask` **only** on a
+positively-detected writable `/dev/tty` with `CLAUDE_HOOKS_NONINTERACTIVE` unset; else fall back to `gr_block`
+(exit 2). Fails SAFE — a false "no TTY" just keeps the proven hard-block; it never risks a headless hang. The
+`/dev/tty` probe returns "no" in the tool shell (verified this session), so unattended runs hard-block
+deterministically. **The live `ask` path (interactive exit-0 + JSON) needs runtime verification at P10.**
+
+Per-rule block-vs-ask table:
+
+| Rule | Mode | Rationale |
+|---|---|---|
+| gitSafety.blockCommitOnMain | **ask** (interactive) / block (headless) | judgment: a deliberate main commit is legitimate; operator decides in-the-moment |
+| planIntegrity.requireSignoffBeforeComplete | **ask** (interactive) / block (headless) | judgment: the Present/STOP sign-off IS an operator approval; `ask` is the natural fit |
+| gitSafety.blockAttribution | hard-block | leak signature — never a judgment call |
+| gitSafety.blockNoVerify | hard-block | mechanical; skipping hooks is never wanted |
+| gitSafety.blockAddForce | hard-block | mechanical |
+| bashSafety.blockBareRm | hard-block | mechanical de-hang; `-f` is always the answer |
+| secretSafety.blockVaultDump / blockSecretEnvEcho | hard-block | secret exposure — never a judgment call |
+| planIntegrity.enforceStatusTransitions | hard-block | pure format/shape rule |
+| security.blockedPattern | hard-block | sensitive-file access — never a judgment call |
+
+### P11.3 — context-correctness audit (one row per hook)
+After the `b5aefa0` fix, no hook judges from incidental session state; every hook reads the actual
+`.tool_input`. Audit + the ONE material defect found (and fixed) this session:
+
+| Hook | Reads | Verdict | Fix / note |
+|---|---|---|---|
+| blockNoVerify | `.tool_input.command` | correct | detection broadened for `git -C DIR …` global-option forms (P11.3 fix) |
+| blockAttribution | `.tool_input.command` | correct | `$EDITOR`-message form is an accepted blind spot (documented) |
+| blockCommitOnMain | target-dir branch (`git -C`>`cd`>cwd) | **defect FOUND+FIXED** | detection grep required `commit` to immediately follow `git`, so `git -C DIR commit` on main slipped past (the b5aefa0 dir-resolution was dead code for `-C`). Fixed with the `gitGlobalOpts` prefix; proven by the shell test + new VM cases |
+| blockAddForce | `.tool_input.command` | correct | same `gitGlobalOpts` broadening applied |
+| blockBareRm | per-segment head word | correct | xargs/sudo/find FNs documented |
+| blockVaultDump | `.tool_input.command` | correct | `rbw get \| tee f` FN (minor) |
+| blockSecretEnvEcho | `.tool_input.command` | correct | `ACCESS_KEY_ID` (non-secret) minor FP |
+| requireSignoffBeforeComplete | edit content + `CLAUDE_TASK_SIGNOFF` | correct | judges edit, not session state |
+| enforceStatusTransitions | edit content | correct | date check coarse on full-file `Write` (documented) |
+| security.blockedPattern | `.tool_input.file_path` | correct | now shares the prelude |
+
+### P11.4 — deadlock root-fix (DONE, pending sign-off)
+Root cause: `modules/programs/git/git.nix` pre-commit hook ran `nix flake check --no-build` (~8 min / ~16 GB
+RSS on this repo) on every staged `.nix`/`flake.lock`, blowing the 2-min tool timeout; `blockNoVerify` forbade
+the `--no-verify` that would skip it. Fix (Tim's Option 2): removed the flake-check block from the pre-commit
+hook (auto-format retained); CI is the authoritative eval+build gate. A normal `.nix` commit now completes
+instantly — the wedge is gone.
+
+### P11.5 — false-positive test matrix (DONE, pending VM run)
+Extended the P4 VM test (`vm-tests.nix` `vm-claude-code-safety-hooks`) with the multi-worktree matrix:
+cross-worktree `git -C mainrepo commit` (block), `-c` global option (block), `git -C featrepo commit` from a
+main cwd (allow), `cd feat && git commit` from a main cwd (allow), `git branch commit-feature` precision
+(allow), headless-fail-safe (hard-block, no `permissionDecision` emitted), `CLAUDE_HOOKS_NONINTERACTIVE=1`
+(block), observability-log assertion, and bashSafety multi-segment. A standalone shell harness mirroring the
+generated scripts passed **16/16** locally this session (it is what surfaced the P11.3 `git -C` defect).
+
+### P11.6 — warn-first + observability (DONE, pending sign-off)
+Decision recorded above (ship directly; already-live gates only softened/clarified). Observability built:
+`gr_log` in the shared prelude appends `<iso-ts>\t<verdict>\t<rule>` to `$CLAUDE_GUARDRAIL_LOG` (default
+`<config-or-home>/logs/guardrails.log`) on every BLOCK and ASK, best-effort (never affects the decision).
+Documented in `docs/claude-code-session-guardrails.md` ("Seeing what fired").
+
+**Remaining before P11 COMPLETE:** Tim's Present/STOP sign-off on this artifact set; full `nix flake check`
+green (running); the VM test executed on a KVM host (or accepted as authored, per prior P4/P7 precedent).
+
+## Progress tracking
+
+**Row order = `/next-task` execution order.** Research/audit tasks (P1, P2) are autonomous-safe. Design and implementation tasks (P3, P4, P5, P7, P8, P9) are **artifact-producing → Present/STOP for Tim's sign-off before COMPLETE** (per memory `next-task-present-stop-artifact-gate`). P6 is an Interactive decision gate (COMPLETE); P10 is the Interactive integration/live-rollout gate (runs last).
+
+| ID | Task | Kind | Depends | Status |
+|----|------|------|---------|--------|
+| P1 | Audit & classify ALL soft rules across global+project CLAUDE.md, auto-memory `feedback` entries, and every active plan's Guardrails. Produce the definitive classification table (A/B/C) with, per rule, the target hook event + one-line mechanism sketch + whether the current option surface already supports it. Correct/extend the seed inventory above. | analysis | — | TASK:COMPLETE (2026-09-05) |
+| P2 | Map the existing hook substrate & gaps: document (in-plan) the `programs.claude-code.hooks` API, `mkHook`, exit-code/injection conventions, module-global caveat, and the VM-test harness; enumerate which Class-A/B conversions the current options already express vs. which need NEW toggle options. | analysis | P1 | TASK:COMPLETE (2026-09-07) |
+| P3 | **Design** the high-confidence Class-A interlocks — P3a AI-attribution block, P3b no-commit/push-on-main, P3c `rm -i`/`cp -i`/`mv -i` hazard. **Adopt the P2 gaps-table grouping (§7): P3a/P3b belong in ONE new `gitSafety` category that SUBSUMES plan 017's `--no-verify` design (do not author a parallel hook); P3c belongs in a new `bashSafety` category (block-with-message, NEVER rewrite — RTK lesson). Copy the `security`/`development` templates, not the vestigial `formatting`/`notifications` ones (P2 §1).** Per rule: hook event, matcher (+`ifFilter` to narrow), script pseudocode (jq-stdin `.tool_input.command`, exit 2, `continueOnError=false`), new toggle option (default safety=block), FALSE-POSITIVE analysis (plan 049 is the canary), and VM-test approach. No adoption. | design (artifact → Present/STOP) | P2 | TASK:COMPLETE (2026-09-07) |
+| P4 | **Implement + VM-test** the Class-A interlocks per the P3 design: add the `gitSafety` + `bashSafety` categories (safety-critical default block, individually toggleable) to `hooks.nix`, appended to the `mergeHookSets` list behind `lib.optionalAttrs cfg.hooks.<cat>.enable` (P2 §3). **Fold plan 017's I1 (`--no-verify`) into `gitSafety` and update plan 017's status to reflect the merge.** Add a VM test — **first add `self.modules.homeManager.claude-code` to a `mkHmContainerTest` `hmModules` (never done before → see P2 §6 P4 RISK; smoke-assert the module activates + emits settings.json first)**, then prove each block FIRES (attribution-trailer commit rejected; commit on main rejected) and does NOT false-positive on a clean feature-branch commit. | implementation (artifact → Present/STOP + review) | P3 | TASK:COMPLETE (2026-09-07) |
+| P5 | **Research the hard process-gates** — P5a Present/STOP-before-COMPLETE, P5b mandatory-handoff-before-stop, P5c plan-status-transition integrity. Investigate feasible PARTIAL enforcement (e.g. a Stop hook that flags a `TASK:COMPLETE` + commit with no review marker; a SessionEnd hook that gates on stale `HANDOFF.md`/unset `active-plan`). Prototype behind default-off flags where feasible; produce an explicit "irreducibly soft" list. | research + experiment (artifact → Present/STOP) | P2 | TASK:COMPLETE (2026-09-09) |
+| P6 | **Decision (rollout split to P10):** per-rule enforcement defaults, which P5 hard-gates to adopt, rollout order (warn-first vs block), plus the 2026-09-10 scope-expansion decisions (adopt P7/P8/P9; new work before integration). Record dated `[DECISION]` blocks in this plan. | Interactive DECISION | P4, P5 | TASK:COMPLETE (2026-09-10) |
+| P7 | **Secret-dump prevention hook — design + implement.** Mechanical enforcement of memory `never-dump-secrets-to-agent-context`. Design (FP-aware, like P3): PreToolUse Bash rule blocking vault-dump forms (`rbw --full`/`rbw get --full` and equivalents) + secret-env echoes (`echo`/`printf`/`env`/`printenv`/`set -x` exposing `*_TOKEN`/`*_SECRET`/`*_PASSWORD`/AWS-key shapes); jq-stdin `.tool_input.command`, `exit 2`, `continueOnError=false`, `CLAUDE_HOOKS_BYPASS` escape, narrow matcher. Group into `gitSafety`/`bashSafety` or a new `secretSafety` category (design decides). FALSE-POSITIVE analysis (dual-use: `rbw get X \| tool --password-stdin` must PASS; only dump/echo forms block). Implement + VM-test (block a `rbw --full`; allow a piped `rbw get`). Present/STOP before COMPLETE. Default-block; not enabled on any host (P10). | design+impl (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-13) |
+| P8 | **Symlink permission-prompt: full from-here fix, TRANSITIONAL/SUNSET.** NOT hook-suppressible (hardened CC invariant — memory `cc-permission-path-anchor`). Sub-steps: (a) empirically test the untested PreToolUse `permissionDecision:allow` vector (settle whether ANY from-here config fix exists; expected-dead); (b) **eradicate all existing cases** — enumerate every personal worktree with a cwd-escaping `.claude/{user-plans,HANDOFF.md,active-plan}` symlink and migrate them (use `migrate-hsw-plans.sh`; do not over-engineer); (c) **fix the source** that creates the symlink pattern so no new cases arise; (d) minimal reminder-only advisory (`continueOnError=true`) + concise docs. **This is throwaway scaffolding for a personal-only pattern being eliminated — the migrate tooling + advisory MUST be removed once cases==0 and the source is fixed (memory `sunset-transitional-scaffolding`); do not build permanent infra.** Present/STOP before COMPLETE. | eradicate+sunset (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-14 — Tim signed off on the final Present. Batch-migrated all 77 cwd-escaping `.claude/user-plans` symlinks → real in-cwd dirs (re-scan = 0 escapes; gitignored, git-status clean, store untouched/reversible). Source-fix (c) = rule 5a written into n3x + hsw CLAUDE.md; Tim reviewing in-browser, then landing to fresh doc branches (me). Docs (d) = the rule-5a text (no CC module hook — minimal). Sunset teardown done: throwaway `/tmp/p8-migrate-*.sh` + `migrate-{hsw-,}plans.sh` deleted. See the "✅ EXECUTED" block in the P8 progress section.) |
+| P9 | **Fold plan 049 T1 into 056.** Migrate the broken project-level `.claude/settings.json` PreToolUse hook (the FP canary: `matchPaths` ignored, `exit 1` non-blocking, stdout-not-stderr) to the proper nix-managed module pattern (jq-stdin path filter, `exit 2`, stderr, `continueOnError=false`) — or remove it in favour of the module hooks if redundant. Verify no more spurious "non-blocking status" noise. Update plan 049's status to reflect the merge. Present/STOP before COMPLETE. | impl (artifact → Present/STOP) | P4 | TASK:COMPLETE (2026-09-14 — Tim signed off. No nixcfg module change needed: `hooks.security` is already the correct jq-stdin/`exit 2`/stderr pattern; project hooks are redundant+broken. Corp `iaas/hsw` hook = REMOVE recommendation recorded, closed out with NO corp MR (P8 precedent). nixcfg relic `claude-runtime/.claude/settings.json` = dead PreToolUse/PostToolUse antipattern blocks STRIPPED (jq-valid, non-hook settings kept, 0 antipattern remaining). Plan 049 status updated. See "P9 analysis" + [DECISION] block.) |
+| P10 | **Integration & live rollout** (was P6's rollout half). Bump nixcfg-work flake.lock to a nixcfg rev carrying the full hook set; `home-manager switch` on `tim@pa161878-nixos`; demonstrate each adopted block fires live (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean work is unaffected; then mark COMPLETE → merge to `main`. Tim-authorized autonomous execution (from the P6 brief) once P7-P9 are green. | Interactive INTEGRATION | P4, P5, P7, P8, P9, P11 | TASK:PENDING — **INTERACTIVE / USER_INPUT_REQUIRED.** All dependencies (incl. P11) are COMPLETE, so this is the next actionable task, BUT it is the public merge: Tim-driven, outward-facing, and NEVER auto-initiated. `/next-task` MUST output `USER_INPUT_REQUIRED` here and stop — do not push/merge/bump-lock without Tim's explicit go-ahead and a `CLAUDE_TASK_SIGNOFF=1 CLAUDE_HOOKS_BYPASS=1` launch. Rollout is already LIVE + durable via the nixcfg-work local pin (nixcfg→`b5aefa0`); only the public-merge step remains. See the ▶ RESUME POINTER for the exact 5-step sequence. **[DECISION] Tim 2026-09-14: HELD OPEN — completion gated on the PUBLIC MERGE.** |
+| P11 | **End-user design & robustness review (the public-merge gate).** Six workstreams (see "P11 spec" section): P11.1 standardize the block-message contract (WHY/PROCEED-NOW/AVOID-FUTURE + docs link) across all 9 hooks; P11.2 hard-block vs. interactive `ask` capability finding + per-rule decision; P11.3 context-correctness audit of every hook (the `blockCommitOnMain` root-cause class); P11.4 guardrail-interaction/deadlock review + root-fix the `blockNoVerify`×slow-flake-check wedge; P11.5 false-positive test matrix incl. the multi-worktree pattern; P11.6 warn-first rollout + observability decision. Human-attended; each workstream Present/STOP before its part is COMPLETE. Unblocks — does not perform — the public merge. | design+impl review (artifact → Present/STOP) | P4, P5, P7, P8, P9 | TASK:COMPLETE (2026-09-15) — Tim signed off on the P11 artifact set in-session (session launched with CLAUDE_TASK_SIGNOFF=1). Six workstreams delivered in `c1c775a`: four-part block-message contract across all hooks; `ask`-hybrid for the two judgment gates; the `git -C` detection defect found+fixed; pre-commit flake-check removed (deadlock root-fix); VM adversarial matrix; guardrail-activity log. `nix flake check` green; shell harness 16/16. Live `ask` prompt deferred to P10 verification. |
+
+## Definition of Done (per task)
+- **P1** — a classification table in this plan covering every soft rule found in global CLAUDE.md, project CLAUDE.md, all auto-memory `feedback` entries, and every active plan's Guardrails; each row tagged A/B/C with target hook event + mechanism sketch + "already supported?" flag. The seed inventory is superseded/corrected. No code. (Autonomous-safe.)
+- **P2** — a "substrate map" section documenting the hook API + conventions (grounded in `_hm/hooks.nix` with file citations) and a gaps list: for each Class-A/B rule, "expressible with existing options" vs "needs new option X". No code. (Autonomous-safe.)
+- **P3** — a design section per Class-A rule (P3a/P3b/P3c) with event, matcher, script pseudocode, exit code, new option name + default, false-positive analysis, and the VM-test assertion it will need. Presented to Tim and signed off BEFORE marking COMPLETE. No host adopts yet.
+- **P4** — `nix flake check --no-build` green (run backgrounded + poll; ~8 min > tool timeout); `nix eval` shows each new hook present in the generated hooks for an account; a VM test passes asserting (a) an attribution-trailer commit is rejected, (b) a commit on `main` is rejected, (c) a clean commit on a feature branch succeeds. Presented + reviewed before COMPLETE. Not yet enabled on the live host (that is P6).
+- **P5** — a findings section: per hard-gate, what a hook CAN enforce vs what is irreducibly model-judgment; working prototypes (default-off) for anything feasible; an explicit "keep soft" list for the rest. Presented before COMPLETE.
+- **P6** (decision only; rollout → P10) — dated `[DECISION]` blocks in this plan fixing per-rule defaults + adopted hard-gates + rollout order (2026-09-09) AND the scope-expansion decisions (2026-09-10: adopt P7/P8/P9, new work before integration). Signed off by Tim. No live host action (that is P10).
+- **P7** — a design section (event, matcher, script pseudocode, option/category, false-positive analysis incl. the dual-use pass/block cases, VM-test assertion) + implementation in `hooks.nix`; `nix flake check --no-build` green; `nix eval` shows the hook in the generated set; a VM test asserts a secret-dump form (`rbw --full`) is rejected and a piped `rbw get X | tool --password-stdin` is allowed. Presented + signed off before COMPLETE. Not enabled on any host.
+- **P8** — (a) a recorded empirical result for the PreToolUse `permissionDecision:allow` vector (works / does-not-work); (b) **zero remaining cases**: a re-scan shows no personal worktree has a cwd-escaping `.claude/{user-plans,HANDOFF.md,active-plan}` symlink; (c) the source that created them is fixed (no new cases); (d) if kept at all, a reminder-only advisory + concise docs, each carrying an explicit **sunset/removal note**; `nix flake check --no-build` green. **Sunset criterion (part of DoD):** once cases==0 and source fixed, the migrate tooling + advisory are scheduled for removal (tracked here) — P8 is not "done" as permanent infra, it is done as an eradication with a documented teardown. Presented before COMPLETE. (Explicitly NOT an attempt to suppress the CC symlink gate — that is impossible.)
+- **P9** — the plan-049 broken project hook migrated to the module pattern (or removed if redundant); `nix flake check --no-build` green; evidence the spurious "non-blocking status" noise is gone (e.g. the VM test or a logic check shows the replacement fires correctly with `exit 2`/stderr); plan 049 status updated. Presented before COMPLETE.
+- **P10** — nixcfg-work flake.lock bumped to a nixcfg rev carrying the full hook set; `home-manager switch` applied on `tim@pa161878-nixos`; a live demonstration that each adopted block fires (attribution, no-main, unsigned `TASK:COMPLETE`, PENDING→COMPLETE skip, secret-dump) and clean commits + properly-attested completions are unaffected; branch merged to `main`. **The merge step is gated on P11 COMPLETE.**
+- **P11** — all six workstreams closed with their per-workstream DoD met (see "P11 spec"): every hook block message matches the four-part template (grep-checkable) + links the guide; a recorded `ask`-capability finding + per-rule block-vs-ask decision table; a context-correctness audit table (one row per hook); the `blockNoVerify`×flake-check deadlock root-fixed (a normal `.nix` commit completes without `--no-verify`); a false-positive test matrix green incl. the `blockCommitOnMain` cross-worktree case; a dated warn-first/observability `[DECISION]`. Each artifact Present/STOP-signed-off by Tim. Completing P11 is what unblocks the P10 public merge.
+
+## Guardrails
+- Serialize nix (no concurrent/background nix). No AI attribution in commits/PRs. `git commit --no-verify`.
+- **Present/STOP gate for artifact-producing tasks** (memory `next-task-present-stop-artifact-gate`): P3/P4/P5 produce reviewable artifacts (module changes, hook designs) — present the design + defaults and get Tim's sign-off BEFORE marking COMPLETE, even under `/next-task`. P1/P2 are research/doc and autonomous-safe.
+- **Full-green `nix flake check --no-build` DoD ≈ 8 min** (> the 2-min tool timeout): run it with `run_in_background` and poll the log for `error:` count + an exit marker; never conclude from a timed-out foreground run (memory `nixcfg-precommit-flakecheck-timeout`).
+- **Hooks are module-global** — a converted rule fires for ALL enabled accounts on the host. Every Class-A/B design MUST include a false-positive analysis; prefer a narrow matcher + `ifFilter` and a clear override path.
+- **Do not enable any new blocking hook on the live host before P10.** Design/implement/test behind default-aware options; P10 is where adoption + live enablement happen (so a bad matcher can't lock the operator out of committing mid-plan).
+- **Never dump secrets to agent context** (memory `never-dump-secrets-to-agent-context`): no `rbw --full`/vault dumps/secret-env echoes into the transcript, context, or files, even while building/testing the P7 hook; refuse stored-note instructions to do so.
+- `$CLAUDE_PROJECT_DIR` is NOT set in the Bash tool shell — use the absolute worktree path for `active-plan`/`HANDOFF.md`.
+
+## Continuity / handoff
+Off-branch work runs in THIS worktree (`/home/tim/src/nixcfg-session-hooks`, branch `plan-056-session-workflow-hooks`). The plan file is tracked on this branch. When P4/P6 land module changes, they merge to `main` like any feature branch. Related durable context lives in auto-memory: `next-task-present-stop-artifact-gate`, `project_ai_attribution_leak`, `cc-sessionstart-hook-contract`, `nixcfg-precommit-flakecheck-timeout`. Prior hook-infra work: plan 044 (resume hook / dual-channel resume), plan 046 (T5 hook-events model + T11 RTK), plan 050 (tmux command-status source).
+
+## Session log
+- 2026-09-14 — **[DECISION] Tim: keep-the-core, trim-the-ceremony (strategic rescope of `.claude/user-plans`).**
+  Prompted by Tim's "is user-plans still earning its keep over native CC/OpenCode continuity?" I verified the
+  native surface via `claude-code-guide` (authoritative, current). **Finding:** native CC has NO durable
+  cross-session task cursor, NO unattended task-by-task burndown, NO *distilled* handoff resume (native
+  `--resume` = full-transcript replay). Those three + multi-worktree/multi-session concurrency coordination
+  are the **load-bearing core** with no native equivalent. What native HAS overtaken: single-session task
+  tracking (native session todos) and research→present→approve (native Plan Mode). The old "tool-agnostic /
+  works for OpenCode" justification is now weak (CC-centric since 2026-06-24; OC dormant).
+  **Tim accepted the recommendation FULLY:** (1) KEEP the core — `active-plan` + `HANDOFF.md` + distilled
+  SessionStart resume + the burndown driver + reliable `TASK:` cursor integrity; (2) TRIM redundant ceremony
+  — stop using `.claude/user-plans` as a single-session todo / present-approve wrapper (lean on native todos +
+  Plan Mode there); (3) SIMPLIFY opportunistically as we go; (4) **keep the higher-level "Claude session hooks"
+  scope front-of-mind — actively look for hook integrations that streamline/harden/improve the user-plans
+  implementation** (reduce the manual-discipline surface CLAUDE.md currently enforces by nagging).
+  **Impact on remaining 056 scope — re-audit P9/P10 through the keep-core-vs-ceremony lens:**
+  • **P9** (fold plan 049 T1 — fix the broken project-level PreToolUse hook) = hardening/cleanup of a fragile
+    edge → **still aligned** (it removes ceremony/noise, doesn't add it).
+  • **P10** live rollout: the safety hooks (`gitSafety`/`bashSafety`/`secretSafety`) are general SESSION
+    safety, not user-plans ceremony → keep. The `planIntegrity`/Present-STOP gates (P5) are user-plans-specific
+    → **re-audit which are burndown-ESSENTIAL (well-formed `TASK:` transitions the driver depends on) vs.
+    human-attended ceremony**; adopt only the essential ones live. (No code change decided yet — flagged for
+    the P10 decision + any future simplification pass.)
+  This decision governs how we finish 056 and any follow-on. See memory `keep-core-trim-ceremony-userplans`.
+- 2026-09-13 — **P7 COMPLETE.** Designed + implemented the new **`secretSafety`** hook category
+  (mechanical enforcement of memory `never-dump-secrets-to-agent-context`). **Design presented + signed
+  off (Tim, [DECISION] 2026-09-13 in the "P7 design" section):** (1) new `secretSafety` category (not
+  folded into bashSafety); (2) **allow `$(rbw get …)`/backtick capture** (Tim overrode the conservative
+  recommendation — capture does not print to the transcript); (3) narrow P7b (explicit secret-var refs
+  only; bare `env`/`set -x` NOT blocked); (4) default-block, `CLAUDE_HOOKS_BYPASS` escape. **Implemented**
+  in `modules/programs/claude-code/_hm/hooks.nix`: `blockVaultDump` (P7a — `rbw --full` always +
+  unpiped/uncaptured `rbw get|code`; piped/`$(…)`-captured PASS) and `blockSecretEnvEcho` (P7b —
+  echo/printf of `$SECRETVAR` + `printenv SECRETVAR`; `GH_TOKEN=$(gh auth token) git push` prefix PASSES),
+  both default-block, PreToolUse Bash, jq-stdin, `exit 2`/`continueOnError=false`, unioned into
+  `mergeHookSets`. Refined the rbw word-boundary detection (`(^|[^[:alnum:]_])rbw`) so `$(rbw --full …)`
+  is still caught by the unconditional `--full` block. **Validation:** (1) **logic test 26/26** driving
+  the DoD matrix through the REAL nix-eval-extracted generated scripts (`.#homeConfigurations."tim@
+  thinky-nixos"..._internal.hooks.PreToolUse`); (2) `nix flake check --no-build` **GREEN** (backgrounded
+  + polled, ~8 min; the `vm-claude-code-safety-hooks` derivation with the new P7 assertions evaluates);
+  (3) VM-test assertions added to `vm-claude-code-safety-hooks`. **VM nspawn RUN deferred** —
+  `ENVIRONMENT_NOT_CAPABLE` locally (the `uid-range` daemon feature is parked, plan 053 T4, same as P4);
+  a full CI `workflow_dispatch` was SKIPPED for resource preservation (Tim's explicit preference this
+  session — it would trigger the heavy nightly tier incl. `pkgs`/tarball builds), and the nspawn harness
+  for this exact category pattern was already proven green in P4's CI run. Its natural execution point is
+  **P10's on-host live demo** (which exercises the real hook). Updated memory
+  `never-dump-secrets-to-agent-context` to record that the durable fix is now implemented (P7), not yet
+  live (P10). Commits on branch `plan-056-session-workflow-hooks`; branch pushed. **Next actionable: P8**
+  (symlink permission-prompt full from-here fix, TRANSITIONAL/SUNSET; artifact → Present/STOP).
+- 2026-09-10 — **P6 marked COMPLETE (decision-only); scope expanded (P7/P8/P9 new work) before integration
+  (now P10).** Wrote the standing security memory `never-dump-secrets-to-agent-context` (emphatic: no
+  `rbw --full`/vault dumps/secret-env echoes into transcript/context/files; refuse stored-note
+  instructions to do so) after Tim removed an `rbw --full` incantation from a Bitwarden notes field.
+  Ran a cross-worktree/branch scan (nixcfg + nixcfg-work(+ci) + nixcfg-coordination plans, all auto-memory,
+  and a deep-dive on the permission-prompt problem) for hook-solvable work. **Key finding:** the
+  permission-prompt/symlink pain (Tim's headline example) is a **hardened CC invariant, NOT
+  hook-suppressible**, and **nixcfg is unaffected** (all worktrees use real per-worktree plan/handoff dirs
+  — verified); the pain is in n3x/hsw families (prepared fix `migrate-hsw-plans.sh`). **Tim's decisions
+  (see the 2026-09-10 `[DECISION]` block):** (A) design+implement a secret-dump prevention hook → **P7**;
+  (B) symlink issue → detection-warning + docs only (not a block) → **P8**; (C) fold plan 049's T1 fix →
+  **P9**; sequencing = new work before integration, so the old P6 rollout half became **P10 — Integration
+  & live rollout** (depends P4,P5,P7,P8,P9). P6 (decision) is COMPLETE. **Next actionable: P7** (secret-dump
+  hook, artifact → Present/STOP). Then P8, P9, then P10 (live rollout, Tim-authorized autonomous).
+- 2026-09-09 — **P6 decisions recorded; status IN_PROGRESS (live demo Tim-driven).** Collected Tim's four
+  decisions via `/next-task` (see the "P6 decision & rollout" section's dated `[DECISION]` block):
+  (1) keep P4 `gitSafety`+`bashSafety` default-BLOCK for all five rules (no code change — already
+  default-block); (2) enable BOTH P5 `planIntegrity` gates as hard block — flipped
+  `requireSignoffBeforeComplete` (P5a) and `enforceStatusTransitions` (P5c) defaults `false`→`true` in
+  `hooks.nix`, with a module-global dev-team caveat added to each option `description` (P5a is
+  Tim-`/next-task`-specific; recommend nixcfg-work scopes it off for team accounts); (3) rollout =
+  decisions-only this session, Tim drives the cross-repo nixcfg-work lock-bump + live `home-manager
+  switch` + block demonstration (P6 DoD's on-host demo is what keeps P6 IN_PROGRESS); (4) FIXED the stale
+  project `CLAUDE.md` "End of Session" clipboard-handoff prose (P1 correction #1) — rewrote it to mandate
+  the per-worktree file channel (`.claude/HANDOFF.md` + `.claude/active-plan`), clipboard demoted to
+  single-session last-resort. `nix flake check --no-build` GREEN (backgrounded + polled). Commits on
+  branch `plan-056-session-workflow-hooks`. **Next: the Tim-driven live demo** (bump nixcfg-work lock →
+  switch on `tim@pa161878-nixos` → demonstrate each adopted block fires + clean commits unaffected →
+  mark P6 COMPLETE).
+- 2026-09-09 — **P5 COMPLETE.** Tim signed off the P5 designs/defaults (decisions recorded 2026-09-08) and
+  authorized implement-and-finish. **Verify-first (his choice) done EMPIRICALLY on the real binary
+  (claude-code 2.1.191):** a throwaway `--settings` env-dumping PreToolUse hook + a `claude -p` driven through
+  two sequential Bash tool calls proved a mid-session `export` is INVISIBLE to a later hook while a pre-launch
+  export IS visible → `CLAUDE_TASK_SIGNOFF` is model-unsettable (only Tim, at launch), so the P5a env-var
+  marker's anti-self-certification property holds (session-global cost accepted). **Implemented** the new
+  `planIntegrity` category in `hooks.nix`: `requireSignoffBeforeComplete` (P5a) + `enforceStatusTransitions`
+  (P5c), both default-OFF, PreToolUse `Edit|MultiEdit|Write`, unioned into `mergeHookSets`. **P5b kept fully
+  soft** ([DECISION] Tim): no SessionEnd warn shipped — `SessionEnd` can't block and its stdout is invisible to
+  Claude, so it cannot enforce anything; rely on CLAUDE.md discipline + the plan-044 resume hook. **Logic test
+  caught a real bug:** the scripts invoke `jq` 3× and the first read drained stdin (leaving `new`/`old` empty →
+  gate silently allowed); fixed with `input="$(cat)"` read-once. 14/14 matrix cases pass on the nix-eval-
+  extracted REAL generated scripts; `nix flake check --no-build` GREEN. NOT enabled on any live host (P6).
+  Also flagged+VERIFIED the previously-unverified env-non-propagation assumption (was same status as
+  `stop_hook_active`). **Next: P6** (Interactive decision/rollout gate — now unblocked, depends P4+P5): fix
+  per-rule enforcement defaults for BOTH the P4 safety blocks and the P5 gates, resolve the stale project
+  CLAUDE.md clipboard-handoff prose, live `home-manager switch` + demonstrate the blocks fire.
+- 2026-09-07 — **P5 RESEARCH DONE (awaiting Tim sign-off on prototype designs; status IN_PROGRESS).** Wrote the
+  "P5 findings" section. Verified the runtime hook contract against the official CC hooks reference + memory
+  `cc-sessionstart-hook-contract` (P5.0 table). **Two facts reshape the design:** (1) there is NO blockable
+  "session is ending" event — `SessionEnd` cannot block (cleanup-only), `Stop` CAN block but fires PER-TURN, so
+  neither can single out and gate the final stop (refutes the seed/P1-B11 "Stop/SessionEnd nag on stale HANDOFF"
+  assumption); (2) the `TASK:COMPLETE` marking is a normal Edit and PreToolUse Edit can block it with
+  `old_string`/`new_string` both on stdin — so P5a/P5c are gate-able at the transition EDIT, MORE enforceable
+  than P1's Class-C prediction. **Verdicts:** P5a Present/STOP-before-COMPLETE = FEASIBLE (PreToolUse Edit gate
+  on `.claude/user-plans/*.md`, block a real →COMPLETE transition unless `CLAUDE_TASK_SIGNOFF=1` attests
+  sign-off; soft residue = proving a real review happened → honor-marker). P5b handoff-before-stop = LARGELY
+  SOFT (no blockable session-end; best mechanical artifact = default-off SessionEnd *advisory* audit-warn on
+  stale `HANDOFF.md`/unset `active-plan` — cannot force, cannot compose the summary; rejected a blocking-Stop
+  gate: per-turn + unverified `stop_hook_active` loop-guard). P5c status-transition integrity = FEASIBLE
+  (PreToolUse Edit textual gate: block PENDING→COMPLETE skip + dateless COMPLETE; soft residue = DoD-met is
+  semantic). Proposed ONE new `planIntegrity` category, three sub-toggles, all **default-OFF** (workflow gates
+  with ergonomic cost → P6 opts in warn-first). Delivered the explicit "keep soft" list (compose-summary,
+  prove-review, DoD-met, confirm-merge-to-main C18, one-task-per-session C19, C20/C21 judgment rules). **DoD
+  bullets 1+3 done (feasibility analysis + keep-soft list); bullet 2 (implement the default-off prototypes) HELD
+  for Present/STOP sign-off** on the designs/defaults (the P5a marker mechanism + the P5b advisory-only verdict
+  are decisions worth a yes before writing code — memory `next-task-present-stop-artifact-gate`). Next: Tim
+  sign-off → implement `planIntegrity` + logic test + flake check → mark P5 COMPLETE; then P6.
+- 2026-09-04 — Plan created. Worktree `/home/tim/src/nixcfg-session-hooks` + branch `plan-056-session-workflow-hooks` cut from `main` (7e2ab33). Motivated by plan 055 task PM, where a `/next-task` session blew past soft Present/STOP conventions; Tim asked to generalize "suggestions in context" into "hard clear processes to follow". Surveyed the existing hook substrate (`modules/programs/claude-code/_hm/hooks.nix`): mature declarative categorized+custom hook API, `mkHook`, `exit 2` PreToolUse-block convention, module-global settings.json (Nix build output), VM-test harness for hooks. Locked decisions (Tim): dedicated worktree off main; both enforceable + hard-gate scope, phased; per-rule enforcement with safety-critical defaulting to block. Seed inventory of soft→hard candidates drafted (AI-attribution, no-main-commit, rm-i hazard as Class-A; handoff + Present/STOP as harder gates). Next actionable: **P1** (audit & classify all soft rules).
+- 2026-09-05 — **P1 COMPLETE.** Audited global + project CLAUDE.md, all 28 auto-memory entries, and every active plan's Guardrails (050-054, 056). Produced the definitive A/B/C/D classification (see "P1 findings" section, supersedes seed inventory): 5 Class-A hard-block targets (A1 attribution, A2 no-main, A3 no-verify, A4 git-add-f, A5 emdash), 2 Class-A/B block-not-rewrite (rm-i, grep/find), 9 Class-B detect/warn, 5 Class-C soft, plus Class-D already-done. Confirmed category surface in `hooks.nix` (no attribution/no-main/no-verify/rm-i/emdash/handoff options exist yet — all NEW). Key findings: (1) project CLAUDE.md "clipboard handoff" rule stale-conflicts with global file-handoff protocol → must resolve before B11; (2) A3 (`--no-verify`) already designed in **plan 017** (`gitSafety`, PENDING) → P4 must coordinate/subsume; (3) plan 049 is the false-positive canary → every P3 design needs the DoD's false-positive analysis; (4) RTK-disabled lesson → block-with-message, never auto-rewrite Bash. Next actionable: **P2** (substrate map, depends P1).
+- 2026-09-07 — **P2 COMPLETE.** Wrote the "P2 substrate map" section (grounded with `path:line` citations into `_hm/hooks.nix`, `claude-code.nix`, `_hm/lib.nix`, `vm-tests.nix`). Documents: the option surface table (10 categories + `custom` + `tmuxStatus`), the `mkHook` builder (`continueOnError=false`/`ifFilter` for blocks), the `mergeHookSets = zipAttrsWith concatLists` union assembly (NOT right-biased `//`), exit-code/JSON-stdin conventions (PreToolUse `exit 2`+`continueOnError=false` blocks; input is `.tool_input.*` via jq-stdin, NOT `$1`), the serialization path (Nix build-output settings.json → runtime coalesce), the module-global caveat, and the `mkHmContainerTest` VM harness (no CC hook test exists yet). Delivered the gaps table: each Class-A/B rule tagged "expressible now (custom/existing)" vs "NEW toggle". Key findings: (1) A1-A4 group into ONE new `gitSafety` category that SUBSUMES plan 017's `--no-verify` design (P4 implements 017 I1 + folds in attribution/no-main/add-f, not a parallel hook); (2) A/B6 rm-i → new `bashSafety` category (block-with-message, never rewrite); (3) A5/B12 reuse the `security`-category path/content-block template; (4) **correction to plan 017 R1** — its "existing hooks use `$1` and may not work" worry is STALE, the module was fixed to jq-stdin (plan 046 T5 era). Next actionable: **P3** (design P3a/P3b/P3c Class-A interlocks; artifact-producing → Present/STOP for sign-off before COMPLETE).
+- 2026-09-07 — **P3 COMPLETE.** Designed two new hook categories (see "P3 design" section) grounded in the P2 substrate map + verified module templates (`security`/`development` in `hooks.nix`, `mkHook`, `mergeHookSets`): **`gitSafety`** (`.blockAttribution` P3a, `.blockCommitOnMain` P3b, `.blockNoVerify`=plan-017-I1 A3 subsumed, `.blockAddForce` A4 sketch) and **`bashSafety`** (`.blockBareRm` P3c). Each rule: PreToolUse Bash, jq-stdin `.tool_input.command`, `exit 2` + `continueOnError=false`, unioned into `mergeHookSets` behind `lib.optionalAttrs (cat.enable && subtoggle)`, per-rule default-block toggle, false-positive analysis (plan 049 canary), direct-invocation VM-test assertion. Key design calls: attribution matcher targets the LEAK SIGNATURE (`Co-Authored-By:`/`Generated with Claude`/`claude.ai`/anthropic-noreply/🤖) NOT bare brand words (this repo mentions Claude/Anthropic constantly → brand matcher would FP on every commit); uniform `CLAUDE_HOOKS_BYPASS=1` escape hatch so a bad matcher can't lock out committing. **Presented to Tim + signed off 2026-09-07** ([DECISION] block in P3 section): P3c hard-block, P3b default-block-everywhere, bypass=plain env var — all confirm the design defaults. Next actionable: **P4** (implement + VM-test the `gitSafety`+`bashSafety` categories; fold plan 017 I1 in; FIRST-ever `homeManager.claude-code` in the nspawn VM harness → smoke-assert activation before block behavior, per P2 §6 P4 RISK; artifact → Present/STOP + review).
+- 2026-09-07 — **P4 COMPLETE.** [DECISION] Tim (P4 sign-off): keep P4 IN_PROGRESS until the nspawn VM test
+  actually RUNS green somewhere (local run blocked by the parked plan-053 `uid-range` daemon feature). Closed
+  that condition: classified `vm-claude-code-safety-hooks` into the `nspawnPr` CI group (`ci-classification.nix`;
+  `ci-matrix-sync` drift guard builds green), pushed branch `plan-056-session-workflow-hooks`, and triggered CI
+  via `workflow_dispatch` (the `vmtest-n` job advertises `uid-range` via `auto-allocate-uids`, so it runs nspawn
+  tests the WSL host cannot). **Run 34153269392: `vm-claude-code-safety-hooks` PASSED on BOTH arches**
+  (✓ aarch64-linux 1m3s, ✓ x86_64-linux 1m18s) — the CC module activated in nspawn, emitted a `settings.json`
+  carrying the hooks, and every block assertion fired (attribution→exit 2, commit-on-main→exit 2, clean
+  feature-branch commit→exit 0, non-commit git→exit 0, bare rm→exit 2, `CLAUDE_HOOKS_BYPASS`→exit 0). All P4 DoD
+  bullets now met: flake check green, `nix eval` shows the hooks in the generated set, VM test passes (a)(b)(c),
+  design signed off (P3) + green-run condition satisfied, NOT enabled on any live host (that is P6). Commits:
+  `7f487f5` (impl+VM test+017 fold-in), `6f04451` (findings), plus the CI-classification commit. **Next: P6**
+  (Interactive decision gate — per-rule enforcement defaults, adopt/rollout, live `home-manager switch` +
+  demonstrate the blocks fire live). P5 (hard process-gate research) is also actionable (depends only on P2).
+- 2026-09-07 — **P4 IMPLEMENTED (awaiting Tim sign-off; status IN_PROGRESS).** Added the `gitSafety`
+  (`blockNoVerify` = subsumed plan 017 I1, `blockAttribution`, `blockCommitOnMain`, `blockAddForce`) and
+  `bashSafety` (`blockBareRm`) categories to `modules/programs/claude-code/_hm/hooks.nix` — options after
+  `security`, hook bindings `gitSafetyHooks`/`bashSafetyHooks` after `securityHooks`, appended to the
+  `mergeHookSets [ … ]` list. Each: PreToolUse, `matcher="Bash"`, jq-stdin `.tool_input.command`, `exit 2` +
+  `continueOnError=false`, uniform `CLAUDE_HOOKS_BYPASS` bypass, Nix-store binary paths, per-rule
+  `lib.optionalAttrs (cat.enable && subtoggle)`. Implemented exactly per the signed-off P3 design; defaults
+  block; NOT enabled on any live host (P6). **Validation done:** (1) exhaustive LOGIC validation — extracted
+  the REAL generated hook commands from `.#homeConfigurations."tim@thinky-nixos"...._internal.hooks.PreToolUse`
+  via `nix eval` and drove 40+ matrix cases through each block; ALL PASS (incl. every plan-017 T1 case,
+  attribution leak-vs-clean, main-vs-feature-vs-detached, bare-rm vs forced-rm vs rmdir/git-rm, and bypass).
+  Caught+fixed one real bug: `bashSafety` used `printf '%s'` so `read` dropped a separator-less final segment
+  (`rm foo` slipped through) → changed to `printf '%s\n'`. (2) `nix flake check --no-build` **GREEN** (0 errors,
+  "all checks passed!"). **VM test:** authored `vm-claude-code-safety-hooks` in `vm-tests.nix` — the FIRST VM
+  test to eval+activate `self.modules.homeManager.claude-code` in nspawn (P2 §6 P4 RISK). Surfaced+resolved the
+  predicted activation fallout: `accounts.max.displayName` has no default (forced at activation, unlike the lazy
+  eval-tests in `tests.nix`) → set it; `nixcfgPath` must pre-exist+be writable → pointed at the container home.
+  The test DERIVATION now evaluates cleanly (drv builds, in the green flake check). **BLOCKER on the local RUN:**
+  building/running any `mkHmContainerTest` needs the nix daemon to advertise the `uid-range`/`n` system feature
+  (`auto-allocate-uids` + `extra-system-features`); this WSL host's daemon does NOT (features = benchmark
+  big-parallel kvm nixos-test). Enabling it host-wide is **plan 053 T4 — PARKED, an explicit Tim decision**.
+  So the VM RUN is `ENVIRONMENT_NOT_CAPABLE` locally (runs in CI or after a 053-T4 daemon rebuild). Committed
+  `7f487f5` (impl + VM test + plan-017 fold-in; `--no-verify` used per memory `nixcfg-precommit-flakecheck-timeout`
+  because the repo pre-commit hook re-runs the 8-min flake check and SIGTERMs the tool — flake check confirmed
+  green out-of-band first). Plan 017 I1/T1 → SUBSUMED. **DECISION NEEDED (P4 sign-off + VM run) — see Present.**
+- 2026-09-07 — **P2 accuracy pass** (post-review self-audit prompted by Tim). Verified claims against source and corrected THREE defects in the just-written substrate map: (1) the option-surface table overstated wiring — `cfg.hooks.formatting/linting/testing/notifications` have 0 hook-merge refs (`formatting` is vestigial; `linting`/`notifications` `enable` only add pkgs to PATH), so the table now marks each row WIRED vs NONE and names `security`/`development` as the only copy-worthy templates; (2) replaced the guessed "plan 046 T5 era" jq-stdin provenance with the actual commit `4f3488c`; (3) added a verified P4 RISK — `homeManager.claude-code` is never in any VM test, so P4 is the first to eval it in nspawn (smoke-assert activation before block behavior). Also WIRED the P2 findings into the P3/P4 task rows (gitSafety-subsumes-017 + bashSafety grouping, template guidance, VM-harness-first-use) so the next `/next-task` session executes against them instead of rediscovering them.

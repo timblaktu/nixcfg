@@ -1,9 +1,16 @@
 # Plan 017: Git Safety Hooks for Claude Code
 
-**Status**: PENDING
+**Status**: SUBSUMED by plan 056 P4 (2026-09-07) — the `--no-verify` design (I1) is
+implemented as `programs.claude-code.hooks.gitSafety.blockNoVerify` in
+`modules/programs/claude-code/_hm/hooks.nix`, folded into the broader `gitSafety`
+category (attribution / no-commit-on-main / add-force siblings). This plan's I1 regex
+and the `-n`/`-an`/`git push -n`=dry-run edge-case matrix (Task I1 + T1 below) were the
+spec; plan 056 P4 carries them forward and validates them (all 12 T1 cases pass under
+plan 056's direct-invocation + nspawn VM test). D1 (standalone non-Nix documentation)
+remains OPEN and out of scope for 056 — see below.
 **Branch**: create from `main` (e.g., `feature/git-safety-hooks`)
 **Created**: 2026-02-01
-**Last Updated**: 2026-02-18 (rewritten based on current repo state and hook API research)
+**Last Updated**: 2026-09-07 (I1/T1 subsumed by plan 056 P4; see status note)
 
 ---
 
@@ -23,9 +30,9 @@ this at the tool level — the command is blocked before it ever executes.
 | Task | Name | Status | Date |
 |------|------|--------|------|
 | R1 | Research Claude Code hook API | TASK:COMPLETE | 2026-02-18 |
-| I1 | Add gitSafety hook category to hooks.nix | TASK:PENDING | |
-| T1 | Test hook blocking behavior | TASK:PENDING | |
-| D1 | Document standalone usage for non-Nix repos | TASK:PENDING | |
+| I1 | Add gitSafety hook category to hooks.nix | TASK:COMPLETE (subsumed by plan 056 P4) | 2026-09-07 |
+| T1 | Test hook blocking behavior | TASK:COMPLETE (via plan 056 P4 direct-invocation + nspawn VM test) | 2026-09-07 |
+| D1 | Document standalone usage for non-Nix repos | TASK:PENDING (out of scope for 056; still open) | |
 
 ---
 
