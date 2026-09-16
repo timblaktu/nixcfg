@@ -10,8 +10,9 @@ Mode: **A only (human-attended `/next-task`).** NOT burndown-eligible — no `Bu
 ## ▶ RESUME POINTER — read FIRST
 
 Fresh session: run `/next-task`. `active-plan` points here. The next actionable task is the first
-`TASK:PENDING` whose dependencies are all `TASK:COMPLETE` — currently **T1** (add the two new global git
-excludes to `git.nix`). Tasks run as a linear chain T1→T2→T3→T4/T5→T6; each has a checkable DoD.
+`TASK:PENDING` whose dependencies are all `TASK:COMPLETE` — currently **T2** (rewrite the functional module
+path references from `.claude/...` to the new homes; T1 landed the global git excludes). Tasks run as a
+linear chain T1→T2→T3→T4/T5→T6; each has a checkable DoD.
 
 **One-line goal:** move numbered plan files to `user-plans/` (repo root) and the two per-worktree runtime
 files (`active-plan`, `HANDOFF.md`) to `.session-state/` (repo root), so NOTHING the session-workflow writes
@@ -94,7 +95,7 @@ trailing-slash dir re-include needs it, `!user-plans/**`) to this local `.gitign
 
 | ID | Task | Type | Depends on | Status |
 |----|------|------|-----------|--------|
-| T1 | **Global git excludes.** In `modules/programs/git/git.nix` `ignores`, ADD `"**/user-plans/"` and `"**/.session-state/"`; update the plan-044 comment to explain the new default-ignore-with-per-repo-opt-in scheme. Keep `**/.claude/active-plan` + `**/.claude/HANDOFF.md` for now (removed in T3 once state relocates) to avoid a coverage gap mid-migration. | impl | — | TASK:PENDING |
+| T1 | **Global git excludes.** In `modules/programs/git/git.nix` `ignores`, ADD `"**/user-plans/"` and `"**/.session-state/"`; update the plan-044 comment to explain the new default-ignore-with-per-repo-opt-in scheme. Keep `**/.claude/active-plan` + `**/.claude/HANDOFF.md` for now (removed in T3 once state relocates) to avoid a coverage gap mid-migration. | impl | — | TASK:COMPLETE (2026-09-16) |
 | T2 | **Module path rewrites.** Rewrite every FUNCTIONAL reference in the map above from `.claude/user-plans/`→`user-plans/`, `.claude/active-plan`→`.session-state/active-plan`, `.claude/HANDOFF.md`→`.session-state/HANDOFF.md` (hooks.nix matchers, resume-hook.sh, task-automation.nix, lib.nix, planning command skills, the global CLAUDE.md template, this repo's CLAUDE.md, claude-code.nix comment). Do the documentary-link cleanup pass too (non-gating). | impl (artifact → Present/STOP) | T1 | TASK:PENDING |
 | T3 | **nixcfg move + re-track.** `git mv .claude/user-plans user-plans` (history-preserving, all ~55 files incl. `archive/`); move THIS plan file with it and repoint `active-plan`. Add `!user-plans/` negation to the local `.gitignore`; drop the old `!.claude/user-plans/` line. Create `.session-state/`, `git mv` (or move, since untracked) `active-plan` + `HANDOFF.md` there. Now that state lives under `.session-state/`, drop the `**/.claude/{active-plan,HANDOFF.md}` global excludes from git.nix (superseded by `**/.session-state/`). | impl (artifact → Present/STOP) | T2 | TASK:PENDING |
 | T4 | **Machine-wide worktree migration** (like 056 P8). For EVERY worktree/repo on the machine that has a real `.claude/user-plans` dir and/or `.claude/{active-plan,HANDOFF.md}`, migrate to `user-plans/` + `.session-state/`. Idempotent (skip already-migrated). | migration (artifact → Present/STOP) | T3 | TASK:PENDING |
@@ -105,7 +106,7 @@ trailing-slash dir re-include needs it, `!user-plans/**`) to this local `.gitign
 
 ## Task detail & Definition of Done
 
-### T1 — Global git excludes `TASK:PENDING`
+### T1 — Global git excludes `TASK:COMPLETE`
 Edit `modules/programs/git/git.nix`: append `"**/user-plans/"` and `"**/.session-state/"` to the `ignores`
 list and expand the comment to describe the new scheme (default-ignore machine-wide; per-repo opt-in tracking
 via a local `!user-plans/` negation). Leave the two existing `**/.claude/{active-plan,HANDOFF.md}` lines in
@@ -113,6 +114,12 @@ place for now (T3 removes them once state has physically moved — avoids a wind
 by neither guard).
 **DoD:** `nix flake check --no-build` passes. `git show :modules/programs/git/git.nix` (staged) contains both
 new patterns. No behavior change yet (nothing lives at those paths).
+
+**COMPLETED 2026-09-16:** Added `"**/user-plans/"` and `"**/.session-state/"` to the `ignores` list in
+`modules/programs/git/git.nix`, with an expanded comment describing the default-ignore-machine-wide +
+per-repo-opt-in-via-`!user-plans/` scheme. The two `**/.claude/{active-plan,HANDOFF.md}` lines were kept
+(annotated as superseded-at-T3). `nix flake check --no-build` passed ("all checks passed!", exit 0). Verified
+both new patterns present in the staged blob via `git show :modules/programs/git/git.nix`.
 
 ### T2 — Module path rewrites `TASK:PENDING`
 Depends on T1. Rewrite the FUNCTIONAL references in the map above. Rules: `.claude/user-plans/`→`user-plans/`;
