@@ -112,17 +112,6 @@ in
             ".direnv/"
             "result"
             "result-*"
-            # Plan 044 (paste-free session resumption): per-worktree Claude Code
-            # handoff state must never be tracked in ANY repo where the resume
-            # loop is used. Anchored on the .claude/ parent so tracked files like
-            # .claude/settings.json and .claude/user-plans/ are unaffected; the
-            # **/ prefix matches at repo root and in nested worktrees alike.
-            # NOTE (plan 057, T3): these two lines are superseded once session
-            # state relocates to `.session-state/` (covered by **/.session-state/
-            # below) and are removed then. Kept for now to avoid a coverage gap
-            # while state still physically lives under .claude/.
-            "**/.claude/active-plan"
-            "**/.claude/HANDOFF.md"
             # Plan 057 (relocate plan & session-state OUT of .claude/): Claude
             # Code 2.1.x fires an unsuppressable permission prompt on EVERY write
             # under .claude/, so the session workflow moves numbered plan files to
