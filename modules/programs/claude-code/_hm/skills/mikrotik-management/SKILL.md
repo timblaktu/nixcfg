@@ -2642,7 +2642,7 @@ ssh admin@192.168.88.1 "/system reset-configuration no-defaults=yes skip-backup=
 
 - [MikroTik RouterOS Documentation](https://help.mikrotik.com/docs/display/ROS/)
 - [Bridge VLAN Configuration](https://help.mikrotik.com/docs/display/ROS/Bridging+and+Switching)
-- Plan 013: `.claude/user-plans/013-distributed-nix-binary-caching.md`
+- Plan 013: `user-plans/013-distributed-nix-binary-caching.md`
 - Design: `docs/wip-L0.1-mikrotik-skill-design.md`
 - L1.0 Guide: `docs/wip-L1.0-mikrotik-setup.md`
 

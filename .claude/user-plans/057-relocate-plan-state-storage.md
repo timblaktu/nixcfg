@@ -10,9 +10,10 @@ Mode: **A only (human-attended `/next-task`).** NOT burndown-eligible — no `Bu
 ## ▶ RESUME POINTER — read FIRST
 
 Fresh session: run `/next-task`. `active-plan` points here. The next actionable task is the first
-`TASK:PENDING` whose dependencies are all `TASK:COMPLETE` — currently **T2** (rewrite the functional module
-path references from `.claude/...` to the new homes; T1 landed the global git excludes). Tasks run as a
-linear chain T1→T2→T3→T4/T5→T6; each has a checkable DoD.
+`TASK:PENDING` whose dependencies are all `TASK:COMPLETE` — currently **T3** (`git mv` the plan dir to
+`user-plans/`, add the `!user-plans/` re-track negation, relocate state to `.session-state/`, drop the now-stale
+`**/.claude/{active-plan,HANDOFF.md}` git excludes; T1 landed the global excludes, T2 rewrote all module path
+references). Tasks run as a linear chain T1→T2→T3→T4/T5→T6; each has a checkable DoD.
 
 **One-line goal:** move numbered plan files to `user-plans/` (repo root) and the two per-worktree runtime
 files (`active-plan`, `HANDOFF.md`) to `.session-state/` (repo root), so NOTHING the session-workflow writes
@@ -96,7 +97,7 @@ trailing-slash dir re-include needs it, `!user-plans/**`) to this local `.gitign
 | ID | Task | Type | Depends on | Status |
 |----|------|------|-----------|--------|
 | T1 | **Global git excludes.** In `modules/programs/git/git.nix` `ignores`, ADD `"**/user-plans/"` and `"**/.session-state/"`; update the plan-044 comment to explain the new default-ignore-with-per-repo-opt-in scheme. Keep `**/.claude/active-plan` + `**/.claude/HANDOFF.md` for now (removed in T3 once state relocates) to avoid a coverage gap mid-migration. | impl | — | TASK:COMPLETE (2026-09-16) |
-| T2 | **Module path rewrites.** Rewrite every FUNCTIONAL reference in the map above from `.claude/user-plans/`→`user-plans/`, `.claude/active-plan`→`.session-state/active-plan`, `.claude/HANDOFF.md`→`.session-state/HANDOFF.md` (hooks.nix matchers, resume-hook.sh, task-automation.nix, lib.nix, planning command skills, the global CLAUDE.md template, this repo's CLAUDE.md, claude-code.nix comment). Do the documentary-link cleanup pass too (non-gating). | impl (artifact → Present/STOP) | T1 | TASK:IN_PROGRESS |
+| T2 | **Module path rewrites.** Rewrite every FUNCTIONAL reference in the map above from `.claude/user-plans/`→`user-plans/`, `.claude/active-plan`→`.session-state/active-plan`, `.claude/HANDOFF.md`→`.session-state/HANDOFF.md` (hooks.nix matchers, resume-hook.sh, task-automation.nix, lib.nix, planning command skills, the global CLAUDE.md template, this repo's CLAUDE.md, claude-code.nix comment). Do the documentary-link cleanup pass too (non-gating). | impl (artifact → Present/STOP) | T1 | TASK:COMPLETE (2026-09-16) |
 | T3 | **nixcfg move + re-track.** `git mv .claude/user-plans user-plans` (history-preserving, all ~55 files incl. `archive/`); move THIS plan file with it and repoint `active-plan`. Add `!user-plans/` negation to the local `.gitignore`; drop the old `!.claude/user-plans/` line. Create `.session-state/`, `git mv` (or move, since untracked) `active-plan` + `HANDOFF.md` there. Now that state lives under `.session-state/`, drop the `**/.claude/{active-plan,HANDOFF.md}` global excludes from git.nix (superseded by `**/.session-state/`). | impl (artifact → Present/STOP) | T2 | TASK:PENDING |
 | T4 | **Machine-wide worktree migration** (like 056 P8). For EVERY worktree/repo on the machine that has a real `.claude/user-plans` dir and/or `.claude/{active-plan,HANDOFF.md}`, migrate to `user-plans/` + `.session-state/`. Idempotent (skip already-migrated). | migration (artifact → Present/STOP) | T3 | TASK:PENDING |
 | T5 | **Suspenders hook + VM test.** Add a `gitSafety` sub-hook blocking `git add` of `.session-state/**` (block-with-message, `CLAUDE_HOOKS_BYPASS` escape, FALSE-POSITIVE analysis). Add/extend a VM test asserting the block fires and does NOT false-positive on a normal `git add`. | impl (artifact → Present/STOP) | T2 | TASK:PENDING |
@@ -121,7 +122,7 @@ per-repo-opt-in-via-`!user-plans/` scheme. The two `**/.claude/{active-plan,HAND
 (annotated as superseded-at-T3). `nix flake check --no-build` passed ("all checks passed!", exit 0). Verified
 both new patterns present in the staged blob via `git show :modules/programs/git/git.nix`.
 
-### T2 — Module path rewrites `TASK:PENDING`
+### T2 — Module path rewrites `TASK:COMPLETE`
 Depends on T1. Rewrite the FUNCTIONAL references in the map above. Rules: `.claude/user-plans/`→`user-plans/`;
 `.claude/active-plan`→`.session-state/active-plan`; `.claude/HANDOFF.md`→`.session-state/HANDOFF.md`. Include
 the `$CLAUDE_PROJECT_DIR/.claude/...` forms (→ `$CLAUDE_PROJECT_DIR/.session-state/...`). Then a non-gating
@@ -130,6 +131,19 @@ documentary-link cleanup pass over the docs/skills citations.
 `.claude/active-plan`, `.claude/HANDOFF.md` across `modules/` + `CLAUDE.md`) returns ZERO functional hits
 (documentary citations in `docs/`/skills may remain if deferred, but note any left behind). This is an
 artifact-producing task: Present the diff + get Tim's sign-off before marking COMPLETE.
+
+**COMPLETED 2026-09-16 (Tim signed off on the side-by-side diff).** 16 files rewritten. FUNCTIONAL touch-points:
+`resume-hook.sh` (`state_dir="$proj/.session-state"`, reads active-plan+HANDOFF there); `hooks.nix` (both
+planIntegrity matchers `*/.claude/user-plans/*.md`→`*/user-plans/*.md`, plus 4 description/comment paths);
+`task-automation.nix` (`/next-task` skill text, burndown driver's load-bearing `mkdir -p`+writes for
+active-plan+HANDOFF → `.session-state/`, ~10 comments/help-text); `lib.nix` + `commands/planning/{plans,burndownify}.md`
+(plan discovery + active-plan reads); the global CLAUDE.md template (~9 refs); this repo's `CLAUDE.md` (6 refs);
+`claude-code.nix` allow-rules comment. DOCUMENTARY cleanup (non-gating, done → zero hits): `wsl-enterprise.nix`,
+mikrotik `REFERENCE.md`/`SKILL.md`, 4 `docs/*.md` citations. `nix flake check --no-build` → "all checks passed!"
+(exit 0). T2 re-scan of `modules/`+`CLAUDE.md` returns only the 3 DELIBERATELY-RETAINED `git.nix` lines
+(`**/.claude/{active-plan,HANDOFF.md}` excludes + their comment at L118/124/125 — T1 keeps them, **T3 removes them**);
+zero unexpected functional hits. NOT done here: physical file moves + `active-plan` repoint (that's T3); changes
+take effect only at T6's `home-manager switch`.
 
 ### T3 — nixcfg move + re-track `TASK:PENDING`
 Depends on T2. Perform, in this worktree:

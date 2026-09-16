@@ -126,12 +126,13 @@
                 "WebFetch"
                 # NOTE: deliberately NO path-scoped `.claude/**` allow rules here.
                 # An earlier attempt (`Write(//**/.claude/**)`) was ineffective:
-                # CC gates writes whose RESOLVED path is under `.claude/` AND
-                # outside the session's working directory (e.g. a git worktree
-                # symlinking `.claude/user-plans` into a shared primary) and that
-                # guard is NOT overridable by allow rules or permission mode. The
-                # durable fix is to keep such shared dirs OUTSIDE `.claude/`, not
-                # to widen permissions. See the `cc-permission-path-anchor` memory.
+                # CC gates EVERY write whose RESOLVED path is under `.claude/`, and
+                # that guard is NOT overridable by allow rules or permission mode
+                # (only `bypassPermissions`). The durable fix (plan 057) is to keep
+                # session-workflow storage OUTSIDE `.claude/` entirely: numbered
+                # plans live in `user-plans/` and the per-worktree runtime files
+                # (active-plan, HANDOFF.md) in `.session-state/`, both at the repo
+                # root. See the `cc-permission-path-anchor` memory.
               ];
               description = "List of tools/patterns to allow";
             };

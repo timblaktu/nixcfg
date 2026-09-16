@@ -425,7 +425,7 @@ in
     # ergonomic cost, so each sub-rule defaults OFF: P6 opts them in (warn-first)
     # after a trial. Both implemented sub-rules are PreToolUse Edit|MultiEdit|Write
     # hooks that inspect a plan-file status transition (`.tool_input.file_path`
-    # under `.claude/user-plans/`, `.new_string`/`.content`/`.edits[].new_string`
+    # under `user-plans/`, `.new_string`/`.content`/`.edits[].new_string`
     # vs `.old_string`/`.edits[].old_string`, all via jq-stdin) and `exit 2`
     # (continueOnError=false) to BLOCK, honoring the uniform `CLAUDE_HOOKS_BYPASS`
     # escape hatch. See plan 056 "P5 findings" for the full feasibility analysis.
@@ -451,7 +451,7 @@ in
         default = true;
         description = ''
           P5a — block an Edit/MultiEdit/Write that flips a task in a
-          `.claude/user-plans/*.md` file to `TASK:COMPLETE` (a net-new
+          `user-plans/*.md` file to `TASK:COMPLETE` (a net-new
           completion) UNLESS the `CLAUDE_TASK_SIGNOFF` env var is set. That var
           can only be set at `claude` LAUNCH time (verified 2026-09-08: a
           mid-session `export` in a Bash tool call is INVISIBLE to a later hook,
@@ -481,7 +481,7 @@ in
         type = types.bool;
         default = true;
         description = ''
-          P5c — block an Edit/MultiEdit/Write on a `.claude/user-plans/*.md` file
+          P5c — block an Edit/MultiEdit/Write on a `user-plans/*.md` file
           that (a) skips `TASK:PENDING`→`TASK:COMPLETE` directly (mark
           IN_PROGRESS first) or (b) introduces a `TASK:COMPLETE` with no
           `(YYYY-MM-DD)` completion date. Pure textual predicates on the edit;
@@ -593,7 +593,7 @@ in
         description = ''
           Enable the SessionStart plan-rehydration hook (plan 044). On
           startup/resume/compact it surfaces the active plan's next task
-          (.claude/active-plan), else .claude/HANDOFF.md, else the latest prior
+          (.session-state/active-plan), else .session-state/HANDOFF.md, else the latest prior
           per-cwd transcript's last assistant message, as factual session-start
           context. The PUSH half of a dual-channel resume design; the next-task
           skill and the readable handoff files are the PULL backstop.
@@ -1040,7 +1040,7 @@ in
               # otherwise drain the pipe, leaving later reads empty.
               input="$(cat)"
               fp="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
-              case "$fp" in */.claude/user-plans/*.md) ;; *) exit 0 ;; esac
+              case "$fp" in */user-plans/*.md) ;; *) exit 0 ;; esac
               new="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.new_string // empty, .tool_input.content // empty, (.tool_input.edits[]?.new_string // empty)] | join("\n")' 2>/dev/null)"
               old="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.old_string // empty, (.tool_input.edits[]?.old_string // empty)] | join("\n")' 2>/dev/null)"
               cn="$(printf '%s' "$new" | ${pkgs.gnugrep}/bin/grep -c 'TASK:COMPLETE')"
@@ -1061,7 +1061,7 @@ in
               # Read stdin ONCE (jq invoked 3x — see requireSignoffBeforeComplete).
               input="$(cat)"
               fp="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null)"
-              case "$fp" in */.claude/user-plans/*.md) ;; *) exit 0 ;; esac
+              case "$fp" in */user-plans/*.md) ;; *) exit 0 ;; esac
               new="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.new_string // empty, .tool_input.content // empty, (.tool_input.edits[]?.new_string // empty)] | join("\n")' 2>/dev/null)"
               old="$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '[.tool_input.old_string // empty, (.tool_input.edits[]?.old_string // empty)] | join("\n")' 2>/dev/null)"
               cn="$(printf '%s' "$new" | ${pkgs.gnugrep}/bin/grep -c 'TASK:COMPLETE')"

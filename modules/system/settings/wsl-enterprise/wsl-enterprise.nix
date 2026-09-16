@@ -53,7 +53,7 @@
         # without [windowsterminal] section. We override the tarball builder to
         # include our enhanced version.
         # TODO: Contribute [windowsterminal] option upstream to NixOS-WSL
-        # See: .claude/user-plans/024-nixos-wsl-upstream.md (when created)
+        # See: user-plans/024-nixos-wsl-upstream.md (when created)
         enterpriseDistributionConf = pkgs.writeText "wsl-distribution.conf" (
           lib.generators.toINI { } (
             {

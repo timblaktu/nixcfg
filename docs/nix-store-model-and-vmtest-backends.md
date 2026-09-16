@@ -8,7 +8,7 @@ systemd-nspawn) behave so differently** when a test does a nix operation at runt
 > Origin: written up from the plan 054 P5b "nspawn-fidelity spike" investigation (2026-08-21). The
 > practical, task-facing version of the nspawn conclusions lives in `docs/TESTING-NSPAWN.md`
 > ("Constraints & caveats"); this document is the deeper *why*. The upstream-unblock research is
-> tracked as task **R1** in `.claude/user-plans/054-vmtest-capabilities-coverage.md`.
+> tracked as task **R1** in `user-plans/054-vmtest-capabilities-coverage.md`.
 
 ---
 

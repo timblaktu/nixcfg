@@ -2,8 +2,8 @@ Generate a high-level summary of all plans in this repository.
 
 ## Instructions
 
-1. Find all plan files in `.claude/user-plans/` (exclude `archive/`) using: `fd -t f -e md . .claude/user-plans/ --max-depth 1`
-   Also note the existence of archived plans: `fd -t f -e md . .claude/user-plans/archive/`
+1. Find all plan files in `user-plans/` (exclude `archive/`) using: `fd -t f -e md . user-plans/ --max-depth 1`
+   Also note the existence of archived plans: `fd -t f -e md . user-plans/archive/`
 
 2. For each **active** plan file, extract:
    - Plan number/name (from filename)

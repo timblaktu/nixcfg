@@ -94,7 +94,7 @@ When applying version-incompatibility workarounds:
 
 ## Session Workflow Protocol
 
-**ONE TASK PER SESSION** for multi-phase **user-plans** (`.claude/user-plans/`) - complete one plan task per session then stop with a handoff checkpoint.
+**ONE TASK PER SESSION** for multi-phase **user-plans** (`user-plans/`) - complete one plan task per session then stop with a handoff checkpoint.
 
 **Scope**: Applies to plan tasks spread across sessions, NOT to executing an approved plan within a single session. When user approves a plan ("implement this plan"), execute all tasks in sequence.
 
@@ -110,17 +110,17 @@ When applying version-incompatibility workarounds:
 
 ## Plan File Conventions
 
-**Location**: `.claude/user-plans/` with numbered prefix (`001-name.md`)
+**Location**: `user-plans/` with numbered prefix (`001-name.md`)
 
 **Format**: Progress table with `TASK:PENDING`/`TASK:COMPLETE`, Definition of Done per task.
 
 **CRITICAL: Plan files must be self-contained** - save the FULL plan to disk, not a summary. New sessions cannot access previous session's chat. Every specification needed to execute remaining tasks MUST be in the plan file. Test: Could a new session execute the next task using ONLY the plan file + CLAUDE.md + codebase?
 
-**Handoff**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the handoff. Write it to the per-worktree `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md` and update `$CLAUDE_PROJECT_DIR/.claude/active-plan` (see Session Handoff Protocol below). Never reference "previous session context".
+**Handoff**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the handoff. Write it to the per-worktree `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md` and update `$CLAUDE_PROJECT_DIR/.session-state/active-plan` (see Session Handoff Protocol below). Never reference "previous session context".
 
 ## Unattended Burndown Contract (authoring plans for autonomous task-by-task execution)
 
-An **unattended burndown** is a driver (the `run-tasks-<account>` script) autonomously executing a plan task-by-task - each task in a fresh clean context - until the plan is COMPLETE or a stop condition trips. No human is in the loop. This is "Mode B"; the human-attended `/next-task` loop is "Mode A". The driver reuses the same substrate as Mode A: the plan file is the source of truth (`TASK:PENDING/IN_PROGRESS/COMPLETE` cursor), `.claude/active-plan` points at the plan, `.claude/HANDOFF.md` records why a run stopped.
+An **unattended burndown** is a driver (the `run-tasks-<account>` script) autonomously executing a plan task-by-task - each task in a fresh clean context - until the plan is COMPLETE or a stop condition trips. No human is in the loop. This is "Mode B"; the human-attended `/next-task` loop is "Mode A". The driver reuses the same substrate as Mode A: the plan file is the source of truth (`TASK:PENDING/IN_PROGRESS/COMPLETE` cursor), `.session-state/active-plan` points at the plan, `.session-state/HANDOFF.md` records why a run stopped.
 
 **Why this matters when you AUTHOR a plan:** the failure policy is *stop-the-whole-run* - a single blocking failure halts the entire unattended burndown. That is only safe if "failure" is well-defined and the plan is authored so that **only a TRULY-BLOCKING condition counts as a failure.** A well-authored plan almost never hits a blocking failure; ordinary "can't proceed right now" situations are expressed as explicit dependencies, non-blocking sentinels, or `Interactive` markers - NOT as crashes. Authoring a plan burndown-safe is the author's job, not the driver's.
 
@@ -188,7 +188,7 @@ A run leaves four artifacts in the worktree (all gitignored runtime state):
 | Event journal | `.claude-task-logs/events.jsonl` | append-only, one JSONL line per transition (the audit trail) |
 | Per-task logs | `.claude-task-logs/<ts>_<task>.{log,json,stderr}` | full Claude response + stderr per attempt |
 | Run state | `.claude-task-state` | latest-only snapshot (`STATUS=` is the stop bucket) |
-| Handoff | `.claude/HANDOFF.md` | human/hook rehydration breadcrumb written on every post-gate stop |
+| Handoff | `.session-state/HANDOFF.md` | human/hook rehydration breadcrumb written on every post-gate stop |
 
 Inspect a partial / stopped burndown:
 
@@ -206,19 +206,19 @@ behind) first, then proceeds to `PENDING`. Because authoring rule 6 requires ide
 re-attempt converges. If the stop was `ENVIRONMENT_NOT_CAPABLE` or `USER_INPUT_REQUIRED`, handle that
 one task interactively with `/next-task` first, then re-launch. A fresh session also rehydrates
 automatically: the SessionStart hook surfaces the active plan's next task (or, for a plan without
-`###`-heading task blocks, `.claude/HANDOFF.md`, which names the stop reason and the resume command).
+`###`-heading task blocks, `.session-state/HANDOFF.md`, which names the stop reason and the resume command).
 
 ## Session Handoff Protocol (MANDATORY - NEVER SKIP)
 
 **EVERY session that works on a plan MUST end by checkpointing its handoff to per-worktree files.** This is non-negotiable - treat it like committing code. A session that ends without an updated handoff is incomplete work.
 
-**Why files, not the clipboard:** many Claude Code sessions run concurrently on one node. The Windows clipboard (a shared ~15-entry Win+V ring) and `/tmp/continuation.md` (a single shared file) are global single slots that any concurrent session silently overwrites - a proven cross-contamination hazard (resuming the wrong worktree's work). `$CLAUDE_PROJECT_DIR/.claude/` is a distinct directory per worktree, so the handoff travels a per-worktree channel that concurrent sessions in other worktrees cannot clobber. See plan 044 (paste-free session resumption) under `.claude/user-plans/` (or its `archive/`) and the `session-handoff-concurrency-fragility` auto-memory for the incident that motivated this.
+**Why files, not the clipboard:** many Claude Code sessions run concurrently on one node. The Windows clipboard (a shared ~15-entry Win+V ring) and `/tmp/continuation.md` (a single shared file) are global single slots that any concurrent session silently overwrites - a proven cross-contamination hazard (resuming the wrong worktree's work). `$CLAUDE_PROJECT_DIR/.session-state/` is a distinct directory per worktree, so the handoff travels a per-worktree channel that concurrent sessions in other worktrees cannot clobber. See plan 044 (paste-free session resumption) under `user-plans/` (or its `archive/`) and the `session-handoff-concurrency-fragility` auto-memory for the incident that motivated this.
 
 At session end:
-1. **Keep the plan doc current (PRIMARY tracker).** Update the `.claude/user-plans/NNN-*.md` task status (`TASK:PENDING`/`IN_PROGRESS`/`COMPLETE`) and fold what was done / what remains into the task block. The plan file is the durable source of truth - resumption depends on it first; write nuance to `HANDOFF.md` only for what the plan doc cannot capture.
-2. **Point at the active plan.** Write the plan file's path (one line) to `$CLAUDE_PROJECT_DIR/.claude/active-plan`. The SessionStart rehydration hook and `/next-task` both read this pointer first.
-3. **Write distilled nuance to `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md`** - the self-contained handoff: which worktree/branch, what was just done (commits, artifacts, what was NOT done), the next concrete step, pending items (pipeline IDs, blockers). Include enough that a fresh session starts without questions. Never reference "previous session context".
-4. Print a one-line confirmation, e.g. "Handoff written: .claude/active-plan -> NNN-name.md, .claude/HANDOFF.md updated". Do NOT print the handoff inline in chat - it clutters output.
+1. **Keep the plan doc current (PRIMARY tracker).** Update the `user-plans/NNN-*.md` task status (`TASK:PENDING`/`IN_PROGRESS`/`COMPLETE`) and fold what was done / what remains into the task block. The plan file is the durable source of truth - resumption depends on it first; write nuance to `HANDOFF.md` only for what the plan doc cannot capture.
+2. **Point at the active plan.** Write the plan file's path (one line) to `$CLAUDE_PROJECT_DIR/.session-state/active-plan`. The SessionStart rehydration hook and `/next-task` both read this pointer first.
+3. **Write distilled nuance to `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md`** - the self-contained handoff: which worktree/branch, what was just done (commits, artifacts, what was NOT done), the next concrete step, pending items (pipeline IDs, blockers). Include enough that a fresh session starts without questions. Never reference "previous session context".
+4. Print a one-line confirmation, e.g. "Handoff written: .session-state/active-plan -> NNN-name.md, .session-state/HANDOFF.md updated". Do NOT print the handoff inline in chat - it clutters output.
 
 These two files are gitignored (per-worktree, never committed). A fresh `claude` session auto-rehydrates from them with zero paste: the SessionStart rehydration hook surfaces the plan pointer + next task, and `/next-task` acts on it.
 
@@ -274,7 +274,7 @@ The file-based memory is per-directory (keyed by cwd, one memory dir per worktre
 - **Default to a dedicated worktree per branch** for any non-trivial or parallelizable work. Worktrees are as cheap as branches; prefer `git worktree add` over an in-place `git checkout -b` whenever the current worktree is dirty, the new branch's base differs (e.g. a clean feature off `main` while the current tree carries unrelated doc/churn), or the work could run alongside other efforts. This keeps each branch's diff clean (clean MRs, accurate code permalinks) and enables maximum parallelism across the many workspaces here.
 - **Parent/child workspace pattern**: treat the workspace that holds the plan, docs, and handoff as the coordination "parent"; cut isolated child worktrees off `main` (or the correct base) for the shippable code. Navigate the set with `git worktree list` (it reads as a task map when dirs/branches are named for the task, e.g. `~/src/<repo>-<feature>` on branch `<feature>`).
 - **Self-authorized**: create worktrees and their branches without asking; just name what you created in your report so the human can follow. Moving/removing a worktree later is cheap and reversible.
-- **A worktree's `.claude/user-plans` (and `.claude/HANDOFF.md`/`active-plan`) must be a REAL in-worktree path, NEVER a symlink escaping the worktree.** Claude Code refuses symlink-escaping writes (`SymlinkWriteRefusedError`), which breaks plan edits and triggers permission prompts. To share plans across worktrees, SEED a real per-worktree dir by copying from the shared plan store (`cp -a store/. .claude/user-plans/`), not by symlinking into it. `**/.claude/user-plans/` is gitignored, so a fresh worktree simply has no plan dir until you create one as a real dir; plan edits are then worktree-local (intended - burndown is commit-based, single-writer-per-plan).
+- **A worktree's `user-plans/` (and `.session-state/HANDOFF.md`/`active-plan`) must be a REAL in-worktree path, NEVER a symlink escaping the worktree.** Claude Code refuses symlink-escaping writes (`SymlinkWriteRefusedError`), which breaks plan edits and triggers permission prompts. To share plans across worktrees, SEED a real per-worktree dir by copying from the shared plan store (`cp -a store/. user-plans/`), not by symlinking into it. `**/user-plans/` is gitignored machine-wide, so a fresh worktree simply has no plan dir until you create one as a real dir (a repo that opts back into tracking does so with a local `!user-plans/` negation); plan edits are then worktree-local (intended - burndown is commit-based, single-writer-per-plan).
 - **Use case**: Parallel work across Claude accounts without interference
 - **Setup**: `git worktree add ~/src/project-pro feature/foo-pro`
 - **Cleanup**: `git worktree remove`, `git branch -d` (root-owned build dirs may need `sudo rm -rf` first)

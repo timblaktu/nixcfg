@@ -33,9 +33,9 @@ The six authoring rules every task must satisfy:
 
 - `$ARGUMENTS` may name a plan file (path or number, e.g. `027` or a full path).
 - `--audit` — report-only mode: produce the readiness report and STOP. Make no edits.
-- If no plan is given, resolve the target like `/next-task` does: read `.claude/active-plan`
+- If no plan is given, resolve the target like `/next-task` does: read `.session-state/active-plan`
   (its one line is the plan path, possibly relative to the worktree root); if absent, list
-  active plans via `fd -t f -e md . .claude/user-plans/ --max-depth 1` and ASK which one.
+  active plans via `fd -t f -e md . user-plans/ --max-depth 1` and ASK which one.
 
 ## Procedure
 

@@ -9,7 +9,7 @@ let
   # Slash command for interactive task execution
   nextTaskMd = ''
     Read the plan file specified below (or, if not specified, resolve it via the
-    PLAN SELECTION precedence: the .claude/active-plan pointer first, then CLAUDE.md auto-detection),
+    PLAN SELECTION precedence: the .session-state/active-plan pointer first, then CLAUDE.md auto-detection),
     find the next actionable task in the Progress Tracking table using the priority below,
     execute it following the task definition in that file,
     document findings in the corresponding section,
@@ -31,7 +31,7 @@ let
 
     PLAN SELECTION (when no plan file argument is provided):
     FIRST, the explicit per-worktree pointer (highest precedence):
-    - If "$CLAUDE_PROJECT_DIR/.claude/active-plan" exists and is non-empty, read the
+    - If "$CLAUDE_PROJECT_DIR/.session-state/active-plan" exists and is non-empty, read the
       first line: it names the active plan file path. Resolve it the same way the
       SessionStart resume hook does: if the path is absolute (starts with "/") use it
       as-is; otherwise resolve it relative to the worktree root "$CLAUDE_PROJECT_DIR".
@@ -260,7 +260,7 @@ let
       BURNDOWN_ALIAS=false
 
       # 044-substrate integration (plan-045 T4). On any stop AFTER the opt-in gate passes,
-      # an EXIT trap writes $BURNDOWN_PROJECT_DIR/.claude/HANDOFF.md so a fresh session's 044
+      # an EXIT trap writes $BURNDOWN_PROJECT_DIR/.session-state/HANDOFF.md so a fresh session's 044
       # SessionStart hook (and a human) can rehydrate. HANDOFF_ARMED gates the trap so pre-gate
       # exits (bad args, plan-not-found, gate refusal, --dry-run) leave no breadcrumb. REASON
       # and STATUS are captured by print_exit_summary / save_state at each stop.
@@ -293,7 +293,7 @@ let
       Arguments:
         [plan-file]       Path to markdown file with Progress Tracking table.
                           Optional: if omitted, falls back to the per-worktree
-                          .claude/active-plan pointer (plan-045 T4, mirrors /next-task).
+                          .session-state/active-plan pointer (plan-045 T4, mirrors /next-task).
 
       Options:
         -n N              Run N tasks (default: 1)
@@ -350,7 +350,7 @@ let
                         transition: ts, iteration, task, status bucket, sha_before/sha_after,
                         head_moved). Delimited per run by a "run_start" marker. Inspect with jq.
         Run state:      ${taskCfg.stateFile}  (latest status snapshot, key=value)
-        Handoff:        .claude/HANDOFF.md  (rehydration breadcrumb on every post-gate stop)
+        Handoff:        .session-state/HANDOFF.md  (rehydration breadcrumb on every post-gate stop)
         To resume a partial burndown: just re-run the same command - an IN_PROGRESS task is
         re-attempted first (the agent's status-transition discipline makes tasks idempotent).
 
@@ -430,15 +430,15 @@ let
 
       # Resolve the worktree root the same way the 044 resume hook does, so the active-plan
       # pointer and HANDOFF.md we read/write live exactly where a fresh session's SessionStart
-      # hook looks: "''${CLAUDE_PROJECT_DIR:-<git toplevel>}/.claude/". (plan-045 T4)
+      # hook looks: "''${CLAUDE_PROJECT_DIR:-<git toplevel>}/.session-state/". (plan-045 T4)
       BURNDOWN_PROJECT_DIR="''${CLAUDE_PROJECT_DIR:-$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
       # (plan-045 T4a) No explicit <plan-file> arg: fall back to the per-worktree
-      # .claude/active-plan pointer, mirroring nextTaskMd / the resume hook's precedence
+      # .session-state/active-plan pointer, mirroring nextTaskMd / the resume hook's precedence
       # (first line; absolute path used as-is, else resolved relative to the worktree root).
       # This is the "pull" half of 044's dual-channel resume applied to the unattended driver.
       if [[ -z "$PLAN_FILE" ]]; then
-          active_plan_file="$BURNDOWN_PROJECT_DIR/.claude/active-plan"
+          active_plan_file="$BURNDOWN_PROJECT_DIR/.session-state/active-plan"
           if [[ -f "$active_plan_file" ]]; then
               plan_rel="$(head -n1 "$active_plan_file" 2>/dev/null | tr -d '[:space:]')"
               if [[ -n "$plan_rel" ]]; then
@@ -446,7 +446,7 @@ let
                       /*) PLAN_FILE="$plan_rel" ;;
                       *)  PLAN_FILE="$BURNDOWN_PROJECT_DIR/$plan_rel" ;;
                   esac
-                  echo -e "''${BLUE}No plan file given; using .claude/active-plan -> $PLAN_FILE''${NC}"
+                  echo -e "''${BLUE}No plan file given; using .session-state/active-plan -> $PLAN_FILE''${NC}"
               fi
           fi
       fi
@@ -455,7 +455,7 @@ let
       if [[ -z "$PLAN_FILE" ]]; then
           echo -e "''${RED}Error: Plan file required''${NC}"
           echo "Usage: run-tasks <plan-file> [options]"
-          echo "  (or set .claude/active-plan to a plan path for arg-free runs)"
+          echo "  (or set .session-state/active-plan to a plan path for arg-free runs)"
           echo "Use -h for help"
           exit 1
       fi
@@ -633,7 +633,7 @@ let
       }
 
       # --- 044 substrate integration (plan-045 T4) --------------------------------------
-      # Point the per-worktree .claude/active-plan at this run's plan, so a fresh session's
+      # Point the per-worktree .session-state/active-plan at this run's plan, so a fresh session's
       # 044 SessionStart hook (Source B) and /next-task resolve the same plan with zero paste.
       # Idempotent; written once at run start after the opt-in gate passes (so we never point
       # at a plan we refused to run). Path stored relative to the worktree root when it lives
@@ -641,15 +641,15 @@ let
       write_active_plan() {
           local proj="$BURNDOWN_PROJECT_DIR"
           [[ -n "$proj" ]] || return 0
-          ${pkgs.coreutils}/bin/mkdir -p "$proj/.claude" 2>/dev/null || return 0
+          ${pkgs.coreutils}/bin/mkdir -p "$proj/.session-state" 2>/dev/null || return 0
           local rel="$PLAN_FILE_ABS"
           case "$PLAN_FILE_ABS" in
               "$proj"/*) rel="''${PLAN_FILE_ABS#"$proj"/}" ;;
           esac
-          printf '%s\n' "$rel" > "$proj/.claude/active-plan" 2>/dev/null || return 0
+          printf '%s\n' "$rel" > "$proj/.session-state/active-plan" 2>/dev/null || return 0
       }
 
-      # Write/refresh $BURNDOWN_PROJECT_DIR/.claude/HANDOFF.md on ANY post-gate stop (blocking
+      # Write/refresh $BURNDOWN_PROJECT_DIR/.session-state/HANDOFF.md on ANY post-gate stop (blocking
       # failure, safety-limit, all-done, interrupt, normal completion). The 044 resume hook
       # surfaces this verbatim (Source A) so a fresh session - and a human - rehydrate why the
       # run stopped and what to do next. Installed as an EXIT trap (armed only after the gate)
@@ -659,7 +659,7 @@ let
           [[ "$HANDOFF_ARMED" == true ]] || return 0
           local proj="$BURNDOWN_PROJECT_DIR"
           [[ -n "$proj" ]] || return 0
-          ${pkgs.coreutils}/bin/mkdir -p "$proj/.claude" 2>/dev/null || return 0
+          ${pkgs.coreutils}/bin/mkdir -p "$proj/.session-state" 2>/dev/null || return 0
 
           local next_task next_status branch now ip
           next_task="$(get_next_task_name 2>/dev/null || echo unknown)"
@@ -668,7 +668,7 @@ let
           branch="$(get_current_branch)"
           now="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
-          ${pkgs.coreutils}/bin/cat > "$proj/.claude/HANDOFF.md" << EOF
+          ${pkgs.coreutils}/bin/cat > "$proj/.session-state/HANDOFF.md" << EOF
       # Unattended burndown handoff (run-tasks-${accountName})
 
       _Written $now by the burndown driver on stop. The plan file is the source of truth for
@@ -1357,7 +1357,7 @@ let
       mkdir -p "$LOG_DIR"
 
       # 044 substrate integration (plan-045 T4). Now that the gate has passed and we are
-      # committed to a real run: (c) point .claude/active-plan at this plan for the run's
+      # committed to a real run: (c) point .session-state/active-plan at this plan for the run's
       # duration, and (b) arm the HANDOFF.md EXIT trap so ANY subsequent stop leaves a
       # rehydration breadcrumb. Both are deliberately AFTER the gate so a refused/aborted
       # pre-flight never writes substrate files.
@@ -1503,7 +1503,7 @@ let
                   else
                       # Default policy: STOP THE WHOLE RUN. Leave the task as the agent left it
                       # (typically TASK:IN_PROGRESS) so a resume re-attempts it; do NOT advance.
-                      # The EXIT trap (plan-045 T4) writes .claude/HANDOFF.md with this stop's
+                      # The EXIT trap (plan-045 T4) writes .session-state/HANDOFF.md with this stop's
                       # reason/status as the run unwinds, so a fresh session rehydrates the failure.
                       echo -e "''${RED}✗ Blocking failure - stopping run (--on-failure stop). Task left IN_PROGRESS.''${NC}"
                       print_exit_summary "Blocking failure (stopped; task left IN_PROGRESS)" "$task_counter"
