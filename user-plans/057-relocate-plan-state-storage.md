@@ -241,8 +241,16 @@ Present/STOP before COMPLETE.
 - **Verification so far:** local shell-harness proved the regex on all 12 cases (5 BLOCK + 7 ALLOW,
   incl. FP-negatives `.session-state-notes.txt`, `src/session-state.rs`). Local pre-commit `nix flake check`
   → "✅ Flake check passed" (exit 0). The end-to-end VM assertions run in CI on **draft PR #8**
-  (`vmtest-nspawn` job) — offloaded to GitHub runners rather than hogging the dev host. **NOT COMPLETE:**
-  needs Tim's Present/STOP sign-off AND the CI `vmtest-nspawn` job green before flipping to COMPLETE.
+  (`vmtest-nspawn` job) — offloaded to GitHub runners rather than hogging the dev host.
+- **CI-surfaced fix (commit pending):** the first CI `vmtest-nspawn` run failed — but NOT in the new
+  code. A PRE-EXISTING fragility in the shared `run_hook` helper wrote the payload with
+  `printf %s "...$VAR..."`, so the guest's `set -u` shell expanded `$GH_TOKEN` in the secretSafety
+  `echo $GH_TOKEN` assertion and aborted with "unbound variable" (the dev host masked it by exporting
+  GH_TOKEN; CI's guest has it unset). Fixed by base64-encoding the payload in the Python driver +
+  decoding in the guest (byte-for-byte, no shell interpretation). This unblocks the new session-state
+  assertions, which run after it. Re-running CI.
+- **NOT COMPLETE:** needs Tim's Present/STOP sign-off AND the CI `vmtest-nspawn` job green
+  (`vm-claude-code-safety-hooks`, both arches) before flipping to COMPLETE.
 
 ### T6 — Live verification `TASK:PENDING`
 Depends on T3, T4, T5. On `tim@pa161878-nixos`: `home-manager switch` carrying the T1-T5 changes (via the
