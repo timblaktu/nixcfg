@@ -339,6 +339,24 @@ in
           Block `git add -f`/`--force` (respect .gitignore; never force-add).
         '';
       };
+      blockAddSessionState = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Plan 057 T5 — block a `git add` that explicitly targets the
+          per-worktree runtime dir `.session-state/` (or a path under it). Those
+          files (`active-plan`, `HANDOFF.md`) are per-worktree session state that
+          must NEVER be committed; they are already gitignored machine-wide
+          (`**/.session-state/`), so this is a SUSPENDER over that belt for the
+          case a repo re-tracks plans (opting `user-plans/` back in) and a stray
+          explicit add reaches under `.session-state/`. FALSE-POSITIVE analysis:
+          fires only when the literal token `.session-state` appears as a path
+          argument to `git add` (terminated by `/`, whitespace, or end); a normal
+          `git add user-plans/...`, `git add -A`, `git add .`, or a path like
+          `.session-state-notes.txt` (different terminator) is NOT blocked.
+          Honors the uniform `CLAUDE_HOOKS_BYPASS` escape.
+        '';
+      };
     };
 
     # Plan 056 P4 — Class-A/B bash-safety interlock. Blocks with an instructive
@@ -909,6 +927,29 @@ in
               [ -z "$cmd" ] && exit 0
               if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}add\b[^;&|]*([[:space:]]-[a-zA-Z]*f\b|[[:space:]]--force\b)'; then
                 gr_block "gitSafety.blockAddForce" "🚫 gitSafety: refusing 'git add -f/--force'. WHY: it overrides .gitignore and can stage build output, secrets, or runtime state that must never be tracked. TO PROCEED NOW: stage only the intended paths (git add <path>); if a file is wrongly ignored, fix .gitignore instead, or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: never force-add — adjust .gitignore rather than overriding it. See docs/claude-code-session-guardrails.md."
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+          # blockAddSessionState (Plan 057 T5) — never stage per-worktree runtime
+          # state. Fires only when the literal token `.session-state` appears as a
+          # path arg to `git add`, terminated by `/`, whitespace, or end-of-arg —
+          # so `git add user-plans/...`, `git add -A`, `git add .`, and a path
+          # like `.session-state-notes.txt` do NOT trip it. Suspender over the
+          # machine-wide `**/.session-state/` gitignore belt.
+          ++ (lib.optional cfg.hooks.gitSafety.blockAddSessionState (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(git add*)";
+            command = ''
+              ${guardrailPrelude}
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              # must be a `git add`, and its argument list must reference the
+              # .session-state dir as a path token (terminated by / whitespace $).
+              if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}add\b[^;&|]*(^|[[:space:]/])\.session-state(/|$|[[:space:]])'; then
+                gr_block "gitSafety.blockAddSessionState" "🚫 gitSafety: refusing to stage '.session-state/'. WHY: it holds per-worktree session runtime state (active-plan, HANDOFF.md) that must never be committed — it is gitignored machine-wide (memory keep-core-trim-ceremony-userplans / plan 057). TO PROCEED NOW: stage only the intended paths (e.g. git add user-plans/<plan>.md); if you truly must track a file here, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: never add .session-state — it is per-worktree, not shared. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';

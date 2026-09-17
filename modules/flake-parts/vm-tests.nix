@@ -1213,6 +1213,31 @@ in
             run_hook("/tmp/h_env.sh", "echo hello world", 0)
             run_hook("/tmp/h_env.sh", "printenv PATH", 0)
 
+            # === gitSafety.blockAddSessionState (Plan 057 T5) ===
+            # Suspender over the **/.session-state/ gitignore belt: never stage the
+            # per-worktree runtime dir. Block fires on an explicit .session-state
+            # path arg; must NOT false-positive on user-plans/ or unrelated adds.
+            extract("blockAddSessionState", "/tmp/h_ss.sh")
+            # BLOCK: explicit adds targeting the dir or a file under it
+            run_hook("/tmp/h_ss.sh", "git add .session-state/active-plan", 2)
+            run_hook("/tmp/h_ss.sh", "git add .session-state/HANDOFF.md", 2)
+            run_hook("/tmp/h_ss.sh", "git add .session-state", 2)
+            run_hook("/tmp/h_ss.sh", "git add .session-state/", 2)
+            run_hook("/tmp/h_ss.sh", "git add ./.session-state/active-plan", 2)
+            # NO FALSE POSITIVE: the sibling tracked plan dir, catch-alls, and a
+            # path that merely shares the .session-state prefix are all allowed.
+            run_hook("/tmp/h_ss.sh", "git add user-plans/057-relocate.md", 0)
+            run_hook("/tmp/h_ss.sh", "git add -A", 0)
+            run_hook("/tmp/h_ss.sh", "git add .", 0)
+            run_hook("/tmp/h_ss.sh", "git add .session-state-notes.txt", 0)
+            # bypass overrides the block
+            rc, _ = machine.execute(
+                "cd /tmp && CLAUDE_HOOKS_BYPASS=1 "
+                f"{jq} -n --arg c 'git add .session-state/active-plan' "
+                "'{tool_input:{command:$c}}' | CLAUDE_HOOKS_BYPASS=1 bash /tmp/h_ss.sh"
+            )
+            assert rc == 0, f"bypass did not override the session-state block: exit {rc}"
+
             # === bypass escape hatch overrides every block ===
             rc, _ = machine.execute(
                 f"cd /tmp/mainrepo && CLAUDE_HOOKS_BYPASS=1 "
