@@ -1077,6 +1077,7 @@ in
             programs.claude-code.nixcfgPath = "/home/${testUsername}";
           };
           testScript = ''
+            import base64
             import json
 
             machine.wait_for_unit("multi-user.target")
@@ -1100,8 +1101,16 @@ in
                 machine.succeed(f"test -s {dest}")
 
             def run_hook(dest, command, expected, cwd="/tmp"):
+                # Write the payload via base64 so the GUEST shell never interprets
+                # $VAR / quotes in the (arbitrary) command string. A literal
+                # `printf %s "...$GH_TOKEN..."` let the guest's `set -u` shell expand
+                # $GH_TOKEN and abort with "unbound variable" when it is unset (the
+                # CI guest) — the dev host masked it by having GH_TOKEN in-env. The
+                # hook only greps .tool_input.command, so the payload must reach it
+                # byte-for-byte; base64 round-trips it exactly.
                 payload = json.dumps({"tool_input": {"command": command}})
-                machine.succeed(f"printf %s {json.dumps(payload)} > /tmp/payload.json")
+                b64 = base64.b64encode(payload.encode()).decode()
+                machine.succeed(f"echo {b64} | base64 -d > /tmp/payload.json")
                 rc, _out = machine.execute(f"cd {cwd} && bash {dest} < /tmp/payload.json")
                 assert rc == expected, (
                     f"{dest} on {command!r} (cwd={cwd}): got exit {rc}, want {expected}"
