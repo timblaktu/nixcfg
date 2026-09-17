@@ -249,8 +249,12 @@ Present/STOP before COMPLETE.
   GH_TOKEN; CI's guest has it unset). Fixed by base64-encoding the payload in the Python driver +
   decoding in the guest (byte-for-byte, no shell interpretation). This unblocks the new session-state
   assertions, which run after it. Re-running CI.
-- **NOT COMPLETE:** needs Tim's Present/STOP sign-off AND the CI `vmtest-nspawn` job green
-  (`vm-claude-code-safety-hooks`, both arches) before flipping to COMPLETE.
+- **CI GREEN (2026-09-17, run 35287024847):** `vm-claude-code-safety-hooks` ✓ on BOTH x86_64-linux
+  (1m17s) and aarch64-linux (1m0s); `Flake evaluation` ✓ (30s). The VM test — including the new
+  `blockAddSessionState` block-fires / no-FP / bypass assertions — passes end-to-end on GitHub runners.
+  DoD (flake check + VM proof) is objectively met. Draft PR #8.
+- **NOT COMPLETE:** awaiting Tim's Present/STOP sign-off (this is the only remaining gate). On sign-off,
+  flip T5 → COMPLETE (2026-09-17) — status shape is legal (already IN_PROGRESS; a date is recorded).
 
 ### T6 — Live verification `TASK:PENDING`
 Depends on T3, T4, T5. On `tim@pa161878-nixos`: `home-manager switch` carrying the T1-T5 changes (via the
