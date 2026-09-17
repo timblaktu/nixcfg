@@ -227,6 +227,23 @@ PROCEED-NOW / AVOID-FUTURE / docs link) per the 056 P11 contract. FALSE-POSITIVE
 **DoD:** `nix flake check --no-build` passes; the VM test (or shell harness) proves block-fires + no-FP.
 Present/STOP before COMPLETE.
 
+**IMPLEMENTED 2026-09-17 (awaiting Tim sign-off + CI green — status stays IN_PROGRESS).** Commit `f0dfb37`:
+- `hooks.nix`: new `gitSafety.blockAddSessionState` option (`default = true`) + a PreToolUse Bash sub-hook
+  unioned onto `gitSafetyHooks` (same shape as `blockAddForce`): `ifFilter = "Bash(git add*)"`,
+  `guardrailPrelude` (→ `CLAUDE_HOOKS_BYPASS` escape + `gr_log` + four-part `gr_block` message),
+  `continueOnError = false`, `exit 2`. Detection regex
+  `git[[:space:]]+${gitGlobalOpts}add\b[^;&|]*(^|[[:space:]/])\.session-state(/|$|[[:space:]])` — fires only
+  when the literal `.session-state` token appears as a `git add` path arg terminated by `/`, whitespace, or
+  end-of-arg (tolerates git global-opts like the sibling rules).
+- `vm-tests.nix`: extended `vm-claude-code-safety-hooks` (nspawn) — extracts the new hook via signature
+  `blockAddSessionState` and asserts BLOCK on `.session-state[/...]`/`./.session-state/...`, ALLOW on
+  `user-plans/...`/`-A`/`.`/`.session-state-notes.txt`, plus the bypass override.
+- **Verification so far:** local shell-harness proved the regex on all 12 cases (5 BLOCK + 7 ALLOW,
+  incl. FP-negatives `.session-state-notes.txt`, `src/session-state.rs`). Local pre-commit `nix flake check`
+  → "✅ Flake check passed" (exit 0). The end-to-end VM assertions run in CI on **draft PR #8**
+  (`vmtest-nspawn` job) — offloaded to GitHub runners rather than hogging the dev host. **NOT COMPLETE:**
+  needs Tim's Present/STOP sign-off AND the CI `vmtest-nspawn` job green before flipping to COMPLETE.
+
 ### T6 — Live verification `TASK:PENDING`
 Depends on T3, T4, T5. On `tim@pa161878-nixos`: `home-manager switch` carrying the T1-T5 changes (via the
 nixcfg-work local-pin or a lock bump, per the 056 rollout precedent). Then:
