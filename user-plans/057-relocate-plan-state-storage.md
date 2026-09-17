@@ -11,11 +11,12 @@ Mode: **A only (human-attended `/next-task`).** NOT burndown-eligible — no `Bu
 
 Fresh session: run `/next-task`. `active-plan` points here (dual-written to `.session-state/active-plan` AND the
 `.claude/active-plan` pre-switch compat shim; both hold `user-plans/057-relocate-plan-state-storage.md`). The next
-actionable task is the first `TASK:PENDING` whose dependencies are all `TASK:COMPLETE` — currently **T4** (machine-wide
-worktree migration) and **T5** (the `gitSafety` `git add .session-state/**` block); both depend on completed tasks
-(T4←T3, T5←T2) and can run in either order. T6 (live switch + verification) is Interactive and gated on T3+T4+T5.
-T1→T3 are COMPLETE: T1 landed the global excludes, T2 rewrote all module path references, T3 moved the plan dir to
-`user-plans/` + state to `.session-state/` and dropped the stale `**/.claude/{active-plan,HANDOFF.md}` excludes.
+actionable task is the first `TASK:PENDING` whose dependencies are all `TASK:COMPLETE` — currently **T5** (the
+`gitSafety` `git add .session-state/**` block); it depends on completed T2. T6 (live switch + verification) is
+Interactive and gated on T3+T4+T5. T1→T4 are COMPLETE: T1 landed the global excludes, T2 rewrote all module path
+references, T3 moved this worktree's plan dir to `user-plans/` + state to `.session-state/` and dropped the stale
+`**/.claude/{active-plan,HANDOFF.md}` excludes, T4 migrated the 9 Category-B (untracked/NOGIT) worktrees machine-wide
+(Category-A tracked-plan repos deferred to plan 058 per Tim 2026-09-17).
 
 **One-line goal:** move numbered plan files to `user-plans/` (repo root) and the two per-worktree runtime
 files (`active-plan`, `HANDOFF.md`) to `.session-state/` (repo root), so NOTHING the session-workflow writes
@@ -101,7 +102,7 @@ trailing-slash dir re-include needs it, `!user-plans/**`) to this local `.gitign
 | T1 | **Global git excludes.** In `modules/programs/git/git.nix` `ignores`, ADD `"**/user-plans/"` and `"**/.session-state/"`; update the plan-044 comment to explain the new default-ignore-with-per-repo-opt-in scheme. Keep `**/.claude/active-plan` + `**/.claude/HANDOFF.md` for now (removed in T3 once state relocates) to avoid a coverage gap mid-migration. | impl | — | TASK:COMPLETE (2026-09-16) |
 | T2 | **Module path rewrites.** Rewrite every FUNCTIONAL reference in the map above from `.claude/user-plans/`→`user-plans/`, `.claude/active-plan`→`.session-state/active-plan`, `.claude/HANDOFF.md`→`.session-state/HANDOFF.md` (hooks.nix matchers, resume-hook.sh, task-automation.nix, lib.nix, planning command skills, the global CLAUDE.md template, this repo's CLAUDE.md, claude-code.nix comment). Do the documentary-link cleanup pass too (non-gating). | impl (artifact → Present/STOP) | T1 | TASK:COMPLETE (2026-09-16) |
 | T3 | **nixcfg move + re-track.** `git mv .claude/user-plans user-plans` (history-preserving, all ~55 files incl. `archive/`); move THIS plan file with it and repoint `active-plan`. Add `!user-plans/` negation to the local `.gitignore`; drop the old `!.claude/user-plans/` line. Create `.session-state/`, `git mv` (or move, since untracked) `active-plan` + `HANDOFF.md` there. Now that state lives under `.session-state/`, drop the `**/.claude/{active-plan,HANDOFF.md}` global excludes from git.nix (superseded by `**/.session-state/`). | impl (artifact → Present/STOP) | T2 | TASK:COMPLETE (2026-09-16) |
-| T4 | **Machine-wide worktree migration** (like 056 P8). For EVERY worktree/repo on the machine that has a real `.claude/user-plans` dir and/or `.claude/{active-plan,HANDOFF.md}`, migrate to `user-plans/` + `.session-state/`. Idempotent (skip already-migrated). | migration (artifact → Present/STOP) | T3 | TASK:IN_PROGRESS |
+| T4 | **Machine-wide worktree migration** (like 056 P8). For EVERY worktree/repo on the machine that has a real `.claude/user-plans` dir and/or `.claude/{active-plan,HANDOFF.md}`, migrate to `user-plans/` + `.session-state/`. Idempotent (skip already-migrated). SCOPED (Tim 2026-09-17): migrate only untracked/NOGIT dirs (Category B); tracked-plan repos (Category A) deferred to plan 058. | migration (artifact → Present/STOP) | T3 | TASK:COMPLETE (2026-09-17) |
 | T5 | **Suspenders hook + VM test.** Add a `gitSafety` sub-hook blocking `git add` of `.session-state/**` (block-with-message, `CLAUDE_HOOKS_BYPASS` escape, FALSE-POSITIVE analysis). Add/extend a VM test asserting the block fires and does NOT false-positive on a normal `git add`. | impl (artifact → Present/STOP) | T2 | TASK:PENDING |
 | T6 | **Live verification** (the real success criterion). `home-manager switch` on `tim@pa161878-nixos`; then edit a relocated `user-plans/*.md` plan and confirm ZERO permission prompt; confirm `/next-task` + the SessionStart resume hook resolve plans/state from the new paths; confirm nixcfg still tracks `user-plans/` and `.session-state/` is untracked+ignored. | Interactive verification | T3, T4, T5 | TASK:PENDING |
 
@@ -183,14 +184,39 @@ containing `user-plans/057-…md` finds the file at its new home. **T6 removes t
 switch flips the live hooks to `.session-state/`.** NOTE: the live planIntegrity guards match `*/.claude/user-plans/*.md`
 only, so they no longer fire on `user-plans/*.md` until T6 — the Present/STOP discipline is assistant-enforced until then.
 
-### T4 — Machine-wide worktree migration `TASK:PENDING`
+### T4 — Machine-wide worktree migration `TASK:COMPLETE`
 Depends on T3. Enumerate every worktree/repo under `~/src` (and any other checkout) with a real
 `.claude/user-plans` dir or `.claude/{active-plan,HANDOFF.md}` file; for each, move to `user-plans/` +
 `.session-state/` (idempotent: skip if already migrated; never touch a repo lacking these). Mirror 056 P8's
 batch approach; this is throwaway migration tooling — remove it after cases==0.
-**DoD:** a re-scan (`fd -td user-plans -H -p '.claude/user-plans$'` or python walk) reports 0 remaining
-`.claude/user-plans` dirs and 0 `.claude/{active-plan,HANDOFF.md}` files across scanned checkouts. Report the
-list migrated. Present/STOP before COMPLETE.
+
+**SCOPING DECISION (Tim, 2026-09-17 via `/next-task` AskUserQuestion).** The 24 candidate checkouts split into
+two categories with fundamentally different handling:
+- **Category B — `.claude/user-plans` is untracked/gitignored or NOGIT** (safe plain `mv`, zero git impact):
+  `ami-fw`, `amdfw/fox_edk2_gcc-master`, `nixpkgs-vm-disk`, `vm-builder`, `converix-hsw`, `nixpkgs-fork`,
+  `paas`(NOGIT), `vte`(NOGIT), `cadr`(NOGIT). paas + vte also carried `active-plan`+`HANDOFF.md`.
+- **Category A — `.claude/user-plans` is git-TRACKED** (15 repos incl. `nixcfg` main=55, `nixcfg-coordination`=47,
+  `n3x-private`=27; two on `main`, one a detached submodule HEAD). Migrating these would silently UNTRACK public
+  plans or force rename commits across 15 branches. That is a per-repo opt-in governance call = **plan 058's
+  domain**; nixcfg's OWN migration arrives via THIS branch's eventual merge, NOT throwaway tooling.
+
+**Decisions:** (1) migrate Category B now; (2) DEFER Category A to plan 058; (3) for the per-worktree runtime
+state (paas, vte) dual-write like T3 — copy to `.session-state/` but LEAVE `.claude/{active-plan,HANDOFF.md}`
+compat shims so the still-live pre-T6 resume hooks (which read `.claude/`) keep resolving. T6 removes those shims.
+
+**Re-scoped DoD (met + verified 2026-09-17):** a re-scan reports 0 remaining `.claude/user-plans` dirs among the
+9 Category-B checkouts (all now have `user-plans/`); the only remaining `.claude/user-plans` dirs are the 15
+Category-A tracked repos (intentionally deferred). The only remaining `.claude/{active-plan,HANDOFF.md}` files are
+the intentional pre-T6 compat shims (paas, vte, and this worktree) — T6 removes them all.
+
+**COMPLETED 2026-09-17.** Migrated 9 Category-B checkouts via an idempotent bash batch (merge-if-target-exists,
+else `mv`): ami-fw, amdfw/fox_edk2_gcc-master, nixpkgs-vm-disk, vm-builder, converix-hsw, nixpkgs-fork, paas, vte,
+cadr — each `.claude/user-plans` → `user-plans/`. paas + vte additionally got `.session-state/{active-plan,HANDOFF.md}`
+(dual-write; `.claude/` shims retained). Post-migration re-scan: `.claude/user-plans` dirs went 24→15 (remaining 15 =
+exactly the Category-A tracked repos). Category-A + nixcfg-main deferred to plan 058. NOTE (ordering vs T6): the live
+`.claude/`-writing hooks flip to `.session-state/` only at T6's `home-manager switch`; a session run in a migrated
+Category-B worktree before T6 could re-create `.claude/active-plan`/`HANDOFF.md` — acceptable given T6 is next and
+removes all shims. Throwaway tooling was inline (no committed migration script to remove).
 
 ### T5 — Suspenders `gitSafety` hook + VM test `TASK:PENDING`
 Depends on T2. Add a `gitSafety` sub-hook (in `hooks.nix`, same pattern as the plan-056 `blockAddForce` etc.):
@@ -209,9 +235,10 @@ nixcfg-work local-pin or a lock bump, per the 056 rollout precedent). Then:
 2. Start a fresh session and confirm the SessionStart resume hook + `/next-task` resolve the active plan and
    next task from `.session-state/active-plan` → `user-plans/...`.
 3. Confirm `git status` in nixcfg still tracks `user-plans/` and that `.session-state/` is untracked+ignored.
-4. Remove the T3 `.claude/{active-plan,HANDOFF.md}` pre-switch compat shims in every migrated worktree now that
-   the switched-in hooks read `.session-state/` (see T3's RESUME-DETERMINISM decision). After removal, confirm a
-   fresh `/next-task` still resumes from `.session-state/` alone.
+4. Remove the pre-switch `.claude/{active-plan,HANDOFF.md}` compat shims in every migrated worktree now that
+   the switched-in hooks read `.session-state/` (see T3's RESUME-DETERMINISM decision). This is THREE worktrees
+   that carry shims: this one (`nixcfg-session-hooks`, from T3) plus `~/src/paas` and `~/src/vte` (from T4).
+   After removal, confirm a fresh `/next-task` still resumes from `.session-state/` alone.
 **DoD:** all four confirmed (the no-prompt observation is the gate). Interactive — requires the live host and
 human observation; yields USER_INPUT_REQUIRED under headless `/next-task`.
 
