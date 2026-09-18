@@ -108,7 +108,7 @@ trailing-slash dir re-include needs it, `!user-plans/**`) to this local `.gitign
 | T3 | **nixcfg move + re-track.** `git mv .claude/user-plans user-plans` (history-preserving, all ~55 files incl. `archive/`); move THIS plan file with it and repoint `active-plan`. Add `!user-plans/` negation to the local `.gitignore`; drop the old `!.claude/user-plans/` line. Create `.session-state/`, `git mv` (or move, since untracked) `active-plan` + `HANDOFF.md` there. Now that state lives under `.session-state/`, drop the `**/.claude/{active-plan,HANDOFF.md}` global excludes from git.nix (superseded by `**/.session-state/`). | impl (artifact → Present/STOP) | T2 | TASK:COMPLETE (2026-09-16) |
 | T4 | **Machine-wide worktree migration** (like 056 P8). For EVERY worktree/repo on the machine that has a real `.claude/user-plans` dir and/or `.claude/{active-plan,HANDOFF.md}`, migrate to `user-plans/` + `.session-state/`. Idempotent (skip already-migrated). SCOPED (Tim 2026-09-17): migrate only untracked/NOGIT dirs (Category B); tracked-plan repos (Category A) deferred to plan 058. | migration (artifact → Present/STOP) | T3 | TASK:COMPLETE (2026-09-17) |
 | T5 | **Suspenders hook + VM test.** Add a `gitSafety` sub-hook blocking `git add` of `.session-state/**` (block-with-message, `CLAUDE_HOOKS_BYPASS` escape, FALSE-POSITIVE analysis). Add/extend a VM test asserting the block fires and does NOT false-positive on a normal `git add`. | impl (artifact → Present/STOP) | T2 | TASK:COMPLETE (2026-09-18) |
-| T6 | **Live verification** (the real success criterion). `home-manager switch` on `tim@pa161878-nixos`; then edit a relocated `user-plans/*.md` plan and confirm ZERO permission prompt; confirm `/next-task` + the SessionStart resume hook resolve plans/state from the new paths; confirm nixcfg still tracks `user-plans/` and `.session-state/` is untracked+ignored. | Interactive verification | T3, T4, T5 | TASK:PENDING |
+| T6 | **Live verification** (the real success criterion). `home-manager switch` on `tim@pa161878-nixos`; then edit a relocated `user-plans/*.md` plan and confirm ZERO permission prompt; confirm `/next-task` + the SessionStart resume hook resolve plans/state from the new paths; confirm nixcfg still tracks `user-plans/` and `.session-state/` is untracked+ignored. | Interactive verification | T3, T4, T5 | TASK:IN_PROGRESS |
 
 ---
 
@@ -260,7 +260,7 @@ Present/STOP before COMPLETE.
 - **SIGNED OFF + COMPLETE (Tim, 2026-09-18):** "I approve of your recs here." T5 flipped IN_PROGRESS →
   COMPLETE. All T5 code is on the branch/PR (commits f0dfb37, 9676fb8) with CI proof above.
 
-### T6 — Live verification `TASK:PENDING`
+### T6 — Live verification `TASK:IN_PROGRESS`
 Depends on T3, T4, T5. On `tim@pa161878-nixos`: `home-manager switch` carrying the T1-T5 changes (via the
 nixcfg-work local-pin or a lock bump, per the 056 rollout precedent). Then:
 1. Edit a relocated `user-plans/*.md` plan (e.g. mark a scratch line) and CONFIRM the CC permission prompt
@@ -274,6 +274,32 @@ nixcfg-work local-pin or a lock bump, per the 056 rollout precedent). Then:
    After removal, confirm a fresh `/next-task` still resumes from `.session-state/` alone.
 **DoD:** all four confirmed (the no-prompt observation is the gate). Interactive — requires the live host and
 human observation; yields USER_INPUT_REQUIRED under headless `/next-task`.
+
+**VERIFICATION 2026-09-18 (one-off override switch on tim@pa161878-nixos).** Tim chose the non-durable
+`--override-input` rollout: `home-manager switch --flake '/home/tim/src/nixcfg-work#tim@pa161878-nixos'
+--override-input nixcfg /home/tim/src/nixcfg-session-hooks` → EXIT 0, lock file NOT written (one-off). The
+switch flipped the live tooling to the new paths:
+- **Live settings.json:** planIntegrity matcher = `*/user-plans/*.md` (was `*/.claude/user-plans/*.md`);
+  `gitSafety.blockAddSessionState` (T5) present.
+- **Live resume hook** (`/nix/store/…-claude-resume-hook`) reads `.session-state/{active-plan,HANDOFF.md}`;
+  ran it against this worktree → resolved active plan `user-plans/057-…md` and surfaced T6. **(step 2 ✓)**
+- **Live `/next-task` skill** (`…/.claude-max/commands/next-task.md` → post-switch store path) reads
+  `.session-state/active-plan` + `$CLAUDE_PROJECT_DIR/.session-state`. **(step 2 ✓)**
+- **git tracking (step 3 ✓):** `~/.config/git/ignore` now carries `**/user-plans/` + `**/.session-state/`;
+  `.session-state/{active-plan,HANDOFF.md}` ignored by `**/.session-state/`; `user-plans/057-…md` NOT
+  ignored (exit 1); 55 files tracked under `user-plans/`, 0 under `.session-state/`.
+- **step 1 (zero prompt):** awaiting Tim's visual confirmation — every Edit to `user-plans/057-…md` this
+  session completed with no CC `.claude/` write-permission prompt (plans no longer live under `.claude/`).
+
+**DEFERRED within T6 — step 4 (shim removal):** NOT done, deliberately. The verification switch is
+NON-DURABLE (one-off `--override-input`, no lock write); a later plain `home-manager switch` reverts nixcfg
+to the pinned pre-057 commit whose hooks read `.claude/`. The `.claude/{active-plan,HANDOFF.md}` compat
+shims (this worktree, `~/src/paas`, `~/src/vte`) are the safety net for that revert, so removing them now
+would break resume determinism. Shim removal is gated on a DURABLE rollout (nixcfg-work lock bump, per the
+056 precedent — cleanest after PR #8 merges to main). T6 stays IN_PROGRESS until durable rollout + shim
+removal + a final fresh-`/next-task` check. **NEXT DECISION (Tim): durability path** — (A) keep one-off,
+defer durable rollout + shim removal until PR #8 merges then bump nixcfg-work→main; or (B) durable
+nixcfg-work lock bump to this branch SHA now, then remove shims and finish T6.
 
 ---
 
