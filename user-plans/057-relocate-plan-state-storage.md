@@ -10,13 +10,17 @@ Mode: **A only (human-attended `/next-task`).** NOT burndown-eligible — no `Bu
 ## ▶ RESUME POINTER — read FIRST
 
 Fresh session: run `/next-task`. `active-plan` points here (dual-written to `.session-state/active-plan` AND the
-`.claude/active-plan` pre-switch compat shim; both hold `user-plans/057-relocate-plan-state-storage.md`). The next
-actionable task is the first `TASK:PENDING` whose dependencies are all `TASK:COMPLETE` — currently **T5** (the
-`gitSafety` `git add .session-state/**` block); it depends on completed T2. T6 (live switch + verification) is
-Interactive and gated on T3+T4+T5. T1→T4 are COMPLETE: T1 landed the global excludes, T2 rewrote all module path
-references, T3 moved this worktree's plan dir to `user-plans/` + state to `.session-state/` and dropped the stale
-`**/.claude/{active-plan,HANDOFF.md}` excludes, T4 migrated the 9 Category-B (untracked/NOGIT) worktrees machine-wide
-(Category-A tracked-plan repos deferred to plan 058 per Tim 2026-09-17).
+`.claude/active-plan` pre-switch compat shim; both hold `user-plans/057-relocate-plan-state-storage.md`). **T1→T5 are
+all COMPLETE.** The single remaining task is **T6 — Live verification**, which is **Interactive** (Type column =
+"Interactive verification"): it requires a live `home-manager switch` on `tim@pa161878-nixos` plus human observation
+of the CC permission prompt, so a headless `/next-task` MUST yield `USER_INPUT_REQUIRED` (do NOT autonomously run the
+switch or improvise). Its deps (T3+T4+T5) are all COMPLETE, so it is unblocked and is the deterministic, sole next
+pick. T1 landed the global excludes; T2 rewrote all module path references; T3 moved this worktree's plan dir to
+`user-plans/` + state to `.session-state/` and dropped the stale `**/.claude/{active-plan,HANDOFF.md}` excludes; T4
+migrated the 9 Category-B (untracked/NOGIT) worktrees machine-wide (Category-A tracked-plan repos deferred to plan
+058 per Tim 2026-09-17); T5 added the `gitSafety.blockAddSessionState` suspender hook + VM test (CI-green, signed off
+2026-09-18). See T6's task-detail block for the exact live-verification steps and the three worktrees whose `.claude/`
+compat shims T6 removes.
 
 **One-line goal:** move numbered plan files to `user-plans/` (repo root) and the two per-worktree runtime
 files (`active-plan`, `HANDOFF.md`) to `.session-state/` (repo root), so NOTHING the session-workflow writes
@@ -103,7 +107,7 @@ trailing-slash dir re-include needs it, `!user-plans/**`) to this local `.gitign
 | T2 | **Module path rewrites.** Rewrite every FUNCTIONAL reference in the map above from `.claude/user-plans/`→`user-plans/`, `.claude/active-plan`→`.session-state/active-plan`, `.claude/HANDOFF.md`→`.session-state/HANDOFF.md` (hooks.nix matchers, resume-hook.sh, task-automation.nix, lib.nix, planning command skills, the global CLAUDE.md template, this repo's CLAUDE.md, claude-code.nix comment). Do the documentary-link cleanup pass too (non-gating). | impl (artifact → Present/STOP) | T1 | TASK:COMPLETE (2026-09-16) |
 | T3 | **nixcfg move + re-track.** `git mv .claude/user-plans user-plans` (history-preserving, all ~55 files incl. `archive/`); move THIS plan file with it and repoint `active-plan`. Add `!user-plans/` negation to the local `.gitignore`; drop the old `!.claude/user-plans/` line. Create `.session-state/`, `git mv` (or move, since untracked) `active-plan` + `HANDOFF.md` there. Now that state lives under `.session-state/`, drop the `**/.claude/{active-plan,HANDOFF.md}` global excludes from git.nix (superseded by `**/.session-state/`). | impl (artifact → Present/STOP) | T2 | TASK:COMPLETE (2026-09-16) |
 | T4 | **Machine-wide worktree migration** (like 056 P8). For EVERY worktree/repo on the machine that has a real `.claude/user-plans` dir and/or `.claude/{active-plan,HANDOFF.md}`, migrate to `user-plans/` + `.session-state/`. Idempotent (skip already-migrated). SCOPED (Tim 2026-09-17): migrate only untracked/NOGIT dirs (Category B); tracked-plan repos (Category A) deferred to plan 058. | migration (artifact → Present/STOP) | T3 | TASK:COMPLETE (2026-09-17) |
-| T5 | **Suspenders hook + VM test.** Add a `gitSafety` sub-hook blocking `git add` of `.session-state/**` (block-with-message, `CLAUDE_HOOKS_BYPASS` escape, FALSE-POSITIVE analysis). Add/extend a VM test asserting the block fires and does NOT false-positive on a normal `git add`. | impl (artifact → Present/STOP) | T2 | TASK:IN_PROGRESS |
+| T5 | **Suspenders hook + VM test.** Add a `gitSafety` sub-hook blocking `git add` of `.session-state/**` (block-with-message, `CLAUDE_HOOKS_BYPASS` escape, FALSE-POSITIVE analysis). Add/extend a VM test asserting the block fires and does NOT false-positive on a normal `git add`. | impl (artifact → Present/STOP) | T2 | TASK:COMPLETE (2026-09-18) |
 | T6 | **Live verification** (the real success criterion). `home-manager switch` on `tim@pa161878-nixos`; then edit a relocated `user-plans/*.md` plan and confirm ZERO permission prompt; confirm `/next-task` + the SessionStart resume hook resolve plans/state from the new paths; confirm nixcfg still tracks `user-plans/` and `.session-state/` is untracked+ignored. | Interactive verification | T3, T4, T5 | TASK:PENDING |
 
 ---
@@ -218,7 +222,7 @@ exactly the Category-A tracked repos). Category-A + nixcfg-main deferred to plan
 Category-B worktree before T6 could re-create `.claude/active-plan`/`HANDOFF.md` — acceptable given T6 is next and
 removes all shims. Throwaway tooling was inline (no committed migration script to remove).
 
-### T5 — Suspenders `gitSafety` hook + VM test `TASK:IN_PROGRESS`
+### T5 — Suspenders `gitSafety` hook + VM test `TASK:COMPLETE`
 Depends on T2. Add a `gitSafety` sub-hook (in `hooks.nix`, same pattern as the plan-056 `blockAddForce` etc.):
 PreToolUse Bash, jq-stdin `.tool_input.command`, block a `git add` that targets `.session-state/` (or a path
 under it), `exit 2`, `continueOnError=false`, `CLAUDE_HOOKS_BYPASS` escape, four-part block message (WHY /
@@ -253,8 +257,8 @@ Present/STOP before COMPLETE.
   (1m17s) and aarch64-linux (1m0s); `Flake evaluation` ✓ (30s). The VM test — including the new
   `blockAddSessionState` block-fires / no-FP / bypass assertions — passes end-to-end on GitHub runners.
   DoD (flake check + VM proof) is objectively met. Draft PR #8.
-- **NOT COMPLETE:** awaiting Tim's Present/STOP sign-off (this is the only remaining gate). On sign-off,
-  flip T5 → COMPLETE (2026-09-17) — status shape is legal (already IN_PROGRESS; a date is recorded).
+- **SIGNED OFF + COMPLETE (Tim, 2026-09-18):** "I approve of your recs here." T5 flipped IN_PROGRESS →
+  COMPLETE. All T5 code is on the branch/PR (commits f0dfb37, 9676fb8) with CI proof above.
 
 ### T6 — Live verification `TASK:PENDING`
 Depends on T3, T4, T5. On `tim@pa161878-nixos`: `home-manager switch` carrying the T1-T5 changes (via the
