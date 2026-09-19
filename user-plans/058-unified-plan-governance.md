@@ -103,7 +103,7 @@ live in that context. Tracking must never outrun enforcement.
 
 | ID | Task | Type | Depends on | Status |
 |----|------|------|-----------|--------|
-| T1 | **Enumerate & canonicalize the server-side push rules.** With Tim's org-admin view (or an admin-scoped token / exported config), capture the exact kyosaku-kai custom push-rule patterns + push-protection/secret-scanning config into a single documented, version-controlled Source Of Truth (SSOT) pattern spec. | discovery (Interactive — needs admin access) | — | TASK:PENDING |
+| T1 | **Enumerate & canonicalize the server-side push rules.** With Tim's org-admin view (or an admin-scoped token / exported config), capture the exact kyosaku-kai custom push-rule patterns + push-protection/secret-scanning config into a single documented, version-controlled Source Of Truth (SSOT) pattern spec. **SCOPE CORRECTION (2026-09-19): the 6 custom patterns are ENTERPRISE-level secret-scanning custom patterns (inherited by the org); the enterprise is the authoritative source, not the org.** | discovery (Interactive — needs admin access) | — | TASK:IN_PROGRESS |
 | T2 | **Design the local-mirror mechanism + SSOT + drift strategy (ADR).** Decide where the pattern SSOT lives, how client hooks consume it, pre-commit vs pre-push (or both), false-positive & bypass policy, and — since server/client are disjoint — the concrete drift-detection approach. Output an ADR. | design (artifact → Present/STOP) | T1 | TASK:PENDING |
 | T3 | **Implement the local mirror as client-side git hooks** in the shared claude-code `gitSafety` hook family (nixcfg, public), reading the T2 SSOT. Fail-fast at commit on a pattern hit; four-part block message + `CLAUDE_HOOKS_BYPASS`. Ships to colleagues via nixcfg. | impl (artifact → Present/STOP) | T2 | TASK:PENDING |
 | T4 | **Drift guard between local & server rule sets.** Add a check (CI and/or scheduled) that detects divergence between the local SSOT and the server config and fails/alerts. Since the server config may not be API-readable without admin, define the most automatable approach available and document the manual fallback. | impl (artifact → Present/STOP) | T1, T3 | TASK:PENDING |
@@ -118,7 +118,20 @@ live in that context. Tracking must never outrun enforcement.
 
 ## Task detail & Definition of Done
 
-### T1 — Enumerate & canonicalize the server-side push rules `TASK:PENDING`
+### T1 — Enumerate & canonicalize the server-side push rules `TASK:IN_PROGRESS`
+
+**PROGRESS 2026-09-19 (patterns captured to a PRIVATE SSOT; regexes NOT in this public file).** The 6 custom
+patterns are **enterprise-level** secret-scanning custom patterns (org `pattern_configurations?tab=custom`
+only toggles push-protection and 404s on click; the definitions live at the enterprise, inherited by the org)
+— so the **enterprise is the authoritative source** (affects T4's drift-guard target). Categories: Corporate
+identity reference, Internal domain reference, Internal email address, Internal infrastructure identifier,
+Internal project identifier, Organizational acronym. The 6 regexes + their shared before/after context anchors
+are captured privately in `nixcfg-work/.session-state/plan-058-t1-custom-patterns.md` (audience-appropriate,
+never public) and reviewed with Tim. STILL PENDING: (a) confirm category↔regex mapping; (b) capture
+push-protection on/off per pattern; (c) fold agreed revisions to the FP-heavy broad tokens; (d) commit the
+canonical SSOT to a tracked PRIVATE location (location = T2 decision). Present/STOP before COMPLETE.
+Also captured (public, non-sensitive): the "Main branch protection" ruleset + a Conventional-Commits
+`commit_message_pattern` on n3x.
 Interactive — requires org-admin visibility Claude's token lacks. With Tim: enumerate, from the kyosaku-kai org
 security settings, the exact custom push-rule patterns (the internal-identifier regexes/terms), whether secret
 scanning + push protection are on, and which repos they apply to. Capture them verbatim into a single documented,
@@ -157,6 +170,11 @@ a check that fails if the export is stale). Document the chosen mechanism and it
 **DoD:** the check fails on an intentional local/server mismatch and passes when aligned (demonstrated); mechanism
 documented. Present/STOP before COMPLETE. NOTE: may be partly BLOCKED-BY-DEP on T1's access outcome — if the server
 config cannot be read programmatically, this task delivers the manual-export fallback, not a live automated diff.
+**SCOPE (from T1, 2026-09-19):** the authoritative source is the **ENTERPRISE** secret-scanning custom patterns,
+not the org, and custom-pattern *definitions* are NOT exposed via REST (a fine-grained org PAT 404s;
+`repos/.../secret-scanning/*` is "not accessible by PAT"). So the drift guard most likely relies on a periodic
+**enterprise-admin UI/GraphQL export** committed to the private SSOT + a staleness check — a live automated API
+diff is probably not available at current access. Confirm during T4.
 
 ### T5 — Establish the public home for public plans in kyosaku-kai `TASK:PENDING`
 Depends on T2. Decide (Interactive) between: fork/move nixcfg into kyosaku-kai; or create a dedicated public repo
