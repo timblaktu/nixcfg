@@ -117,7 +117,7 @@ live in that context. Tracking must never outrun enforcement.
 | T8 | **Flip default posture to always-track; retire the 057 opt-in machinery.** Change the machine-wide git excludes + per-repo negations so plans are tracked by default; remove the now-unnecessary `**/user-plans/` default-ignore + `!user-plans/` gymnastics. Gated on T3 (mirror live) per the invariant. | impl (artifact → Present/STOP) | T3, T5 | TASK:PENDING |
 | T9 | **Cross-audience plan policy (the 052 pattern).** Define + document the convention for plans that span public + internal (public shell + private detail split, or restrict-to-private). Apply it to plan 052 as the worked example. | policy (artifact → Present/STOP) | T2 | TASK:PENDING |
 | T10 | **Record the central-plans-repo alternative as considered-and-superseded** (short ADR / design note capturing the analysis + why kyosaku-kai supersedes it). | doc | — | TASK:COMPLETE (2026-09-19) |
-| T11 | **Scrub nixcfg of internal-identifier exposure (history + working tree) AND add going-forward enforcement so no more leaks land.** Inventory + remediate every internal-identifier hit in nixcfg across the FULL git history and the working tree (T1 SSOT patterns + audited additions incl. `nextcloud.aero`); then stand up the strongest available enforcement on nixcfg (personal-repo secret-scanning/push-protection where possible, else the T3 local mirror + the T5 move-to-kyosaku-kai option). | migration + impl (Interactive — history rewrite/force-push, auth/irreversible) | T1, T6 (coord. T3, T5, T7) | TASK:PENDING |
+| T11 | **Scrub nixcfg of internal-identifier exposure (history + working tree) AND add going-forward enforcement so no more leaks land.** Inventory + remediate every internal-identifier hit in nixcfg across the FULL git history and the working tree (T1 SSOT patterns + audited additions — specifics in the private capture); then stand up the strongest available enforcement on nixcfg (personal-repo secret-scanning/push-protection where possible, else the T3 local mirror + the T5 move-to-kyosaku-kai option). | migration + impl (Interactive — history rewrite/force-push, auth/irreversible) | T1, T6 (coord. T3, T5, T7) | TASK:PENDING |
 
 ---
 
@@ -130,10 +130,10 @@ ordered UI screenshot), push-protection CONFIRMED ON for all 6, and reviewed wit
 PRIVATE SSOT capture `nixcfg-work/.session-state/plan-058-t1-custom-patterns.md` (audience-appropriate; NOT in
 this public file). **Decision: keep the two broad tokens (`\bpac\b`, `\bhsw\b`) UNCHANGED** — a measurement
 against public nixcfg found 0 Intel-Haswell hits and ~100% true-positive internal matches, so narrowing would
-only add false negatives. Two follow-ups were spun out to **T11**: (a) `nextcloud.aero` is an internal domain
-NOT in the 6 patterns (pattern-gap; audit for more), and (b) public nixcfg already contains substantial
-internal-identifier exposure (panasonic.aero ×38, hsw ×38, pac ×18, converix ×16, nextcloud.aero ×17) in
-tracked docs — remediation + enforcement handed to T11. Canonical version-controlled SSOT placement + how the
+only add false negatives. Two follow-ups were spun out to **T11**: (a) at least one internal
+domain is NOT covered by the 6 patterns (a pattern-gap), and (b) public nixcfg already contains substantial
+internal-identifier exposure (6 identifier classes, ~130 hits across tracked docs) — specifics recorded ONLY
+in the private capture; remediation + enforcement handed to T11. Canonical version-controlled SSOT placement + how the
 local mirror consumes it are finalized in **T2**.
 _(Original capture notes:)_ The 6 custom
 patterns are **enterprise-level** secret-scanning custom patterns (org `pattern_configurations?tab=custom`
@@ -246,11 +246,11 @@ absolute-path support. No code change (DoD met). **COMPLETE 2026-09-19 (Tim sign
 ### T11 — Scrub nixcfg of internal-identifier exposure + enforce going forward `TASK:PENDING`
 Depends on T1 (SSOT patterns; coordinate with T3 mirror, T5 kyosaku-kai move, T6 attribution scrub, T7
 consumer repoint). Surfaced by T1's measurement: public nixcfg already contains substantial internal-identifier
-exposure in tracked docs (panasonic.aero ×38, hsw ×38, pac ×18, converix ×16, nextcloud.aero ×17). Two parts:
+exposure in tracked docs (6 identifier classes, ~130 hits; specifics ONLY in the private capture). Two parts:
 
 1. **Remediate existing exposure — working tree AND full history.** Inventory every internal-identifier hit
    across the entire nixcfg git history (not just HEAD) using the T1 SSOT patterns PLUS audited additions
-   (start with `nextcloud.aero`; sweep for other internal domains/hosts/codenames). Redact/remove from the
+   (start with the pattern-gap domain from the private capture; sweep for other internal domains/hosts/codenames). Redact/remove from the
    working tree; scrub history with `git filter-repo` (or BFG) so NO commit in any ref contains them. History
    rewrite ⇒ force-push ⇒ breaks the nixcfg-work `flake.lock` pin + any consumers → do it in ONE pass with the
    T6 AI-attribution scrub, then T7 repoints consumers. Tim-authorized (irreversible, force-push).
@@ -264,7 +264,7 @@ exposure in tracked docs (panasonic.aero ×38, hsw ×38, pac ×18, converix ×16
 
 **DoD:** (a) a history+tree scan (`git filter-repo --analyze` or `git log -p --all | rg -f <patterns>`) returns
 ZERO internal-identifier hits across nixcfg, OR an explicit recorded deferral with rationale; (b) the missing
-patterns (nextcloud.aero + audit result) are added to the enterprise SSOT; (c) a recorded enforcement decision
+patterns (the pattern-gap domain + audit result, per the private capture) are added to the enterprise SSOT; (c) a recorded enforcement decision
 for nixcfg (personal-repo custom patterns available? if not → kyosaku-kai move per T5) with the local mirror
 confirmed active. Interactive (force-push authorization) — USER_INPUT_REQUIRED under headless. Present/STOP.
 
