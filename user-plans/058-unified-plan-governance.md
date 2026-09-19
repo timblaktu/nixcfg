@@ -1,6 +1,6 @@
 # Plan 058 — Unified plan governance: always-track plans behind the kyosaku-kai enforced boundary (+ local mirror of server push rules)
 
-Status: CANDIDATE → ACTIVE (design + phased implementation; human-attended)
+Status: ACTIVE (design + phased implementation; human-attended) — started 2026-09-19 (worktree `/home/tim/src/nixcfg-plan-058`)
 Owner: Tim
 Created: 2026-09-17
 Working branch: **plan-058-unified-plan-governance** (to be created off `main` when work starts; this stub was
@@ -112,7 +112,7 @@ live in that context. Tracking must never outrun enforcement.
 | T7 | **Repoint nixcfg-work `flake.lock`** (and any other consumers) to the new nixcfg remote/home after migration; verify builds. | impl | T5 | TASK:PENDING |
 | T8 | **Flip default posture to always-track; retire the 057 opt-in machinery.** Change the machine-wide git excludes + per-repo negations so plans are tracked by default; remove the now-unnecessary `**/user-plans/` default-ignore + `!user-plans/` gymnastics. Gated on T3 (mirror live) per the invariant. | impl (artifact → Present/STOP) | T3, T5 | TASK:PENDING |
 | T9 | **Cross-audience plan policy (the 052 pattern).** Define + document the convention for plans that span public + internal (public shell + private detail split, or restrict-to-private). Apply it to plan 052 as the worked example. | policy (artifact → Present/STOP) | T2 | TASK:PENDING |
-| T10 | **Record the central-plans-repo alternative as considered-and-superseded** (short ADR / design note capturing the analysis + why kyosaku-kai supersedes it). | doc | — | TASK:PENDING |
+| T10 | **Record the central-plans-repo alternative as considered-and-superseded** (short ADR / design note capturing the analysis + why kyosaku-kai supersedes it). | doc | — | TASK:IN_PROGRESS |
 
 ---
 
@@ -193,7 +193,7 @@ to instead restrict the whole plan to the private repo. Apply the convention to 
 super-plan) as the worked example.
 **DoD:** policy documented in an audience-appropriate location; 052 restructured or annotated to conform; Present/STOP.
 
-### T10 — Record the central-plans-repo alternative (considered & superseded) `TASK:PENDING`
+### T10 — Record the central-plans-repo alternative (considered & superseded) `TASK:IN_PROGRESS`
 Short ADR / design note capturing: the proposal (one separate repo holding all plans, referenced by all sessions
 with global r/w), its pros (single browsable source, branch-decoupled, natural cross-repo home), and the reasons it
 was superseded by the kyosaku-kai approach (reintroduces out-of-cwd write-permission friction, splits plan↔code
