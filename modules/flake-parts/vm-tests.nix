@@ -1077,6 +1077,7 @@ in
             programs.claude-code.nixcfgPath = "/home/${testUsername}";
           };
           testScript = ''
+            import base64
             import json
 
             machine.wait_for_unit("multi-user.target")
@@ -1100,8 +1101,16 @@ in
                 machine.succeed(f"test -s {dest}")
 
             def run_hook(dest, command, expected, cwd="/tmp"):
+                # Write the payload via base64 so the GUEST shell never interprets
+                # $VAR / quotes in the (arbitrary) command string. A literal
+                # `printf %s "...$GH_TOKEN..."` let the guest's `set -u` shell expand
+                # $GH_TOKEN and abort with "unbound variable" when it is unset (the
+                # CI guest) — the dev host masked it by having GH_TOKEN in-env. The
+                # hook only greps .tool_input.command, so the payload must reach it
+                # byte-for-byte; base64 round-trips it exactly.
                 payload = json.dumps({"tool_input": {"command": command}})
-                machine.succeed(f"printf %s {json.dumps(payload)} > /tmp/payload.json")
+                b64 = base64.b64encode(payload.encode()).decode()
+                machine.succeed(f"echo {b64} | base64 -d > /tmp/payload.json")
                 rc, _out = machine.execute(f"cd {cwd} && bash {dest} < /tmp/payload.json")
                 assert rc == expected, (
                     f"{dest} on {command!r} (cwd={cwd}): got exit {rc}, want {expected}"
@@ -1212,6 +1221,31 @@ in
             run_hook("/tmp/h_env.sh", "GH_TOKEN=$(gh auth token) git push", 0)
             run_hook("/tmp/h_env.sh", "echo hello world", 0)
             run_hook("/tmp/h_env.sh", "printenv PATH", 0)
+
+            # === gitSafety.blockAddSessionState (Plan 057 T5) ===
+            # Suspender over the **/.session-state/ gitignore belt: never stage the
+            # per-worktree runtime dir. Block fires on an explicit .session-state
+            # path arg; must NOT false-positive on user-plans/ or unrelated adds.
+            extract("blockAddSessionState", "/tmp/h_ss.sh")
+            # BLOCK: explicit adds targeting the dir or a file under it
+            run_hook("/tmp/h_ss.sh", "git add .session-state/active-plan", 2)
+            run_hook("/tmp/h_ss.sh", "git add .session-state/HANDOFF.md", 2)
+            run_hook("/tmp/h_ss.sh", "git add .session-state", 2)
+            run_hook("/tmp/h_ss.sh", "git add .session-state/", 2)
+            run_hook("/tmp/h_ss.sh", "git add ./.session-state/active-plan", 2)
+            # NO FALSE POSITIVE: the sibling tracked plan dir, catch-alls, and a
+            # path that merely shares the .session-state prefix are all allowed.
+            run_hook("/tmp/h_ss.sh", "git add user-plans/057-relocate.md", 0)
+            run_hook("/tmp/h_ss.sh", "git add -A", 0)
+            run_hook("/tmp/h_ss.sh", "git add .", 0)
+            run_hook("/tmp/h_ss.sh", "git add .session-state-notes.txt", 0)
+            # bypass overrides the block
+            rc, _ = machine.execute(
+                "cd /tmp && CLAUDE_HOOKS_BYPASS=1 "
+                f"{jq} -n --arg c 'git add .session-state/active-plan' "
+                "'{tool_input:{command:$c}}' | CLAUDE_HOOKS_BYPASS=1 bash /tmp/h_ss.sh"
+            )
+            assert rc == 0, f"bypass did not override the session-state block: exit {rc}"
 
             # === bypass escape hatch overrides every block ===
             rc, _ = machine.execute(

@@ -416,7 +416,7 @@ in
 
             ## Instructions
 
-            1. Find all plan files in `.claude/user-plans/` using: `fd -t f -e md . .claude/user-plans/`
+            1. Find all plan files in `user-plans/` using: `fd -t f -e md . user-plans/`
 
             2. For each plan file, extract:
                - Plan number/name (from filename)

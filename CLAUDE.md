@@ -2,7 +2,7 @@
 
 ## Starting a New Session
 When user says **"resume"**, **"continue"**, or **"next task"**:
-1. Check `.claude/user-plans/` for any plans with PENDING tasks
+1. Check `user-plans/` for any plans with PENDING tasks
 2. Find the first PENDING task (or continue IN_PROGRESS task)
 3. State the task scope concisely and ask for confirmation before proceeding
 
@@ -37,13 +37,13 @@ Every task follows this pattern - adapt depth based on complexity:
 - **Only mark COMPLETE after validation passes**
 
 ## End of Session (MANDATORY - NO EXCEPTIONS)
-At the END of every session, you MUST checkpoint the handoff to the **per-worktree file channel** (NOT the clipboard). Many Claude Code sessions run concurrently on one node; the Windows clipboard is a shared, single-slot ring that a concurrent session silently overwrites - a proven cross-worktree contamination hazard (plan 044). `$CLAUDE_PROJECT_DIR/.claude/` is a distinct directory per worktree, so the handoff travels a channel concurrent sessions cannot clobber.
+At the END of every session, you MUST checkpoint the handoff to the **per-worktree file channel** (NOT the clipboard). Many Claude Code sessions run concurrently on one node; the Windows clipboard is a shared, single-slot ring that a concurrent session silently overwrites - a proven cross-worktree contamination hazard (plan 044). `$CLAUDE_PROJECT_DIR/.session-state/` is a distinct directory per worktree, so the handoff travels a channel concurrent sessions cannot clobber.
 
 At session end:
-1. **Keep the plan doc current (PRIMARY tracker)** - update the `.claude/user-plans/NNN-*.md` task status and fold what was done / what remains into the task block.
-2. **Point at the active plan** - write the plan file's path (one line) to `$CLAUDE_PROJECT_DIR/.claude/active-plan`.
-3. **Write distilled nuance to `$CLAUDE_PROJECT_DIR/.claude/HANDOFF.md`** - self-contained: which worktree/branch, what was just done (commits, artifacts, what was NOT done), the next concrete step, pending items (pipeline IDs, blockers). Never reference "previous session context".
-4. Print a one-line confirmation (e.g. "Handoff written: .claude/active-plan -> NNN-name.md, .claude/HANDOFF.md updated"). Do NOT print the handoff inline in chat.
+1. **Keep the plan doc current (PRIMARY tracker)** - update the `user-plans/NNN-*.md` task status and fold what was done / what remains into the task block.
+2. **Point at the active plan** - write the plan file's path (one line) to `$CLAUDE_PROJECT_DIR/.session-state/active-plan`.
+3. **Write distilled nuance to `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md`** - self-contained: which worktree/branch, what was just done (commits, artifacts, what was NOT done), the next concrete step, pending items (pipeline IDs, blockers). Never reference "previous session context".
+4. Print a one-line confirmation (e.g. "Handoff written: .session-state/active-plan -> NNN-name.md, .session-state/HANDOFF.md updated"). Do NOT print the handoff inline in chat.
 
 Both files are gitignored (per-worktree, never committed); a fresh `claude` session auto-rehydrates from them via the SessionStart resume hook with zero paste. This mirrors the global "Session Handoff Protocol" - the file channel is authoritative.
 
@@ -187,7 +187,7 @@ wsl-enterprise (module) -> wsl-dev-team (module) -> nixos-wsl-dev-team (host) ->
 
 ## Active Plans
 
-Plans live in `.claude/user-plans/`. Completed plans are in `.claude/user-plans/archive/`.
+Plans live in `user-plans/`. Completed plans are in `user-plans/archive/`.
 Check plans for TASK:PENDING to find next work items.
 
 ## MANDATORY: Next Session Prompt Template

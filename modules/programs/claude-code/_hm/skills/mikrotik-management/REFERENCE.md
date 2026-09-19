@@ -1100,5 +1100,5 @@ L0.1 is complete when:
 - [MikroTik RouterOS Documentation](https://help.mikrotik.com/docs/display/ROS/)
 - [Bridge VLAN Configuration](https://help.mikrotik.com/docs/display/ROS/Bridging+and+Switching)
 - [First Time Configuration](https://help.mikrotik.com/docs/display/ROS/First+Time+Configuration)
-- Plan 013: `.claude/user-plans/013-distributed-nix-binary-caching.md`
+- Plan 013: `user-plans/013-distributed-nix-binary-caching.md`
 - L1.0 Guide: `docs/wip-L1.0-mikrotik-setup.md` (previous manual approach)

@@ -139,7 +139,11 @@ opencode-runtime/**/package-lock.json
 # Web session runtime (.claude/ in repo root)
 .claude/*
 !.claude/settings.json
-!.claude/user-plans/
+
+# Plan 057: numbered plan files relocated to user-plans/ (repo root). The global
+# git excludes (programs.git.ignores) default-ignore **/user-plans/ machine-wide;
+# nixcfg keeps plans public/tracked by opting back in with this local negation.
+!user-plans/
 
 # Task automation runtime state
 .claude-task-logs/

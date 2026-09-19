@@ -14,7 +14,7 @@ viable" — that was premature, weighing token-saving + gateway *connectivity* b
 *model catalog* (see §4). **User decision (2026-06-24): go Claude-Code-centric anyway** — build
 around Claude-on-Bedrock + CC's richer harness + RTK, leave OpenCode dormant, and **park** the
 non-Claude question behind a credential-gated probe (the CCv2 **V2** auth change invalidated old
-tokens). Tracked in `.claude/user-plans/046-ai-tool-capability-upgrade.md`.
+tokens). Tracked in `user-plans/046-ai-tool-capability-upgrade.md`.
 
 ---
 
@@ -164,7 +164,7 @@ dormant, build around what CC can do today, and park what it can't.**
   works ⇒ curate those IDs into `availableModels` and you're CC-only with the full catalog;
   OpenAI-only ⇒ stand up a translating gateway (LiteLLM) or briefly revive OpenCode for those.
 
-All of this is sequenced in **`.claude/user-plans/046-ai-tool-capability-upgrade.md`**
+All of this is sequenced in **`user-plans/046-ai-tool-capability-upgrade.md`**
 (active: T1/T3-T7/T11/T13/T14; dormant OC: T2/T8-T10/T12; blocked: T15). Deployment reaches the
 work host via a nixcfg-work flake.lock bump.
 
@@ -204,7 +204,7 @@ existing `pkgs/opencode-pinned/` pin, untouched.
 (plan T15) — the §4/§5 analysis is unchanged. **Deploy gate:** RTK + discovery reach the work host
 only after a nixcfg-work flake.lock bump to a nixcfg revision carrying T11/T13.
 
-Detail: `docs/ai-tool-feature-comparison.md` §13, plan `.claude/user-plans/046-ai-tool-capability-upgrade.md`.
+Detail: `docs/ai-tool-feature-comparison.md` §13, plan `user-plans/046-ai-tool-capability-upgrade.md`.
 
 ## 7. T15 resolved (2026-06-25) — CCv2 *does* speak Anthropic, and CC uses it directly
 

@@ -51,7 +51,7 @@ Stops a password or token from ending up in the chat transcript, where it would 
 
 ### Plan integrity (`planIntegrity`)
 
-Protects the discipline behind our numbered plan files (the ones under `.claude/user-plans/`).
+Protects the discipline behind our numbered plan files (the ones under `user-plans/`).
 
 - **Won't mark a task complete without your sign-off** (`planIntegrity.requireSignoffBeforeComplete`). Flipping a task to `TASK:COMPLETE` needs your attestation that the "present it and stop for review" step actually happened. In an interactive session this guardrail asks you to approve the completion in the moment; unattended, or when launched with `CLAUDE_TASK_SIGNOFF=1`, it uses that launch-time variable as the attestation instead. Either way Claude cannot sign off purely on its own - a person either approves the prompt or set the variable at launch. One thing to know: the launch variable is per session, not per task - once set, it green-lights every completion marked in that session.
 - **Won't allow a malformed status change** (`planIntegrity.enforceStatusTransitions`). A task cannot jump straight from `TASK:PENDING` to `TASK:COMPLETE` (it has to pass through `IN_PROGRESS` first), and a completion has to record a date like `(2026-09-14)`. This enforces the shape of a status change, not whether the underlying work is truly finished - that judgment is still yours.

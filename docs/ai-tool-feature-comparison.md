@@ -457,7 +457,7 @@ name the corresponding nixcfg module option (or `—` if not exposed).
 
 ## 7. Gap Tables
 
-These three tables drive Plan 032 (`.claude/user-plans/032-cc-oc-parity-gap-closure.md`).
+These three tables drive Plan 032 (`user-plans/032-cc-oc-parity-gap-closure.md`).
 A "gap" is a feature the upstream tool supports that our Nix module does not currently
 expose. Gaps marked **(P31-MISS)** were also missing from Plan 031's comparison doc.
 
@@ -611,7 +611,7 @@ expose. Gaps marked **(P31-MISS)** were also missing from Plan 031's comparison 
 
 ## 13. Plan 046 addendum — CC-centric capability upgrade (2026-06-24)
 
-**Last refreshed: 2026-06-24.** Plan `.claude/user-plans/046-ai-tool-capability-upgrade.md`.
+**Last refreshed: 2026-06-24.** Plan `user-plans/046-ai-tool-capability-upgrade.md`.
 
 **Direction:** the project went **Claude-Code-centric** (decided 2026-06-24). OpenCode is kept
 **dormant** in-repo — its module and pin are untouched — and is revisited only if a non-Claude CCv2

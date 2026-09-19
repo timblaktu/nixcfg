@@ -4,10 +4,10 @@
 # so a fresh/resumed/compacted session re-acquires "what plan, which task, next
 # step" with zero clipboard paste. This is the PUSH half of a dual-channel design
 # (CC #10373: SessionStart stdout can silently fail to inject) — the readable
-# .claude/active-plan + .claude/HANDOFF.md files and the next-task skill are the
-# PULL backstop, so this hook is never load-bearing alone.
+# .session-state/active-plan + .session-state/HANDOFF.md files and the next-task
+# skill are the PULL backstop, so this hook is never load-bearing alone.
 #
-# Precedence: B (.claude/active-plan -> next task) -> A (.claude/HANDOFF.md)
+# Precedence: B (.session-state/active-plan -> next task) -> A (.session-state/HANDOFF.md)
 #             -> C (latest OTHER per-cwd transcript's last assistant text).
 # Always exits 0. Tolerant of missing files. Emits ONLY the JSON payload — no
 # stray plain stdout (T1: plain stdout ALSO enters model context). Payload is
@@ -32,7 +32,7 @@ if [ "${CLAUDE_BURNDOWN:-}" = "1" ]; then
 fi
 
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-claude_dir="$proj/.claude"
+state_dir="$proj/.session-state"
 
 # Emit the additionalContext payload as SessionStart hook JSON, then exit 0.
 emit() {
@@ -42,7 +42,7 @@ emit() {
 }
 
 # --- Source B: explicit plan pointer (highest precedence) ---
-active_plan_file="$claude_dir/active-plan"
+active_plan_file="$state_dir/active-plan"
 if [ -f "$active_plan_file" ]; then
   plan_rel="$(head -n1 "$active_plan_file" 2>/dev/null | tr -d '[:space:]')"
   if [ -n "$plan_rel" ]; then
@@ -70,9 +70,9 @@ ${task_block}"
 fi
 
 # --- Source A: distilled handoff ---
-handoff="$claude_dir/HANDOFF.md"
+handoff="$state_dir/HANDOFF.md"
 if [ -f "$handoff" ] && [ -s "$handoff" ]; then
-  emit "A distilled handoff exists for this worktree at .claude/HANDOFF.md. Its contents follow as rehydrated session context:
+  emit "A distilled handoff exists for this worktree at .session-state/HANDOFF.md. Its contents follow as rehydrated session context:
 
 $(cat "$handoff" 2>/dev/null)"
 fi
@@ -89,7 +89,7 @@ if [ -n "$cur_transcript" ]; then
       last_text="$(jq -R 'fromjson? // empty' "$latest" 2>/dev/null \
         | jq -rs '[ .[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text ] | last // empty' 2>/dev/null)"
       if [ -n "$last_text" ]; then
-        emit "No .claude/active-plan pointer or .claude/HANDOFF.md was found for this worktree. The most recent prior session in this directory ended with the following assistant message, surfaced as a fallback (it may be stale):
+        emit "No .session-state/active-plan pointer or .session-state/HANDOFF.md was found for this worktree. The most recent prior session in this directory ended with the following assistant message, surfaced as a fallback (it may be stale):
 
 ${last_text}"
       fi

@@ -160,20 +160,18 @@ in
         nix.linux-builder = {
           enable = true;
           package = pkgs.darwin.linux-builder-vz;
-          systems = cfg.systems;
+          inherit (cfg) systems;
           # Builder-disk lifecycle. Default (false) = persistent builder, matching
           # upstream nix-darwin; set `ephemeral = true` for a clean slate on every
           # restart (reference §4.5). Operator's choice, hence an option.
-          ephemeral = cfg.ephemeral;
-          maxJobs = cfg.maxJobs;
+          inherit (cfg) ephemeral maxJobs;
           config = {
             virtualisation = {
               vz.rosetta.enable = cfg.rosetta;
               vz.nestedVirtualization = cfg.nestedVirtualization;
-              cores = cfg.cores;
+              inherit (cfg) cores;
               darwin-builder = {
-                memorySize = cfg.memorySize;
-                diskSize = cfg.diskSize;
+                inherit (cfg) memorySize diskSize;
               };
             };
           };

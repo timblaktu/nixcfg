@@ -112,13 +112,19 @@ in
             ".direnv/"
             "result"
             "result-*"
-            # Plan 044 (paste-free session resumption): per-worktree Claude Code
-            # handoff state must never be tracked in ANY repo where the resume
-            # loop is used. Anchored on the .claude/ parent so tracked files like
-            # .claude/settings.json and .claude/user-plans/ are unaffected; the
-            # **/ prefix matches at repo root and in nested worktrees alike.
-            "**/.claude/active-plan"
-            "**/.claude/HANDOFF.md"
+            # Plan 057 (relocate plan & session-state OUT of .claude/): Claude
+            # Code 2.1.x fires an unsuppressable permission prompt on EVERY write
+            # under .claude/, so the session workflow moves numbered plan files to
+            # `user-plans/` (repo root) and the per-worktree runtime files
+            # (active-plan, HANDOFF.md) to `.session-state/` (repo root). Governance
+            # is DEFAULT-IGNORE machine-wide: every repo on this machine ignores
+            # both dirs by default (zero per-repo work for internal GitLab repos).
+            # A repo that WANTS to track its plans (e.g. nixcfg, which keeps plans
+            # public) opts back in with a LOCAL `.gitignore` negation `!user-plans/`.
+            # `.session-state/` is NEVER re-tracked - it stays per-worktree runtime.
+            # The **/ prefix matches at repo root and in nested worktrees alike.
+            "**/user-plans/"
+            "**/.session-state/"
           ];
 
           hooks = {
