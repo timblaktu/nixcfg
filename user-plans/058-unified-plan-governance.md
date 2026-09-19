@@ -201,6 +201,13 @@ atomicity + audit trail, conflicts with public-plans-in-nixcfg, and the absolute
 active-plan` means it can still be adopted later for a narrow case without re-architecting now).
 **DoD:** ADR/note committed under `docs/adr/`; no code change.
 
+**DRAFTED 2026-09-19 (awaiting Tim sign-off — stays IN_PROGRESS).** Wrote `docs/adr/0001-no-central-plans-repo.md`
+(first ADR in the repo, establishes `docs/adr/`). Status Accepted; records the central-plans-repo alternative,
+the analysis, and why it is superseded by repo-remote-as-audience-boundary + co-located plans (preserves
+plan↔code atomicity + audit trail; avoids reintroducing out-of-cwd write friction 057 escaped; reuses
+kyosaku-kai server enforcement; keeps public plans public). Notes it is reversible via `.session-state/active-plan`
+absolute-path support. No code change (DoD met). Present/STOP before COMPLETE (ADR artifact).
+
 ---
 
 ## Notes / open items (context, not tasks)
