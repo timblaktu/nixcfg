@@ -18,7 +18,11 @@ always-track and adds the enforcement that makes always-track safe.
 This is a design-heavy, human-attended plan. Fresh session: run `/next-task`; the first actionable task is the
 first `TASK:PENDING` whose dependencies are `TASK:COMPLETE`. The linchpin ordering is **T1 (enumerate the server
 rules) → T2 (design the local mirror + SSOT) → T3 (implement local hooks) → T8 (flip default posture)**; the
-migration tasks (T5/T6/T7) and policy tasks (T9/T10) branch off. Nothing here is started yet — all tasks PENDING.
+migration tasks (T5/T6/T7/T11) and policy tasks (T9/T10) branch off. **STATUS 2026-09-19: T1 + T10 COMPLETE
+(Tim signed off); T11 added** (scrub nixcfg internal-identifier exposure across history+tree + add enforcement).
+**Next actionable = T2** (deps: T1 ✓) — the local-mirror/SSOT/drift ADR (uses the `adr-writer` skill). The T1
+patterns live in the PRIVATE capture `nixcfg-work/.session-state/plan-058-t1-custom-patterns.md` (never public).
+Worktree: `/home/tim/src/nixcfg-plan-058`.
 
 **One-line goal:** make *every* plan tracked in git by default, with the public/private audience boundary
 enforced by the repository's remote (kyosaku-kai's server-side push rules for public plans; a private counterpart
@@ -103,7 +107,7 @@ live in that context. Tracking must never outrun enforcement.
 
 | ID | Task | Type | Depends on | Status |
 |----|------|------|-----------|--------|
-| T1 | **Enumerate & canonicalize the server-side push rules.** With Tim's org-admin view (or an admin-scoped token / exported config), capture the exact kyosaku-kai custom push-rule patterns + push-protection/secret-scanning config into a single documented, version-controlled Source Of Truth (SSOT) pattern spec. **SCOPE CORRECTION (2026-09-19): the 6 custom patterns are ENTERPRISE-level secret-scanning custom patterns (inherited by the org); the enterprise is the authoritative source, not the org.** | discovery (Interactive — needs admin access) | — | TASK:IN_PROGRESS |
+| T1 | **Enumerate & canonicalize the server-side push rules.** With Tim's org-admin view (or an admin-scoped token / exported config), capture the exact kyosaku-kai custom push-rule patterns + push-protection/secret-scanning config into a single documented, version-controlled Source Of Truth (SSOT) pattern spec. **SCOPE CORRECTION (2026-09-19): the 6 custom patterns are ENTERPRISE-level secret-scanning custom patterns (inherited by the org); the enterprise is the authoritative source, not the org.** | discovery (Interactive — needs admin access) | — | TASK:COMPLETE (2026-09-19) |
 | T2 | **Design the local-mirror mechanism + SSOT + drift strategy (ADR).** Decide where the pattern SSOT lives, how client hooks consume it, pre-commit vs pre-push (or both), false-positive & bypass policy, and — since server/client are disjoint — the concrete drift-detection approach. Output an ADR. | design (artifact → Present/STOP) | T1 | TASK:PENDING |
 | T3 | **Implement the local mirror as client-side git hooks** in the shared claude-code `gitSafety` hook family (nixcfg, public), reading the T2 SSOT. Fail-fast at commit on a pattern hit; four-part block message + `CLAUDE_HOOKS_BYPASS`. Ships to colleagues via nixcfg. | impl (artifact → Present/STOP) | T2 | TASK:PENDING |
 | T4 | **Drift guard between local & server rule sets.** Add a check (CI and/or scheduled) that detects divergence between the local SSOT and the server config and fails/alerts. Since the server config may not be API-readable without admin, define the most automatable approach available and document the manual fallback. | impl (artifact → Present/STOP) | T1, T3 | TASK:PENDING |
@@ -112,15 +116,26 @@ live in that context. Tracking must never outrun enforcement.
 | T7 | **Repoint nixcfg-work `flake.lock`** (and any other consumers) to the new nixcfg remote/home after migration; verify builds. | impl | T5 | TASK:PENDING |
 | T8 | **Flip default posture to always-track; retire the 057 opt-in machinery.** Change the machine-wide git excludes + per-repo negations so plans are tracked by default; remove the now-unnecessary `**/user-plans/` default-ignore + `!user-plans/` gymnastics. Gated on T3 (mirror live) per the invariant. | impl (artifact → Present/STOP) | T3, T5 | TASK:PENDING |
 | T9 | **Cross-audience plan policy (the 052 pattern).** Define + document the convention for plans that span public + internal (public shell + private detail split, or restrict-to-private). Apply it to plan 052 as the worked example. | policy (artifact → Present/STOP) | T2 | TASK:PENDING |
-| T10 | **Record the central-plans-repo alternative as considered-and-superseded** (short ADR / design note capturing the analysis + why kyosaku-kai supersedes it). | doc | — | TASK:IN_PROGRESS |
+| T10 | **Record the central-plans-repo alternative as considered-and-superseded** (short ADR / design note capturing the analysis + why kyosaku-kai supersedes it). | doc | — | TASK:COMPLETE (2026-09-19) |
+| T11 | **Scrub nixcfg of internal-identifier exposure (history + working tree) AND add going-forward enforcement so no more leaks land.** Inventory + remediate every internal-identifier hit in nixcfg across the FULL git history and the working tree (T1 SSOT patterns + audited additions incl. `nextcloud.aero`); then stand up the strongest available enforcement on nixcfg (personal-repo secret-scanning/push-protection where possible, else the T3 local mirror + the T5 move-to-kyosaku-kai option). | migration + impl (Interactive — history rewrite/force-push, auth/irreversible) | T1, T6 (coord. T3, T5, T7) | TASK:PENDING |
 
 ---
 
 ## Task detail & Definition of Done
 
-### T1 — Enumerate & canonicalize the server-side push rules `TASK:IN_PROGRESS`
+### T1 — Enumerate & canonicalize the server-side push rules `TASK:COMPLETE`
 
-**PROGRESS 2026-09-19 (patterns captured to a PRIVATE SSOT; regexes NOT in this public file).** The 6 custom
+**COMPLETE 2026-09-19 (Tim signed off).** The 6 custom patterns were captured, mapping CONFIRMED (via the
+ordered UI screenshot), push-protection CONFIRMED ON for all 6, and reviewed with Tim. Regexes are in the
+PRIVATE SSOT capture `nixcfg-work/.session-state/plan-058-t1-custom-patterns.md` (audience-appropriate; NOT in
+this public file). **Decision: keep the two broad tokens (`\bpac\b`, `\bhsw\b`) UNCHANGED** — a measurement
+against public nixcfg found 0 Intel-Haswell hits and ~100% true-positive internal matches, so narrowing would
+only add false negatives. Two follow-ups were spun out to **T11**: (a) `nextcloud.aero` is an internal domain
+NOT in the 6 patterns (pattern-gap; audit for more), and (b) public nixcfg already contains substantial
+internal-identifier exposure (panasonic.aero ×38, hsw ×38, pac ×18, converix ×16, nextcloud.aero ×17) in
+tracked docs — remediation + enforcement handed to T11. Canonical version-controlled SSOT placement + how the
+local mirror consumes it are finalized in **T2**.
+_(Original capture notes:)_ The 6 custom
 patterns are **enterprise-level** secret-scanning custom patterns (org `pattern_configurations?tab=custom`
 only toggles push-protection and 404s on click; the definitions live at the enterprise, inherited by the org)
 — so the **enterprise is the authoritative source** (affects T4's drift-guard target). Categories: Corporate
@@ -211,7 +226,7 @@ to instead restrict the whole plan to the private repo. Apply the convention to 
 super-plan) as the worked example.
 **DoD:** policy documented in an audience-appropriate location; 052 restructured or annotated to conform; Present/STOP.
 
-### T10 — Record the central-plans-repo alternative (considered & superseded) `TASK:IN_PROGRESS`
+### T10 — Record the central-plans-repo alternative (considered & superseded) `TASK:COMPLETE`
 Short ADR / design note capturing: the proposal (one separate repo holding all plans, referenced by all sessions
 with global r/w), its pros (single browsable source, branch-decoupled, natural cross-repo home), and the reasons it
 was superseded by the kyosaku-kai approach (reintroduces out-of-cwd write-permission friction, splits plan↔code
@@ -224,7 +239,34 @@ active-plan` means it can still be adopted later for a narrow case without re-ar
 the analysis, and why it is superseded by repo-remote-as-audience-boundary + co-located plans (preserves
 plan↔code atomicity + audit trail; avoids reintroducing out-of-cwd write friction 057 escaped; reuses
 kyosaku-kai server enforcement; keeps public plans public). Notes it is reversible via `.session-state/active-plan`
-absolute-path support. No code change (DoD met). Present/STOP before COMPLETE (ADR artifact).
+absolute-path support. No code change (DoD met). **COMPLETE 2026-09-19 (Tim signed off).**
+
+---
+
+### T11 — Scrub nixcfg of internal-identifier exposure + enforce going forward `TASK:PENDING`
+Depends on T1 (SSOT patterns; coordinate with T3 mirror, T5 kyosaku-kai move, T6 attribution scrub, T7
+consumer repoint). Surfaced by T1's measurement: public nixcfg already contains substantial internal-identifier
+exposure in tracked docs (panasonic.aero ×38, hsw ×38, pac ×18, converix ×16, nextcloud.aero ×17). Two parts:
+
+1. **Remediate existing exposure — working tree AND full history.** Inventory every internal-identifier hit
+   across the entire nixcfg git history (not just HEAD) using the T1 SSOT patterns PLUS audited additions
+   (start with `nextcloud.aero`; sweep for other internal domains/hosts/codenames). Redact/remove from the
+   working tree; scrub history with `git filter-repo` (or BFG) so NO commit in any ref contains them. History
+   rewrite ⇒ force-push ⇒ breaks the nixcfg-work `flake.lock` pin + any consumers → do it in ONE pass with the
+   T6 AI-attribution scrub, then T7 repoints consumers. Tim-authorized (irreversible, force-push).
+2. **Enforce going forward on nixcfg.** Determine the strongest available server-side enforcement for the repo
+   and implement it: GitHub free secret-scanning + push-protection cover PROVIDER patterns on public repos, but
+   CUSTOM patterns typically require GHAS/an org — so verify whether custom patterns/push-protection are
+   available on a PERSONAL public repo. If not, that is a decisive argument for T5's "move nixcfg into
+   kyosaku-kai" (which brings the org's server-side custom push rules). Regardless of the server outcome, the
+   058 local mirror (T3) MUST be active on nixcfg as the client-side backstop, scoped so it enforces on
+   public-destined content.
+
+**DoD:** (a) a history+tree scan (`git filter-repo --analyze` or `git log -p --all | rg -f <patterns>`) returns
+ZERO internal-identifier hits across nixcfg, OR an explicit recorded deferral with rationale; (b) the missing
+patterns (nextcloud.aero + audit result) are added to the enterprise SSOT; (c) a recorded enforcement decision
+for nixcfg (personal-repo custom patterns available? if not → kyosaku-kai move per T5) with the local mirror
+confirmed active. Interactive (force-push authorization) — USER_INPUT_REQUIRED under headless. Present/STOP.
 
 ---
 
