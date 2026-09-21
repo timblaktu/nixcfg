@@ -271,6 +271,11 @@ confirmed active. Interactive (force-push authorization) — USER_INPUT_REQUIRED
 ---
 
 ## Notes / open items (context, not tasks)
+- **Rescued main WIP → `salvage/main-wip` (local, unpushed, 2026-09-21; worktree `~/src/nixcfg-salvage`).**
+  Uncommitted work found loose on nixcfg `main` was moved to a branch off `c9d0c10` so main could fast-forward
+  cleanly. It CONTAINS corp-internal identifiers, so it must NOT be pushed as-is — split it (generic bits →
+  public nixcfg; corp bits → nixcfg-work private) before any push. Same class as T11; the branch commit
+  self-documents the contents.
 - **Relationship to 057:** 057 (working-tree layout: `user-plans/` + `.session-state/`, plus the plan-056 hook set)
   is the substrate and is unaffected. Finish 057 first (its T4/T5/T6 remain). 058 flips 057's *default posture* and
   adds enforcement; it does not undo 057.
