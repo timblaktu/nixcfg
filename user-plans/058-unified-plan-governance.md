@@ -118,6 +118,7 @@ live in that context. Tracking must never outrun enforcement.
 | T9 | **Cross-audience plan policy (the 052 pattern).** Define + document the convention for plans that span public + internal (public shell + private detail split, or restrict-to-private). Apply it to plan 052 as the worked example. | policy (artifact → Present/STOP) | T2 | TASK:PENDING |
 | T10 | **Record the central-plans-repo alternative as considered-and-superseded** (short ADR / design note capturing the analysis + why kyosaku-kai supersedes it). | doc | — | TASK:COMPLETE (2026-09-19) |
 | T11 | **Scrub nixcfg of internal-identifier exposure (history + working tree) AND add going-forward enforcement so no more leaks land.** Inventory + remediate every internal-identifier hit in nixcfg across the FULL git history and the working tree (T1 SSOT patterns + audited additions — specifics in the private capture); then stand up the strongest available enforcement on nixcfg (personal-repo secret-scanning/push-protection where possible, else the T3 local mirror + the T5 move-to-kyosaku-kai option). | migration + impl (Interactive — history rewrite/force-push, auth/irreversible) | T1, T6 (coord. T3, T5, T7) | TASK:PENDING |
+| T12 | **Split & clean the `salvage/main-wip` rescue branch.** The rescued uncommitted-on-main WIP mixes GENERIC content (a session command, generic Jira wiki-markup + ADR guidance) with CORP-internal content (an org ADR standard, ticket conventions, an SCM MR gate). Split it: generic → public nixcfg (proper commit/PR); corp-specific → nixcfg-work (private). RECREATE clean commits (new history) — never push `salvage/main-wip` as-is: its FILES **and its commit message** carry internal identifiers. | cleanup (Interactive — generic-vs-corp judgment) | — | TASK:PENDING |
 
 ---
 
@@ -268,14 +269,28 @@ patterns (the pattern-gap domain + audit result, per the private capture) are ad
 for nixcfg (personal-repo custom patterns available? if not → kyosaku-kai move per T5) with the local mirror
 confirmed active. Interactive (force-push authorization) — USER_INPUT_REQUIRED under headless. Present/STOP.
 
+### T12 — Split & clean the `salvage/main-wip` rescue branch `TASK:PENDING`
+No hard deps (thematically related to T11/T3; the generic-vs-corp boundary is informed by T2, but this can run
+independently). Context: uncommitted work found loose on nixcfg `main` (2026-09-21) was rescued to the local,
+unpushed branch `salvage/main-wip` (worktree `~/src/nixcfg-salvage`, commit `474f878`) so main could
+fast-forward. It mixes:
+- **Generic (→ public nixcfg):** the `/closesess` session command; generic Jira wiki-markup escaping guidance;
+  generic ADR-template tweaks.
+- **Corp-internal (→ nixcfg-work private):** an org-specific ADR standard, internal ticket/branch conventions,
+  and an SCM `build_team` MR-gate doc — all carrying internal identifiers.
+**DoD:** the generic parts land in public nixcfg as fresh, identifier-clean commits (a scan of the new commits
+returns ZERO internal-identifier hits); the corp parts land in nixcfg-work (private); the `salvage/main-wip`
+branch is deleted afterward. CRITICAL: build NEW commits — do NOT `git push` or cherry-pick `salvage/main-wip`
+as-is, because both its file contents AND its commit message contain internal identifiers, so pushing the
+branch (or its history) would leak. Present/STOP before COMPLETE.
+
 ---
 
 ## Notes / open items (context, not tasks)
 - **Rescued main WIP → `salvage/main-wip` (local, unpushed, 2026-09-21; worktree `~/src/nixcfg-salvage`).**
   Uncommitted work found loose on nixcfg `main` was moved to a branch off `c9d0c10` so main could fast-forward
   cleanly. It CONTAINS corp-internal identifiers, so it must NOT be pushed as-is — split it (generic bits →
-  public nixcfg; corp bits → nixcfg-work private) before any push. Same class as T11; the branch commit
-  self-documents the contents.
+  public nixcfg; corp bits → nixcfg-work private) before any push. **Tracked as T12.**
 - **Relationship to 057:** 057 (working-tree layout: `user-plans/` + `.session-state/`, plus the plan-056 hook set)
   is the substrate and is unaffected. Finish 057 first (its T4/T5/T6 remain). 058 flips 057's *default posture* and
   adds enforcement; it does not undo 057.
