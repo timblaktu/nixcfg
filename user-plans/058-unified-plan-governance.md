@@ -126,9 +126,9 @@ live in that context. Tracking must never outrun enforcement.
 ### T1 — Enumerate & canonicalize the server-side push rules `TASK:COMPLETE`
 
 **COMPLETE 2026-09-19 (Tim signed off).** The 6 custom patterns were captured, mapping CONFIRMED (via the
-ordered UI screenshot), push-protection CONFIRMED ON for all 6, and reviewed with Tim. Regexes are in the
-PRIVATE SSOT capture `nixcfg-work/.session-state/plan-058-t1-custom-patterns.md` (audience-appropriate; NOT in
-this public file). **Decision: keep the two broad tokens (`\bpac\b`, `\bhsw\b`) UNCHANGED** — a measurement
+ordered UI screenshot), push-protection CONFIRMED ON for all 6, and reviewed with Tim. The 6 regexes are verified verbatim (Tim paste 2026-09-21 —
+exact match to the screenshot capture, 0 discrepancies) and committed to the version-controlled PRIVATE SSOT
+`nixcfg-work/docs/governance/plan-058-secret-scanning-ssot.md` (audience-appropriate; NOT in this public file). **Decision: keep the two broad tokens (`\bpac\b`, `\bhsw\b`) UNCHANGED** — a measurement
 against public nixcfg found 0 Intel-Haswell hits and ~100% true-positive internal matches, so narrowing would
 only add false negatives. Two follow-ups were spun out to **T11**: (a) at least one internal
 domain is NOT covered by the 6 patterns (a pattern-gap), and (b) public nixcfg already contains substantial
