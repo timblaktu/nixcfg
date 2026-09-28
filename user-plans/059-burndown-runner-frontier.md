@@ -54,7 +54,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T1 | Rebase on origin/main; extract shared frontier prompt | TASK:COMPLETE | (2026-09-28) | |
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:COMPLETE | (2026-09-28) | |
 | T3 | Per-layer stop-on-failure semantics | TASK:IN_PROGRESS | | |
-| T4 | Per-layer event journal + save_state | TASK:PENDING | | |
+| T4 | Per-layer event journal + save_state | TASK:IN_PROGRESS | | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:PENDING | | |
 | T6 | Update help text + Burndown Contract docs | TASK:PENDING | | |
 | T7 | Validation: flake check, switch, e2e layer burndown | TASK:PENDING | | |
@@ -156,7 +156,7 @@ ENVIRONMENT_NOT_CAPABLE, USER_INPUT_REQUIRED, ALL_TASKS_DONE) but interpreted pe
 **DoD:** with a seeded failing task among independents, `--on-failure stop` halts and leaves exactly the
 failing task `IN_PROGRESS` while the independents that finished remain COMPLETE; HANDOFF.md records it.
 
-### T4 - Per-layer event journal + save_state `TASK:PENDING`
+### T4 - Per-layer event journal + save_state `TASK:IN_PROGRESS`
 Depends on T2.
 Update `append_event`/`save_state` so each iteration records a per-LAYER transition (layer outcome,
 count of tasks completed in the layer, HEAD before/after the whole layer). Document in-code that
