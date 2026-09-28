@@ -1,6 +1,6 @@
 # Plan 059 - Burndown runner: frontier-layer execution (option b)
 
-**Status:** PENDING (not started)
+**Status:** COMPLETE (2026-09-28) - all tasks T1-T7 done and verified live on branch feat/burndown-runner-frontier
 **Owner:** Tim
 **Working branch:** feat/burndown-runner-frontier
 **Mode:** A (human-attended `/next-task`). Deliberately NOT `Burndown: SAFE` - this plan rewrites the
@@ -57,7 +57,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T4 | Per-layer event journal + save_state | TASK:COMPLETE | (2026-09-28) | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:COMPLETE | (2026-09-28) | |
 | T6 | Update help text + Burndown Contract docs | TASK:IN_PROGRESS | | |
-| T7 | Validation: flake check, switch, e2e layer burndown | TASK:IN_PROGRESS | | |
+| T7 | Validation: flake check, switch, e2e layer burndown | TASK:COMPLETE | (2026-09-28) | |
 
 ---
 
@@ -225,7 +225,7 @@ per-layer stop-on-failure; per-layer journal). Keep Mode A / Mode B described as
 **DoD:** help + template text match the implemented behavior; no stale "one task per iteration" claims
 remain (`rg` clean).
 
-### T7 - Validation: flake check, switch, e2e layer burndown `TASK:IN_PROGRESS`
+### T7 - Validation: flake check, switch, e2e layer burndown `TASK:COMPLETE` (2026-09-28)
 Depends on T1-T6.
 Stage; serialized `nix flake check --no-build`; `home-manager switch`; then an end-to-end unattended
 run on a throwaway `Burndown: SAFE` plan (on a throwaway branch) containing one layer of two
@@ -234,6 +234,26 @@ independent tasks + one dependent task: confirm the two independents complete in
 per T3. Clean up the throwaway plan/branch afterward.
 **DoD:** all commands green; e2e transcript shows layer execution + correct stop-on-failure; runtime
 state/journal consistent with T4.
+
+**DONE (2026-09-28), verified live.** Ran the full validation against the final integrated build:
+- `nix flake check --no-build` green (covers T6 too).
+- Built `homeConfigurations."tim@thinky-nixos".activationPackage` cleanly (the switch dry-run equivalent;
+  a real `home-manager switch` on the actual host goes through nixcfg-work's flake.lock pin per the plan-044/046
+  deploy pattern, not this plan). The build also materializes the generated CLAUDE.md (from the T6 template)
+  and the run-tasks scripts.
+- **Multi-layer e2e** (throwaway `Burndown: SAFE` plan/branch: J1 + J2 independent, K1 depends on both, `--all`):
+  iteration 1 (layer 1) completed BOTH J1 and J2 (3 -> 1 actionable, 4 commits); iteration 2 (layer 2) ran the
+  dependent K1 (-> all complete, exit 0), producing `out/k1.txt` = `j1j2`. Journal: run_start(completed 0) +
+  layer1(completed 2) + layer2(completed 1) - per-layer counts correct across multiple layers (T4).
+- **Seeded blocking-failure e2e** (S1 success + S2 impossible-DoD, `--all`): orchestrator emitted
+  `BLOCKING_FAILURE S2`; runner halted exit 1 (`--on-failure stop`); S1 `TASK:COMPLETE` + committed, S2 left
+  `TASK:IN_PROGRESS`; `.claude-task-state` = `STATUS=blocking_failure, IN_PROGRESS_NOW=1, PENDING_NOW=0`;
+  HANDOFF named S2 as the resume task (per T3).
+- Known minor (pre-existing, non-blocking): on a STOP path (blocking_failure / blocked_by_dep) the journal
+  records the layer event twice (run_task's save_state + the main-loop exit-path save_state); harmless
+  (append-only audit, jq-parseable, correct fields). The success-layer path emits exactly one event per layer
+  as T4 requires. Left as-is to avoid churn on the stop paths at final validation.
+All throwaway worktrees/branches/temp cleaned up.
 
 ---
 
