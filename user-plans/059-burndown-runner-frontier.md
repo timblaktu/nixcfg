@@ -56,7 +56,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T3 | Per-layer stop-on-failure semantics | TASK:COMPLETE | (2026-09-28) | |
 | T4 | Per-layer event journal + save_state | TASK:COMPLETE | (2026-09-28) | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:COMPLETE | (2026-09-28) | |
-| T6 | Update help text + Burndown Contract docs | TASK:IN_PROGRESS | | |
+| T6 | Update help text + Burndown Contract docs | TASK:COMPLETE | (2026-09-28) | |
 | T7 | Validation: flake check, switch, e2e layer burndown | TASK:COMPLETE | (2026-09-28) | |
 
 ---
@@ -217,13 +217,24 @@ reported "Remaining frontier blocked by incomplete dependencies" and exited 0 af
 (a completable layer reached all-done in one iteration) and gets multi-layer, dependent-sequencing
 re-confirmation in T7. `nix flake check --no-build` green.
 
-### T6 - Update help text + Burndown Contract docs `TASK:IN_PROGRESS`
+### T6 - Update help text + Burndown Contract docs `TASK:COMPLETE` (2026-09-28)
 Depends on T2-T5.
 Update the `usage()` help, inline comments, and the "Unattended Burndown Contract" section of
 `claude-code-user-memory-template.md` to describe layer-based Mode B (fans out independent tasks;
 per-layer stop-on-failure; per-layer journal). Keep Mode A / Mode B described as parity.
 **DoD:** help + template text match the implemented behavior; no stale "one task per iteration" claims
 remain (`rg` clean).
+
+**DONE (2026-09-28), verified.** Updated `task-automation.nix`: the file-header comment, `usage()` help (new
+"Execution model" section; `-n`/`-a` documented as layers; `--task` as the single-task escape hatch;
+`--on-failure` and Observability described per-layer with the `completed` field; Examples reworded), the zsh/bash
+completion descriptions for `-n`/`-a`/`--all`, the `run_task` docblock, and the `get_next_task_name`/`_model`
+comments (now "layer anchor"). Updated `claude-code-user-memory-template.md` "Unattended Burndown Contract": new
+layer-model / Mode A-B parity paragraph, per-layer `BLOCKING_FAILURE` wording in the taxonomy, and per-layer
+journal/artifact descriptions with the `completed` field. `rg` for stale driver claims is clean (the one
+remaining "per task, not per batch" hit is the Mode-A per-task-outcome rule, still true under the layer model,
+not a stale driver claim). `nix-instantiate --parse` + `nixpkgs-fmt --check` clean; `nix flake check --no-build`
+green (with T7); the generated CLAUDE.md + `--help` output were materialized by the T7 activation-package build.
 
 ### T7 - Validation: flake check, switch, e2e layer burndown `TASK:COMPLETE` (2026-09-28)
 Depends on T1-T6.
