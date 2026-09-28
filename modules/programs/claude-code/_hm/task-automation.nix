@@ -1530,15 +1530,40 @@ let
           # code (3/5/6/8/9/...). Capture the code with `|| result=$?` so the case below can
           # dispatch it. (Before plan-045 T2 the collapsed `return` bug made run_task always
           # return 0, which is why this guard was not previously needed.)
+          # Progress snapshot for the layer-model termination guard (plan 059 T5): capture the actionable
+          # count and HEAD before the orchestrator invocation, so the case below can tell whether this layer
+          # actually made progress (a task reached COMPLETE -> actionable drops, or a commit landed -> HEAD
+          # moves). Used to clean-exit a stalled or wholly-blocked frontier instead of spinning.
+          iter_actionable_before=$(actionable_count)
+          iter_head_before=$(git_head)
+
           result=0
           run_task $task_counter $consecutive_rate_limits "$current_task_id" || result=$?
+
+          iter_actionable_after=$(actionable_count)
+          iter_head_after=$(git_head)
+          layer_made_progress=false
+          if [[ "$iter_actionable_after" -lt "$iter_actionable_before" || "$iter_head_after" != "$iter_head_before" ]]; then
+              layer_made_progress=true
+          fi
 
           case $result in
               0)  # Success
                   retries=0
                   consecutive_rate_limits=0
                   consecutive_blocked=0
-                  COMPLETED_COUNT=$((COMPLETED_COUNT + 1))  # a real COMPLETE (not just an iteration)
+                  if [[ "$layer_made_progress" == true ]]; then
+                      COMPLETED_COUNT=$((COMPLETED_COUNT + 1))  # a layer that actually advanced
+                  elif [[ "$MODE" == "all" || "$MODE" == "continuous" ]]; then
+                      # No-progress guard (plan 059 T5): under the layer model a successful iteration should
+                      # have cleared at least one task or moved HEAD. If a layer returns success but made NO
+                      # progress in a continuing mode, the frontier is stalled (e.g. everything remaining is
+                      # Interactive, or the orchestrator could do nothing without emitting a sentinel);
+                      # clean-exit rather than spin to the iteration limit. Not a failure.
+                      print_exit_summary "Frontier stalled (layer completed with no progress)" "$task_counter"
+                      save_state "$task_counter" "no_progress"
+                      exit 0
+                  fi
                   ;;
               2)  # Rate limited
                   task_counter=$((task_counter - 1))
@@ -1611,9 +1636,18 @@ let
                   fi
                   ;;
               10) # BLOCKED-BY-DEP - a declared dependency is not yet COMPLETE; NOT a failure.
-                  # Advance to the next actionable task. A wholly-blocked frontier (the agent keeps
-                  # reporting BLOCKED_BY_DEP with no progress) is bounded here so it can't spin forever.
                   consecutive_rate_limits=0
+                  # Layer-model termination (plan 059 T5): the orchestrator evaluated the WHOLE frontier this
+                  # invocation. If the blocked layer made NO progress, the remaining frontier is wholly
+                  # dep-blocked and re-invoking cannot help - clean-exit now (not a failure) instead of
+                  # spinning. If it DID make progress (cleared some, only the remainder is blocked), continue:
+                  # the next layer may be newly actionable. The consecutive-block bound stays as a backstop
+                  # against a pathological blocked-with-progress loop.
+                  if [[ "$layer_made_progress" == false ]]; then
+                      print_exit_summary "Remaining frontier blocked by incomplete dependencies" "$task_counter"
+                      save_state "$task_counter" "blocked_by_dep"
+                      exit 0
+                  fi
                   consecutive_blocked=$((consecutive_blocked + 1))
                   if [[ $consecutive_blocked -ge $MAX_RETRIES ]]; then
                       print_exit_summary "Remaining tasks blocked by incomplete dependencies" "$task_counter"
