@@ -51,7 +51,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
-| T1 | Rebase on origin/main; extract shared frontier prompt | TASK:PENDING | | |
+| T1 | Rebase on origin/main; extract shared frontier prompt | TASK:IN_PROGRESS | 2026-09-28 | |
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:PENDING | | |
 | T3 | Per-layer stop-on-failure semantics | TASK:PENDING | | |
 | T4 | Per-layer event journal + save_state | TASK:PENDING | | |
@@ -63,7 +63,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 
 ## Tasks
 
-### T1 - Rebase on origin/main; extract shared frontier prompt `TASK:PENDING`
+### T1 - Rebase on origin/main; extract shared frontier prompt `TASK:IN_PROGRESS`
 Depends on: `feat/cc-context-fixes` merged - SATISFIED (`origin/main` @ `2f2edb3`).
 First `git fetch origin`, then rebase this branch onto **`origin/main`** (NOT local `main`, which is
 stale at `c9d0c10`) so the concurrent-frontier `nextTaskMd` (change 2) is present. Then
