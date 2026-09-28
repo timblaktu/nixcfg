@@ -1054,15 +1054,26 @@ let
               model_flag="--model $model_to_use"
           fi
 
-          # Single-line compact header: [N/total] TASK @ TIME (logs: basename)
+          # Single-line compact header (plan 059 T2 - layer model). Default (no --task) = a frontier
+          # LAYER: this ONE invocation launches an orchestrating claude -p that clears every
+          # independent actionable task this iteration (fans out sub-agents, commits each task, edits
+          # the plan TASK markers itself); the next iteration re-reads the plan for the newly-unblocked
+          # layer. With --task it is a single targeted task. task_name is the log-file anchor either way
+          # (the first actionable row); run_kind labels which mode this invocation is.
+          local run_kind="task"
+          [[ -z "$target_task_id" ]] && run_kind="frontier layer"
           if [[ -n "$model_to_use" ]]; then
-              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${actionable_before} actionable)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC} ''${YELLOW}[model: ''${model_to_use}]''${NC}"
+              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} (''${run_kind}) @ $(date '+%H:%M:%S') ''${YELLOW}(''${actionable_before} actionable)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC} ''${YELLOW}[model: ''${model_to_use}]''${NC}"
           else
-              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} @ $(date '+%H:%M:%S') ''${YELLOW}(''${actionable_before} actionable)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC}"
+              echo -e "''${GREEN}[''${iteration}] ''${CYAN}''${task_name}''${NC} (''${run_kind}) @ $(date '+%H:%M:%S') ''${YELLOW}(''${actionable_before} actionable)''${NC} ''${BLUE}→ ''${log_base##*/}.*''${NC}"
           fi
 
           if [[ "$DRY_RUN" == true ]]; then
-              echo -e "  ''${YELLOW}[DRY RUN] Would execute: $CLAUDE_CMD -p $model_flag ...''${NC}"
+              if [[ -z "$target_task_id" ]]; then
+                  echo -e "  ''${YELLOW}[DRY RUN] Would launch ONE orchestrating $CLAUDE_CMD -p $model_flag over the whole frontier (shared frontier prompt)''${NC}"
+              else
+                  echo -e "  ''${YELLOW}[DRY RUN] Would execute: $CLAUDE_CMD -p $model_flag for task $target_task_id''${NC}"
+              fi
               return 0
           fi
 
@@ -1318,13 +1329,19 @@ let
           preview_task_model=""
           preview_model_source=""
           preview_effective_model=""
+          preview_scope=""
 
           if [[ -n "$TASK_ID" ]]; then
               preview_task_id="$TASK_ID"
               preview_task_model=$(get_task_model_by_id "$TASK_ID")
+              preview_scope="single task: $TASK_ID"
           else
               preview_task_id=$(get_next_task_name)
               preview_task_model=$(get_next_task_model)
+              # Default path is a frontier LAYER, not one row (plan 059 T2): the orchestrator clears
+              # every independent actionable task this iteration. Show that, and note the model is
+              # anchored on the first actionable row.
+              preview_scope="frontier layer ($INITIAL_ACTIONABLE actionable; model anchored on first row: $preview_task_id)"
           fi
 
           # Determine effective model
@@ -1340,7 +1357,7 @@ let
           fi
 
           echo -e "''${CYAN}Execution Preview:''${NC}"
-          echo "  Task ID:     $preview_task_id"
+          echo "  Scope:       $preview_scope"
           echo "  Model:       $preview_effective_model ($preview_model_source)"
           echo "  Claude cmd:  $CLAUDE_CMD"
           echo "  Event log:   $EVENTS_LOG"
@@ -1368,7 +1385,7 @@ let
               echo "  CLAUDE_BURNDOWN=1 $CLAUDE_CMD -p --output-format json --permission-mode bypassPermissions <prompt>"
           fi
           echo ""
-          echo -e "''${CYAN}Prompt (truncated):''${NC}"
+          echo -e "''${CYAN}Frontier prompt (truncated):''${NC}"
           echo "  ''${PROMPT:0:200}..."
           exit 0
       fi
@@ -1447,9 +1464,15 @@ let
 
           task_counter=$((task_counter + 1))
 
-          # Determine which task to run:
-          # - First iteration with --task: run the specific task
-          # - Subsequent iterations: run next actionable task (IN_PROGRESS > PENDING)
+          # Determine what this iteration runs (plan 059 T2 - layer model):
+          # - With --task on the first iteration: run that ONE specific task (single-task path,
+          #   deliberately unchanged - it stays per-task).
+          # - Otherwise: launch ONE orchestrating claude -p over the whole independent FRONTIER (a
+          #   layer). That single invocation clears every mutually-independent actionable task this
+          #   iteration - fanning out sub-agents, committing each task, and editing the plan TASK
+          #   markers itself (the shared frontier prompt in $PROMPT drives it). We no longer advance a
+          #   cursor one row per iteration; the next iteration simply re-reads the plan to pick up the
+          #   newly-unblocked layer. (Per-layer failure/journal/termination are refined in T3/T4/T5.)
           current_task_id=""
           if [[ -n "$TASK_ID" && "$specific_task_done" == false ]]; then
               current_task_id="$TASK_ID"

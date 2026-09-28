@@ -111,6 +111,35 @@ the plan `TASK:` markers; the loop then re-reads the plan to detect the next lay
 `--dry-run` echo (currently `"Would execute: $CLAUDE_CMD -p $model_flag ..."`) so it actually shows the
 frontier prompt per the DoD.
 
+**IMPLEMENTED (2026-09-28), minimal scope (Tim approved "minimal/honest"), pending COMPLETE sign-off.**
+Key finding: T1 already did more than the prompt half. Because T1 swapped the runner `PROMPT` to the
+shared `frontierPromptBody`, the default (non `--task`) path in `run_task` (`task_prompt="$PROMPT"`)
+ALREADY launches ONE orchestrating `claude -p` instructed to clear the whole independent frontier, and
+default `MODE=single` runs exactly one iteration. So the layer mechanism was in place after T1; T2's
+remaining work was to make the loop, labels, and both dry-run paths honestly reflect the layer model
+(no behavioral change). Edits (all in `task-automation.nix`, four scoped regions, verified against the
+Nix indented-string hazard):
+- `run_task` header: added `run_kind` ("frontier layer" when no `--task`, else "task") so the per-iteration
+  line reads as a layer clear, not a single row; updated the (belt-and-suspenders) `run_task` dry-run echo
+  to describe launching one orchestrator over the whole frontier vs a single `--task` execution.
+- Top-level `--dry-run` preview: replaced the single `Task ID:` line with a `Scope:` line that reads
+  `frontier layer (N actionable; model anchored on first row: X)` for the default path and
+  `single task: <id>` for `--task`; relabeled the prompt preview to `Frontier prompt (truncated)`.
+- Main-loop task-selection comment: rewritten to document the layer model (one orchestrator over the
+  whole frontier per iteration; `--task` stays single-task; next iteration re-reads the plan for the
+  newly-unblocked layer; per-layer failure/journal/termination deferred to T3/T4/T5).
+The single-task `--task` path is deliberately unchanged (stays per-task) per the impl note.
+
+**Validated:** `nix-instantiate --parse` OK; `nixpkgs-fmt --check` clean; scoped `diff` shows only the four
+intended regions; `nix flake check --no-build` green (all checks passed); built `run-tasks-max` from
+`homeConfigurations."tim@thinky-nixos"`, `bash -n` clean; dry-run against a two-independent-task test plan
+renders `Scope: frontier layer (2 actionable; model anchored on first row: A1)` and the frontier prompt
+intro (DoD half 1 met), and `--task A2 --dry-run` renders `Scope: single task: A2`.
+**DoD half 2 (a live real iteration completing BOTH with two commits) is deferred to T7 by design** (T7 is
+the end-to-end unattended run on a throwaway `Burndown: SAFE` plan/branch); performing an autonomous
+`bypassPermissions` burndown now would be out of T2 scope. The mechanism that makes it true is in place
+and demonstrated via dry-run; T7 exercises it live.
+
 ### T3 - Per-layer stop-on-failure semantics `TASK:PENDING`
 Depends on T2.
 Define how the orchestrating invocation signals a layer-level blocking failure (e.g. emits
