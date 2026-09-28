@@ -54,7 +54,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T1 | Rebase on origin/main; extract shared frontier prompt | TASK:COMPLETE | (2026-09-28) | |
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:COMPLETE | (2026-09-28) | |
 | T3 | Per-layer stop-on-failure semantics | TASK:COMPLETE | (2026-09-28) | |
-| T4 | Per-layer event journal + save_state | TASK:IN_PROGRESS | | |
+| T4 | Per-layer event journal + save_state | TASK:COMPLETE | (2026-09-28) | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:PENDING | | |
 | T6 | Update help text + Burndown Contract docs | TASK:PENDING | | |
 | T7 | Validation: flake check, switch, e2e layer burndown | TASK:PENDING | | |
@@ -170,7 +170,7 @@ F1)`, halted with exit 1; final plan state was G1 `TASK:COMPLETE` (committed, `o
 `TASK:IN_PROGRESS`; `.session-state/HANDOFF.md` named F1 as the resume task and recorded the blocking-failure
 stop reason. `nix flake check --no-build` green. Throwaway artifacts cleaned up.
 
-### T4 - Per-layer event journal + save_state `TASK:IN_PROGRESS`
+### T4 - Per-layer event journal + save_state `TASK:COMPLETE` (2026-09-28)
 Depends on T2.
 Update `append_event`/`save_state` so each iteration records a per-LAYER transition (layer outcome,
 count of tasks completed in the layer, HEAD before/after the whole layer). Document in-code that
@@ -178,6 +178,19 @@ per-task commit attribution now lives in the orchestrator's report and the plan-
 the external journal.
 **DoD:** `events.jsonl` after a multi-task layer shows one run_start + one event per layer with correct
 `head_moved` and a completed-count; `jq` parses it; comment explains the granularity shift.
+
+**DONE (2026-09-28), verified live.** Edits in `task-automation.nix`: added a `complete_count()` helper and an
+`EVENT_COMPLETE_BEFORE` global captured at the layer start (in `run_task`) and at the `run_start` marker;
+`append_event` now emits a `completed` field (`complete_count` now minus the layer-start count, clamped `>= 0`)
+alongside the existing per-layer HEAD `sha_before`/`sha_after`/`head_moved`. Updated the `EVENTS_LOG` header
+comment and the `append_event` comment to document the granularity shift: one non-run_start line = one LAYER
+(the orchestrator clears the whole frontier per invocation), and per-TASK commit attribution now lives in the
+orchestrator's report + the plan-file `TASK:` edits, not this journal (the `task` field is just the layer's
+first-actionable-row anchor for a human label). **e2e (two independent tasks J1/J2, one layer):** `events.jsonl`
+parsed by `jq` showed exactly `{iteration:0, status:run_start, completed:0, head_moved:false}` then
+`{iteration:1, task:J1, status:all_complete, completed:2, head_moved:true}`. Cross-validated in the T3 failure
+e2e: the layer event recorded `completed:1` (G1 done before the F1 failure), `status:blocking_failure`,
+`head_moved:true`. `nix flake check --no-build` green.
 
 ### T5 - Loop termination: progress vs all-done vs blocked `TASK:PENDING`
 Depends on T2, T3.
