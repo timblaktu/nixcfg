@@ -252,10 +252,13 @@ let
       # Configurable defaults (from Nix options)
       LOG_DIR="${taskCfg.logDirectory}"
       STATE_FILE="${taskCfg.stateFile}"
-      # Per-run append-only event journal (plan-045 T6): one JSONL line per task
-      # transition, recording the outcome bucket and the commit SHA the task produced
-      # (HEAD before -> after). Durable across runs (delimited by run_start markers) so a
-      # partial burndown can be inspected and resumed. Inspect with:
+      # Per-run append-only event journal (plan-045 T6; granularity shifted per-LAYER in plan 059 T4).
+      # Each non-run_start line now records one LAYER transition, not one task: an iteration launches ONE
+      # orchestrating claude -p that clears the whole independent frontier, so a line captures the layer's
+      # outcome bucket, how many tasks reached COMPLETE during the layer (completed), and the commit SHA
+      # span for the whole layer (HEAD before -> after, head_moved). Per-TASK commit attribution now lives
+      # in the orchestrator's own report and the plan-file TASK edits, NOT this external journal. Durable
+      # across runs (delimited by run_start markers) so a partial burndown can be inspected and resumed:
       #   jq -c . "''${LOG_DIR}/events.jsonl"   (see the plan's "Inspect & resume" runbook)
       EVENTS_LOG="''${LOG_DIR}/events.jsonl"
       DELAY_BETWEEN_TASKS=${toString taskCfg.safetyLimits.delayBetweenTasks}
@@ -300,6 +303,9 @@ let
       # SHA) the agent's autonomous commit advanced the branch for that task.
       EVENT_TASK_NAME="-"
       EVENT_HEAD_BEFORE=""
+      # Completed-row count captured at the layer start (plan 059 T4), so append_event can record how
+      # many tasks reached COMPLETE during the orchestrator invocation (complete_count now - then).
+      EVENT_COMPLETE_BEFORE="0"
 
       # Count of tasks that actually reached COMPLETE (return 0), as distinct from
       # task_counter (loop iterations attempted). A blocking failure increments the
@@ -526,6 +532,12 @@ let
           ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:(PENDING|IN_PROGRESS)\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
       }
 
+      # Count of rows already marked done (plan 059 T4). The per-layer event journal compares this
+      # before/after an orchestrator invocation to record how many tasks the layer completed.
+      complete_count() {
+          ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:COMPLETE\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
+      }
+
       # Extract task ID/name from the next actionable row in the plan file
       # Priority: IN_PROGRESS first (resume unfinished work), then PENDING
       # Returns a sanitized name safe for use in filenames (no /, :, or spaces)
@@ -587,10 +599,13 @@ let
           ${pkgs.git}/bin/git rev-parse --short HEAD 2>/dev/null || echo ""
       }
 
-      # Append one JSONL event to the per-run journal (plan-045 T6). Records the outcome
-      # bucket (status), the task, the iteration, and the commit SHA before/after the task
-      # so every transition - and every commit it produced - is durably auditable.
-      #   $1 = status (outcome bucket)   $2 = task name   $3 = iteration
+      # Append one JSONL event to the per-run journal (plan-045 T6; per-LAYER in plan 059 T4). Records the
+      # outcome bucket (status), how many tasks the layer completed (completed = complete_count now minus
+      # the count captured at layer start), and the commit SHA span for the whole layer (before/after +
+      # head_moved) so each layer transition is durably auditable. The `task` field is the layer's anchor
+      # (first actionable row) for a human-readable label only; per-TASK commit attribution lives in the
+      # orchestrator's report and the plan-file TASK edits, not here.
+      #   $1 = status (outcome bucket)   $2 = task/layer anchor   $3 = iteration
       # Best-effort: a journal-write failure never aborts the run.
       append_event() {
           local ev_status="$1" ev_task="''${2:--}" ev_iter="''${3:-0}"
@@ -599,6 +614,11 @@ let
           if [[ -n "$EVENT_HEAD_BEFORE" && -n "$sha_after" && "$EVENT_HEAD_BEFORE" != "$sha_after" ]]; then
               moved=true
           fi
+          # Tasks that reached COMPLETE during this layer (clamped at >= 0 so a plan edit that removes a
+          # completed row can never emit a negative count).
+          local complete_now; complete_now="$(complete_count)"
+          local completed=$(( complete_now - EVENT_COMPLETE_BEFORE ))
+          [[ $completed -lt 0 ]] && completed=0
           ${pkgs.coreutils}/bin/mkdir -p "$LOG_DIR" 2>/dev/null || return 0
           ${pkgs.jq}/bin/jq -cn \
               --arg ts "$(date -Iseconds)" \
@@ -608,7 +628,8 @@ let
               --arg sha_before "$EVENT_HEAD_BEFORE" \
               --arg sha_after "$sha_after" \
               --argjson moved "$moved" \
-              '{ts:$ts, iteration:$iter, task:$task, status:$status, sha_before:$sha_before, sha_after:$sha_after, head_moved:$moved}' \
+              --argjson completed "$completed" \
+              '{ts:$ts, iteration:$iter, task:$task, status:$status, completed:$completed, sha_before:$sha_before, sha_after:$sha_after, head_moved:$moved}' \
               >> "$EVENTS_LOG" 2>/dev/null || true
       }
 
@@ -1042,6 +1063,7 @@ let
           # agent produces (HEAD before -> after) and tag it with the right task name.
           EVENT_TASK_NAME="$task_name"
           EVENT_HEAD_BEFORE="$(git_head)"
+          EVENT_COMPLETE_BEFORE="$(complete_count)"  # layer-start completed count (plan 059 T4)
 
           local timestamp=$(date +"%Y%m%d_%H%M%S")
           # Log file naming: LOG_DIR/YYYYMMDD_HHMMSS_TASKNAME.{log,json}
@@ -1440,6 +1462,7 @@ let
       # run from prior ones in the durable, append-only events.jsonl and records the starting
       # HEAD + plan + branch + failure policy so a partial burndown is fully reconstructable.
       EVENT_HEAD_BEFORE="$(git_head)"
+      EVENT_COMPLETE_BEFORE="$(complete_count)"  # so the run_start marker records completed=0 (plan 059 T4)
       append_event "run_start" "-" "0"
 
       # Trap Ctrl+C (the EXIT trap above also fires on this path's `exit 130`, writing HANDOFF.md)
