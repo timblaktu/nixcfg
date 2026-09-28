@@ -6,17 +6,13 @@ let
   cfg = config.programs.claude-code;
   taskCfg = cfg.taskAutomation;
 
-  # Slash command for interactive task execution
-  nextTaskMd = ''
-    Read the plan file specified below (or, if not specified, resolve it via the PLAN SELECTION
-    precedence: the .session-state/active-plan pointer first, then CLAUDE.md auto-detection),
-    then find and execute the ACTIONABLE FRONTIER of tasks in the Progress Tracking table using
-    the policy below. Independent tasks run concurrently; only genuinely dependent tasks are
-    serialized. Document findings in each task's section, update each task's status with today's
-    date, commit each task's changes, and report every task's outcome.
-
-    Plan file: $ARGUMENTS
-
+  # Shared frontier orchestration policy (plan 059 T1). SINGLE SOURCE OF TRUTH for the
+  # ACTIONABLE-FRONTIER execution policy, reused VERBATIM by BOTH Mode A (the /next-task slash
+  # command, `nextTaskMd`) and Mode B (the unattended runner's PROMPT) so the two modes stay
+  # identical by construction. Deliberately contains NO Nix antiquotation and NO indented-string
+  # close delimiter, so it embeds cleanly both in a Nix indented string AND in a single-quoted bash
+  # heredoc (where its literal " and $ characters need no escaping).
+  frontierPromptBody = ''
     ACTIONABLE FRONTIER (which tasks to run this invocation):
     1. FIRST resume: every task with status "TASK:IN_PROGRESS" is unfinished work - resume it.
     2. THEN all ready PENDING: every "TASK:PENDING" task whose declared dependencies
@@ -37,29 +33,6 @@ let
     - Completing a task: change its "TASK:IN_PROGRESS" to "TASK:COMPLETE" and add today's date.
     - A task already IN_PROGRESS: resume, then mark COMPLETE.
     - Each task's status edit + commit is its own; do not batch-commit unrelated tasks together.
-
-    PLAN SELECTION (when no plan file argument is provided):
-    FIRST, the explicit per-worktree pointer (highest precedence):
-    - If "$CLAUDE_PROJECT_DIR/.session-state/active-plan" exists and is non-empty, read the
-      first line: it names the active plan file path. Resolve it the same way the
-      SessionStart resume hook does: if the path is absolute (starts with "/") use it
-      as-is; otherwise resolve it relative to the worktree root "$CLAUDE_PROJECT_DIR".
-      If the resolved file exists, use that plan and SKIP auto-detection below.
-      (This is the "pull" half of plan 044's dual-channel resume: it works even when
-      the SessionStart hook's context injection silently fails. The pointer wins
-      because it was set deliberately for this worktree.)
-
-    OTHERWISE, fall back to CLAUDE.md auto-detection (no pointer, or it resolves to a
-    missing file):
-    1. Check the project's CLAUDE.md "Project Status" section for active plans with plan file paths
-    2. Prefer the plan with an IN_PROGRESS task (unfinished work from a previous session)
-    3. If multiple plans have IN_PROGRESS tasks: prefer the one with the most recent session
-       date in its progress table
-    4. If no IN_PROGRESS tasks: prefer the plan with the most recent session date among
-       PENDING tasks
-    5. If no dates in progress tables: use git log modification time of plan files as fallback
-       (rg "^\\| " file | ... or git log -1 --format=%ct -- <file>)
-    6. If still ambiguous: ask the user which plan to work on
 
     PER-TASK OUTCOMES (decide individually, never per-batch):
     IMPORTANT: If a frontier task is blocked because a declared dependency is not yet TASK:COMPLETE,
@@ -90,6 +63,45 @@ let
     If no IN_PROGRESS or PENDING tasks remain, output on its own line: ALL_TASKS_DONE
 
     IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response
+  '';
+
+  # Slash command for interactive task execution (Mode A). Wraps the shared frontier policy
+  # (frontierPromptBody) with interactive framing: $ARGUMENTS plan-file handling and the PLAN
+  # SELECTION precedence. The policy body below the PLAN SELECTION block is identical to Mode B's.
+  nextTaskMd = ''
+    Read the plan file specified below (or, if not specified, resolve it via the PLAN SELECTION
+    precedence: the .session-state/active-plan pointer first, then CLAUDE.md auto-detection),
+    then find and execute the ACTIONABLE FRONTIER of tasks in the Progress Tracking table using
+    the policy below. Independent tasks run concurrently; only genuinely dependent tasks are
+    serialized. Document findings in each task's section, update each task's status with today's
+    date, commit each task's changes, and report every task's outcome.
+
+    Plan file: $ARGUMENTS
+
+    PLAN SELECTION (when no plan file argument is provided):
+    FIRST, the explicit per-worktree pointer (highest precedence):
+    - If "$CLAUDE_PROJECT_DIR/.session-state/active-plan" exists and is non-empty, read the
+      first line: it names the active plan file path. Resolve it the same way the
+      SessionStart resume hook does: if the path is absolute (starts with "/") use it
+      as-is; otherwise resolve it relative to the worktree root "$CLAUDE_PROJECT_DIR".
+      If the resolved file exists, use that plan and SKIP auto-detection below.
+      (This is the "pull" half of plan 044's dual-channel resume: it works even when
+      the SessionStart hook's context injection silently fails. The pointer wins
+      because it was set deliberately for this worktree.)
+
+    OTHERWISE, fall back to CLAUDE.md auto-detection (no pointer, or it resolves to a
+    missing file):
+    1. Check the project's CLAUDE.md "Project Status" section for active plans with plan file paths
+    2. Prefer the plan with an IN_PROGRESS task (unfinished work from a previous session)
+    3. If multiple plans have IN_PROGRESS tasks: prefer the one with the most recent session
+       date in its progress table
+    4. If no IN_PROGRESS tasks: prefer the plan with the most recent session date among
+       PENDING tasks
+    5. If no dates in progress tables: use git log modification time of plan files as fallback
+       (rg "^\\| " file | ... or git log -1 --format=%ct -- <file>)
+    6. If still ambiguous: ask the user which plan to work on
+
+    ${frontierPromptBody}
   '';
 
   # Generate zsh completion for run-tasks-<account>
@@ -476,10 +488,22 @@ let
       # NOTE: the log directory is created AFTER the opt-in gate passes (see below), so a
       # gate refusal leaves no empty .claude-task-logs/ litter. (plan-045 polish)
 
-      # Build the prompt
-      # NOTE: Sentinel tokens (ALL_TASKS_DONE, ENVIRONMENT_NOT_CAPABLE) must appear on their own line
-      # for reliable detection - the script uses ^TOKEN anchored patterns to avoid false positives
-      PROMPT="Read ''${PLAN_FILE_ABS}, find the next actionable task in the Progress Tracking table. Priority: FIRST any task with status \"TASK:IN_PROGRESS\" (unfinished work, resume immediately), SECOND the first \"TASK:PENDING\" task not blocked by incomplete dependencies. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If no TASK:IN_PROGRESS or TASK:PENDING found, output on its own line: ALL_TASKS_DONE. IMPORTANT: If the only actionable task(s) are blocked because a declared dependency is not yet TASK:COMPLETE, do NOT attempt them; output on its own line: BLOCKED_BY_DEP followed by which dependency is incomplete. This is NOT a failure. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met (e.g., 'test the Nix-generated package' but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
+      # Build the prompt (Mode B). This is the SHARED frontier policy (frontierPromptBody) - byte-for-byte
+      # identical to Mode A's /next-task command - delivered via a single-quoted heredoc so the policy's
+      # literal double-quote and dollar characters need NO bash escaping. The FRONTIER_EOF terminator must
+      # land in column 0 of the generated script; the enclosing writeShellScriptBin indented string strips a
+      # uniform 6-space indent, so the terminator is written at that same 6-space indent below.
+      # NOTE (plan 059 T1): this REPLACES the former single-task prompt. Mode A and Mode B now share one
+      # frontier policy by construction. Transitional: the main loop below still selects one cursor task per
+      # iteration; T2 rewires the loop to launch one orchestrating claude -p that clears the whole frontier
+      # this invocation. Sentinel tokens (ALL_TASKS_DONE, ENVIRONMENT_NOT_CAPABLE, BLOCKED_BY_DEP,
+      # USER_INPUT_REQUIRED) must appear on their own line for the ^TOKEN anchored detection to fire.
+      PROMPT="Read ''${PLAN_FILE_ABS} and execute the ACTIONABLE FRONTIER of tasks in its Progress Tracking table using the policy below. Independent tasks run concurrently; only genuinely dependent tasks are serialized. Document findings in each task's section, update each task's status with today's date, commit each task's changes, and report every task's outcome.
+
+      $(${pkgs.coreutils}/bin/cat <<'FRONTIER_EOF'
+      ${frontierPromptBody}
+      FRONTIER_EOF
+      )"
 
       # Functions
       pending_count() {
