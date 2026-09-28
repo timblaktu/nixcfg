@@ -94,19 +94,36 @@ When applying version-incompatibility workarounds:
 
 ## Session Workflow Protocol
 
-**ONE TASK PER SESSION** for multi-phase **user-plans** (`user-plans/`) - complete one plan task per session then stop with a handoff checkpoint.
+**BATCH INDEPENDENT TASKS; SERIALIZE DEPENDENT ONES.** For multi-phase **user-plans**
+(`user-plans/`), the unit of a session is the **independent frontier**, not a single task.
+When several actionable tasks are mutually independent (no dependency edge between them) and
+each task's declared dependencies are all `TASK:COMPLETE`, execute them **together in one
+session** - concurrently, without asking - and fall back to one-at-a-time only for tasks that
+genuinely depend on each other.
 
-**Scope**: Applies to plan tasks spread across sessions, NOT to executing an approved plan within a single session. When user approves a plan ("implement this plan"), execute all tasks in sequence.
+- **Independent + deps-satisfied => run concurrently now.** Fan out parallel sub-agents; when
+  tasks mutate files that would collide, give each its own git worktree (see Git Worktree
+  Workflow), then integrate. No permission needed - independence is the license.
+- **Dependent => serialize.** A task whose declared dep is not yet `TASK:COMPLETE` yields
+  BLOCKED-BY-DEP and is left until its dependency lands; never attempt it early.
+- **Per-task semantics stay individual.** Each task in a batch is completed, marked
+  `TASK:COMPLETE` with today's date, and committed on its own; `Interactive`/USER_INPUT_REQUIRED,
+  ENVIRONMENT_NOT_CAPABLE, and BLOCKED-BY-DEP are decided per task, not per batch.
+
+**Scope**: Applies to plan tasks spread across sessions. When the user approves a plan
+("implement this plan"), execute all tasks respecting dependencies (independent ones in parallel).
 
 **Correct Protocol (multi-session plans)**:
-1. Complete ONE plan task
-2. Update memory (project and user-global if learnings occurred)
-3. Update plan files with task status
-4. Commit changes
-5. Checkpoint the handoff to per-worktree files (see Session Handoff Protocol below)
-6. STOP - wait for user to start new session
+1. Identify the actionable frontier: all `TASK:IN_PROGRESS` (resume first) plus every
+   `TASK:PENDING` whose declared deps are all COMPLETE.
+2. Group the mutually-independent members; execute each group concurrently (sub-agents / worktrees).
+3. For each finished task: update memory if learnings occurred, set `TASK:COMPLETE` + today's
+   date, commit that task's changes.
+4. When the frontier is exhausted (only dependency-blocked or Interactive tasks remain),
+   checkpoint the handoff to per-worktree files (see Session Handoff Protocol) and STOP.
 
-**Exception**: User explicitly grants permission to continue.
+**Exception**: none needed for parallelism - independence is self-authorizing. Stop early only if
+the user asks, or the remaining frontier is empty/blocked/Interactive.
 
 ## Plan File Conventions
 
@@ -228,18 +245,31 @@ These two files are gitignored (per-worktree, never committed). A fresh `claude`
 
 ## Memory Index Compaction (MEMORY.md auto-memory)
 
-When the harness flags MEMORY.md as too big ("approaching the read limit / compact to under X KB"), compaction is RELEVANCE curation, NOT byte-minimization. NEVER just trim the longest lines to hit the byte target: entry length correlates with recency and importance (active plans accumulate the most detail and are updated most), so "cut the biggest" destroys the most load-bearing memory. Size is a symptom; relevance is the target.
+When the harness flags MEMORY.md as too big ("approaching the read limit / compact to under X KB"),
+compaction is RELEVANCE curation, NOT byte-minimization. NEVER just trim the longest lines to hit the
+byte target: entry length often correlates with how load-bearing an entry is, so "cut the biggest"
+can destroy the most useful memory. Size is a symptom; relevance is the target. (Per the Scope rule
+in Curation below, per-plan status / `NEXT=` / cursor lines do not belong in MEMORY.md at all - if you
+find them here, de-index them; their durable home is the plan file `user-plans/NNN-*.md`.)
 
 Order of operations:
-1. DROP or archive STALE entries first. Stale = no longer informs future action: completed-and-landed work with no open `NEXT=`, superseded/reversed decisions, resolved one-offs whose reusable lesson already lives in another entry, dated past events. Signals: `DONE`/`LANDED`/`MERGED`/`RESOLVED`/`FIXED` with no `NEXT=`; a merged MR; a past date with no forward action.
-2. MERGE duplicate or same-plan multi-line entries into one bullet.
-3. ONLY THEN, for still-long ACTIVE entries, move detail into that entry's topic file and leave a one-line pointer that PRESERVES its identity and current status/`NEXT=`.
+1. DROP or archive STALE entries first. Stale = no longer informs future action: completed-and-landed
+   work, superseded/reversed decisions, resolved one-offs whose reusable lesson already lives in
+   another entry, dated past events. Signals: `DONE`/`LANDED`/`MERGED`/`RESOLVED`/`FIXED` with no
+   lasting general lesson; a merged MR; a past date with no forward action.
+2. MERGE duplicate or near-duplicate entries into one bullet.
+3. ONLY THEN, for still-long ACTIVE entries, move detail into that entry's topic file and leave a
+   one-line pointer that PRESERVES its identity.
 
 Rules:
 - "One line per entry" is a FORMAT rule (collapse multi-line bullets), not license to truncate active content.
-- PROTECT active entries (any with `NEXT=`, in-flight branch/MR/pipeline, or recent date); trim the OLDEST INACTIVE entries instead.
-- If dropping stale + merging still exceeds budget, too many ACTIVE plans are indexed: ARCHIVE completed plans or tell the user. Do NOT mutilate active entries to fit.
-- When unsure whether an entry is stale, KEEP it or ask. Deleting memory is high-cost; over-keeping is low-cost.
+- PROTECT still-relevant general entries (durable behavioral feedback, reusable reference, live
+  cross-plan project constraints); trim the OLDEST INACTIVE entries instead.
+- If dropping stale + merging still exceeds budget, too many entries are indexed - and per-plan status
+  must not be here at all (it belongs in the plan files). Move any such entries out first, then
+  ARCHIVE completed-work entries or tell the user. Do NOT mutilate active general entries to fit.
+- When unsure whether an entry is stale, KEEP it or ask. Deleting memory is high-cost; over-keeping
+  is low-cost.
 
 ## Long-Running Task Strategy
 
@@ -250,7 +280,24 @@ Long-running tasks (>5 min) are allowed but require management:
 
 ## Memory Index Curation (memory/MEMORY.md)
 
-The file-based memory is per-directory (keyed by cwd, one memory dir per worktree - a rule in one project's memory does NOT apply in another), and the harness loads MEMORY.md in full every session, capped at 25 KB / 200 lines (whichever first) - NOT user-configurable. Curate MEMORY.md as a working set, not an archive:
+The file-based memory store is **SHARED across all worktrees of a repo** - it is keyed by the
+git common-dir (the main worktree), NOT by the current directory. Every worktree of the same
+repo (e.g. `repo`, `repo-featureA`, `repo-featureB`) reads and writes the SAME `memory/MEMORY.md`.
+Entries must therefore be **worktree-agnostic and repo-general**; anything specific to one
+worktree, branch, or plan does NOT belong here. The harness loads MEMORY.md in full every session,
+capped at 25 KB / 200 lines (whichever first) - NOT user-configurable. Curate MEMORY.md as a
+working set, not an archive:
+
+**SCOPE - what MEMORY.md is FOR (and NOT for).** It holds only GENERAL, cross-plan, repo-wide
+knowledge: durable behavioral feedback (`feedback`), reusable technical facts and external pointers
+(`reference`), and genuinely cross-plan project constraints not derivable from any single plan file
+or the code (`project`). **It is NOT a per-plan tracker. Do NOT index per-plan status, task cursors,
+`NEXT=` pointers, or branch/MR/pipeline state here.** That state has a purpose-built, per-worktree,
+durable home in the plan file `user-plans/NNN-*.md`, which the SessionStart resume hook and
+`/next-task` read first; duplicating it here overflows the ONE shared index (every worktree of the
+repo appends to the same file - the diagnosed cause of MEMORY.md overflow). Keep a `project` entry
+only for a constraint that spans plans (e.g. "this repo's CI must stay reproducible outside CI"),
+never for "where plan NNN stands right now".
 
 - **ONE line per entry** - a title link + a short hook, never a paragraph. All detail lives in the topic file (recalled on demand), not the index. Write the one-liner from the start; do not draft a paragraph and then shave it.
 - **Demote, don't shave.** Under size pressure, DROP or collapse entries for COMPLETED / merged / superseded work (the topic file persists for on-demand recall) rather than word-trimming live entries. The 200-line count usually binds before bytes, so fewer entries - not shorter ones - is the real lever.

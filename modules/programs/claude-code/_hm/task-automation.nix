@@ -8,26 +8,35 @@ let
 
   # Slash command for interactive task execution
   nextTaskMd = ''
-    Read the plan file specified below (or, if not specified, resolve it via the
-    PLAN SELECTION precedence: the .session-state/active-plan pointer first, then CLAUDE.md auto-detection),
-    find the next actionable task in the Progress Tracking table using the priority below,
-    execute it following the task definition in that file,
-    document findings in the corresponding section,
-    update the task status as described below, and add today's date,
-    and report what you completed and what's next.
-    Commit your changes when done.
+    Read the plan file specified below (or, if not specified, resolve it via the PLAN SELECTION
+    precedence: the .session-state/active-plan pointer first, then CLAUDE.md auto-detection),
+    then find and execute the ACTIONABLE FRONTIER of tasks in the Progress Tracking table using
+    the policy below. Independent tasks run concurrently; only genuinely dependent tasks are
+    serialized. Document findings in each task's section, update each task's status with today's
+    date, commit each task's changes, and report every task's outcome.
 
     Plan file: $ARGUMENTS
 
-    TASK PRIORITY (find next task):
-    1. FIRST: Any task with status "TASK:IN_PROGRESS" — this is unfinished work, resume immediately
-    2. SECOND: First task with status "TASK:PENDING" not blocked by incomplete dependencies
+    ACTIONABLE FRONTIER (which tasks to run this invocation):
+    1. FIRST resume: every task with status "TASK:IN_PROGRESS" is unfinished work - resume it.
+    2. THEN all ready PENDING: every "TASK:PENDING" task whose declared dependencies
+       ("Depends on TX" lines) are ALL "TASK:COMPLETE". A PENDING task with an incomplete
+       declared dependency is NOT on the frontier - leave it for when its dependency lands.
 
-    STATUS TRANSITIONS:
-    - When starting a PENDING task: immediately change "TASK:PENDING" to "TASK:IN_PROGRESS"
-      in the plan file and commit, BEFORE beginning work
-    - When completing a task: change "TASK:IN_PROGRESS" to "TASK:COMPLETE" and add today's date
-    - If a task is already IN_PROGRESS (from a previous session): resume work, then mark COMPLETE
+    CONCURRENCY (the core rule - do NOT ask, just do it):
+    - Two frontier tasks are INDEPENDENT when neither depends on the other (directly or transitively).
+    - Execute all mutually-independent frontier tasks CONCURRENTLY: spawn a parallel sub-agent per
+      task; when tasks mutate files that would collide (same files, or both commit in this worktree)
+      give each its own git worktree so edits/commits don't race, then integrate.
+    - Serialize ONLY genuinely dependent tasks: run the dependency to COMPLETE first, then dependents.
+    - Never run more than one git commit at a time in the SAME worktree (index.lock races); isolate
+      concurrent file-mutating tasks in separate worktrees.
+
+    STATUS TRANSITIONS (per task, individually):
+    - Starting a PENDING task: change its "TASK:PENDING" to "TASK:IN_PROGRESS" and commit BEFORE work.
+    - Completing a task: change its "TASK:IN_PROGRESS" to "TASK:COMPLETE" and add today's date.
+    - A task already IN_PROGRESS: resume, then mark COMPLETE.
+    - Each task's status edit + commit is its own; do not batch-commit unrelated tasks together.
 
     PLAN SELECTION (when no plan file argument is provided):
     FIRST, the explicit per-worktree pointer (highest precedence):
@@ -52,35 +61,31 @@ let
        (rg "^\\| " file | ... or git log -1 --format=%ct -- <file>)
     6. If still ambiguous: ask the user which plan to work on
 
-    IMPORTANT: If the only actionable task(s) are blocked because a declared dependency
-    is not yet TASK:COMPLETE, do NOT attempt them. Output on its own line: BLOCKED_BY_DEP
-    Then name the incomplete dependency. This is NOT a failure - leave the status unchanged.
+    PER-TASK OUTCOMES (decide individually, never per-batch):
+    IMPORTANT: If a frontier task is blocked because a declared dependency is not yet TASK:COMPLETE,
+    do NOT attempt it. For that task output on its own line: BLOCKED_BY_DEP and name the incomplete
+    dependency. Not a failure - leave its status unchanged and continue with the rest.
 
-    IMPORTANT: If you determine the task cannot be executed on the current host
-    (e.g., requires Nix but running on Termux, or requires specific tools not available),
-    output on its own line: ENVIRONMENT_NOT_CAPABLE
-    Then explain briefly. Do NOT mark the task complete - leave its status unchanged.
+    IMPORTANT: If a task cannot run on the current host (e.g., requires Nix but running on Termux,
+    or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE and
+    explain briefly. Do NOT mark it complete - leave its status unchanged. Continue with the others.
 
-    IMPORTANT: If the task is marked as "Interactive" in the plan file, or requires user
-    decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED
-    Then present the questions/options clearly. Do NOT mark it complete - leave its status
-    unchanged so the user can complete it in an interactive session using /next-task.
+    IMPORTANT: If a task is marked "Interactive" in the plan file, or requires user decisions/choices
+    before proceeding, output on its own line: USER_INPUT_REQUIRED and present the questions/options.
+    Do NOT mark it complete - leave its status unchanged. Continue with the others.
 
-    CRITICAL: Do NOT invent "alternative approaches" or workarounds to tasks.
-    If a task has prerequisites that aren't met (e.g., "test the Nix-generated package"
-    but the package hasn't been built), that task is ENVIRONMENT_NOT_CAPABLE.
-    Complete the task as defined or mark it not capable - no workarounds.
+    CRITICAL: Do NOT invent "alternative approaches" or workarounds to tasks. If a task has
+    prerequisites that aren't met (e.g., "test the Nix-generated package" but the package hasn't been
+    built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable.
 
-    After completing the task, provide a summary:
+    After the frontier is processed, provide a summary:
 
-    ## Task Completed
-    - **Task ID**: [task number/name]
-    - **Status**: Complete
-    - **Summary**: [1-2 sentence summary]
+    ## Tasks Completed (this invocation)
+    For each task: - **Task ID** - **Status** (Complete / Blocked / Env-not-capable / User-input)
+    - **Summary** (1-2 sentences)
 
-    ## Next Task
-    - **Task ID**: [next IN_PROGRESS or PENDING task number/name]
-    - **Description**: [brief description]
+    ## Next Frontier
+    - The tasks now newly actionable, or "none - remaining tasks are dependency-blocked or Interactive"
 
     If no IN_PROGRESS or PENDING tasks remain, output on its own line: ALL_TASKS_DONE
 
