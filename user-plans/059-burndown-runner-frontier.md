@@ -53,7 +53,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 |------|------|--------|------|-------|
 | T1 | Rebase on origin/main; extract shared frontier prompt | TASK:COMPLETE | (2026-09-28) | |
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:COMPLETE | (2026-09-28) | |
-| T3 | Per-layer stop-on-failure semantics | TASK:IN_PROGRESS | | |
+| T3 | Per-layer stop-on-failure semantics | TASK:COMPLETE | (2026-09-28) | |
 | T4 | Per-layer event journal + save_state | TASK:IN_PROGRESS | | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:PENDING | | |
 | T6 | Update help text + Burndown Contract docs | TASK:PENDING | | |
@@ -145,7 +145,7 @@ worktree/branch/temp removed afterward. Observed and correctly left to their own
 "completed" count and the `events.jsonl` line are still per-iteration/single-task (the per-layer count +
 journal are T4); T7 layers on the dependent-task sequencing and the seeded-failure case.
 
-### T3 - Per-layer stop-on-failure semantics `TASK:IN_PROGRESS`
+### T3 - Per-layer stop-on-failure semantics `TASK:COMPLETE` (2026-09-28)
 Depends on T2.
 Define how the orchestrating invocation signals a layer-level blocking failure (e.g. emits
 `BLOCKING_FAILURE` on its own line naming the failed task, leaves that task `IN_PROGRESS`, and does not
@@ -155,6 +155,20 @@ layer stay committed. Preserve the existing return-code taxonomy semantics (BLOC
 ENVIRONMENT_NOT_CAPABLE, USER_INPUT_REQUIRED, ALL_TASKS_DONE) but interpreted per-layer.
 **DoD:** with a seeded failing task among independents, `--on-failure stop` halts and leaves exactly the
 failing task `IN_PROGRESS` while the independents that finished remain COMPLETE; HANDOFF.md records it.
+
+**DONE (2026-09-28), verified live.** Two edits in `task-automation.nix`: (1) added the blocking-failure
+sentinel instruction to the shared `frontierPromptBody` (a HARD error - build/test regression, crash, or a
+missing non-dependency prerequisite - means: leave that task in-progress, start no further tasks, and print
+`BLOCKING_FAILURE <taskid>` on its own line; reserved for a true hard error vs the dep/env/user sentinels);
+(2) a `^BLOCKING_FAILURE` detector in `run_task` that extracts the failing task id and maps to the existing
+return-9 machinery, so the main-loop case applies `--on-failure stop` (halt, leave in-progress, EXIT trap
+writes HANDOFF.md) or `skip` (advance). Independents already completed in the layer stay committed. The
+existing return-9 paths (startup/API/non-zero-exit failures) are unchanged; this adds the orchestrator-emitted
+per-layer signal. **e2e (seeded G1 success + F1 impossible-DoD, throwaway `Burndown: SAFE` plan/branch):** the
+orchestrator emitted `BLOCKING_FAILURE F1`; the runner printed `blocking failure in the layer (failed task:
+F1)`, halted with exit 1; final plan state was G1 `TASK:COMPLETE` (committed, `out/g1.txt`) and F1 exactly
+`TASK:IN_PROGRESS`; `.session-state/HANDOFF.md` named F1 as the resume task and recorded the blocking-failure
+stop reason. `nix flake check --no-build` green. Throwaway artifacts cleaned up.
 
 ### T4 - Per-layer event journal + save_state `TASK:IN_PROGRESS`
 Depends on T2.
