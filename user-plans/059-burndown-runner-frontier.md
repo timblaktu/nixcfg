@@ -55,7 +55,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:COMPLETE | (2026-09-28) | |
 | T3 | Per-layer stop-on-failure semantics | TASK:COMPLETE | (2026-09-28) | |
 | T4 | Per-layer event journal + save_state | TASK:COMPLETE | (2026-09-28) | |
-| T5 | Loop termination: progress vs all-done vs blocked | TASK:PENDING | | |
+| T5 | Loop termination: progress vs all-done vs blocked | TASK:IN_PROGRESS | | |
 | T6 | Update help text + Burndown Contract docs | TASK:PENDING | | |
 | T7 | Validation: flake check, switch, e2e layer burndown | TASK:PENDING | | |
 
@@ -192,7 +192,7 @@ parsed by `jq` showed exactly `{iteration:0, status:run_start, completed:0, head
 e2e: the layer event recorded `completed:1` (G1 done before the F1 failure), `status:blocking_failure`,
 `head_moved:true`. `nix flake check --no-build` green.
 
-### T5 - Loop termination: progress vs all-done vs blocked `TASK:PENDING`
+### T5 - Loop termination: progress vs all-done vs blocked `TASK:IN_PROGRESS`
 Depends on T2, T3.
 Ensure the main loop terminates correctly under the layer model: continue while the layer makes
 progress (actionable count drops / HEAD moves); clean-exit on ALL_TASKS_DONE; clean-exit when the
