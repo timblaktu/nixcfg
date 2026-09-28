@@ -51,7 +51,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
-| T1 | Rebase on origin/main; extract shared frontier prompt | TASK:IN_PROGRESS | 2026-09-28 | |
+| T1 | Rebase on origin/main; extract shared frontier prompt | TASK:COMPLETE | (2026-09-28) | |
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:PENDING | | |
 | T3 | Per-layer stop-on-failure semantics | TASK:PENDING | | |
 | T4 | Per-layer event journal + save_state | TASK:PENDING | | |
@@ -63,7 +63,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 
 ## Tasks
 
-### T1 - Rebase on origin/main; extract shared frontier prompt `TASK:IN_PROGRESS`
+### T1 - Rebase on origin/main; extract shared frontier prompt `TASK:COMPLETE` (2026-09-28)
 Depends on: `feat/cc-context-fixes` merged - SATISFIED (`origin/main` @ `2f2edb3`).
 First `git fetch origin`, then rebase this branch onto **`origin/main`** (NOT local `main`, which is
 stale at `c9d0c10`) so the concurrent-frontier `nextTaskMd` (change 2) is present. Then
@@ -72,6 +72,25 @@ factor the frontier orchestration prompt into ONE shared Nix `let` binding in `t
 `PROMPT` reuse, so Mode A and Mode B stay identical by construction. Mind `''`/`${` Nix string escaping.
 **DoD:** branch rebased on `main`; `rg` shows the frontier text defined once and referenced by both
 `nextTaskMd` and `PROMPT`; `nix flake check --no-build` passes.
+
+**DONE (2026-09-28), commit `3861f24`.** Rebased onto `origin/main` `2f2edb3` (clean; our 2 plan
+commits replayed). Extracted `frontierPromptBody` (`task-automation.nix` line ~15): the shared
+ACTIONABLE-FRONTIER policy (FRONTIER / CONCURRENCY / STATUS TRANSITIONS / PER-TASK OUTCOMES / summary
+/ sentinels). `nextTaskMd` now wraps it with interactive framing (`$ARGUMENTS` + PLAN SELECTION moved
+above the shared block) and references `${frontierPromptBody}`. The runner `PROMPT` now IS that shared
+body, delivered via a single-quoted `cat <<'FRONTIER_EOF'` heredoc so the policy's literal `"`/`$` need
+no bash escaping; `FRONTIER_EOF` written at 6-space indent (the enclosing `writeShellScriptBin` indented
+string's uniform strip) so it lands in column 0 of the generated script. `rg 'frontierPromptBody'` shows
+one definition + two references (nextTaskMd, PROMPT). Verified: `nix flake check --no-build` green;
+`nixpkgs-fmt --check` clean; diff scoped to only these 2 regions; generated bash passes `bash -n` with
+`$PLAN_FILE_ABS` expanding and the full policy rendering.
+**Gotcha for T2+ (learned):** a literal `''` inside a `#` comment INSIDE the `writeShellScriptBin ''`
+string closes the Nix indented-string early -> syntax error, and the on-broken-file formatter then
+re-indents the whole runner body (2-space) and splits bash statements. If a `.nix` edit corrupts the
+runner string wholesale, `git checkout origin/main -- <file>` and cleanly re-apply. Never put `''` (or
+`${`) literally in runner-string comments.
+**Transitional state:** the runner `PROMPT` now carries frontier semantics but the main loop still
+selects one cursor task per iteration - T2 rewires the loop to launch one orchestrating `claude -p`.
 
 ### T2 - Runner = thin loop around one orchestrating claude -p `TASK:PENDING`
 Depends on T1.
