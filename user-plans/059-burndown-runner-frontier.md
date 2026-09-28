@@ -57,7 +57,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T4 | Per-layer event journal + save_state | TASK:COMPLETE | (2026-09-28) | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:COMPLETE | (2026-09-28) | |
 | T6 | Update help text + Burndown Contract docs | TASK:IN_PROGRESS | | |
-| T7 | Validation: flake check, switch, e2e layer burndown | TASK:PENDING | | |
+| T7 | Validation: flake check, switch, e2e layer burndown | TASK:IN_PROGRESS | | |
 
 ---
 
@@ -225,7 +225,7 @@ per-layer stop-on-failure; per-layer journal). Keep Mode A / Mode B described as
 **DoD:** help + template text match the implemented behavior; no stale "one task per iteration" claims
 remain (`rg` clean).
 
-### T7 - Validation: flake check, switch, e2e layer burndown `TASK:PENDING`
+### T7 - Validation: flake check, switch, e2e layer burndown `TASK:IN_PROGRESS`
 Depends on T1-T6.
 Stage; serialized `nix flake check --no-build`; `home-manager switch`; then an end-to-end unattended
 run on a throwaway `Burndown: SAFE` plan (on a throwaway branch) containing one layer of two
