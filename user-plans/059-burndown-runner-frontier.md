@@ -5,8 +5,10 @@
 **Working branch:** feat/burndown-runner-frontier
 **Mode:** A (human-attended `/next-task`). Deliberately NOT `Burndown: SAFE` - this plan rewrites the
 unattended driver itself; it must not be auto-burned-down by the very driver it is changing.
-**Depends on:** branch `feat/cc-context-fixes` (worktree `nixcfg-cc-context`) being merged to `main`.
-That branch introduces the concurrent-frontier `/next-task` prompt (`nextTaskMd`) this plan reuses.
+**Depends on:** branch `feat/cc-context-fixes` - **SATISFIED (merged 2026-09-28)**. It squash-merged to
+`origin/main` as `2f2edb3` ("claude-code: batch independent plan tasks... (#9)"), which carries the
+concurrent-frontier `/next-task` prompt (`nextTaskMd`) this plan reuses. NOTE: local `main` is STALE at
+`c9d0c10` and must NOT be used as the rebase target - T1 rebases onto `origin/main`.
 
 ---
 
@@ -49,7 +51,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
-| T1 | Rebase on main; extract shared frontier prompt | TASK:PENDING | | |
+| T1 | Rebase on origin/main; extract shared frontier prompt | TASK:PENDING | | |
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:PENDING | | |
 | T3 | Per-layer stop-on-failure semantics | TASK:PENDING | | |
 | T4 | Per-layer event journal + save_state | TASK:PENDING | | |
@@ -61,9 +63,10 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 
 ## Tasks
 
-### T1 - Rebase on main; extract shared frontier prompt `TASK:PENDING`
-Depends on: `feat/cc-context-fixes` merged to `main`.
-Rebase this branch onto `main` so the concurrent-frontier `nextTaskMd` (change 2) is present. Then
+### T1 - Rebase on origin/main; extract shared frontier prompt `TASK:PENDING`
+Depends on: `feat/cc-context-fixes` merged - SATISFIED (`origin/main` @ `2f2edb3`).
+First `git fetch origin`, then rebase this branch onto **`origin/main`** (NOT local `main`, which is
+stale at `c9d0c10`) so the concurrent-frontier `nextTaskMd` (change 2) is present. Then
 factor the frontier orchestration prompt into ONE shared Nix `let` binding in `task-automation.nix`
 (e.g. `frontierPromptBody`) that BOTH `nextTaskMd` (the `/next-task` command) and the runner's
 `PROMPT` reuse, so Mode A and Mode B stay identical by construction. Mind `''`/`${` Nix string escaping.
