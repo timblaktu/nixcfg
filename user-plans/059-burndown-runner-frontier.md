@@ -52,7 +52,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
 | T1 | Rebase on origin/main; extract shared frontier prompt | TASK:COMPLETE | (2026-09-28) | |
-| T2 | Runner = thin loop around one orchestrating claude -p | TASK:IN_PROGRESS | | |
+| T2 | Runner = thin loop around one orchestrating claude -p | TASK:COMPLETE | (2026-09-28) | |
 | T3 | Per-layer stop-on-failure semantics | TASK:PENDING | | |
 | T4 | Per-layer event journal + save_state | TASK:PENDING | | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:PENDING | | |
@@ -92,7 +92,7 @@ runner string wholesale, `git checkout origin/main -- <file>` and cleanly re-app
 **Transitional state:** the runner `PROMPT` now carries frontier semantics but the main loop still
 selects one cursor task per iteration - T2 rewires the loop to launch one orchestrating `claude -p`.
 
-### T2 - Runner = thin loop around one orchestrating claude -p `TASK:IN_PROGRESS`
+### T2 - Runner = thin loop around one orchestrating claude -p `TASK:COMPLETE` (2026-09-28)
 Depends on T1.
 Replace the per-task selection (one `run_task` per next-actionable row) with: each iteration launches
 ONE `claude -p` given the shared frontier prompt, instructing it to execute the entire independent
@@ -111,7 +111,7 @@ the plan `TASK:` markers; the loop then re-reads the plan to detect the next lay
 `--dry-run` echo (currently `"Would execute: $CLAUDE_CMD -p $model_flag ..."`) so it actually shows the
 frontier prompt per the DoD.
 
-**IMPLEMENTED (2026-09-28), minimal scope (Tim approved "minimal/honest"), pending COMPLETE sign-off.**
+**DONE (2026-09-28), minimal scope (Tim approved "minimal/honest"), verified live.**
 Key finding: T1 already did more than the prompt half. Because T1 swapped the runner `PROMPT` to the
 shared `frontierPromptBody`, the default (non `--task`) path in `run_task` (`task_prompt="$PROMPT"`)
 ALREADY launches ONE orchestrating `claude -p` instructed to clear the whole independent frontier, and
@@ -135,10 +135,15 @@ intended regions; `nix flake check --no-build` green (all checks passed); built 
 `homeConfigurations."tim@thinky-nixos"`, `bash -n` clean; dry-run against a two-independent-task test plan
 renders `Scope: frontier layer (2 actionable; model anchored on first row: A1)` and the frontier prompt
 intro (DoD half 1 met), and `--task A2 --dry-run` renders `Scope: single task: A2`.
-**DoD half 2 (a live real iteration completing BOTH with two commits) is deferred to T7 by design** (T7 is
-the end-to-end unattended run on a throwaway `Burndown: SAFE` plan/branch); performing an autonomous
-`bypassPermissions` burndown now would be out of T2 scope. The mechanism that makes it true is in place
-and demonstrated via dry-run; T7 exercises it live.
+**DoD half 2 proven live (2026-09-28):** ran the freshly-built runner in default single mode against a
+throwaway `Burndown: SAFE` plan (two independent tasks E1/E2) on a throwaway `tmp/t2-e2e` worktree/branch.
+ONE runner iteration (one orchestrating `claudemax -p` invocation, ~1m41s) completed BOTH tasks: E1 and E2
+both reached done with dates, both output files written correctly, and the run produced 4 commits
+(in-progress + done per task, i.e. both tasks committed individually). Runner exited 0 with "All tasks
+complete", and the header rendered `E1 (frontier layer)` confirming the layer label. Throwaway
+worktree/branch/temp removed afterward. Observed and correctly left to their own tasks: the exit-summary
+"completed" count and the `events.jsonl` line are still per-iteration/single-task (the per-layer count +
+journal are T4); T7 layers on the dependent-task sequencing and the seeded-failure case.
 
 ### T3 - Per-layer stop-on-failure semantics `TASK:PENDING`
 Depends on T2.
