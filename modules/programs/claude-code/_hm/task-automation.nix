@@ -51,6 +51,14 @@ let
     prerequisites that aren't met (e.g., "test the Nix-generated package" but the package hasn't been
     built), that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable.
 
+    IMPORTANT (blocking failure): If a task is attempted but its Definition of Done cannot be met due to a
+    HARD error - a real build/test regression, a crash, or a genuinely missing prerequisite that is NOT a
+    declared dependency and NOT an environment/host limitation - do NOT invent a workaround and do NOT start
+    any further tasks in this layer. Leave that task TASK:IN_PROGRESS (do not mark it complete), and output
+    on its own line: BLOCKING_FAILURE followed by the failing task's ID. Independent tasks you already
+    completed in this layer stay committed as they are. This is the ONLY outcome that halts an unattended
+    run, so reserve it for a true hard error; a dependency/env/user situation uses its own sentinel above.
+
     After the frontier is processed, provide a summary:
 
     ## Tasks Completed (this invocation)
@@ -1168,6 +1176,22 @@ let
           # PRIORITY 3: Check protocol sentinels in result text (defined in our prompt)
           # IMPORTANT: Match only at line start to avoid false positives from code blocks,
           # ready-to-paste prompts, or quoted instructions that mention these tokens
+
+          # PRIORITY 3a: orchestrator-signalled per-LAYER blocking failure (plan 059 T3). The frontier
+          # orchestrator emits "BLOCKING_FAILURE <taskid>" on its own line when a task hit a HARD error
+          # (build/test regression, crash, missing non-dependency prerequisite); it leaves that task
+          # TASK:IN_PROGRESS and starts no further tasks, while the independents it already finished stay
+          # committed. Map it to return 9 so the main-loop case applies the failure policy: --on-failure
+          # stop (default) halts the whole run leaving the task IN_PROGRESS and the EXIT trap writes
+          # HANDOFF.md; --on-failure skip advances. Checked before the other sentinels so a real failure is
+          # never masked by a co-emitted line.
+          if echo "$json_result" | ${pkgs.ripgrep}/bin/rg -q '^BLOCKING_FAILURE'; then
+              local failed_task
+              failed_task=$(echo "$json_result" | ${pkgs.ripgrep}/bin/rg -m1 '^BLOCKING_FAILURE' | ${pkgs.gnused}/bin/sed -E 's/^BLOCKING_FAILURE[[:space:]]*//; s/[[:space:]]+$//')
+              echo -e "  ''${RED}✗ ''${task_name}: blocking failure in the layer (failed task: ''${failed_task:-unknown})''${NC}"
+              save_state "$iteration" "blocking_failure"
+              return 9
+          fi
 
           # Blocked by an incomplete declared dependency - NOT a failure. The agent declined to
           # attempt the task because a task it depends on is not yet COMPLETE. Advance to the next
