@@ -52,7 +52,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | Task | Name | Status | Date | Model |
 |------|------|--------|------|-------|
 | T1 | Rebase on origin/main; extract shared frontier prompt | TASK:COMPLETE | (2026-09-28) | |
-| T2 | Runner = thin loop around one orchestrating claude -p | TASK:PENDING | | |
+| T2 | Runner = thin loop around one orchestrating claude -p | TASK:IN_PROGRESS | | |
 | T3 | Per-layer stop-on-failure semantics | TASK:PENDING | | |
 | T4 | Per-layer event journal + save_state | TASK:PENDING | | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:PENDING | | |
@@ -92,7 +92,7 @@ runner string wholesale, `git checkout origin/main -- <file>` and cleanly re-app
 **Transitional state:** the runner `PROMPT` now carries frontier semantics but the main loop still
 selects one cursor task per iteration - T2 rewires the loop to launch one orchestrating `claude -p`.
 
-### T2 - Runner = thin loop around one orchestrating claude -p `TASK:PENDING`
+### T2 - Runner = thin loop around one orchestrating claude -p `TASK:IN_PROGRESS`
 Depends on T1.
 Replace the per-task selection (one `run_task` per next-actionable row) with: each iteration launches
 ONE `claude -p` given the shared frontier prompt, instructing it to execute the entire independent
