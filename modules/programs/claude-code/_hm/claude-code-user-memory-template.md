@@ -135,15 +135,17 @@ the user asks, or the remaining frontier is empty/blocked/Interactive.
 
 **Handoff**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the handoff. Write it to the per-worktree `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md` and update `$CLAUDE_PROJECT_DIR/.session-state/active-plan` (see Session Handoff Protocol below). Never reference "previous session context".
 
-## Unattended Burndown Contract (authoring plans for autonomous task-by-task execution)
+## Unattended Burndown Contract (authoring plans for autonomous layer-by-layer execution)
 
-An **unattended burndown** is a driver (the `run-tasks-<account>` script) autonomously executing a plan task-by-task - each task in a fresh clean context - until the plan is COMPLETE or a stop condition trips. No human is in the loop. This is "Mode B"; the human-attended `/next-task` loop is "Mode A". The driver reuses the same substrate as Mode A: the plan file is the source of truth (`TASK:PENDING/IN_PROGRESS/COMPLETE` cursor), `.session-state/active-plan` points at the plan, `.session-state/HANDOFF.md` records why a run stopped.
+An **unattended burndown** is a driver (the `run-tasks-<account>` script) autonomously executing a plan until it is COMPLETE or a stop condition trips. No human is in the loop. This is "Mode B"; the human-attended `/next-task` loop is "Mode A". The driver reuses the same substrate as Mode A: the plan file is the source of truth (`TASK:PENDING/IN_PROGRESS/COMPLETE` cursor), `.session-state/active-plan` points at the plan, `.session-state/HANDOFF.md` records why a run stopped.
 
-**Why this matters when you AUTHOR a plan:** the failure policy is *stop-the-whole-run* - a single blocking failure halts the entire unattended burndown. That is only safe if "failure" is well-defined and the plan is authored so that **only a TRULY-BLOCKING condition counts as a failure.** A well-authored plan almost never hits a blocking failure; ordinary "can't proceed right now" situations are expressed as explicit dependencies, non-blocking sentinels, or `Interactive` markers - NOT as crashes. Authoring a plan burndown-safe is the author's job, not the driver's.
+**Layer model (Mode A / Mode B parity).** Each driver iteration launches ONE orchestrating `claude -p` over the whole independent FRONTIER (a "layer"): it fans out sub-agents for the mutually-independent actionable tasks, commits each task individually, and edits the plan `TASK:` markers itself. The next iteration re-reads the plan and clears the next, newly-unblocked layer. This is the exact frontier policy `/next-task` uses, so Mode A and Mode B behave identically by construction; the driver is a thin loop around that one intelligent coordinator (which is what keeps concurrent work safe in a single worktree).
+
+**Why this matters when you AUTHOR a plan:** the failure policy is *stop-the-whole-run* - a single blocking failure in a layer halts the entire unattended burndown (the independent tasks the layer already committed stay done). That is only safe if "failure" is well-defined and the plan is authored so that **only a TRULY-BLOCKING condition counts as a failure.** A well-authored plan almost never hits a blocking failure; ordinary "can't proceed right now" situations are expressed as explicit dependencies, non-blocking sentinels, or `Interactive` markers - NOT as crashes. Authoring a plan burndown-safe is the author's job, not the driver's.
 
 ### Outcome taxonomy
 
-Every per-task outcome resolves to exactly one of these. The driver maps each to an action. Author tasks so the **BLOCKING-FAILURE** bucket is essentially unreachable for a well-formed plan.
+Every outcome resolves to exactly one of these. The orchestrator decides each per task and the driver maps the layer's aggregate to an action (a layer completes the independent tasks it can, then reports the first blocking outcome). Author tasks so the **BLOCKING-FAILURE** bucket is essentially unreachable for a well-formed plan.
 
 | Outcome | Meaning | Driver action | How you avoid misuse |
 |---|---|---|---|
@@ -151,7 +153,7 @@ Every per-task outcome resolves to exactly one of these. The driver maps each to
 | **BLOCKED-BY-DEP** | a declared dependency is not yet COMPLETE | skip to next actionable task; NOT a failure | express ordering as explicit deps, not assumptions |
 | **ENVIRONMENT_NOT_CAPABLE** | wrong host / missing toolchain | exit run cleanly, leave task PENDING | tag host-specific tasks; never invent a workaround |
 | **USER_INPUT_REQUIRED** | needs a human decision/approval | exit run cleanly, leave task PENDING | mark decision tasks `Interactive` |
-| **BLOCKING-FAILURE** | task attempted, DoD unmet due to a hard error (build regression, crash, prerequisite that is NOT a declared dep) | **STOP the whole run**, leave task `IN_PROGRESS`, write HANDOFF, exit non-zero | author so this is unreachable: checkable DoD + deps + no-workaround rule |
+| **BLOCKING-FAILURE** | a task attempted in the layer hit a hard error (build regression, crash, prerequisite that is NOT a declared dep); the orchestrator emits `BLOCKING_FAILURE <taskid>`, leaves that task `IN_PROGRESS`, and starts no further tasks | **STOP the whole run**, leave that task `IN_PROGRESS` (independents already done in the layer stay committed), write HANDOFF, exit non-zero | author so this is unreachable: checkable DoD + deps + no-workaround rule |
 
 ### Authoring rules (make blocking failures unreachable)
 
@@ -202,8 +204,8 @@ A run leaves four artifacts in the worktree (all gitignored runtime state):
 
 | Artifact | Path | What it holds |
 |---|---|---|
-| Event journal | `.claude-task-logs/events.jsonl` | append-only, one JSONL line per transition (the audit trail) |
-| Per-task logs | `.claude-task-logs/<ts>_<task>.{log,json,stderr}` | full Claude response + stderr per attempt |
+| Event journal | `.claude-task-logs/events.jsonl` | append-only, one JSONL line per LAYER transition, incl. a `completed` count (tasks the layer finished); per-task commit attribution lives in the orchestrator report + plan `TASK:` edits |
+| Per-layer logs | `.claude-task-logs/<ts>_<anchor>.{log,json,stderr}` | full orchestrator response + stderr per layer (`<anchor>` = the layer's first actionable row) |
 | Run state | `.claude-task-state` | latest-only snapshot (`STATUS=` is the stop bucket) |
 | Handoff | `.session-state/HANDOFF.md` | human/hook rehydration breadcrumb written on every post-gate stop |
 
@@ -211,10 +213,10 @@ Inspect a partial / stopped burndown:
 
 ```
 cat .claude-task-state                                   # STATUS= tells you the stop bucket
-jq -c . .claude-task-logs/events.jsonl                   # full transition history
-jq -r 'select(.head_moved) | "\(.task) \(.sha_before)->\(.sha_after) \(.status)"' \
-    .claude-task-logs/events.jsonl                       # which tasks committed, to what SHA
-ls -t .claude-task-logs/*.log | head -1 | xargs cat      # the most recent task's output
+jq -c . .claude-task-logs/events.jsonl                   # full per-layer transition history
+jq -r 'select(.head_moved) | "\(.task) +\(.completed) \(.sha_before)->\(.sha_after) \(.status)"' \
+    .claude-task-logs/events.jsonl                       # per layer: anchor, tasks completed, SHA span
+ls -t .claude-task-logs/*.log | head -1 | xargs cat      # the most recent layer's output
 ```
 
 **Resume** is just re-running the same command - burndown state lives entirely in the plan file's

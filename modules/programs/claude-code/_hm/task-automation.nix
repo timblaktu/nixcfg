@@ -122,9 +122,9 @@ let
         typeset -A opt_args
 
         _arguments -C \
-          '-n[Run N tasks]:number of tasks:' \
-          '-a[Run all pending tasks]' \
-          '--all[Run all pending tasks]' \
+          '-n[Run N frontier layers]:number of layers:' \
+          '-a[Run all layers until the frontier is exhausted]' \
+          '--all[Run all layers until the frontier is exhausted]' \
           '-c[Run continuously]' \
           '--continuous[Run continuously]' \
           '--burndown[Unattended whole-plan burndown: --all --on-failure stop, opt-in asserted]' \
@@ -231,7 +231,10 @@ let
       #
       # Runs ${claudeWrapper} -p to execute tasks defined in a markdown plan file.
       # The plan file must have a Progress Tracking table with TASK: status markers.
-      # Prioritizes IN_PROGRESS tasks (unfinished work) over PENDING tasks.
+      # Layer model (plan 059): each iteration launches ONE orchestrating ${claudeWrapper} -p over the whole
+      # independent frontier (a "layer") - it fans out sub-agents, commits each task, and edits the plan TASK
+      # markers itself; the next iteration re-reads the plan for the newly-unblocked layer. Mode A
+      # (/next-task) and Mode B (this runner) share one frontier policy, so they behave identically.
 
       set -euo pipefail
 
@@ -326,25 +329,35 @@ let
                           Optional: if omitted, falls back to the per-worktree
                           .session-state/active-plan pointer (plan-045 T4, mirrors /next-task).
 
+      Execution model (layer-based, plan 059):
+        Each iteration launches ONE orchestrating ${claudeWrapper} -p over the whole independent
+        FRONTIER (a "layer") - it fans out sub-agents for the mutually-independent tasks, commits
+        each task, and edits the plan TASK markers itself. The next iteration re-reads the plan and
+        clears the next, newly-unblocked layer. A "-n N" count and "--all" therefore mean layers,
+        not single tasks. This is the same frontier policy /next-task uses, so Mode A (interactive)
+        and Mode B (this runner) behave identically.
+
       Options:
-        -n N              Run N tasks (default: 1)
-        -a, --all         Run all actionable tasks (IN_PROGRESS + PENDING)
+        -n N              Run N layers (each clears one independent frontier; default: 1)
+        -a, --all         Run successive layers until the whole frontier is exhausted
         -c, --continuous  Run continuously (survives rate limits)
         --burndown        Unattended whole-plan burndown: alias for --all --on-failure stop,
                           with opt-in asserted (incompatible with --force). The convenience
                           entry point for a detached long run.
-        -d, --delay N     Seconds between tasks (default: ${toString taskCfg.safetyLimits.delayBetweenTasks})
+        -d, --delay N     Seconds between layers (default: ${toString taskCfg.safetyLimits.delayBetweenTasks})
         --model MODEL     Override model (alias or full name, e.g., opus, qwen-a3b)
-        --on-failure WHAT On a blocking failure: stop (default) halts the whole run leaving the
-                          task IN_PROGRESS; skip is the legacy advance-despite-failure behavior
+        --on-failure WHAT On a blocking failure in a layer: stop (default) halts the whole run leaving
+                          the failed task IN_PROGRESS (independents already done in the layer stay
+                          committed); skip is the legacy advance-despite-failure behavior
         --force           Bypass the 'Burndown: SAFE' opt-in gate (interactive/testing only).
                           Does NOT bypass the branch guard: never runs on main/master.
         --dry-run         Show what would execute without running
         -h, --help        Show this help
 
       Task Selection:
-        --task ID         Run specific task by ID (e.g., --task F1)
-                          Can combine with -n: --task F1 -n 3 (run F1, then next 2)
+        --task ID         Run one specific task by ID (e.g., --task F1). This is the single-task
+                          escape hatch - it does NOT fan out a layer; it runs exactly that task.
+                          Can combine with -n: --task F1 -n 3 (run F1, then the next 2 layers)
         --list            Show all tasks with status, select with fzf if interactive
 
       Plan File Format:
@@ -375,22 +388,25 @@ let
         Max runtime:     ${toString taskCfg.safetyLimits.maxRuntimeHours} hours
         Rate limit wait: ${toString taskCfg.safetyLimits.rateLimitWaitSeconds} seconds
 
-      Observability & resume (plan-045 T6):
-        Per-task logs:  ${taskCfg.logDirectory}/YYYYMMDD_HHMMSS_<task>.{log,json,stderr}
-        Event journal:  ${taskCfg.logDirectory}/events.jsonl  (append-only; one JSONL line per
-                        transition: ts, iteration, task, status bucket, sha_before/sha_after,
-                        head_moved). Delimited per run by a "run_start" marker. Inspect with jq.
+      Observability & resume (plan-045 T6; per-layer since plan 059 T4):
+        Per-layer logs: ${taskCfg.logDirectory}/YYYYMMDD_HHMMSS_<anchor>.{log,json,stderr}
+                        (<anchor> = the layer's first actionable row; the full orchestrator report is inside)
+        Event journal:  ${taskCfg.logDirectory}/events.jsonl  (append-only; one JSONL line per LAYER
+                        transition: ts, iteration, task anchor, status bucket, completed (tasks the layer
+                        finished), sha_before/sha_after, head_moved). Per-TASK commit attribution lives in
+                        the orchestrator report + plan TASK edits, not here. Delimited per run by a
+                        "run_start" marker. Inspect with jq.
         Run state:      ${taskCfg.stateFile}  (latest status snapshot, key=value)
         Handoff:        .session-state/HANDOFF.md  (rehydration breadcrumb on every post-gate stop)
         To resume a partial burndown: just re-run the same command - an IN_PROGRESS task is
         re-attempted first (the agent's status-transition discipline makes tasks idempotent).
 
       Examples:
-        run-tasks-${accountName} docs/plan.md               # Run next pending task
-        run-tasks-${accountName} docs/plan.md -n 5          # Run 5 tasks sequentially
+        run-tasks-${accountName} docs/plan.md               # Clear the next frontier layer (one iteration)
+        run-tasks-${accountName} docs/plan.md -n 5          # Clear up to 5 successive layers
         run-tasks-${accountName} docs/plan.md --burndown    # Unattended whole-plan burndown
-        run-tasks-${accountName} docs/plan.md --task F1     # Run task F1 specifically
-        run-tasks-${accountName} docs/plan.md --task F1 -n 3 # Run F1, then next 2 pending
+        run-tasks-${accountName} docs/plan.md --task F1     # Run task F1 specifically (single-task, no layer)
+        run-tasks-${accountName} docs/plan.md --task F1 -n 3 # Run F1, then the next 2 layers
         run-tasks-${accountName} docs/plan.md --list        # Show task status, select with fzf
         run-tasks-${accountName} docs/plan.md --dry-run     # Preview what would execute
       EOF
@@ -538,7 +554,8 @@ let
           ${pkgs.ripgrep}/bin/rg -c '\|\s*TASK:COMPLETE\s*\|' "$PLAN_FILE" 2>/dev/null || echo "0"
       }
 
-      # Extract task ID/name from the next actionable row in the plan file
+      # Extract the layer ANCHOR name from the first actionable row in the plan file (plan 059: this
+      # labels the layer's log files and header line; the orchestrator still clears the whole frontier).
       # Priority: IN_PROGRESS first (resume unfinished work), then PENDING
       # Returns a sanitized name safe for use in filenames (no /, :, or spaces)
       get_next_task_name() {
@@ -567,7 +584,8 @@ let
           fi
       }
 
-      # Extract model specification from the next actionable row in the plan file
+      # Extract the model for the layer from the first actionable row in the plan file (plan 059: the
+      # layer's orchestrator runs under this model; the Model column anchors on that first row).
       # Priority: IN_PROGRESS first (resume unfinished work), then PENDING
       # Returns the model name if specified, empty string if not
       get_next_task_model() {
@@ -1019,7 +1037,9 @@ let
           fi
       }
 
-      # run_task: execute ONE task via the Claude CLI and map its outcome to a return code.
+      # run_task: run ONE Claude CLI invocation and map its outcome to a return code. In the default
+      # (no --task) path that invocation is a whole frontier LAYER (the orchestrator clears every
+      # independent actionable task); with --task it is a single targeted task. (plan 059)
       #
       # Return-code table (consumed by the main-loop `case` below). These map 1:1 onto the
       # Unattended Burndown Contract outcome taxonomy (CLAUDE.md "Unattended Burndown Contract"):
@@ -1107,7 +1127,8 @@ let
               return 0
           fi
 
-          # Build prompt - either for specific task or next actionable (IN_PROGRESS > PENDING)
+          # Build prompt - either the single-task prompt (--task) or the shared frontier/layer prompt
+          # ($PROMPT) that clears the whole independent frontier this invocation (plan 059)
           local task_prompt
           if [[ -n "$target_task_id" ]]; then
               task_prompt="Read ''${PLAN_FILE_ABS}, find the task with ID \"$target_task_id\" in the Progress Tracking table. Execute it following the task definition in that file. Document findings in the corresponding section. Status transitions: if PENDING, change to \"TASK:IN_PROGRESS\" first and commit, then work, then change to \"TASK:COMPLETE\" with today's date. If already IN_PROGRESS, resume work then change to \"TASK:COMPLETE\" with today's date. Report what you completed and what's next. Commit your changes when done. If the task is already TASK:COMPLETE, output on its own line: TASK_ALREADY_COMPLETE. If no such task ID found, output on its own line: TASK_NOT_FOUND. IMPORTANT: If the task is blocked because a declared dependency is not yet TASK:COMPLETE, do NOT attempt it; output on its own line: BLOCKED_BY_DEP followed by which dependency is incomplete. This is NOT a failure. IMPORTANT: If you determine the task cannot be executed on the current host (e.g., requires Nix but running on Termux, or requires specific tools not available), output on its own line: ENVIRONMENT_NOT_CAPABLE followed by a brief explanation. Do NOT mark the task complete - leave its status unchanged. IMPORTANT: If the task is marked as 'Interactive' in the plan file, or requires user decisions/choices before proceeding, output on its own line: USER_INPUT_REQUIRED followed by the questions/options. Do NOT mark it complete - leave its status unchanged for interactive session via /next-task. CRITICAL: Do NOT invent 'alternative approaches' or workarounds to tasks. If a task has prerequisites that aren't met, that task is ENVIRONMENT_NOT_CAPABLE. Complete the task as defined or mark it not capable - no workarounds. IMPORTANT: Do not include ready-to-paste prompts or continuation templates in your response."
