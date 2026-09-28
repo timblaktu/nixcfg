@@ -56,7 +56,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T3 | Per-layer stop-on-failure semantics | TASK:COMPLETE | (2026-09-28) | |
 | T4 | Per-layer event journal + save_state | TASK:COMPLETE | (2026-09-28) | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:COMPLETE | (2026-09-28) | |
-| T6 | Update help text + Burndown Contract docs | TASK:PENDING | | |
+| T6 | Update help text + Burndown Contract docs | TASK:IN_PROGRESS | | |
 | T7 | Validation: flake check, switch, e2e layer burndown | TASK:PENDING | | |
 
 ---
@@ -217,7 +217,7 @@ reported "Remaining frontier blocked by incomplete dependencies" and exited 0 af
 (a completable layer reached all-done in one iteration) and gets multi-layer, dependent-sequencing
 re-confirmation in T7. `nix flake check --no-build` green.
 
-### T6 - Update help text + Burndown Contract docs `TASK:PENDING`
+### T6 - Update help text + Burndown Contract docs `TASK:IN_PROGRESS`
 Depends on T2-T5.
 Update the `usage()` help, inline comments, and the "Unattended Burndown Contract" section of
 `claude-code-user-memory-template.md` to describe layer-based Mode B (fans out independent tasks;
