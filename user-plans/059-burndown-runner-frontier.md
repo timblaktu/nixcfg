@@ -55,7 +55,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:COMPLETE | (2026-09-28) | |
 | T3 | Per-layer stop-on-failure semantics | TASK:COMPLETE | (2026-09-28) | |
 | T4 | Per-layer event journal + save_state | TASK:COMPLETE | (2026-09-28) | |
-| T5 | Loop termination: progress vs all-done vs blocked | TASK:IN_PROGRESS | | |
+| T5 | Loop termination: progress vs all-done vs blocked | TASK:COMPLETE | (2026-09-28) | |
 | T6 | Update help text + Burndown Contract docs | TASK:PENDING | | |
 | T7 | Validation: flake check, switch, e2e layer burndown | TASK:PENDING | | |
 
@@ -192,7 +192,7 @@ parsed by `jq` showed exactly `{iteration:0, status:run_start, completed:0, head
 e2e: the layer event recorded `completed:1` (G1 done before the F1 failure), `status:blocking_failure`,
 `head_moved:true`. `nix flake check --no-build` green.
 
-### T5 - Loop termination: progress vs all-done vs blocked `TASK:IN_PROGRESS`
+### T5 - Loop termination: progress vs all-done vs blocked `TASK:COMPLETE` (2026-09-28)
 Depends on T2, T3.
 Ensure the main loop terminates correctly under the layer model: continue while the layer makes
 progress (actionable count drops / HEAD moves); clean-exit on ALL_TASKS_DONE; clean-exit when the
@@ -201,6 +201,21 @@ not a failure); halt on blocking failure. Keep the max-iterations / max-runtime 
 breakers.
 **DoD:** a plan whose remaining tasks are all dependency-blocked exits 0 cleanly (not a failure); a
 fully-completable plan reaches all-done; neither spins past a no-progress layer.
+
+**DONE (2026-09-28), verified live.** Added a per-iteration progress snapshot in the main loop (actionable
+count + HEAD before/after the orchestrator invocation) and a `layer_made_progress` flag, then used it to
+terminate correctly under the layer model: (a) a success layer that made NO progress in `--all`/`continuous`
+clean-exits 0 as "frontier stalled" (and only a layer that actually advanced increments the completed count);
+(b) a `BLOCKED_BY_DEP` layer that made NO progress clean-exits 0 as "remaining frontier blocked" (re-invoking
+the whole-frontier orchestrator cannot help), while one that DID make progress continues to the next possibly
+newly-unblocked layer, bounded by the existing consecutive-block backstop. ALL_TASKS_DONE clean-exit, the
+blocking-failure halt (T3), and the max-iterations / max-runtime / rate-limit circuit breakers are unchanged.
+**e2e (wholly dependency-blocked plan, two tasks each depending on a missing task, `--all`):** the runner
+reported "Remaining frontier blocked by incomplete dependencies" and exited 0 after exactly ONE iteration
+(~13s) - it did NOT spin to MAX_ITERATIONS (DoD bullets 1 and 3). The journal recorded the blocked layer with
+`completed:0, head_moved:false`. Bullet 2 (a fully-completable plan reaches all-done) is shown by the T2 e2e
+(a completable layer reached all-done in one iteration) and gets multi-layer, dependent-sequencing
+re-confirmation in T7. `nix flake check --no-build` green.
 
 ### T6 - Update help text + Burndown Contract docs `TASK:PENDING`
 Depends on T2-T5.
