@@ -101,6 +101,15 @@ commit each task individually). Keep the existing burndown opt-in gate, branch g
 model resolution, rate-limit handling, and safety limits.
 **DoD:** a dry-run (`--dry-run`) shows the frontier prompt would be sent; on a test plan with two
 independent PENDING tasks, one real iteration completes BOTH (two commits) rather than one.
+**Impl note (T1 already did the prompt half):** `$PROMPT` is ALREADY the shared frontier body
+(`frontierPromptBody`, delivered via the `cat <<'FRONTIER_EOF'` heredoc) - T2 does NOT rebuild the
+prompt; it rewires the LOOP. Today `$PROMPT` is consumed at `task_prompt="$PROMPT"` in `run_task` (the
+"next actionable" default path); the separate `-t TASKID` branch builds its own single-task
+`task_prompt` and MUST stay single-task (leave it). So T2's change is: stop advancing the cursor one row
+per iteration and instead invoke the orchestrator once per layer, letting IT commit each task and edit
+the plan `TASK:` markers; the loop then re-reads the plan to detect the next layer. Also update the
+`--dry-run` echo (currently `"Would execute: $CLAUDE_CMD -p $model_flag ..."`) so it actually shows the
+frontier prompt per the DoD.
 
 ### T3 - Per-layer stop-on-failure semantics `TASK:PENDING`
 Depends on T2.
@@ -157,3 +166,24 @@ state/journal consistent with T4.
   never run concurrent nix.
 - This plan is intentionally Mode A: architectural decisions and risky rewrites of the autonomous
   driver want a human in the loop. Do not add `Burndown: SAFE` to this file.
+- **Nix indented-string editing hazard (learned in T1, applies to T2-T7 - they all edit
+  `task-automation.nix`).** The runner is one big `writeShellScriptBin "..." ''<~1300 lines>''` indented
+  string. A literal indented-string close delimiter OR a dollar-brace antiquotation inside a bash `#`
+  comment (or anywhere) INSIDE that string is interpreted by Nix (the delimiter closes the string; the
+  antiquotation starts interpolation) -> eval/parse error. When the file is left syntactically broken,
+  the auto-formatter re-indents the WHOLE runner body (to 2-space) and splits bash statements across
+  lines - silent, wholesale corruption that still `bash -n`-passes because it is opaque string content.
+  Guardrails: (1) never write those two literal sequences in runner-string comments (say "indented
+  string" / "antiquotation" / "dollar-brace" in prose); (2) after any `.nix` edit run
+  `nix-instantiate --parse <file>` (fast) BEFORE the slow `nix flake check`; (3) confirm
+  `nixpkgs-fmt --check <file>` is clean AND `diff` vs `origin/main` is scoped to only your intended
+  regions; (4) if the runner string is corrupted wholesale, recover with
+  `git checkout origin/main -- modules/programs/claude-code/_hm/task-automation.nix` and cleanly
+  re-apply. The runner string's uniform indent is 6 spaces (relied on for the heredoc terminator to
+  land in column 0); keep it 6.
+- **planIntegrity guardrail (env):** marking a row done requires a parenthesized `(YYYY-MM-DD)` date in
+  the SAME edit and the row must already be in-progress (no pending-straight-to-done skip). NOTE this
+  hook is a substring counter, so plan prose that merely quotes the status tokens can trip a false
+  positive - reword prose to avoid the literal tokens. The pre-commit hook now only auto-formats (flake
+  check was removed in plan 056 P11.4), so `.nix` commits are fast when already fmt-clean; CI is the
+  authoritative eval+build gate.
