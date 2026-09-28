@@ -53,7 +53,7 @@ Reference reading before starting: `task-automation.nix` (whole file), especiall
 |------|------|--------|------|-------|
 | T1 | Rebase on origin/main; extract shared frontier prompt | TASK:COMPLETE | (2026-09-28) | |
 | T2 | Runner = thin loop around one orchestrating claude -p | TASK:COMPLETE | (2026-09-28) | |
-| T3 | Per-layer stop-on-failure semantics | TASK:PENDING | | |
+| T3 | Per-layer stop-on-failure semantics | TASK:IN_PROGRESS | | |
 | T4 | Per-layer event journal + save_state | TASK:PENDING | | |
 | T5 | Loop termination: progress vs all-done vs blocked | TASK:PENDING | | |
 | T6 | Update help text + Burndown Contract docs | TASK:PENDING | | |
@@ -145,7 +145,7 @@ worktree/branch/temp removed afterward. Observed and correctly left to their own
 "completed" count and the `events.jsonl` line are still per-iteration/single-task (the per-layer count +
 journal are T4); T7 layers on the dependent-task sequencing and the seeded-failure case.
 
-### T3 - Per-layer stop-on-failure semantics `TASK:PENDING`
+### T3 - Per-layer stop-on-failure semantics `TASK:IN_PROGRESS`
 Depends on T2.
 Define how the orchestrating invocation signals a layer-level blocking failure (e.g. emits
 `BLOCKING_FAILURE` on its own line naming the failed task, leaves that task `IN_PROGRESS`, and does not
