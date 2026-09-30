@@ -79,6 +79,17 @@ Do NOT put copy-paste content in chat as code-fenced blocks. Instead:
 
 Does NOT apply when content is sent directly via API (e.g., `glab api`).
 
+## Task/Session Close-Out Summaries (MANDATORY)
+
+At the end of any task you believe is complete - and at minimum at the end of every working session - give the user a short, jargon-free plain-English summary using FOUR markdown headings, each with its body on the line IMMEDIATELY below it (NO blank line between a heading and its body; blank line only between sections):
+
+`# What I did` - in everyday terms.
+`# Why it was the right thing` - why worth doing now.
+`# Why the approach is correct` - the EVIDENCE it works (tests/observations), not just that it ran.
+`# How it moves us toward the goal` - how it advances the objective, PLUS a concise note on the tasks remaining to the end of the plan/goal (show the remaining road, not just the step just taken).
+
+Spell out or avoid every acronym/tool name on first use; gloss unavoidable real file/command/API names in parentheses the first time. Concise; abbreviations OK if still clear. This is a Definition-of-Done requirement, not optional polish.
+
 ## CI/CD and Testing Philosophy
 
 - CI/CD is just orchestration - everything must be reproducible everywhere

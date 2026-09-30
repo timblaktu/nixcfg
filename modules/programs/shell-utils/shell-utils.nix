@@ -78,6 +78,57 @@ _:
             runtimeInputs = with pkgs; [ coreutils openssh bash ];
           })
 
+          # edge-focus - bring a Microsoft Edge tab to the foreground from WSL
+          # (drives the exact window HWND via UI Automation; see the .ps1 worker).
+          (pkgs.writeShellApplication {
+            name = "edge-focus";
+            runtimeInputs = with pkgs; [ coreutils ];
+            text =
+              let
+                ps1 = pkgs.writeText "Focus-EdgeTab.ps1"
+                  (builtins.readFile (filesDir + "/bin/Focus-EdgeTab.ps1"));
+              in
+                /* bash */ ''
+                # WSL-only: needs powershell.exe (Windows PATH) and wslpath (WSL).
+                ps1_win="$(wslpath -w ${ps1})"
+                run_ps() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps1_win" "$@"; }
+
+                usage() {
+                  echo "Usage:"
+                  echo "  edge-focus <wsl-file-path>          focus that file's tab (open if needed)"
+                  echo "  edge-focus --new <wsl-file-path>    open the file in its OWN Edge window, then focus"
+                  echo "  edge-focus <title-substring> [url]  focus first tab whose title matches (open url if none)"
+                  echo "  edge-focus --list                   list every Edge window + tab"
+                  exit 1
+                }
+
+                new=0
+                if [ "''${1:-}" = "--new" ]; then new=1; shift; fi
+                if [ "''${1:-}" = "--list" ]; then run_ps -List; exit $?; fi
+
+                arg="''${1:-}"
+                [ -z "$arg" ] && usage
+
+                if [ -e "$arg" ]; then
+                  abs="$(readlink -f "$arg")"
+                  match="$(basename "$abs")"
+                  url="file://wsl.localhost/''${WSL_DISTRO:-''${WSL_DISTRO_NAME:-nixos}}$abs"
+                  if [ "$new" = "1" ]; then
+                    run_ps -Match "$match" -Url "$url" -NewWindow
+                  else
+                    run_ps -Match "$match" -Url "$url"
+                  fi
+                else
+                  if [ -n "''${2:-}" ]; then
+                    if [ "$new" = "1" ]; then run_ps -Match "$arg" -Url "''${2}" -NewWindow
+                    else run_ps -Match "$arg" -Url "''${2}"; fi
+                  else
+                    run_ps -Match "$arg"
+                  fi
+                fi
+              '';
+          })
+
           # mergejson - JSON merging utility with diff preview
           (pkgs.writeShellApplication {
             name = "mergejson";
