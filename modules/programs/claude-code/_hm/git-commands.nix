@@ -110,13 +110,18 @@ in
                  fi
                  ```
 
-              5. **Run post-checkout hook manually**
-                 git's post-checkout hook does NOT fire during `git worktree add` (confirmed git 2.52).
-                 Run it explicitly so hooks like user-plans symlink setup execute.
+              5. **Seed a real per-worktree `.claude/user-plans` directory**
+                 Each worktree gets its OWN real user-plans dir, never a symlink:
+                 Claude Code refuses writes through a symlink that escapes the worktree
+                 (SymlinkWriteRefusedError) and otherwise prompts on every plan/handoff
+                 write. Seed it once from the main worktree's copy. (The repo no longer
+                 ships a post-checkout hook for this - user-plans setup lives here.)
                  ```bash
-                 HOOK="$NEW_WORKTREE/.githooks/post-checkout"
-                 if [[ -x "$HOOK" ]]; then
-                   (cd "$NEW_WORKTREE" && "$HOOK" 0000000000000000000000000000000000000000 "$(git rev-parse HEAD)" 1)
+                 CANON="$(git -C "$NEW_WORKTREE" rev-parse --path-format=absolute --git-common-dir | sed 's|/\.git$||')/.claude/user-plans"
+                 DEST="$NEW_WORKTREE/.claude/user-plans"
+                 mkdir -p "$DEST"
+                 if [[ -d "$CANON" && "$CANON" != "$DEST" ]]; then
+                   cp -a "$CANON/." "$DEST/" 2>/dev/null || true
                  fi
                  ```
 
