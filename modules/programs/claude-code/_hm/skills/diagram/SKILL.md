@@ -5,10 +5,30 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.12.0
-**Last Updated**: 2026-07-22
+**Version**: 1.13.0
+**Last Updated**: 2026-09-29
 
 ## Changelog
+
+### v1.13.0 (2026-09-29)
+- Encoded four defect classes a user had to catch by hand (title, congested labels,
+  cramped fan-in, stray decorative edge) so the self-check catches them next time:
+  - **Section 29: Diagram Title default = centered + one line** (distinct from the
+    left-justified *container* title). A left-aligned or title+stacked-subtitle diagram
+    title now reads as an anti-pattern (new anti-pattern row + Layout-Issues checklist row).
+  - **Section 29: Fan-in / fan-out channels** - budget the routing channel BEFORE placing
+    labels; the fix for struck-through labels and crossing lines is usually to narrow +
+    left-justify the many-side boxes to widen the channel, not to fight the label. New
+    anti-pattern rows + creation-checklist rows.
+  - **Section 20: edge-label background** gained exception (c) - a genuinely congested
+    fan-in channel where offsetting still leaves the label struck through may use a SOLID
+    `#ffffff` mask + 2-line label, but only AFTER trying to free space first.
+  - **Section 15 self-check**: new symptom rows for "struck-through edge label", "cramped
+    fan-in channel", and "stray / floating line" (e.g. a decorative axis arrow between
+    invisible anchors - remove it).
+  - **Section 29: Size Boxes to Content** - a short label in a wide fixed-width box renders as a
+    mostly-empty box (left-justify alone does not fix it); size each box to its content in a flow
+    layout, keeping only a status column aligned. New anti-pattern + checklist + Layout-Issues rows.
 
 ### v1.12.0 (2026-07-22)
 - Section 15: added a hard **"Definition of Done - EVERY frame reviewed"** gate
@@ -1608,12 +1628,15 @@ After viewing the rendered diagram, systematically check for:
 | **Stacked labels** | Multiple labels pile on same spot | Offset labels with mxGeometry adjustments |
 | **Truncated text** | Words cut off or "..." shown | Increase element width/height |
 | **Illegible text** | Font too small or poor contrast | Increase fontSize, adjust colors |
+| **Struck-through edge label** | A connector line passes THROUGH the label text (esp. in a tight fan-in channel) | Free the channel (narrow/left-justify source boxes), offset the label; last resort 2-line + solid `#ffffff` mask (Section 20 exception c) |
 
 #### Connector Issues
 
 | Issue | Symptom | Typical Fix |
 |-------|---------|-------------|
 | **Messy bundles** | Multiple connectors overlap creating visual noise | Adjust exit/entry points, add waypoints, or reposition elements |
+| **Cramped fan-in channel** | Several edges converge through a narrow gap; labels crowd, lines cross | Narrow + left-justify the many-side boxes to widen the channel (Section 29) |
+| **Stray / floating line** | A thin edge crosses the diagram with no clear endpoints (e.g. a decorative "axis" arrow between invisible anchors) | Remove it; convey the idea via numbering/title/position |
 | **Redundant labels** | Same label (e.g., "1x Eth") on every connector | Use one label for the group, or remove individual labels |
 | **Awkward routing** | Connectors route through unrelated element groups | Add explicit waypoints or reposition elements |
 | **Crossing connectors** | Connectors cross unnecessarily | Reorder elements or adjust anchor points |
@@ -1626,6 +1649,8 @@ After viewing the rendered diagram, systematically check for:
 | **Uneven alignment** | Elements not on grid | Snap to grid (multiples of 10) |
 | **Poor grouping** | Related elements not visually clustered | Use containers or adjust positioning |
 | **Legend interference** | Legend overlaps diagram content | Move legend to corner or separate area |
+| **Unfinished title** | Diagram title is left-aligned or split into a bold title + a stacked lighter subtitle line | Center it (`align=center`, spans width) and put it on ONE line (title ` : ` short subtitle) |
+| **Mostly-empty box** | A short label floats in a much wider box (~half whitespace) | Size the box to its content (Section 29 "Size Boxes to Content"); do not rely on left-justify alone |
 | **Asymmetric layout** | Diagram feels unbalanced | Center elements, equalize spacing |
 
 #### Content Issues
@@ -1778,10 +1803,18 @@ value="lock/&lt;br&gt;unlock"
    `labelBackgroundColor` to any color (`#ffffff`, etc.) on an edge. Use
    `labelBackgroundColor=none` or omit it entirely. This is a hard rule - a filled box
    behind arrow text looks like a sticker and breaks visual consistency.
-   - **Only exception:** the user explicitly asks for it, OR a label is unavoidably sitting
-     ON A BORDER/GRID LINE where it would otherwise be bisected (the fieldset/legend pattern -
-     a *container* title centered on its own dashed border, NOT an arrow label). Even then,
-     prefer offsetting the label off the line (Rule 5) over adding a background.
+   - **Exceptions (in priority order):** (a) the user explicitly asks for a background; (b) a
+     label is unavoidably sitting ON A BORDER/GRID LINE where it would otherwise be bisected (the
+     fieldset/legend pattern - a *container* title centered on its own dashed border, NOT an arrow
+     label); (c) a **congested fan-in/fan-out channel** where several edges converge in tight
+     quarters and offsetting the label (Rule 5) still leaves it struck through by a line. In case
+     (c), FIRST try to *free space* (see Section 29 "Fan-in / fan-out channels": narrow /
+     left-justify / reposition the source shapes to widen the routing channel) - that usually makes
+     offsetting enough. Only if the layout genuinely cannot open up, set a SOLID
+     `labelBackgroundColor=#ffffff` so the fill masks the line under the text (the "the line breaks
+     at the text" technique) and stack the label over 2 lines with `<br>` to keep it compact. A
+     solid mask in a tight channel is legible; the anti-pattern is a sticker-background on a label
+     that had room to offset.
 2. **Neutral label text, NOT line color**: set edge-label `fontColor=#333333`. Do NOT match
    the connector's `strokeColor` - line-colored label text reads as a defect. The line keeps its
    color; the label stays neutral. (`drawio_gen.py` now defaults edge labels to `#333333` +
@@ -2298,15 +2331,61 @@ CENTERED (default) - title fights top-right badge:        LEFT-JUSTIFIED (prefer
 - This also frees the top edge for more consistent port/connector indicator placement.
 - Do NOT instead shrink or rename the title to dodge an overlap - that loses meaning and is fragile.
 
+### Diagram Title (Default: Centered, One Line)
+
+The overall **diagram title** (distinct from a container/group title, above) defaults to **centered
+across the diagram width and a single line**. Give it a text cell whose width spans the drawing and
+`align=center`. Keep it to one line: a short bold title, optionally followed by a brief subtitle
+clause on the SAME line after a separator (` : `), NOT a bold title with a lighter subtitle stacked
+in a second cell below it. A two-line/left-aligned title reads as unfinished and wastes vertical
+space; centered-and-concise reads as a finished figure.
+- This is the opposite default from a *container* title (which is left-justified, above) - do not
+  confuse the two. The diagram title captions the whole figure; a container title labels one box.
+
+### Fan-in / Fan-out Channels (leave routing room)
+
+When several edges converge on one target (fan-in) or spread from one source (fan-out), the shapes
+on the many-side and the empty gap between them and the one-side form a **routing channel**. The
+#1 cause of struck-through labels and crossing lines is a channel that is too narrow because the
+source shapes are too WIDE. Budget the channel BEFORE fighting label placement:
+- Make the many-side boxes **as narrow as their text allows and left-justify them**
+  (`align=left;spacingLeft=8`) so their right edges retreat and the channel widens. A wide,
+  centered box wastes the very space the converging lines and their labels need.
+- Keep decorative/unrelated shapes (callouts, notes) OUT of the channel - move them below or to the
+  side so risers do not cross them.
+- Only after the channel has room, place the labels (offset per Section 27; or, if still tight, the
+  2-line + solid-mask fallback in Section 20 exception (c)).
+
+### Size Boxes to Content (do not leave boxes mostly empty)
+
+A box should hug its text, not float a short label in a wide rectangle. Fixed-width boxes across a
+grid look tidy in the XML but render as **mostly-empty boxes** whenever the content is short (a
+"inside AMIROM.fd" chip in a 380px box is ~75% whitespace), and the user WILL flag it. Left-just
+alignment alone does not fix this - it only moves the empty space to the right of the text.
+- **Size each box to the wider of its own two constraints**: its longest one-line text row, plus a
+  small padding (~16-24px). Let sibling boxes have DIFFERENT widths (a flow layout, left-to-right
+  in the row) rather than forcing one fixed width that fits the longest and wastes space on the rest.
+- Keep a genuinely aligned element (e.g. a right-hand verdict/status column) aligned by placing it
+  at a fixed x just past the WIDEST row; the shorter rows then show band/background space to its
+  left, which is fine - that is background, not an empty box.
+- After sizing down, **re-render and check for wrap**: a box narrowed below its longest line wraps
+  that line and, in a fixed-height box, crowds or clips it. Widen just the offenders (and shift the
+  boxes after them) until every intended one-line row is one line. This width-vs-wrap tradeoff is
+  why box-sizing is an iterate-on-the-raster step, not a one-shot calculation.
+
 ### Creation Checklist
 
 Before running drawio-svg-sync on a new diagram, verify:
 
 | Check | How to Verify |
 |-------|---------------|
+| ☐ Diagram title centered + one line | Title cell `align=center`, spans width, single line (no stacked subtitle cell) |
+| ☐ Fan-in channel has room | Many-side boxes narrow + left-justified; no callout/note sits in the converging-lines channel |
+| ☐ Boxes hug their content | No box is mostly empty; size each to its longest one-line row + padding (flow layout), not a fixed grid width |
+| ☐ No stray/floating decorative edges | No thin edge between tiny invisible anchor points (e.g. a floating "axis" arrow); convey ordering via numbering/title/position instead |
 | ☐ Annotations at end of XML | Search for ①②③④ or "callout" - should be in last 10 cells |
 | ☐ Edge labels have offset | All `<mxCell ... edge="1" ... value="...">` have `<mxPoint as="offset">` |
-| ☐ No labelBackgroundColor | Edge labels use `labelBackgroundColor=none` |
+| ☐ No labelBackgroundColor | Edge labels use `labelBackgroundColor=none` (solid `#ffffff` only in a genuinely congested channel, Section 20 exception c) |
 | ☐ Explicit anchor points | All edges have `exitX/exitY/entryX/entryY` with `Dx=0;Dy=0` |
 | ☐ Consistent spacing | Elements aligned to grid (multiples of 10px) |
 
@@ -2319,8 +2398,12 @@ Before running drawio-svg-sync on a new diagram, verify:
 | Separate text boxes for edge labels | Don't move with edge | Use `value` attribute on edge |
 | Missing anchor points | Edges detach on resize | Always specify exit/entry X/Y/Dx/Dy |
 | Large strokeWidth on edges | Oversized arrowheads | Use strokeWidth=1 or 2 max |
-| Background behind an arrow/line label | Looks like a sticker, breaks consistency | Never set `labelBackgroundColor` to a color on an edge; offset the label instead (Section 20) |
+| Background behind an arrow/line label | Looks like a sticker, breaks consistency | Never set `labelBackgroundColor` to a color on an edge; offset the label instead (Section 20). Exception: a genuinely congested fan-in channel (Section 20 exception c) |
 | Centered container title | Collides with top-right badges/annotations | Left-justify: `align=left;spacingLeft=6` |
+| Left-aligned or two-line (title+subtitle) diagram title | Reads as unfinished, wastes space | Center the diagram title, one line: bold title ` : ` short subtitle clause |
+| Wide, centered boxes on the many-side of a fan-in | Squeezes the routing channel; labels get struck through, lines cross | Narrow + left-justify the source boxes to open the channel BEFORE placing labels (Section 29 "Fan-in / fan-out channels") |
+| Floating decorative "axis"/arrow between tiny anchors | Renders as a stray line the reader cannot parse | Drop it; convey ordering via numbering + title + top-to-bottom position |
+| Fixed-width boxes leaving short entries mostly empty | ~Half the box is whitespace; left-justify alone does not fix it | Size each box to its content (flow layout), keep only a status column aligned (Section 29 "Size Boxes to Content") |
 
 ### Quick Reference: Recommended Defaults
 
