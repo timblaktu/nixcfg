@@ -378,6 +378,14 @@ in
                 bind-key -n M-h previous-window \; ${cmdStateClearOnSelect}
                 bind-key -n M-l next-window \; ${cmdStateClearOnSelect}
 
+                # Jump to the next/previous window with a "done" command-status
+                # marker (purple/blinking - a background command just exited).
+                # Alt+Shift+L = next done window, Alt+Shift+H = previous. Wraps in
+                # window-index order; the after-select-window hook clears the marker
+                # on arrival, same as plain window navigation above.
+                bind-key -n M-L run-shell "tmux-goto-done-window next"
+                bind-key -n M-H run-shell "tmux-goto-done-window prev"
+
                 # Window reordering - use prefix-based bindings (more reliable in Windows Terminal)
                 bind-key < swap-window -t -1\; select-window -t -1
                 bind-key > swap-window -t +1\; select-window -t +1
@@ -515,6 +523,12 @@ in
                     set -g @resurrect-strategy-vim 'session'
                     set -g @resurrect-capture-pane-contents 'on'
 
+                    # "~bin/claude->claude-tmux-restore *" relaunches Claude Code
+                    # panes THROUGH the account wrapper so CLAUDE_CONFIG_DIR (and
+                    # thus session history / /resume) survives a restore. See the
+                    # claude-tmux-restore helper in home.packages below, and the
+                    # tmuxPlugins.resurrect override in overlays/default.nix (the
+                    # '*' substitution it relies on needs resurrect > 2022-05-01).
                     set -g @resurrect-processes '\
                         "~mosh *" \
                         "~wait4ssh *" \
@@ -525,7 +539,7 @@ in
                         "~tail *" \
                         "~powershell.exe *" \
                         "~*loop *" \
-                        "~claude" \
+                        "~bin/claude->claude-tmux-restore *" \
                         "~btop" \
                         "~bandwhich" \
                         "~iostat *" \
@@ -545,7 +559,15 @@ in
                     # limited to that one pane after a restore. Re-launch manually
                     # with `dool` if needed.
 
-                    set -g @resurrect-save-command-strategy 'tmux-resurrect-cleanup'
+                    # Pin the save-command strategy to 'ps' (resurrect's default)
+                    # explicitly. This was previously set to 'tmux-resurrect-cleanup',
+                    # which is NOT a valid strategy (valid: ps/pgrep/gdb/linux_procfs)
+                    # and silently fell back to 'ps' - a latent misconfiguration.
+                    # Resurrect cleanup already runs via the client-detached /
+                    # session-closed hooks above, not via this option. 'ps' captures
+                    # the full command line the "~bin/claude->claude-tmux-restore *"
+                    # entry parses on restore.
+                    set -g @resurrect-save-command-strategy 'ps'
                     bind-key S run-shell "tmux-save-with-rename"
                   '';
                 }
@@ -653,6 +675,102 @@ in
                   [ "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh" ]
                   (builtins.readFile ./files/tmux-save-with-rename);
                 runtimeInputs = with pkgs; [ tmux ];
+              })
+
+              # tmux-resurrect restore shim for Claude Code panes.
+              #
+              # resurrect records a running claude pane as the resolved wrapper
+              # target - an absolute store path with flags but WITHOUT the
+              # wrapper's environment - e.g.
+              #   /nix/store/<hash>/bin/claude \
+              #     --settings=<cfg>/.claude-<acct>/settings.json \
+              #     --mcp-config=<cfg>/.claude-<acct>/.mcp.json [/next-task]
+              # Replaying that raw command loses CLAUDE_CONFIG_DIR and the rest
+              # of the account wrapper's env, so the restored session has no
+              # history and an empty /resume. The restore entry
+              #   "~bin/claude->claude-tmux-restore *"   (see @resurrect-processes)
+              # hands us everything after `.../bin/claude`; we infer the account
+              # from the --settings path and relaunch THROUGH the account wrapper
+              # (claude<acct>), which re-establishes the environment. /next-task
+              # re-seeds that slash command (a new session); otherwise we
+              # --continue the most recent session for the pane's cwd. The
+              # wrapper re-adds --settings/--mcp-config itself, so we deliberately
+              # do not forward them. Account/next-task detection is also stable
+              # across a re-save of an already-restored pane.
+              (pkgs.writeShellApplication {
+                name = "claude-tmux-restore";
+                runtimeInputs = with pkgs; [ coreutils ];
+                text = /* bash */ ''
+                  args="$*"
+
+                  account=""
+                  if [[ "$args" =~ \.claude-([A-Za-z0-9_-]+)/settings ]]; then
+                    account="''${BASH_REMATCH[1]}"
+                  fi
+
+                  wrapper="claude"
+                  if [[ -n "$account" ]] && command -v "claude''${account}" >/dev/null 2>&1; then
+                    wrapper="claude''${account}"
+                  fi
+
+                  mode="--continue"
+                  case " $args " in
+                    *" /next-task "*|*" next-task "*) mode="--next-task" ;;
+                  esac
+
+                  exec "$wrapper" "$mode"
+                '';
+              })
+
+              # Jump to the next/previous window carrying a "done" command-status
+              # marker (the purple/blinking foreground set by tmux-cmd-state when a
+              # background command exits - see commandStatus and
+              # modules/lib/tmux-cmd-state.nix). Bound to Alt+Shift+L / Alt+Shift+H.
+              # Reads @cmd_state per pane directly (robust; no #{P:} fold needed in
+              # list-panes), scopes to the current session, skips the current window,
+              # and wraps around in window-index order. The after-select-window hook
+              # clears the marker on arrival, exactly like plain window navigation.
+              (pkgs.writeShellApplication {
+                name = "tmux-goto-done-window";
+                runtimeInputs = with pkgs; [ gawk coreutils ];
+                text = /* bash */ ''
+                  dir="''${1:-next}"
+                  t="$(command -v tmux 2>/dev/null)" || exit 0
+                  ref=(); [ -n "''${TMUX_PANE:-}" ] && ref=(-t "$TMUX_PANE")
+
+                  sess="$("$t" display -p "''${ref[@]}" '#{session_name}' 2>/dev/null)" || exit 0
+                  cur="$("$t" display -p "''${ref[@]}" '#{window_index}' 2>/dev/null)" || exit 0
+                  [ -n "$cur" ] || exit 0
+
+                  # window indices in this session with a pane in the 'done' state,
+                  # excluding the current window, ascending and de-duplicated.
+                  mapfile -t dwins < <("$t" list-panes -s "''${ref[@]}" \
+                    -F '#{window_index} #{@cmd_state}' 2>/dev/null \
+                    | awk -v c="$cur" '$2=="done" && $1!=c {print $1}' | sort -nu)
+
+                  if [ "''${#dwins[@]}" -eq 0 ]; then
+                    "$t" display-message "no windows with a completed (done) command" 2>/dev/null || true
+                    exit 0
+                  fi
+
+                  target=""
+                  case "$dir" in
+                    prev|previous|h|H)
+                      for ((i=''${#dwins[@]}-1; i>=0; i--)); do
+                        if [ "''${dwins[i]}" -lt "$cur" ]; then target="''${dwins[i]}"; break; fi
+                      done
+                      [ -z "$target" ] && target="''${dwins[''${#dwins[@]}-1]}"
+                      ;;
+                    *)
+                      for w in "''${dwins[@]}"; do
+                        if [ "$w" -gt "$cur" ]; then target="$w"; break; fi
+                      done
+                      [ -z "$target" ] && target="''${dwins[0]}"
+                      ;;
+                  esac
+
+                  "$t" select-window -t "$sess:$target" 2>/dev/null || true
+                '';
               })
 
               # Tmux test data generator
