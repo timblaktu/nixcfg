@@ -515,6 +515,12 @@ in
                     set -g @resurrect-strategy-vim 'session'
                     set -g @resurrect-capture-pane-contents 'on'
 
+                    # "~bin/claude->claude-tmux-restore *" relaunches Claude Code
+                    # panes THROUGH the account wrapper so CLAUDE_CONFIG_DIR (and
+                    # thus session history / /resume) survives a restore. See the
+                    # claude-tmux-restore helper in home.packages below, and the
+                    # tmuxPlugins.resurrect override in overlays/default.nix (the
+                    # '*' substitution it relies on needs resurrect > 2022-05-01).
                     set -g @resurrect-processes '\
                         "~mosh *" \
                         "~wait4ssh *" \
@@ -525,7 +531,7 @@ in
                         "~tail *" \
                         "~powershell.exe *" \
                         "~*loop *" \
-                        "~claude" \
+                        "~bin/claude->claude-tmux-restore *" \
                         "~btop" \
                         "~bandwhich" \
                         "~iostat *" \
@@ -545,7 +551,15 @@ in
                     # limited to that one pane after a restore. Re-launch manually
                     # with `dool` if needed.
 
-                    set -g @resurrect-save-command-strategy 'tmux-resurrect-cleanup'
+                    # Pin the save-command strategy to 'ps' (resurrect's default)
+                    # explicitly. This was previously set to 'tmux-resurrect-cleanup',
+                    # which is NOT a valid strategy (valid: ps/pgrep/gdb/linux_procfs)
+                    # and silently fell back to 'ps' - a latent misconfiguration.
+                    # Resurrect cleanup already runs via the client-detached /
+                    # session-closed hooks above, not via this option. 'ps' captures
+                    # the full command line the "~bin/claude->claude-tmux-restore *"
+                    # entry parses on restore.
+                    set -g @resurrect-save-command-strategy 'ps'
                     bind-key S run-shell "tmux-save-with-rename"
                   '';
                 }
@@ -653,6 +667,51 @@ in
                   [ "${pkgs.tmuxPlugins.resurrect}/share/tmux-plugins/resurrect/scripts/save.sh" ]
                   (builtins.readFile ./files/tmux-save-with-rename);
                 runtimeInputs = with pkgs; [ tmux ];
+              })
+
+              # tmux-resurrect restore shim for Claude Code panes.
+              #
+              # resurrect records a running claude pane as the resolved wrapper
+              # target - an absolute store path with flags but WITHOUT the
+              # wrapper's environment - e.g.
+              #   /nix/store/<hash>/bin/claude \
+              #     --settings=<cfg>/.claude-<acct>/settings.json \
+              #     --mcp-config=<cfg>/.claude-<acct>/.mcp.json [/next-task]
+              # Replaying that raw command loses CLAUDE_CONFIG_DIR and the rest
+              # of the account wrapper's env, so the restored session has no
+              # history and an empty /resume. The restore entry
+              #   "~bin/claude->claude-tmux-restore *"   (see @resurrect-processes)
+              # hands us everything after `.../bin/claude`; we infer the account
+              # from the --settings path and relaunch THROUGH the account wrapper
+              # (claude<acct>), which re-establishes the environment. /next-task
+              # re-seeds that slash command (a new session); otherwise we
+              # --continue the most recent session for the pane's cwd. The
+              # wrapper re-adds --settings/--mcp-config itself, so we deliberately
+              # do not forward them. Account/next-task detection is also stable
+              # across a re-save of an already-restored pane.
+              (pkgs.writeShellApplication {
+                name = "claude-tmux-restore";
+                runtimeInputs = with pkgs; [ coreutils ];
+                text = /* bash */ ''
+                  args="$*"
+
+                  account=""
+                  if [[ "$args" =~ \.claude-([A-Za-z0-9_-]+)/settings ]]; then
+                    account="''${BASH_REMATCH[1]}"
+                  fi
+
+                  wrapper="claude"
+                  if [[ -n "$account" ]] && command -v "claude''${account}" >/dev/null 2>&1; then
+                    wrapper="claude''${account}"
+                  fi
+
+                  mode="--continue"
+                  case " $args " in
+                    *" /next-task "*|*" next-task "*) mode="--next-task" ;;
+                  esac
+
+                  exec "$wrapper" "$mode"
+                '';
               })
 
               # Tmux test data generator

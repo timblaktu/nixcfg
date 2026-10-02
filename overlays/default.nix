@@ -85,6 +85,53 @@ in
   # opencode 1.14.48 - pinned ahead of nixpkgs input (which has 1.2.5)
   opencode = prev.callPackage ../pkgs/opencode-pinned/package.nix { };
 
+  # tmux-resurrect: bump from nixpkgs' stale unstable-2022-05-01 snapshot to
+  # upstream master (cff343c, 2023-03-06) and apply PR #587.
+  #
+  # API-ADAPTATION (2026-10-02): nixpkgs pins a resurrect snapshot that predates
+  # merged upstream PR #469, which changed the inline-strategy argument
+  # substitution sed delimiter from '/' to ','. Our Claude Code panes are
+  # recorded by resurrect (ps strategy) as an absolute
+  # `/nix/store/<hash>/bin/claude --settings=<cfg>/.claude-<acct>/settings.json
+  # --mcp-config=.../.mcp.json [/next-task]` command whose args are full of '/'.
+  # On the stale snapshot the '*' argument substitution used by our
+  # `"~bin/claude->claude-tmux-restore *"` restore entry (see
+  # modules/programs/tmux/tmux.nix) therefore breaks with
+  # `sed: unknown option to 's'`; resurrect then silently replays the raw
+  # store-path command, which loses the wrapper environment (CLAUDE_CONFIG_DIR
+  # etc.) and so restores a Claude session with no history / empty /resume.
+  #
+  # Master alone fixes the '/' case (via #469). PR #587 - still OPEN upstream;
+  # the repo has had no code merge since 2023-03 - additionally replaces the
+  # fragile `sed` with bash prefix/suffix splitting so a literal comma, '&' or
+  # tab in a captured command is also safe. We carry it as a local patch and
+  # have mirrored the finding upstream.
+  #
+  # MIGRATION PATH: drop this whole override once nixpkgs ships a resurrect
+  # newer than cff343c AND PR #587 (or an equivalent substitution fix) has
+  # landed upstream, after which the restore entry works against the stock
+  # package.
+  tmuxPlugins = prev.tmuxPlugins // {
+    resurrect = prev.tmuxPlugins.resurrect.overrideAttrs (old: {
+      version = "unstable-2023-03-06";
+      src = prev.fetchFromGitHub {
+        owner = "tmux-plugins";
+        repo = "tmux-resurrect";
+        rev = "cff343cf9e81983d3da0c8562b01616f12e8d548";
+        hash = "sha256-FcSjYyWjXM1B+WmiK2bqUNJYtH7sJBUsY2IjSur5TjY=";
+      };
+      patches = (old.patches or [ ]) ++ [ ./tmux-resurrect-pr587-arg-substitution.patch ];
+      # WORKAROUND (2026-10-02): master ships tests/ symlinks (run_tests,
+      # tests/run_tests_in_isolation, tests/helpers/helpers.sh) that point into
+      # the `lib/tmux-test` git submodule. fetchFromGitHub does not fetch
+      # submodules, so those symlinks dangle and trip nixpkgs' noBrokenSymlinks
+      # fixup hook. The targets are test harness only - never used at runtime -
+      # so opt out of the check rather than pull the submodule. Remove with the
+      # rest of this override per the MIGRATION PATH note above.
+      dontCheckForBrokenSymlinks = true;
+    });
+  };
+
   # Fix watchfiles test failure that affects MCP servers
   # Fallback: Disable problematic tests while working on version update
   pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
