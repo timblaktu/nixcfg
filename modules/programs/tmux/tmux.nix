@@ -378,6 +378,14 @@ in
                 bind-key -n M-h previous-window \; ${cmdStateClearOnSelect}
                 bind-key -n M-l next-window \; ${cmdStateClearOnSelect}
 
+                # Jump to the next/previous window with a "done" command-status
+                # marker (purple/blinking - a background command just exited).
+                # Alt+Shift+L = next done window, Alt+Shift+H = previous. Wraps in
+                # window-index order; the after-select-window hook clears the marker
+                # on arrival, same as plain window navigation above.
+                bind-key -n M-L run-shell "tmux-goto-done-window next"
+                bind-key -n M-H run-shell "tmux-goto-done-window prev"
+
                 # Window reordering - use prefix-based bindings (more reliable in Windows Terminal)
                 bind-key < swap-window -t -1\; select-window -t -1
                 bind-key > swap-window -t +1\; select-window -t +1
@@ -711,6 +719,57 @@ in
                   esac
 
                   exec "$wrapper" "$mode"
+                '';
+              })
+
+              # Jump to the next/previous window carrying a "done" command-status
+              # marker (the purple/blinking foreground set by tmux-cmd-state when a
+              # background command exits - see commandStatus and
+              # modules/lib/tmux-cmd-state.nix). Bound to Alt+Shift+L / Alt+Shift+H.
+              # Reads @cmd_state per pane directly (robust; no #{P:} fold needed in
+              # list-panes), scopes to the current session, skips the current window,
+              # and wraps around in window-index order. The after-select-window hook
+              # clears the marker on arrival, exactly like plain window navigation.
+              (pkgs.writeShellApplication {
+                name = "tmux-goto-done-window";
+                runtimeInputs = with pkgs; [ gawk coreutils ];
+                text = /* bash */ ''
+                  dir="''${1:-next}"
+                  t="$(command -v tmux 2>/dev/null)" || exit 0
+                  ref=(); [ -n "''${TMUX_PANE:-}" ] && ref=(-t "$TMUX_PANE")
+
+                  sess="$("$t" display -p "''${ref[@]}" '#{session_name}' 2>/dev/null)" || exit 0
+                  cur="$("$t" display -p "''${ref[@]}" '#{window_index}' 2>/dev/null)" || exit 0
+                  [ -n "$cur" ] || exit 0
+
+                  # window indices in this session with a pane in the 'done' state,
+                  # excluding the current window, ascending and de-duplicated.
+                  mapfile -t dwins < <("$t" list-panes -s "''${ref[@]}" \
+                    -F '#{window_index} #{@cmd_state}' 2>/dev/null \
+                    | awk -v c="$cur" '$2=="done" && $1!=c {print $1}' | sort -nu)
+
+                  if [ "''${#dwins[@]}" -eq 0 ]; then
+                    "$t" display-message "no windows with a completed (done) command" 2>/dev/null || true
+                    exit 0
+                  fi
+
+                  target=""
+                  case "$dir" in
+                    prev|previous|h|H)
+                      for ((i=''${#dwins[@]}-1; i>=0; i--)); do
+                        if [ "''${dwins[i]}" -lt "$cur" ]; then target="''${dwins[i]}"; break; fi
+                      done
+                      [ -z "$target" ] && target="''${dwins[''${#dwins[@]}-1]}"
+                      ;;
+                    *)
+                      for w in "''${dwins[@]}"; do
+                        if [ "$w" -gt "$cur" ]; then target="$w"; break; fi
+                      done
+                      [ -z "$target" ] && target="''${dwins[0]}"
+                      ;;
+                  esac
+
+                  "$t" select-window -t "$sess:$target" 2>/dev/null || true
                 '';
               })
 
