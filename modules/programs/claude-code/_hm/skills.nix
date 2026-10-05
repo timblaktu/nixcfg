@@ -107,6 +107,26 @@ let
         "scripts/validate_import.py" = ./skills/jira-bulk-issues/scripts/validate_import.py;
       };
     };
+    # Modular skill: one shared core (SKILL.md + OS-agnostic analyze.sh) plus
+    # environment modules (references/<env>.md + scripts/os/<env>.sh) loaded on
+    # demand via runtime dispatch. All environment modules ship; progressive
+    # disclosure makes unused ones cost ~0 tokens, so there is no build-time
+    # per-OS trimming. Evals live in the source tree but are NOT deployed.
+    # The analyzer's toolset (dust/duf) is nix-managed via home.packages below.
+    disk-doctor = {
+      name = "disk-doctor";
+      description = "Diagnose and reclaim local disk space on Linux, WSL, and macOS - audits the Nix store and GC-roots, caches, temp, and build directories, then proposes a ranked, safe reclaim plan. Use when a disk or filesystem is full or low on space, the Nix store is huge, a build fails for lack of space, or someone asks to free up / clean up / reclaim disk.";
+      files = {
+        "SKILL.md" = ./skills/disk-doctor/SKILL.md;
+        "scripts/analyze.sh" = ./skills/disk-doctor/scripts/analyze.sh;
+        "scripts/os/linux.sh" = ./skills/disk-doctor/scripts/os/linux.sh;
+        "scripts/os/wsl.sh" = ./skills/disk-doctor/scripts/os/wsl.sh;
+        "scripts/os/darwin.sh" = ./skills/disk-doctor/scripts/os/darwin.sh;
+        "references/linux.md" = ./skills/disk-doctor/references/linux.md;
+        "references/wsl.md" = ./skills/disk-doctor/references/wsl.md;
+        "references/darwin.md" = ./skills/disk-doctor/references/darwin.md;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -433,6 +453,20 @@ in
           md_to_wiki.py, validate_import.py) and CSV/JSON/rich-text references.
         '';
       };
+      disk-doctor = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the disk-doctor skill: diagnose and reclaim local disk space on
+          Linux, WSL, and macOS. A shared core (read-only analyzer covering the
+          Nix store, GC-roots audit, caches, and large directories) dispatches at
+          runtime to an environment module for OS-specific levers (systemd-tmpfiles
+          and ZFS/btrfs on Linux; the .vhdx sparse-growth trap on WSL; APFS local
+          snapshots, Xcode DerivedData, and Homebrew on macOS). Analysis is
+          read-only; deletions are always proposed and confirmed, never automatic.
+          Pulls the analyzer's toolset (dust, duf, ncdu) into the profile.
+        '';
+      };
     };
 
     custom = mkOption {
@@ -471,6 +505,13 @@ in
       pkgs.asciinema-agg # .cast -> animated GIF
       pkgs.ffmpeg # GIF -> MP4/WebM
       pkgs.vhs # optional: scripted deterministic .tape recordings
+    ]
+    # Nix-managed toolset for the disk-doctor analyzer (cross-platform;
+    # coreutils/nix provide the fallbacks the script degrades to).
+    ++ lib.optionals skillsCfg.builtins.disk-doctor [
+      pkgs.dust # du, but more intuitive (largest-dirs scan)
+      pkgs.duf # df replacement (filesystem usage overview)
+      pkgs.ncdu # interactive disk usage (manual deep-dives)
     ];
 
     # Extend the activation script to deploy skills
