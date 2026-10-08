@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Find a Microsoft Edge tab by title substring across ALL Edge windows, select it,
   and bring its window to the foreground. Optionally open a URL first if no tab
