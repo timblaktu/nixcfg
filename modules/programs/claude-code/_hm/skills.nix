@@ -107,6 +107,13 @@ let
         "scripts/validate_import.py" = ./skills/jira-bulk-issues/scripts/validate_import.py;
       };
     };
+    gnu-parallel = {
+      name = "gnu-parallel";
+      description = "Master GNU parallel for shell fan-out - run a command over many inputs concurrently with correct quoting, ordered/tagged output, bounded concurrency, error-halting, and joblog/resume. Use when a loop over files/hosts/IDs/lines should run in parallel, when deciding between parallel vs xargs -P vs background jobs, when a fan-out needs retries or resumability, or when debugging parallel quoting/output-interleaving.";
+      files = {
+        "SKILL.md" = ./skills/gnu-parallel/SKILL.md;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -431,6 +438,18 @@ in
           importer's JSON) matching the instance's real fields, custom field IDs,
           and allowed select values. Ships helper scripts (inventory_export.py,
           md_to_wiki.py, validate_import.py) and CSV/JSON/rich-text references.
+        '';
+      };
+      gnu-parallel = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the GNU parallel mastery skill: idioms for shell fan-out with
+          parallel - input sources (:::/::::/stdin/-0/--colsep), replacement
+          strings ({} {.} {/} {//} {#} {%}), -j concurrency, grouped/-k/--tag/
+          --line-buffer output, --halt/--retries error handling, --joblog/
+          --resume, safe quoting + exported functions, and the parallel vs
+          xargs -P vs background-jobs decision guide.
         '';
       };
     };
