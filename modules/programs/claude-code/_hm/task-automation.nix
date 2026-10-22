@@ -13,6 +13,21 @@ let
   # close delimiter, so it embeds cleanly both in a Nix indented string AND in a single-quoted bash
   # heredoc (where its literal " and $ characters need no escaping).
   frontierPromptBody = ''
+    RESUME SCOPE (check this FIRST, before computing the frontier below):
+    Some plans are large and multi-thread, but the owner works ONE track at a time. If the plan file
+    contains an "ACTIVE FOCUS / RESUME SCOPE" banner (an authoritative block near the top naming the
+    active track, its current frontier tasks, and a PARKED / OFF-TRACK list), you MUST scope this
+    invocation to that track:
+    - Treat ONLY the banner's active-track tasks as candidates for the ACTIONABLE FRONTIER below.
+    - Tasks the banner marks PARKED / OFF-TRACK are OFF the frontier even if they are TASK:IN_PROGRESS
+      or all their dependencies are TASK:COMPLETE. Do NOT resume them and do NOT start them: a dormant
+      other-thread IN_PROGRESS row is NOT "unfinished work to resume" here - the banner's scope wins.
+    - Fan out across all threads ONLY when there is NO such banner, or the owner explicitly says to
+      switch tracks / work the whole plan. NEVER report the raw all-thread fan-out as if it were the
+      intended plan when a banner scopes the work.
+    - If the banner's active track has no actionable task left (all its frontier tasks are
+      blocked/Interactive), say so and name the blockers - do NOT silently spill onto an off-track task.
+
     ACTIONABLE FRONTIER (which tasks to run this invocation):
     1. FIRST resume: every task with status "TASK:IN_PROGRESS" is unfinished work - resume it.
     2. THEN all ready PENDING: every "TASK:PENDING" task whose declared dependencies
