@@ -15,7 +15,7 @@ is connected** — in native Windows apps *and* inside WSL (which inherits the r
 - Name resolution flaps while the VPN is up: the same lookup fails, then succeeds,
   then fails — in Windows browsers/apps AND inside WSL (`getent hosts github.com`
   intermittently FAILs), while `ping <IP>` by raw address stays reliable.
-- Corporate/internal sites (e.g. `*.mascorp.com`, `git.panasonic.aero`) or even
+- Corporate/internal sites (e.g. `*.example.com`, `git.corp.example`) or even
   public sites (`github.com`) intermittently fail to resolve.
 - The Claude Code CLI (running inside WSL) hangs for minutes on the VPN — it is
   failing to resolve `api.anthropic.com` during a flap.
@@ -32,8 +32,8 @@ Two conditions combine, both on the **Windows** side:
    resolver."
 2. **Windows "smart multi-homed name resolution" is ON** (the default). Windows
    fires every lookup at **all** active interfaces' resolvers in parallel:
-   - VPN resolver (e.g. `10.170.77.1`) — correct answer, but slower over the tunnel.
-   - Wi-Fi/LAN resolver (e.g. `172.20.214.78`) — returns a **fast NXDOMAIN** for
+   - VPN resolver (e.g. `CORP_DNS_IP`) — correct answer, but slower over the tunnel.
+   - Wi-Fi/LAN resolver (e.g. `192.168.1.1`) — returns a **fast NXDOMAIN** for
      corporate names.
 
    The fast negative intermittently wins the race → Windows apps see "can't find".
@@ -105,7 +105,7 @@ bash "$CLAUDE_SKILL_DIR/capture.sh"     # heartbeat: VPN=  ping8.8.8.8=  DNS=  c
 
 The heartbeat disambiguates the two failure modes live: `ping8.8.8.8=OK DNS=FAIL` ⇒
 the **DNS race**; `ping8.8.8.8=FAIL` ⇒ **route starvation**. The corp column uses an
-HTTP-status probe of `git.panasonic.aero` (403 without the tunnel, 200/302 with) —
+HTTP-status probe of `git.corp.example` (403 without the tunnel, 200/302 with) —
 a better VPN discriminator than DNS or TCP, since that host is publicly reachable.
 
 ## Fix WITHOUT admin (WSL-side — preferred when you cannot elevate)
@@ -156,7 +156,7 @@ from generating resolv.conf:
 services.dnsmasq.enable = true;
 services.dnsmasq.settings = {
   no-resolv = true;
-  server = [ "/mascorp.com/CORP_DNS_IP" "/panasonic.aero/CORP_DNS_IP" "1.1.1.1" "9.9.9.9" ];
+  server = [ "/example.com/CORP_DNS_IP" "/corp.example/CORP_DNS_IP" "1.1.1.1" "9.9.9.9" ];
 };
 # point /etc/resolv.conf at 127.0.0.1 (dnsmasq)
 ```
@@ -211,10 +211,12 @@ $k='HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient'; Remove-ItemProperty
 Self-install NRPT rules for the corporate suffixes (also needs elevation):
 
 ```powershell
-Add-DnsClientNrptRule -Namespace ".mascorp.com" -NameServers "10.170.77.1"
-Add-DnsClientNrptRule -Namespace ".panasonic.aero" -NameServers "10.170.77.1"
+Add-DnsClientNrptRule -Namespace ".example.com" -NameServers "CORP_DNS_IP"
+Add-DnsClientNrptRule -Namespace ".corp.example" -NameServers "CORP_DNS_IP"
 ```
 
 Caveat: GlobalProtect can clobber user-added NRPT rules on each connect, so this is
 less durable than the registry toggle. Verify the VPN resolver IP first via
-`diagnose.sh` (it can change between gateways).
+`diagnose.sh` (it can change between gateways). `CORP_DNS_IP` above is a placeholder -
+the real VPN resolver address and corp suffixes for this environment live in the
+private nixcfg-work repo, not in this public skill.

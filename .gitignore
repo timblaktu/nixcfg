@@ -140,10 +140,14 @@ opencode-runtime/**/package-lock.json
 .claude/*
 !.claude/settings.json
 
-# Plan 057: numbered plan files relocated to user-plans/ (repo root). The global
-# git excludes (programs.git.ignores) default-ignore **/user-plans/ machine-wide;
-# nixcfg keeps plans public/tracked by opting back in with this local negation.
-!user-plans/
+# Plan 062: planning/triage/survey docs are PRIVATE - never tracked in public nixcfg.
+# Supersedes the plan-057 !user-plans/ negation: user-plans/ returns to ignored, and
+# ad-hoc planning docs under claude-runtime/.claude-*/ stay local-only. The real plans
+# live locally (and in the private nixcfg-work); the public repo carries none of them.
+user-plans/
+claude-max/
+claude-runtime/.claude-*/*.md
+claude-runtime/.claude-*/archive/
 
 # Task automation runtime state
 .claude-task-logs/

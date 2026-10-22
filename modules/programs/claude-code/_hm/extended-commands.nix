@@ -65,6 +65,51 @@ in
             };
           }
 
+          # ===== MEMORY COMMANDS =====
+          # Bare /cleanmemory (top-level, no namespace): curate + prune MEMORY.md
+          # and its topic files by relevance. Deployed to every enabled account.
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/cleanmemory.md" = {
+              text = builtins.readFile (commandsBasePath + "/cleanmemory.md");
+            };
+          }
+          # /memcheck (+ /memhealth alias): READ-ONLY memory health report - sizes vs
+          # the harness caps (24.4KB / 200 lines), orphan topic files, stale/leak
+          # signals, GREEN/AMBER/RED verdict. The read-only sibling of /cleanmemory
+          # (check -> clean). Both aliases share the one body.
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/memcheck.md" = {
+              text = builtins.readFile (commandsBasePath + "/memcheck.md");
+            };
+          }
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/memhealth.md" = {
+              text = builtins.readFile (commandsBasePath + "/memcheck.md");
+            };
+          }
+
+          # ===== REORIENT COMMAND (+ aliases) =====
+          # Bare /reorient (top-level): cold-start re-orientation to the active
+          # plan's durable objective, where-we-are, what-remains, and an on-track
+          # vs in-the-weeds self-audit. Read-only. Traces BOTH the git lineage to
+          # main AND the gitignored plan/session-history trail. /align-with-objective
+          # and /dude-wheres-my-car are aliases wired to the same body.
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/reorient.md" = {
+              text = builtins.readFile (commandsBasePath + "/reorient.md");
+            };
+          }
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/align-with-objective.md" = {
+              text = builtins.readFile (commandsBasePath + "/reorient.md");
+            };
+          }
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/dude-wheres-my-car.md" = {
+              text = builtins.readFile (commandsBasePath + "/reorient.md");
+            };
+          }
+
           # ===== DOCUMENTATION COMMANDS =====
           {
             "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/documentation/create-readme-section.md" = {

@@ -1187,7 +1187,7 @@
                 # 2026-06-24: needs CC >= 2.1.129; caches to
                 # ~/.claude/cache/gateway-models.json (refreshed each startup);
                 # ONLY model IDs beginning with `claude`/`anthropic` are added
-                # (so this surfaces just the Claude subset of a CCv2/Bedrock
+                # (so this surfaces just the Claude subset of an internal-gateway/Bedrock
                 # catalog — non-Claude IDs must be added manually via
                 # models.customOption / models.available). Off by default; the
                 # env var is emitted ONLY for accounts that opt in, into both the

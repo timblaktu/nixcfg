@@ -46,7 +46,7 @@
 #     azureAuth = {
 #       enable = true;
 #       # Fully non-interactive with TOTP:
-#       bitwarden.credentialItem = "PAC Microsoft account";
+#       bitwarden.credentialItem = "Corp Microsoft account";
 #       bitwarden.roleArnItem = "AWS Role ARN";
 #       autoTotp = true;
 #       knownRoles = { dev = "arn:...:role/dev"; eks-admin = "arn:...:role/eks-admin"; };
@@ -743,7 +743,7 @@
                   auto-filled from this item. The item should also have TOTP configured
                   if autoTotp is enabled.
                 '';
-                example = "PAC Microsoft account";
+                example = "Corp Microsoft account";
               };
 
               usernameField = mkOption {

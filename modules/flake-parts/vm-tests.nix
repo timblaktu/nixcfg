@@ -2142,7 +2142,7 @@ in
 
             ${lib.optionalString (system == "x86_64-linux") ''
               # x86 dev-team CROSS-builds the ARM HSW product/VTE images
-              # (`nix run '.' -- --machine converix-orin-nano` / `qemuarm64`): the
+              # (`nix run '.' -- --machine example-orin-nano` / `qemuarm64`): the
               # dev-team module enables aarch64 binfmt emulation and advertises
               # aarch64-linux as an extra Nix build platform. Assert both halves so
               # the cross-arch entrypoint is provably usable in-env.

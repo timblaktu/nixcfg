@@ -41,7 +41,7 @@ Writes **asciicast-v2** (widest player/agg/engine support).
 
 ```bash
 # Interactive: drops into a recorded shell; type the demo, then exit / Ctrl-D.
-record.sh demo.cast --title "Consume packages from converix-validated" --size 100x30
+record.sh demo.cast --title "Consume packages from example-validated" --size 100x30
 
 # Scripted: capture one command headless (no TTY needed, re-runnable).
 record.sh build.cast -- nix run '.' -- --variant base
@@ -77,7 +77,7 @@ label = "List all 16 image variants"
 
 [[step]]
 at    = 42.0
-label = "Consume 15 packages from converix-validated"
+label = "Consume 15 packages from example-validated"
 ```
 
 What it produces: a boxed blue title card at each `at`, a dim `⏩ skipped Nm Ns`
