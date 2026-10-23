@@ -170,6 +170,14 @@ in
             };
           }
 
+          # ===== SESSION COMMANDS =====
+          # Top-level (un-namespaced) so it is invoked as /closesess in any session.
+          {
+            "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/closesess.md" = {
+              text = builtins.readFile (commandsBasePath + "/closesess.md");
+            };
+          }
+
           # ===== SECURITY TEST EXAMPLES =====
           {
             "${cfg.nixcfgPath}/claude-runtime/.claude-${name}/commands/security/test-examples/test-advanced-injection.md" = {
