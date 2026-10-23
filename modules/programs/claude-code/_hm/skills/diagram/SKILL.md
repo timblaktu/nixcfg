@@ -5,17 +5,71 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.15.0
-**Last Updated**: 2026-10-08
+**Version**: 1.18.0
+**Last Updated**: 2026-10-18
 
 ## Changelog
 
-### v1.15.0 (2026-10-08)
+### v1.18.0 (2026-10-18)
+- **Section 2 DECISION RULE reframed around the mermaid ENGINE version, not "GitLab-only".**
+  The whole multi-line-breaks saga was one OLD bundled engine (simov's 10.8.0 + Panzoom/CSS).
+  Inline mermaid renders multi-line fine on CURRENT-engine surfaces: GitLab, GitHub, VS Code
+  1.121+ (native), and Firefox + the `xicilion`/docu.md Markdown Viewer (mermaid 11.x) - plain
+  `<br/>`, bold/italic, real labels, NO hacks. Static SVG is for OLD-engine/unknown/mixed
+  viewers and genuinely complex diagrams. The `htmlLabels:false` + markdown-string "house
+  style" is now explicitly LEGACY (only for old-engine viewers). Also recorded that VS Code
+  1.121+ ships mermaid natively (bierner's extension deprecated into core) and docu.md
+  (xicilion) is the recommended Firefox viewer (mermaid 11.12.2); simov's is frozen on 10.8.0.
+
+### v1.17.0 (2026-10-18)
+- **Section 2: new subsection "Making inline mermaid render in LOCAL markdown viewers"** -
+  records the fully-investigated `simov/markdown-viewer` (Chrome/Edge) case. Root cause: v5.3
+  bundles mermaid 10.8.0, inits `{theme}` only (strict + htmlLabels:true -> foreignObject
+  labels), and the 5.3 Panzoom/resize feature collapses multi-line foreignObject labels. FIX
+  (upstream issue #263, verified on the bundled 10.8.0): first line `%%{init: {"flowchart":
+  {"htmlLabels": false}} }%%` + markdown-string labels -> renders in markdown-viewer AND
+  GitLab (the portable inline house style). Adds the mermaid-label markdown FEATURE MATRIX
+  (only bold/italic/newlines/auto-wrap work; lists/tables/headings/links/code/blockquote/HR/
+  strikethrough fail, several SILENTLY DROP text; glyph workarounds) and the verified finding
+  that NO renderer (markdown-it/marked/remark/remarkable/showdown) or setting changes label
+  markdown - it is a mermaid-10.8.0-engine ceiling.
+
+### v1.16.0 (2026-10-18)
+- **Section 2 RESTRUCTURED - format decision comes FIRST; eradicated the misleading
+  "plain `<br/>` is the reliable approach, use ALWAYS" framing** that caused two false
+  "it's fixed" claims. The real lesson: inline ```mermaid is re-rendered by the VIEWER's
+  mermaid, so multi-line node text is VIEWER-DEPENDENT. GitLab honours `<br/>`; some local
+  markdown viewers (an Edge/Chrome markdown extension on a raw `.md`) STRIP it and collapse
+  lines into run-on text. So the v1.15.0 "plain `<br/>` is reliable" rule is now correctly
+  SCOPED to GitLab-only; for any other audience, SHIP A STATIC VECTOR SVG (sequence diagrams
+  export clean via mermaid-cli; flowcharts must be hand-authored vector - mermaid-cli
+  flowchart labels use `<foreignObject>` which browsers drop via `<img>`; drawio export
+  rasterizes). Validate committed SVGs with `librsvg`, not `resvg` (false negatives).
+- **New: SVG text ENRICHMENT guidance** - bold the primary token (`font-weight`), italic+
+  muted gloss lines (`font-style`/`fill`), justification (`text-anchor`), orientation
+  (`transform rotate`), per-tspan size/colour - so hand-authored SVGs are not flat walls of
+  equal text. Plus mermaid markdown-string labels (`**bold**`/`*italic*`) for the GitLab-only
+  inline case; raw `<b>`/`<i>` is still BANNED (it kills the following `<br/>`).
+
+### v1.15.0 (2026-10-08) - partially SUPERSEDED by v1.16.0 (scope correction)
 - **Section 2: Mermaid node-text wrapping MANDATORY - CORRECTED rule after full GitLab
   verification** (supersedes the same-day v1.14.0 draft, which was never deployed and
   was WRONG). An early 4-panel test used abbreviated tokens + short titles and gave a
   false "markdown-string hybrid works" reading. Testing REAL token-heavy diagrams
-  against GitLab's own Mermaid (git.corp.example) revealed: GitLab SCALES a too-wide
+  against GitLab's own Mermaid (a self-hosted instance) revealed: GitLab SCALES a too-wide
+  diagram down to fit the page, and when scaled Mermaid's foreignObject labels CLIP;
+  markdown-string auto-wrap only breaks at spaces, so long identifiers (no spaces)
+  overflow and clip; and `<br/>` in a subgraph TITLE is ignored (titles overflow). The
+  rule PLAIN labels + manual `<br/>`, every label line <= ~20 chars (break
+  long identifiers at natural underscore/camelCase boundaries), SHORT single-line
+  subgraph titles, NO markdown-string, NO init directive, DrawIO for genuinely wide
+  diagrams - **is CORRECT ONLY FOR GITLAB.** v1.16.0 scopes it to GitLab-only: `<br/>` is
+  viewer-dependent, so for non-GitLab audiences ship a static SVG instead.
+- **Section 2: Mermaid node-text wrapping MANDATORY - CORRECTED rule after full GitLab
+  verification** (supersedes the same-day v1.14.0 draft, which was never deployed and
+  was WRONG). An early 4-panel test used abbreviated tokens + short titles and gave a
+  false "markdown-string hybrid works" reading. Testing REAL token-heavy diagrams
+  against GitLab's own Mermaid (a self-hosted instance) revealed: GitLab SCALES a too-wide
   diagram down to fit the page, and when scaled Mermaid's foreignObject labels CLIP;
   markdown-string auto-wrap only breaks at spaces, so long identifiers (no spaces)
   overflow and clip; and `<br/>` in a subgraph TITLE is ignored (titles overflow). The
@@ -69,13 +123,13 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
     SUPERSEDES: the manual pre-render checklist in Section 8 and the
     dup-ID/dangling-edge shell recipes in Section 13 (both removed).
   - **Graphviz auto-layout** (`autolayout.py`) + `drawio_gen.py wrap` for dense
-    graphs (>~15 nodes) — new Section 34. Removes the manual-coordinate ceiling.
+    graphs (>~15 nodes) - new Section 34. Removes the manual-coordinate ceiling.
   - **Vision self-check loop**: Section 15 rewritten from "ask the user for a
     screenshot" into an active render -> validate -> raster -> self-read ->
     auto-fix (<=2 rounds) loop. Collapsed the old templates/example; gutted the
     five redundant extraction one-liners in Section 16 to a pointer at
     `drawio_gen.py extract`/`verify`.
-  - **Shape & AI-icon search** (`shapesearch.py`, `aiicons.py`) — new Section 35:
+  - **Shape & AI-icon search** (`shapesearch.py`, `aiicons.py`) - new Section 35:
     exact official draw.io vendor style strings (10k+ shapes) and AI/LLM brand
     logos.
 - Added a Helper Scripts toolbox table (below Overview) so the tools are discoverable.
@@ -268,85 +322,180 @@ flowchart TD
 - `-->` = arrow, `---` = line, `-.->` = dashed arrow
 - `|label|` = edge label
 
-### Node-Text Wrapping (MANDATORY)
+### Node text: pick the FORMAT first (this is the part that kept biting)
 
-**Hard rule: NEVER emit a Mermaid flowchart node whose label is a long line.** Mermaid
-grows the node box HORIZONTALLY to fit label text (long-standing limitation - Mermaid
-issues #199 and still-open #1321). Worse, **GitLab SCALES a too-wide diagram down to
-fit the page container, and when it scales, Mermaid's foreignObject HTML labels CLIP** -
-so a long label line that looked fine at a wide window is truncated at a narrow one.
-The clipping is width-dependent and bites in real documents.
+**Inline ```mermaid is re-rendered by whatever mermaid the VIEWER ships - so multi-line
+node text is VIEWER-DEPENDENT, not something you control.** GitLab's mermaid honours
+`<br/>`; some local markdown viewers (an Edge/Chrome markdown extension on a raw `.md`,
+some static-site renderers) strip `<br/>` and collapse your lines into run-on text - the
+`htmlLabels`/`securityLevel`/version the viewer picked decides. A diagram that looks
+perfect in `mermaid-cli` or a tuned local preview can be broken in the reader's actual
+viewer. (This cost two false "it's fixed" claims on 2026-10-18; do not trust a preview
+that honours `<br/>` to represent a viewer that may not.)
 
-This was verified the hard way against **GitLab's own embedded Mermaid**
-(git.corp.example, 2026-10-08) across several rounds. An early 4-panel test used
-abbreviated tokens + short titles and gave a FALSE "markdown-string hybrid works"
-reading; testing REAL token-heavy diagrams (full identifiers like
-`PROJECT_MINOR_VERSION`, multi-word subgraph titles) exposed the truth below. The
-only authoritative check is the target renderer at a NARROW width.
+**DECISION RULE (apply before authoring)** - the real question is whether EVERY viewer that
+will open the doc runs a CURRENT mermaid (11.x). Inline ```mermaid renders multi-line fine on
+current-engine surfaces; it breaks ONLY on viewers that bundle an OLD mermaid.
+- **All viewers are current-engine** - GitLab, GitHub, VS Code 1.121+ (native mermaid), and
+  Firefox + the `xicilion` / docu.md "Markdown Viewer" extension (mermaid 11.x) -> inline
+  ```mermaid is fine: **plain `<br/>` multi-line, bold/italic, real labels all work, no hacks**
+  (see "Inline mermaid" below). This is now the common case for this user (they review `.md`
+  in Firefox+docu.md, and ship to GitLab).
+- **Any viewer bundles an OLD mermaid, OR the audience is unknown/mixed** - e.g. the `simov`
+  markdown-viewer extension (frozen on mermaid 10.8.0, which collapses multi-line labels), or
+  you are simply NOT SURE -> **ship a committed static vector SVG** `![alt](x.svg)`. A static
+  SVG is displayed, not re-rendered, so it looks identical in every viewer. Safest default for
+  widely/externally-shared docs, and the right call for genuinely complex diagrams where you
+  want pixel control.
 
-**The reliable approach - use this ALWAYS:**
-1. **Plain labels + manual `<br/>`.** Write `ID["line one<br/>line two"]` - NO
-   backticks. The box auto-sizes to the longest line; you control width by where you
-   break. **PLAIN means no inline styling tags either** - do NOT wrap label text in
-   `<b>...</b>` / `<i>...</i>` / other HTML. Verified 2026-10-18: a label like
-   `["<b>on-die BootROM</b><br/>lives on: X"]` rendered the bold run, then IGNORED the
-   `<br/>` and ran the rest on one line until it clipped. Use emphasis via node
-   fill/`classDef` color, not inline HTML; keep label text bare + `<br/>`.
-2. **Every label line <= ~20 characters.** Long lines clip when GitLab scales the
-   diagram (~25+ char lines clipped at a narrow window; ~20 survived).
-3. **Break long identifiers at natural boundaries, separator at the END of a line**
-   (not dangling at the start): SNAKE_CASE after a prefix -
-   `PROJECT_MINOR_VERSION` -> `PROJECT_<br/>MINOR_VERSION`,
-   `CORE_COMBINED_VERSION` -> `CORE_COMBINED_<br/>VERSION`; camelCase at a case
-   boundary - `ProjectMajorVersion[3]` -> `ProjectMajor<br/>Version[3]`,
-   `PcdNodeXPlatformPresent` -> `PcdNodeX<br/>PlatformPresent`. Identifiers already
-   <=20 (`CORE_MAJOR_VERSION`, `CORE_BUILD_NUMBER`) stay whole. Put file:line cites on
-   their own short line.
-4. **Subgraph titles MUST be SHORT and SINGLE-LINE.** GitLab **ignores `<br/>` inside a
-   subgraph title** - it does not break; the title overflows and collides with
-   neighbours. Keep each title one short phrase (`subgraph PROJ["Project (example
-   OEM)"]`); move extra detail into a node, not the title.
-5. **Decision nodes `{...}` and edge labels `"..."`:** same <=20-char-per-line rule,
-   break with `<br/>`; never backticks.
-6. **Literal `<` / `>=` -> `&lt;` / `&ge;`** (e.g. `(MAJOR&lt;&lt;8)|MINOR`); these
-   render correctly in plain labels.
+(Verified 2026-10-18: the entire "multi-line mermaid breaks" saga traced to ONE old bundled
+engine - simov's mermaid 10.8.0 + its Panzoom/CSS. The `htmlLabels:false` + markdown-string
+"house style" below is the LEGACY workaround for such old-engine viewers; current engines need
+no hack. Static SVG remains the bulletproof option when you cannot guarantee the engine.)
 
-**Do NOT use (verified to FAIL on GitLab):**
-- **Markdown-string auto-wrap** (`["` + backtick + text + backtick + `"]` +
-  `wrappingWidth`): it only breaks at SPACES, so a long identifier with no spaces (the
-  common case in these diagrams) is one unbreakable "word" wider than the wrap width -
-  it overflows and CLIPS. Reliable only for prose-y labels with spaces and no long
-  tokens, which architecture diagrams rarely have.
-- **`<br/>` in a subgraph title:** ignored by GitLab (rule 4).
-- **`%%{init: {...wrappingWidth...}}%%`:** only affects markdown-string wrapping -
-  useless noise for plain labels; omit it.
+#### Shipping a static vector SVG (the cross-viewer-safe path)
 
-**Also:** total diagram width is driven by the number of parallel subgraphs/columns and
-by title length - keep titles short, limit parallel columns, pick the flow direction
-(TB vs LR) deliberately. For genuinely complex/wide architecture diagrams where even
-this is fiddly, prefer **DrawIO** (SVG text scales cleanly, never clips).
+The SVG MUST be clean vector: native `<text>`/`<tspan>` with **inline** `fill`/`stroke`/
+`font-*` attributes on each element (NOT a `<style>`/CSS-class block - stricter renderers
+and some `<img>` embeds skip it), **0 `<foreignObject>`**, **0 `data:image/png`**.
+- **Sequence diagrams**: `mermaid-cli` already renders these to clean `<text>`/`<tspan>`
+  (no foreignObject) - render and commit the `.svg` directly. Verify
+  `grep -c foreignObject` = 0 and `grep -c data:image/png` = 0.
+- **Flowcharts / everything else**: do NOT ship a mermaid-rendered SVG - mermaid puts
+  flowchart node labels in `<foreignObject>`, which browsers DROP when the SVG loads via
+  `<img>` (blank boxes), and `htmlLabels:false` mangles multi-line text (drops inter-word
+  spaces). And `drawio_gen.py` / draw.io SVG export RASTERIZES labels to embedded PNGs
+  (file balloons to 100s of KB, not vector). **Hand-author the flowchart as a clean
+  vector `.drawio.svg`** (pure `<rect>`/`<line>`/`<polygon>`/`<text>`/`<tspan>`, inline
+  styles). A good hand-authored box-and-arrow SVG is ~3-5 KB.
+- **Validate EVERY committed SVG** with a browser-grade rasterizer and READ the output:
+  `nix run 'nixpkgs#librsvg' -- -o out.png x.svg`. Do NOT judge appearance with `resvg` -
+  it ignores internal `<style>` and `foreignObject`, so it is useful ONLY to prove text
+  lives in `<text>` (not foreignObject), never for the final look.
 
-**Previewing faithfully (so your local check matches the target):** a bare
-`mermaid.initialize({...})` defaults to `securityLevel:'strict'`, which **HTML-escapes
-labels so `<br/>` renders as literal text and does not break** - your preview then lies
-about the layout. When self-previewing in a local HTML file, initialize with
-`securityLevel:'loose'` + `flowchart:{htmlLabels:true}` to match how GitLab/GitHub
-render. Better: validate with `mermaid-cli` (`nix run 'nixpkgs#mermaid-cli' -- -i d.mmd
--o d.png -p pconf.json` where `pconf.json` = `{"args":["--no-sandbox","--disable-gpu"]}`)
-and READ the PNG - it honours `<br/>` and surfaces parse errors a hand check misses.
+#### Make the SVG text RICH, not flat (enrichment - do this by default)
 
-**Example (the reliable style):**
+A hand-authored SVG is plain same-weight `<text>` unless you style it, so a flat
+wall of equal lines is a defect you chose. All of the following are INLINE per
+`<text>`/`<tspan>` and render everywhere, including via `<img>`:
+- **Hierarchy per box:** **bold the primary token** (the component name / the verb) with
+  `font-weight="700"`; render secondary "what it is" gloss lines **italic + muted +
+  smaller** (`font-style="italic" fill="#555555" font-size="12"`). One bold name over
+  one or two light glosses reads far better than three equal lines.
+- **Justification:** `text-anchor="middle"` (centered - default for boxes), `"start"`
+  (left - good for annotation/lists), `"end"` (right). Center short identifiers;
+  left-justify multi-line descriptor lists.
+- **Per-line size/colour:** set `font-size`/`fill` per `<tspan>` (title 14 bold, gloss
+  12 muted).
+- **Orientation:** rotate a lane/axis label with `transform="rotate(-90 x y)"`; keep body
+  text horizontal.
+- **Colour emphasis** via the box `fill`/`stroke`, not the text (keep body text near-black
+  `#000`, muted glosses `#555`).
+
+Example box with hierarchy (bold name over two italic/muted glosses):
+```xml
+<text x="120" y="40" text-anchor="middle" font-family="sans-serif">
+  <tspan x="120" dy="0"  font-size="14" font-weight="700" fill="#000000">BootROM (BR)</tspan>
+  <tspan x="120" dy="18" font-size="12" font-style="italic" fill="#555555">mask ROM</tspan>
+  <tspan x="120" dy="15" font-size="12" font-style="italic" fill="#555555">HW root of trust</tspan>
+</text>
+```
+
+#### Inline mermaid (GitLab-only)
+
+Use ONLY when the doc is GitLab-only (see the decision rule). Mermaid grows node boxes
+HORIZONTALLY and GitLab scales a too-wide diagram down, CLIPPING foreignObject labels at
+narrow widths - so even here, discipline is required:
+1. **Plain labels + manual `<br/>`, every line <= ~20 chars.** Break long identifiers at
+   a natural boundary with the separator at the END of the line:
+   `MY_PROJECT_MINOR_VERSION` -> `MY_PROJECT_<br/>MINOR_VERSION`;
+   `ProjectMajorVersion[3]` -> `ProjectMajor<br/>Version[3]`. Put file:line cites on their
+   own short line.
+2. **Subgraph titles SHORT + single-line** - GitLab IGNORES `<br/>` in a subgraph title
+   (it overflows and collides). Move detail into a node, not the title.
+3. **Literal `<` / `>=` -> `&lt;` / `&ge;`** (e.g. `(MAJOR&lt;&lt;8)|MINOR`).
+4. **Enrichment (bold/italic) in mermaid = MARKDOWN-STRING labels**, never raw HTML.
+   Wrap the label in a backtick string and use markdown: `node["` + backtick +
+   `**BootROM (BR)**` then a real newline then `*mask ROM*` + backtick + `"]` - mermaid
+   renders `**bold**` / `*italic*` and the newline as a line break. Colour via `classDef`
+   (`classDef fw fill:#fff2cc,stroke:#d6b656,color:#000`), applied `class node fw`.
+   **NEVER use raw `<b>`/`<i>` in a label** - it renders the styled run then IGNORES the
+   following `<br/>` (verified 2026-10-18), silently breaking your line breaks.
+   Caveat: markdown-string wrapping only breaks at SPACES (a long no-space identifier
+   overflows and clips), and like all inline mermaid it is viewer-dependent - which is
+   why this whole subsection is GitLab-only.
+
+**Validating inline mermaid before committing:** render with `mermaid-cli`
+(`nix run 'nixpkgs#mermaid-cli' -- -i d.mmd -o d.png -p pconf.json`, `pconf.json` =
+`{"args":["--no-sandbox","--disable-gpu"]}`) and READ the PNG - it surfaces parse errors
+a hand check misses. But remember mermaid-cli honours `<br/>`; it CANNOT tell you whether
+the reader's viewer will. A bare `mermaid.initialize({})` in a local preview defaults to
+`securityLevel:'strict'` (escapes `<br/>` to literal text) - set `securityLevel:'loose'`
++ `flowchart:{htmlLabels:true}` to match GitLab, and know that match is still only "like
+GitLab", not "like every viewer".
+
+**Inline mermaid example (GitLab-only), with markdown-string emphasis:**
 
 ```mermaid
 flowchart TB
-    subgraph PROJ["Project (example OEM)"]
-      proj["PROJECT_<br/>MAJOR_VERSION = 0<br/>PROJECT_<br/>MINOR_VERSION = 06<br/>BOARD-REV.sdl"]
+    subgraph PROJ["Project (Example OEM)"]
+      proj["`**PROJECT_MAJOR** = 0
+**PROJECT_MINOR** = 06
+*board-config.sdl*`"]
     end
-    subgraph CORE["Core (AMI base)"]
-      core["CORE_MAJOR_VERSION=5<br/>CORE_BUILD_NUMBER=24<br/>AmiPkg/Configuration<br/>(Lock)"]
-    end
-    proj --> rev["BIOS revision<br/>(MAJOR&lt;&lt;8)|MINOR<br/>node.rom name"]
+    proj --> rev["BIOS revision<br/>(MAJOR&lt;&lt;8)|MINOR<br/>firmware.rom name"]
+    classDef p fill:#dae8fc,stroke:#6c8ebf,color:#000;
+    class proj p;
 ```
+
+#### Making inline mermaid render in LOCAL markdown viewers (the `htmlLabels:false` house style)
+
+The "GitLab-only" caveat can be LIFTED for the common local case - the `simov/markdown-viewer`
+Chrome/Edge extension (a popular raw-`.md` review tool) - with one recipe. Investigated to the
+source 2026-10-18: v5.3 (latest; nothing newer) bundles **mermaid 10.8.0** and inits it with
+`mermaid.initialize({theme})` only -> `securityLevel:'strict'` + `htmlLabels:true` default ->
+flowchart labels become `<foreignObject>` HTML; the **Panzoom/resize feature added in 5.3** +
+its CSS then COLLAPSE multi-line foreignObject labels to one line (the box is still sized for N
+lines - the tell). Plain `<br/>` AND default markdown-string both fail there; single-line works.
+
+**The fix (upstream issue #263, verified on the exact bundled 10.8.0) = the portable
+inline-mermaid house style:**
+1. Make the FIRST line of EVERY mermaid block `%%{init: {"flowchart": {"htmlLabels": false}} }%%`
+   (forces native SVG `<text>`/`<tspan>` labels instead of foreignObject).
+2. Write labels as MARKDOWN-STRINGS (backtick-wrapped): bold title + real newlines + `*italic*`
+   glosses - NOT `<br/>`.
+
+This renders correctly in BOTH `simov/markdown-viewer` AND GitLab, so it is the most portable
+inline style. Example:
+
+```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}} }%%
+flowchart TB
+  n["`**BootROM (BR)**
+*mask ROM*
+HW root of trust`"] --> m["`**MB1 / MB2 / UEFI**
+the cpu-bootloader`"]
+```
+
+**What markdown ACTUALLY works inside a mermaid label** (mermaid 10.8.0 markdown-string). This
+is a MERMAID-ENGINE ceiling, not a viewer/renderer/setting thing (see the note below):
+
+| Works | Fails - several SILENTLY DROP your text (danger) |
+|---|---|
+| `**bold**` `__bold__`, `*italic*` `_italic_`, bold-italic, explicit newlines, auto-wrap | `- `/`1. ` lists (items DROPPED), `# heading` (line DROPPED), `[t](u)` link (DROPPED), `> ` blockquote (EMPTIED), `---` HR (eats line above), `` `code` `` (SYNTAX ERROR - backtick collides with the label delimiter), tables (literal pipes), `~~strike~~` (literal) |
+
+For list / status / arrow / table LOOKS, use plain glyphs that are NOT markdown syntax:
+`•` / `–` bullets, `✓` / `✗` status, `→` arrows, aligned-text pseudo-tables; use `subgraph`s or
+multiple nodes for real structure.
+
+**No renderer or setting changes any of this** (verified 2026-10-18: read all 5 compiler
+wrappers - markdown-it / marked / remark / remarkable / showdown - AND empirically compiled a
+mermaid fence with three of them). Every compiler treats a ```mermaid block as an escaped code
+fence and hands IDENTICAL escaped content to mermaid; NONE parses inside the fence. The
+extension exposes NO mermaid config (hardcoded `initialize({theme})`; README documents none).
+So label capability is purely the mermaid 10.8.0 engine's; the only lever that would add
+list/table support is a newer engine (11.x), which the extension hard-bundles away. If you need
+richer-than-emphasis labels, that is the signal to ship a static SVG (full control) instead.
 
 ### Sequence Diagram
 
@@ -385,10 +534,13 @@ erDiagram
 1. Keep diagrams focused - one concept per diagram
 2. Use meaningful node IDs (not just A, B, C)
 3. Add labels to edges for clarity
-4. Test in GitHub preview before committing
-5. ALWAYS wrap long node labels - see "Node-Text Wrapping (MANDATORY)" above. Never
-   emit a node whose label runs long on a single line; use PLAIN labels with manual
-   `<br/>` (every line <= ~20 chars) and SHORT single-line subgraph titles.
+4. **Decide the FORMAT first** (see "Node text: pick the FORMAT first" above): inline
+   mermaid ONLY for GitLab-only docs; ship a static vector SVG for any other audience
+   (`<br/>` is viewer-dependent). When unsure, ship the SVG.
+5. For the GitLab-only inline case: PLAIN labels + manual `<br/>`, every line <= ~20
+   chars, SHORT single-line subgraph titles; bold/italic via markdown-string labels, never
+   raw `<b>`/`<i>`. Validate with `mermaid-cli` (but remember it honours `<br/>` even when
+   the reader's viewer will not).
 
 ---
 

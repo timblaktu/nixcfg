@@ -1,0 +1,16 @@
+{
+  "skill": "disk-doctor",
+  "environment": "wsl",
+  "query": "Builds keep failing with no space left on device, but Windows says the drive still has room.",
+  "setup": "A WSL2 distro whose Linux filesystem is full; the .vhdx has grown to its high-water mark; a concurrent build is consuming space.",
+  "expected_behavior": [
+    "Detects WSL (WSL_DISTRO env or microsoft in /proc/sys/kernel/osrelease) and loads references/wsl.md AND references/linux.md",
+    "Runs analyze.sh and both scripts/os/linux.sh and scripts/os/wsl.sh",
+    "Calls out the min-free emergency GC as a cause of mid-build failures and recommends protecting unrooted artifacts first",
+    "Frees space inside WSL using the Linux order (GC-roots audit first)",
+    "Explains the .vhdx sparse-growth trap: reclaiming inside WSL does not shrink the Windows-side .vhdx",
+    "Hands the user the Windows-side wsl --shutdown + Optimize-VHD/diskpart compact steps to actually return space to Windows",
+    "Does NOT try to delete /mnt/c Windows temp from inside WSL",
+    "Never kills the running build to free space without asking"
+  ]
+}
