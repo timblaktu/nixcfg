@@ -117,6 +117,20 @@ let
       export PATH=${makeBinPath [ pkgs.jq pkgs.fd pkgs.coreutils pkgs.gawk pkgs.gnugrep ]}:$PATH
     '' + builtins.readFile ./resume-hook.sh);
 
+  # Plan 060 T6 — proactive low-disk SessionStart warning. The bash body lives
+  # in its own file (its ${...} parameter expansions then need no Nix escaping);
+  # the Nix wrapper prepends the runtime PATH and exports the analyzer path +
+  # thresholds as env. It REUSES the disk-doctor skill's analyze.sh --quiet
+  # (imported into the store verbatim), so the hook and the skill share one
+  # analyzer — no duplicated df/threshold logic. Silent when healthy.
+  diskWarnHookScript = pkgs.writeShellScript "claude-disk-warn-hook"
+    (''
+      export PATH=${makeBinPath [ pkgs.bash pkgs.jq pkgs.coreutils pkgs.gawk ]}:$PATH
+      export ANALYZE_SH=${./skills/disk-doctor/scripts/analyze.sh}
+      export DISK_WARN_PCT=${toString cfg.hooks.diskWarn.thresholdPercent}
+      export DISK_WARN_GIB=${toString cfg.hooks.diskWarn.thresholdGiB}
+    '' + builtins.readFile ./disk-warn-hook.sh);
+
   # Plan 046 T11 — RTK-Tokensave PreToolUse Bash hook (graceful pass-through).
   # RTK (`rtk hook claude`) reads the Bash tool-call JSON on stdin and emits a
   # filtered/rewritten version on stdout, cutting tokens before output reaches
@@ -667,6 +681,41 @@ in
           per-cwd transcript's last assistant message, as factual session-start
           context. The PUSH half of a dual-channel resume design; the next-task
           skill and the readable handoff files are the PULL backstop.
+        '';
+      };
+    };
+
+    # Plan 060 T6 — proactive low-disk SessionStart warning. Reuses the
+    # disk-doctor skill's analyze.sh --quiet to read root-filesystem usage and,
+    # when free space is below either threshold, injects a one-line
+    # SessionStart additionalContext nudging the operator toward the
+    # disk-doctor skill. Silent above threshold; continueOnError keeps it from
+    # ever gating startup. Hooks are module-global (every enabled account).
+    diskWarn = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the SessionStart low-disk warning hook (plan 060 T6). On
+          startup/resume it runs the disk-doctor analyzer in --quiet mode and,
+          when the root filesystem is at/above `thresholdPercent` used OR below
+          `thresholdGiB` free, emits a one-shot warning as SessionStart
+          additionalContext pointing at the `/disk-doctor` skill. Produces no
+          output when disk is healthy and never blocks session start.
+        '';
+      };
+      thresholdPercent = mkOption {
+        type = types.ints.between 1 100;
+        default = 90;
+        description = ''
+          Warn when the root filesystem is at or above this used-percent.
+        '';
+      };
+      thresholdGiB = mkOption {
+        type = types.ints.positive;
+        default = 20;
+        description = ''
+          Warn when free space on the root filesystem is below this many GiB.
         '';
       };
     };
@@ -1243,6 +1292,21 @@ in
         ];
       };
 
+      # Plan 060 T6 — proactive low-disk SessionStart warning. Matches
+      # startup|resume (NOT compact — a mid-session compaction should not re-nag
+      # about disk). continueOnError keeps a non-zero exit from gating startup;
+      # the script is silent when disk is healthy.
+      diskWarnHooks = lib.optionalAttrs cfg.hooks.diskWarn.enable {
+        SessionStart = [
+          (mkHook {
+            matcher = "startup|resume";
+            command = "${diskWarnHookScript}";
+            continueOnError = true;
+            timeout = 10;
+          })
+        ];
+      };
+
       # Plan 046 T11 — RTK-Tokensave PreToolUse Bash hook. continueOnError keeps
       # a non-zero RTK exit from blocking the tool call; the script itself is a
       # no-op when `rtk` is absent (see rtkHookScript above).
@@ -1285,6 +1349,7 @@ in
       planIntegrityHooks
       loggingHooks
       resumeHooks
+      diskWarnHooks
       rtkHooks
       tmuxStatusHooks
       # Plan 046 T5 — user-defined custom hooks. Freeform attrs keyed by event
