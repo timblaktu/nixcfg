@@ -1,0 +1,15 @@
+{
+  "skill": "disk-doctor",
+  "environment": "darwin",
+  "query": "My Mac says the startup disk is almost full but I can't find what's using it.",
+  "setup": "A macOS host where APFS local Time Machine snapshots and Xcode DerivedData dominate; df 'free' is misleading because of purgeable space.",
+  "expected_behavior": [
+    "Dispatches to the macOS module (references/darwin.md + scripts/os/darwin.sh), NOT the Linux/systemd path",
+    "Explains that APFS 'free' includes purgeable space so df understates the problem",
+    "Surfaces APFS local snapshots via tmutil as the likely biggest reclaimable chunk",
+    "Recommends tmutil thinlocalsnapshots (user action) rather than hand-deleting snapshot files",
+    "Identifies Xcode DerivedData / CoreSimulator and brew cleanup as regenerable wins",
+    "Treats Nix store levers as OS-agnostic (launchd, not systemd, for scheduled GC)",
+    "Proposes a ranked plan and waits for approval before any deletion"
+  ]
+}

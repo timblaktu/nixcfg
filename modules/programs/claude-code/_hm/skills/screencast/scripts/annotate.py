@@ -34,12 +34,11 @@ Sidecar schema (TOML shown; JSON with the same keys also works):
 
     [[step]]
     at    = 42.0
-    label = "Consume 15 packages from example-validated"
+    label = "Consume 15 packages from acme-validated"
 
 CLI flags override sidecar values; sidecar values override the built-in defaults.
 With no sidecar, only gap compression runs (using defaults / CLI flags).
 """
-
 from __future__ import annotations
 
 import argparse
@@ -50,13 +49,17 @@ from pathlib import Path
 # ---- ANSI title-card / skip-frame rendering -------------------------------------------------
 
 RESET = "[0m"
-CARD = "[1;97;44m"  # bold white on blue
-SKIP = "[2;37m"  # dim grey
+# Truecolor (24-bit) so the card bypasses the agg/asciinema theme palette: a
+# 16-color "blue" (44) gets remapped by themes like monokai to a light shade
+# that kills contrast against white text. Bold white on solid dark navy reads
+# under any theme.
+CARD = "[1;38;2;255;255;255;48;2;13;40;110m"  # bold white on dark navy
+SKIP = "[2;37m"      # dim grey
 
 
 def banner(label: str, width: int) -> str:
     """A boxed title card as one output frame (CR/LF separated, blank-line padded)."""
-    text = f" ▸ {label} "  # ▸ label
+    text = f" ▸ {label} "          # ▸ label
     bar = text.ljust(width)
     return f"\r\n{CARD}{bar}{RESET}\r\n\r\n"
 
@@ -69,7 +72,6 @@ def skip_frame(seconds: float, width: int) -> str:
 
 
 # ---- cast IO --------------------------------------------------------------------------------
-
 
 def load_cast(path: Path):
     lines = path.read_text().splitlines()
@@ -96,13 +98,7 @@ def load_cast(path: Path):
 
 
 def load_steps(path: Path | None, args) -> dict:
-    cfg = {
-        "gap_threshold": 8.0,
-        "skip_dwell": 1.2,
-        "card_dwell": 2.5,
-        "width": 72,
-        "step": [],
-    }
+    cfg = {"gap_threshold": 8.0, "skip_dwell": 1.2, "card_dwell": 2.5, "width": 72, "step": []}
     if path is not None:
         raw = path.read_text()
         if path.suffix == ".json":
@@ -111,9 +107,7 @@ def load_steps(path: Path | None, args) -> dict:
             try:
                 import tomllib
             except ModuleNotFoundError:
-                sys.exit(
-                    "annotate.py: TOML sidecar needs Python 3.11+ (tomllib); use a .json sidecar instead"
-                )
+                sys.exit("annotate.py: TOML sidecar needs Python 3.11+ (tomllib); use a .json sidecar instead")
             data = tomllib.loads(raw)
         cfg.update({k: v for k, v in data.items() if k != "step"})
         cfg["step"] = data.get("step", data.get("steps", []))
@@ -130,7 +124,6 @@ def load_steps(path: Path | None, args) -> dict:
 
 
 # ---- transform ------------------------------------------------------------------------------
-
 
 def transform(events, cfg):
     """Walk events in interval form, injecting cards/markers and collapsing gaps.
@@ -154,18 +147,16 @@ def transform(events, cfg):
         # Inject any step boundaries we cross on the way to this event.
         while si < len(steps) and steps[si]["at"] <= abs_t:
             label = steps[si]["label"]
-            lead = min(interval, 0.4)  # tiny lead-in before the card
-            out.append([lead, "m", label])  # marker on the scrubber
+            lead = min(interval, 0.4)          # tiny lead-in before the card
+            out.append([lead, "m", label])      # marker on the scrubber
             out.append([0.0, "o", banner(label, width)])
-            interval = card_dwell  # banner dwells before real output
+            interval = card_dwell               # banner dwells before real output
             card_here = True
             si += 1
 
         # Collapse long idle/build gaps (skip the compression if we just showed a card).
         if not card_here and interval > gap:
-            out.append(
-                [min(skip_dwell * 0.4, interval), "o", skip_frame(interval, width)]
-            )
+            out.append([min(skip_dwell * 0.4, interval), "o", skip_frame(interval, width)])
             interval = skip_dwell
 
         out.append([interval, code, data])
@@ -182,9 +173,7 @@ def transform(events, cfg):
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Annotate + compress an asciicast-v2 recording."
-    )
+    ap = argparse.ArgumentParser(description="Annotate + compress an asciicast-v2 recording.")
     ap.add_argument("input", type=Path)
     ap.add_argument("steps", type=Path, nargs="?", default=None)
     ap.add_argument("-o", "--output", type=Path, default=None)
@@ -216,11 +205,8 @@ def main():
             fh.write(json.dumps(ev) + "\n")
 
     n_cards = len(cfg["step"])
-    print(
-        f"annotate.py: wrote {out_path} ({len(out_events)} events, {n_cards} title cards, "
-        f"gap>{cfg['gap_threshold']}s collapsed)",
-        file=sys.stderr,
-    )
+    print(f"annotate.py: wrote {out_path} ({len(out_events)} events, {n_cards} title cards, "
+          f"gap>{cfg['gap_threshold']}s collapsed)", file=sys.stderr)
 
 
 if __name__ == "__main__":
