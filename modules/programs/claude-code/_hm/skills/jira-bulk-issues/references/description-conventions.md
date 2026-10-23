@@ -134,10 +134,10 @@ Embedded newlines inside a quoted CSV cell are preserved as line breaks.
 
 ## Worked example
 
-`CONVSW-7055` ("labDevices Nix source of truth and generators", a child of the
-CONVSW-4165 HIL feature) is the canonical example of this convention: a concise
+`PROJ-7055` ("labDevices Nix source of truth and generators", a child of the
+PROJ-4165 HIL feature) is the canonical example of this convention: a concise
 first-line diagram+README reference, an unheaded thesis + context intro with
 concept links inline, a "how we plan to build it" paragraph linking both repos,
 the prescriptive path, two prior-work pattern examples and the current-state file,
 and a single `h3. Acceptance Criteria` list of done-conditions. Mirror its shape.
-Its whole sibling set (CONVSW-7055..7070) follows the same shape.
+Its whole sibling set (PROJ-7055..7070) follows the same shape.

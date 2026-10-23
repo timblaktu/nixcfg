@@ -13,10 +13,10 @@ echo
 echo "=== DNS-flap check from WSL (name resolution vs raw IP; run repeatedly with VPN up) ==="
 ping -c1 -W2 8.8.8.8 >/dev/null 2>&1 && echo "ping 8.8.8.8 (IP egress) : OK" || echo "ping 8.8.8.8 (IP egress) : FAIL -> route starvation, not the DNS race"
 getent hosts github.com  >/dev/null 2>&1 && echo "getent github.com (DNS)  : OK" || echo "getent github.com (DNS)  : FAIL -> DNS race (name flaps while IP egress is fine)"
-# corp reachability via HTTP status: git.panasonic.aero returns 403 when the tunnel is
+# corp reachability via HTTP status: git.corp.example returns 403 when the tunnel is
 # NOT effective (server-side allowlist), a normal code (200/302) when the VPN works.
 # This is a better VPN discriminator than DNS or TCP - the host is publicly reachable.
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 6 https://git.panasonic.aero 2>/dev/null)"
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 6 https://git.corp.example 2>/dev/null)"
 case "$code" in 200|301|302) echo "corp https (HTTP $code)  : VPN EFFECTIVE";; 403) echo "corp https (HTTP $code)  : VPN NOT effective (403 = not on allowlist)";; *) echo "corp https (HTTP ${code:-000})  : UNREACHABLE";; esac
 echo
 echo "=== WSL eth0 MTU (Linux side; clamped by mss-clamp - NOT the Windows problem) ==="
@@ -35,7 +35,7 @@ echo "=== Smart multi-homed resolution policy (blank = ENABLED = condition #2 pr
 ps "(Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' -EA SilentlyContinue | Select-Object DisableSmartNameResolution,DisableParallelAandAAAA | Format-List)"
 
 echo "=== Per-resolver probe of a corporate name (expect VPN=answer, Wi-Fi=NXDOMAIN) ==="
-name="${1:-git.panasonic.aero}"
+name="${1:-git.corp.example}"
 echo "--- WSL getent $name ---"; getent hosts "$name" || echo "(no answer)"
 for dns in $(ps "(Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object {\$_.ServerAddresses}).ServerAddresses" | tr -d '\r'); do
   echo "--- nslookup $name @ $dns ---"

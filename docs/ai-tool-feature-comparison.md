@@ -457,7 +457,7 @@ name the corresponding nixcfg module option (or `—` if not exposed).
 
 ## 7. Gap Tables
 
-These three tables drive Plan 032 (`user-plans/032-cc-oc-parity-gap-closure.md`).
+These three tables drive Plan 032 (tracked internally).
 A "gap" is a feature the upstream tool supports that our Nix module does not currently
 expose. Gaps marked **(P31-MISS)** were also missing from Plan 031's comparison doc.
 
@@ -611,11 +611,11 @@ expose. Gaps marked **(P31-MISS)** were also missing from Plan 031's comparison 
 
 ## 13. Plan 046 addendum — CC-centric capability upgrade (2026-06-24)
 
-**Last refreshed: 2026-06-24.** Plan `user-plans/046-ai-tool-capability-upgrade.md`.
+**Last refreshed: 2026-06-24.** Plan 046 (tracked internally).
 
 **Direction:** the project went **Claude-Code-centric** (decided 2026-06-24). OpenCode is kept
-**dormant** in-repo — its module and pin are untouched — and is revisited only if a non-Claude CCv2
-model path forces it (see the verdict doc + plan T15). The §1-§12 enumeration above predates this
+**dormant** in-repo — its module and pin are untouched — and is revisited only if a non-Claude
+gateway model path forces it (tracked privately in nixcfg-work). The §1-§12 enumeration above predates this
 plan; the rows below are the deltas, not a re-enumeration.
 
 ### 13.1 Tool versions after Plan 046
@@ -673,5 +673,6 @@ set). File paths are under `modules/programs/claude-code/`.
 
 - **OpenCode (T2/T8-T10/T12):** no investment this plan; module + pin (1.14.48) untouched. The §3/§4
   OC enumeration and §7.2 gap closures remain accurate as of Plan 032; re-audit only on OC revival.
-- **T15 (CCv2 Anthropic-format probe):** BLOCKED — credential-gated. Decides whether the non-Claude
-  CCv2 catalog (Auto-MoM/Qwen/Llama/GLM) is reachable from CC. See verdict doc §5.
+- **T15 (internal-gateway Anthropic-format probe):** BLOCKED — credential-gated. Decides whether the
+  internal gateway's non-Claude catalog (open models like Qwen/Llama/GLM plus an internal router) is
+  reachable from CC (tracked privately in nixcfg-work).

@@ -5,10 +5,24 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.13.0
-**Last Updated**: 2026-09-29
+**Version**: 1.15.0
+**Last Updated**: 2026-10-08
 
 ## Changelog
+
+### v1.15.0 (2026-10-08)
+- **Section 2: Mermaid node-text wrapping MANDATORY - CORRECTED rule after full GitLab
+  verification** (supersedes the same-day v1.14.0 draft, which was never deployed and
+  was WRONG). An early 4-panel test used abbreviated tokens + short titles and gave a
+  false "markdown-string hybrid works" reading. Testing REAL token-heavy diagrams
+  against GitLab's own Mermaid (git.corp.example) revealed: GitLab SCALES a too-wide
+  diagram down to fit the page, and when scaled Mermaid's foreignObject labels CLIP;
+  markdown-string auto-wrap only breaks at spaces, so long identifiers (no spaces)
+  overflow and clip; and `<br/>` in a subgraph TITLE is ignored (titles overflow). The
+  reliable rule: PLAIN labels + manual `<br/>`, every label line <= ~20 chars (break
+  long identifiers at natural underscore/camelCase boundaries), SHORT single-line
+  subgraph titles, NO markdown-string, NO init directive. DrawIO for genuinely wide
+  diagrams.
 
 ### v1.13.0 (2026-09-29)
 - Encoded four defect classes a user had to catch by hand (title, congested labels,
@@ -254,6 +268,86 @@ flowchart TD
 - `-->` = arrow, `---` = line, `-.->` = dashed arrow
 - `|label|` = edge label
 
+### Node-Text Wrapping (MANDATORY)
+
+**Hard rule: NEVER emit a Mermaid flowchart node whose label is a long line.** Mermaid
+grows the node box HORIZONTALLY to fit label text (long-standing limitation - Mermaid
+issues #199 and still-open #1321). Worse, **GitLab SCALES a too-wide diagram down to
+fit the page container, and when it scales, Mermaid's foreignObject HTML labels CLIP** -
+so a long label line that looked fine at a wide window is truncated at a narrow one.
+The clipping is width-dependent and bites in real documents.
+
+This was verified the hard way against **GitLab's own embedded Mermaid**
+(git.corp.example, 2026-10-08) across several rounds. An early 4-panel test used
+abbreviated tokens + short titles and gave a FALSE "markdown-string hybrid works"
+reading; testing REAL token-heavy diagrams (full identifiers like
+`PROJECT_MINOR_VERSION`, multi-word subgraph titles) exposed the truth below. The
+only authoritative check is the target renderer at a NARROW width.
+
+**The reliable approach - use this ALWAYS:**
+1. **Plain labels + manual `<br/>`.** Write `ID["line one<br/>line two"]` - NO
+   backticks. The box auto-sizes to the longest line; you control width by where you
+   break. **PLAIN means no inline styling tags either** - do NOT wrap label text in
+   `<b>...</b>` / `<i>...</i>` / other HTML. Verified 2026-10-18: a label like
+   `["<b>on-die BootROM</b><br/>lives on: X"]` rendered the bold run, then IGNORED the
+   `<br/>` and ran the rest on one line until it clipped. Use emphasis via node
+   fill/`classDef` color, not inline HTML; keep label text bare + `<br/>`.
+2. **Every label line <= ~20 characters.** Long lines clip when GitLab scales the
+   diagram (~25+ char lines clipped at a narrow window; ~20 survived).
+3. **Break long identifiers at natural boundaries, separator at the END of a line**
+   (not dangling at the start): SNAKE_CASE after a prefix -
+   `PROJECT_MINOR_VERSION` -> `PROJECT_<br/>MINOR_VERSION`,
+   `CORE_COMBINED_VERSION` -> `CORE_COMBINED_<br/>VERSION`; camelCase at a case
+   boundary - `ProjectMajorVersion[3]` -> `ProjectMajor<br/>Version[3]`,
+   `PcdNodeXPlatformPresent` -> `PcdNodeX<br/>PlatformPresent`. Identifiers already
+   <=20 (`CORE_MAJOR_VERSION`, `CORE_BUILD_NUMBER`) stay whole. Put file:line cites on
+   their own short line.
+4. **Subgraph titles MUST be SHORT and SINGLE-LINE.** GitLab **ignores `<br/>` inside a
+   subgraph title** - it does not break; the title overflows and collides with
+   neighbours. Keep each title one short phrase (`subgraph PROJ["Project (example
+   OEM)"]`); move extra detail into a node, not the title.
+5. **Decision nodes `{...}` and edge labels `"..."`:** same <=20-char-per-line rule,
+   break with `<br/>`; never backticks.
+6. **Literal `<` / `>=` -> `&lt;` / `&ge;`** (e.g. `(MAJOR&lt;&lt;8)|MINOR`); these
+   render correctly in plain labels.
+
+**Do NOT use (verified to FAIL on GitLab):**
+- **Markdown-string auto-wrap** (`["` + backtick + text + backtick + `"]` +
+  `wrappingWidth`): it only breaks at SPACES, so a long identifier with no spaces (the
+  common case in these diagrams) is one unbreakable "word" wider than the wrap width -
+  it overflows and CLIPS. Reliable only for prose-y labels with spaces and no long
+  tokens, which architecture diagrams rarely have.
+- **`<br/>` in a subgraph title:** ignored by GitLab (rule 4).
+- **`%%{init: {...wrappingWidth...}}%%`:** only affects markdown-string wrapping -
+  useless noise for plain labels; omit it.
+
+**Also:** total diagram width is driven by the number of parallel subgraphs/columns and
+by title length - keep titles short, limit parallel columns, pick the flow direction
+(TB vs LR) deliberately. For genuinely complex/wide architecture diagrams where even
+this is fiddly, prefer **DrawIO** (SVG text scales cleanly, never clips).
+
+**Previewing faithfully (so your local check matches the target):** a bare
+`mermaid.initialize({...})` defaults to `securityLevel:'strict'`, which **HTML-escapes
+labels so `<br/>` renders as literal text and does not break** - your preview then lies
+about the layout. When self-previewing in a local HTML file, initialize with
+`securityLevel:'loose'` + `flowchart:{htmlLabels:true}` to match how GitLab/GitHub
+render. Better: validate with `mermaid-cli` (`nix run 'nixpkgs#mermaid-cli' -- -i d.mmd
+-o d.png -p pconf.json` where `pconf.json` = `{"args":["--no-sandbox","--disable-gpu"]}`)
+and READ the PNG - it honours `<br/>` and surfaces parse errors a hand check misses.
+
+**Example (the reliable style):**
+
+```mermaid
+flowchart TB
+    subgraph PROJ["Project (example OEM)"]
+      proj["PROJECT_<br/>MAJOR_VERSION = 0<br/>PROJECT_<br/>MINOR_VERSION = 06<br/>BOARD-REV.sdl"]
+    end
+    subgraph CORE["Core (AMI base)"]
+      core["CORE_MAJOR_VERSION=5<br/>CORE_BUILD_NUMBER=24<br/>AmiPkg/Configuration<br/>(Lock)"]
+    end
+    proj --> rev["BIOS revision<br/>(MAJOR&lt;&lt;8)|MINOR<br/>node.rom name"]
+```
+
 ### Sequence Diagram
 
 ```mermaid
@@ -292,6 +386,9 @@ erDiagram
 2. Use meaningful node IDs (not just A, B, C)
 3. Add labels to edges for clarity
 4. Test in GitHub preview before committing
+5. ALWAYS wrap long node labels - see "Node-Text Wrapping (MANDATORY)" above. Never
+   emit a node whose label runs long on a single line; use PLAIN labels with manual
+   `<br/>` (every line <= ~20 chars) and SHORT single-line subgraph titles.
 
 ---
 

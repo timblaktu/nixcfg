@@ -75,7 +75,7 @@ in
   inherit (pkgsDocling) docling;
 
   # claude-code 2.1.191 - pinned ahead of nixpkgs input (which has 2.1.158).
-  # Plan 046: features needed for the CC-centric CCv2 workflow postdate 2.1.158 -
+  # Plan 046: features needed for the CC-centric gateway workflow postdate 2.1.158 -
   # fallbackModel (2.1.166), Fable (2.1.170), availableModels/enforceAvailableModels
   # (2.1.172-175), reliability env (2.1.186). Vendored copy is byte-identical to the
   # nixpkgs derivation; only pkgs/claude-code-pinned/manifest.json moves the version.

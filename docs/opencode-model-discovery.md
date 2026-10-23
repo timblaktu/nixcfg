@@ -6,7 +6,7 @@ picker without rebuilding the Nix config.
 
 ## Problem
 
-Enterprise AI proxies (CCv2, Bedrock) add and retire models frequently — 7 new
+Enterprise AI proxies (internal gateways, Bedrock) add and retire models frequently — 7 new
 models appeared in 6 weeks during initial development. Each change required
 updating the Nix config, rebuilding, and switching. Discovery makes model lists
 self-updating while keeping Nix as the source of truth for known-good models.

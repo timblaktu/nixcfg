@@ -13,6 +13,7 @@
 - ALWAYS use rg and fd for file searching (never grep/find or Search/Find tools)
 - ALWAYS ensure shell commands support both bash AND zsh
 - ALWAYS properly escape or quote special shell characters
+- **The Bash tool shell is zsh** - emit data with `printf '%s\n'`, NEVER `echo "$var"`, whenever the value may contain backslashes/escapes/control chars (JSON, regexes, serialized blobs, Windows UNC paths). zsh's builtin `echo` interprets backslash escapes by default and silently corrupts the data (e.g. collapses `\\` to `\`), which can misdirect a diagnosis. When reproducing a production script, match its interpreter/primitives (run under `bash -c`, or use shell-neutral `printf`).
 - **ALWAYS single-quote Nix derivation references**: `nix build '.#thing'` (zsh glob expansion)
 - **Screenshots (WSL)**: Find dynamically with `fd -t f -e png -e jpg -e jpeg . '/mnt/c/Users/'*/OneDrive*/Pictures/Screenshots* -d 1 --exec stat --printf='%Y %n\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-`
 - NEVER create files unless absolutely necessary - prefer editing existing files
@@ -32,7 +33,12 @@
 
 - Use `echo "${WSL_DISTRO_NAME:-$WSL_DISTRO}"` to determine WSL instance (NixOS WSL sets `WSL_DISTRO`, not `WSL_DISTRO_NAME`); access others at `/mnt/wsl/$WSL_DISTRO/`
 - **Windows executables callable directly from WSL** (e.g., `usbipd.exe list`, `powershell.exe -c "command"`). NEVER tell user to "open PowerShell" - call `.exe` directly. Windows PATH is on `$PATH` via `appendWindowsPath`.
-- **Opening files and URLs**: Use `xdg-open <path-or-url>` to open in browser. On WSL this routes through wslview with automatic mount recovery.
+- **Opening content - Firefox is for MARKDOWN ONLY; EVERYTHING ELSE uses `xdg-open`**: The ONE and ONLY reason we use Firefox is the `xicilion`/docu.md Markdown Viewer (mermaid 11.x). So Firefox is used EXCLUSIVELY to render MARKDOWN the user reviews - local `.md` files AND remote `.md` URLs - and for nothing else. For ALL OTHER content - general web pages, GitLab/GitHub MR/PR pages, pipeline/CI/job URLs, dashboards, issue links, ANY non-`.md` URL - use `xdg-open "<url>"`, which opens **Edge**, the user's Windows DEFAULT browser (kept for OTHER purposes). **NEVER open a non-markdown URL in Firefox** (this was a real mistake: an MR link was sent to Firefox - MR/PR/pipeline pages are web pages, so `xdg-open`). When you DO open markdown in Firefox, call `firefox.exe` directly (NOT `xdg-open`, which would hand it to Edge and not render it). Never assume Firefox is the default. For markdown opened in Firefox there are THREE distinct path forms for the SAME WSL file and they MUST NOT be conflated:
+  - **A remote `.md` URL to be RENDERED by docu.md** passes straight through to Firefox: `"/mnt/c/Program Files/Mozilla Firefox/firefox.exe" "https://.../file.md"` (an already-running instance opens it as a new tab). A non-markdown URL (MR/PR, pipeline, any web page) does NOT go here - use `xdg-open "<url>"` (Edge) instead.
+  - **A WSL-native local file** (`.md`, `.html`, ...) MUST be passed as the Windows UNC path from `wslpath -w`, NOT as a `file://` URL. Passing `file://wsl.localhost/<distro>/...` AS a firefox.exe argument makes Firefox strip the authority and mangle it to `file:///<distro>/...` (a path that exists on neither Windows nor Linux), so nothing opens. Correct recipe: `p=/abs/linux/path/doc.md; "/mnt/c/Program Files/Mozilla Firefox/firefox.exe" "$(wslpath -w "$p")" >/dev/null 2>&1 &`. On current WSL builds `wslpath -w` emits the `\\wsl.localhost\<distro>\...` form that Firefox accepts.
+  - The `file://wsl.localhost/<distro>/...` form (TWO slashes after `file:`) is a TERMINAL-CLICKABLE CHAT LINK ONLY (see the clickable-`file://`-URIs rule under Content Delivery) - it is NEVER a firefox.exe argument. When echoing such a UNC path in a Bash command, use `printf '%s\n'`, never `echo` (the Bash tool runs zsh, whose builtin `echo` interprets backslash escapes and corrupts the path).
+  - **An embedded `[text](href)` link INSIDE a markdown/HTML doc that the user opens in Firefox/docu.md** (i.e. a link Firefox resolves when clicked, not a CLI arg and not a terminal chat link) MUST use the FIVE-slash form `file://///wsl.localhost/<distro>/<abs-path-without-leading-slash>` (that is `file:` + five `/`). The two-slash `file://wsl.localhost/...` href gets its authority stripped by Firefox to `file:///<distro>/...` (a bogus path) and the link dead-ends; the five-slash form preserves `wsl.localhost` as the UNC host so the link resolves. Heading anchors append as `...#lower-case-github-slug`. This is the form for cross-doc links in review artifacts (e.g. an adjudication sheet linking into before/after docs).
+  - If the docu.md extension cannot read a `file://`-opened local file (Firefox file-access restrictions), serve the directory over `http://localhost` and open that URL in Firefox instead.
 
 ## Nix and Git Safety
 
@@ -53,7 +59,9 @@ nix build '.#checks.x86_64-linux.TEST_NAME'  # Specific test
 
 ## Proactive Browser Integration
 
-The user's dev environment is Terminal + Browser. Proactively `xdg-open` content that would naturally need viewing.
+The user's dev environment is Terminal + Browser. Proactively open content that would naturally need viewing, routed by TYPE (see "Opening content" under WSL Interop):
+- **MARKDOWN the user reviews -> Firefox** (call `firefox.exe` directly; docu.md renders it). WSL-native local `.md` files go via the `wslpath -w` UNC recipe (never a `file://` argument); remote `.md` URLs pass straight to `firefox.exe`.
+- **EVERYTHING ELSE -> `xdg-open "<url>"`** (opens Edge, the user's default): MR/PR links after creation, pipeline/CI/job URLs, diagram images, dashboards, any non-`.md` URL the user needs next. **NEVER send a non-markdown URL to Firefox.**
 
 **Always open automatically**: PR/MR links after creation, pipeline URLs, diagram files after editing, docs after substantial rewriting, URLs user needs to visit next.
 
@@ -71,24 +79,93 @@ All markdown tables in chat MUST fit within terminal width.
 
 File output may exceed terminal width (editors have horizontal scroll).
 
+**Display-width discipline (HARD requirement, always):** in ANY fixed-width / columnar / aligned output to the user, reason in terminal DISPLAY CELLS, never in bytes or character count. Most emoji and many CJK/multibyte glyphs occupy 2 cells; a `U+FE0F` variation selector can flip a 1-cell symbol to 2 cells. `column -t` counts characters, not cells, so it silently MISALIGNS any field containing emoji - do not trust it there. Always sanity-check alignment by cell width.
+
+**Emoji-set width (SOFT requirement):** when emoji carry meaning in aligned output, pick a set whose members ALL render the SAME display width - prefer default-emoji-presentation glyphs that are 2 cells wide WITHOUT a variation selector. Do not mix 2-cell emoji with 1-cell symbols or `U+FE0F`-dependent glyphs (e.g. ⚠️ ➡️ ⏭️); mixed widths break the column math.
+
+## Annotated Stack/Runtime Tree Diagrams (for complex explanations)
+
+When explaining a non-trivial system - a layered runtime (host -> emulator -> guest ->
+process), a call/data path, a build/derivation pipeline, or any "what talks to what, and
+where does my change live" question - LEAD WITH a small ASCII tree/stack diagram, then
+annotate it. This is a strongly-held user preference: the user finds it VERY helpful as a
+shared visualization of the exact context under discussion.
+
+Format that lands well:
+- A left-hand ASCII tree (`├─`, `└─`, indentation) showing the layers/components nested.
+- Right-hand annotations on each layer saying what it is / what runs there.
+- Arrows (`──►`) to show flow or to point from a layer to its role.
+- Emphasis (CAPS, "THIS layer", inline notes) on the specific layer(s) the current
+  conversation is about - make the relevant level visually pop out of the whole.
+
+```
+HOST
+ ├─ driver        ──► what this layer is; **the layer we're discussing**
+ └─ emulator      ──► ...
+      └─ GUEST    ──► where the actual change / bug lives
+```
+
+Use it proactively in complex cases (don't wait to be asked); skip it for simple one-layer
+answers. Follow the diagram with prose that walks the annotated layers.
+
 ## Content Delivery for Copy-Paste
 
 Do NOT put copy-paste content in chat as code-fenced blocks. Instead:
-1. **clip.exe** for short content: `echo -n "content" | clip.exe`
-2. **temp .md file + xdg-open** for long/formatted content
+1. **clip.exe** for short content: `printf '%s' "content" | clip.exe` (use `printf`, not `echo` - see the zsh-echo rule under Critical Rules)
+2. **temp .md file opened in Firefox** for long/formatted content: `firefox.exe "$(wslpath -w "$f")"` (see WSL Interop; NOT `xdg-open`, which opens Edge)
 
 Does NOT apply when content is sent directly via API (e.g., `glab api`).
 
-## Task/Session Close-Out Summaries (MANDATORY)
+**ALWAYS print WSL paths as clickable `file://` URIs.** Any time a real filesystem path appears in a response (a temp file, plan, doc, script, artifact, memory file), render it as `file://wsl.localhost/<distro>/<abs-path-without-leading-slash>` so the user can click to open it - literal host `wsl.localhost`, distro LOWERCASE (resolve via `${WSL_DISTRO_NAME:-$WSL_DISTRO}`), forward slashes, NO leading slash, NO `\\`, NO `$`. The three-slash `file:///home/...` form is NOT clickable in MS Terminal - do not use it; the `\\wsl.localhost\...` backslash UNC form (what `wslpath -w` emits) is only for passing to Windows apps (a Windows browser, e.g. firefox.exe), never a chat link. This is not limited to close-out - it applies to every path printed.
 
-At the end of any task you believe is complete - and at minimum at the end of every working session - give the user a short, jargon-free plain-English summary using FOUR markdown headings, each with its body on the line IMMEDIATELY below it (NO blank line between a heading and its body; blank line only between sections):
+## Presenting Decisions to the User (MANDATORY - single rule, supersedes any earlier decision-format guidance)
 
-`# What I did` - in everyday terms.
-`# Why it was the right thing` - why worth doing now.
-`# Why the approach is correct` - the EVIDENCE it works (tests/observations), not just that it ran.
-`# How it moves us toward the goal` - how it advances the objective, PLUS a concise note on the tasks remaining to the end of the plan/goal (show the remaining road, not just the step just taken).
+When you need the user to DECIDE something, the weight of the decision picks the format. There are exactly two modes; do not invent a third, and do not mix them.
 
-Spell out or avoid every acronym/tool name on first use; gloss unavoidable real file/command/API names in parentheses the first time. Concise; abbreviations OK if still clear. This is a Definition-of-Done requirement, not optional polish.
+**COMPLEX / CONSEQUENTIAL decisions** (a design gate, an architectural fork, a "which approach?" with real trade-offs, anything where the user must understand a mechanism to choose well): write a STANDALONE, easy-to-read markdown file and OPEN IT IN FIREFOX (call `firefox.exe` directly on the `wslpath -w` UNC path - `"/mnt/c/Program Files/Mozilla Firefox/firefox.exe" "$(wslpath -w <file>.md)"` - NOT `xdg-open`, which opens Edge, the user's system default) - do NOT explain inline in chat, and NEVER bury the explanation inside the `AskUserQuestion` prompt. The document, in this order:
+1. **The problem, in plain language, lead with a concrete picture** - an ASCII sketch, a small table, or a worked example the user can grasp in seconds. Gloss every acronym on first use.
+2. **The proposed fix** - what you want to do, in one or two plain sentences.
+3. **Why THIS over the alternatives** - name the options you considered AND rejected, each with the reason. This is the part that earns trust; never hide the roads not taken.
+4. **Before / after** - show the concrete change (diff, generated-output delta, config line) where one exists.
+5. **Things to know / consequences** - side effects, blast radius, what becomes redundant, cost.
+6. **What is NOT in scope / what still gates closure** - so the decision's boundaries are explicit.
+7. **The question, last** - state it plainly, then list the options with your RECOMMENDATION FIRST and a one-line rationale each.
+Then tell the user exactly which Firefox tab to look at plus the clickable `file://wsl.localhost/<distro>/...` link (the chat-link form, NOT the exe argument), and COLLECT THE DECISION via the `AskUserQuestion` tool (short option labels - the real explanation already lives in the doc). This markdown-in-browser treatment (Firefox + docu.md, not Edge) is the standard the user explicitly called "essentially perfect"; use it for every non-trivial decision, automatically, without being asked.
+
+**QUICK / LOW-STAKES choices** (a naming nit, an obvious default, a yes/no with no hidden trade-off): a short paragraph of context in chat followed by the `AskUserQuestion` tool is fine. Do not manufacture a document for these.
+
+Two hard rules across BOTH modes: (1) explain BEFORE asking, in plain language - the user must understand what you are talking about from prose/doc FIRST, then see a clean short decision; (2) actually USE the `AskUserQuestion` tool to collect the decision - do not narrate options in prose and move on. Keep it jargon-light.
+
+## Task/Session Close-Out (MANDATORY)
+
+End every completed task - and at minimum every working session - with a COMPACT, SCANNABLE status block, NOT prose. It REPLACES any multi-paragraph "What I did / Why / Evidence / Goal" essay. Depth belongs in the plan file + `.session-state/HANDOFF.md`, never in this block.
+
+Format = fixed-field columns `<icon> <LABEL padded to 8> <content>` (content column = cell 12), NO table/box-drawing characters. One logical row per label, most important first; content MAY wrap onto continuation lines indented to the content column. All labels are <=8 cells so the column is uniform. Omit a row only if genuinely N/A.
+
+GROUP A - session narrative (always):
+
+```
+✅ DONE      what changed (the deliverable, in plain terms)
+🔎 EVIDENCE  the proof it works: a test passed / command output / observation
+🟡 UNPROVEN  use INSTEAD of EVIDENCE when not yet proven - what's unconfirmed + why
+👉 NEXT      the immediate next step
+💡 WHY       one line, ONLY if the rationale isn't self-evident (usually omit)
+```
+
+GROUP B - task state (one row per reported task; icons mirror the user-plans state machine 1:1):
+
+```
+✅ COMPLETE  DoD met + committed                             (TASK:COMPLETE)
+🔄 ONGOING   started / partial, resuming next                (TASK:IN_PROGRESS)
+⏳ WAITING   a dependency / external work isn't done yet      (BLOCKED-BY-DEP)
+🙋 DECISION  needs YOUR decision / approval before proceeding (USER_INPUT_REQUIRED / Interactive)
+🚫 CANT-RUN  wrong host / missing toolchain here              (ENVIRONMENT_NOT_CAPABLE)
+⛔ FAILED    hard error: build regression / crash / missing non-dep prereq (BLOCKING-FAILURE)
+```
+
+WAITING vs DECISION (NOT the same - do not double-report): WAITING = the blocker clears WITHOUT your input (another in-plan task, a running job/build); the ball is not in your court. DECISION = nothing clears until YOU act (a choice, approval, credential, manual step). If a WAITING chain bottoms out in a human decision, report only the DECISION (the actionable root) and drop the WAIT it causes - collapse to the single state that tells you what, if anything, YOU must do.
+
+Icons: all are default 2-cell emoji with NO variation selector so columns align (see the display-width + emoji-set requirements under Terminal-Width-Aware Output Formatting). Gloss any acronym/tool/file name on first use. Definition-of-Done requirement.
 
 ## CI/CD and Testing Philosophy
 
@@ -254,7 +331,7 @@ These two files are gitignored (per-worktree, never committed). A fresh `claude`
 
 **Note:** a `Stop`/`SessionEnd` hook cannot *compose* this semantic summary (only the assistant can distill what mattered), so writing the handoff stays an assistant-discipline step; the rehydration hook only *surfaces* what was written here.
 
-**Last resort only (single-session machine, no `$CLAUDE_PROJECT_DIR`):** if the per-worktree file channel is genuinely unavailable, fall back to `clip.exe` (short) or a temp `.md` + `xdg-open` (long). NEVER use this fallback on a multi-session node - it is the exact mechanism this protocol replaces.
+**Last resort only (single-session machine, no `$CLAUDE_PROJECT_DIR`):** if the per-worktree file channel is genuinely unavailable, fall back to `clip.exe` (short) or a temp `.md` opened in Firefox (`firefox.exe "$(wslpath -w ...)"`, long). NEVER use this fallback on a multi-session node - it is the exact mechanism this protocol replaces.
 
 ## Memory Index Compaction (MEMORY.md auto-memory)
 
@@ -331,7 +408,7 @@ never for "where plan NNN stands right now".
 - **Fix**: `kas-build` wrapper unmounts `/mnt/[a-z]` drives before building. Leaves `/usr/lib/wsl/drivers` (read-only, no sync hang).
 
 ### Git Worktree Workflow
-- **Default to a dedicated worktree per branch** for any non-trivial or parallelizable work. Worktrees are as cheap as branches; prefer `git worktree add` over an in-place `git checkout -b` whenever the current worktree is dirty, the new branch's base differs (e.g. a clean feature off `main` while the current tree carries unrelated doc/churn), or the work could run alongside other efforts. This keeps each branch's diff clean (clean MRs, accurate code permalinks) and enables maximum parallelism across the many workspaces here.
+- **Reach for a worktree per parallel EFFORT, when isolation actually helps - it is an opt-in convenience, not a rule.** There is NO "one worktree per branch" mandate, and reusing a single worktree across several branches (plain `git checkout -b`, or switching branches in place) is perfectly fine and often the right call. Spin up a *new* worktree (`git worktree add`) specifically when isolation buys you something concrete: the current worktree is dirty and you want a clean base, the new branch's base differs (e.g. a clean feature off `main` while the current tree carries unrelated churn), or the effort needs to run alongside other work at the same time. The payoffs - clean per-branch diffs (tidy MRs, accurate code permalinks) and parallelism across workspaces - are the *reason to opt in*, offered as guidance, never an obligation to spawn a worktree for every branch.
 - **Parent/child workspace pattern**: treat the workspace that holds the plan, docs, and handoff as the coordination "parent"; cut isolated child worktrees off `main` (or the correct base) for the shippable code. Navigate the set with `git worktree list` (it reads as a task map when dirs/branches are named for the task, e.g. `~/src/<repo>-<feature>` on branch `<feature>`).
 - **Self-authorized**: create worktrees and their branches without asking; just name what you created in your report so the human can follow. Moving/removing a worktree later is cheap and reversible.
 - **A worktree's `user-plans/` (and `.session-state/HANDOFF.md`/`active-plan`) must be a REAL in-worktree path, NEVER a symlink escaping the worktree.** Claude Code refuses symlink-escaping writes (`SymlinkWriteRefusedError`), which breaks plan edits and triggers permission prompts. To share plans across worktrees, SEED a real per-worktree dir by copying from the shared plan store (`cp -a store/. user-plans/`), not by symlinking into it. `**/user-plans/` is gitignored machine-wide, so a fresh worktree simply has no plan dir until you create one as a real dir (a repo that opts back into tracking does so with a local `!user-plans/` negation); plan edits are then worktree-local (intended - burndown is commit-based, single-writer-per-plan).

@@ -120,7 +120,7 @@ let
   # Plan 046 T11 — RTK-Tokensave PreToolUse Bash hook (graceful pass-through).
   # RTK (`rtk hook claude`) reads the Bash tool-call JSON on stdin and emits a
   # filtered/rewritten version on stdout, cutting tokens before output reaches
-  # the model (per docs/claude-code-codecompanion-parity-verdict.md §2b). We do
+  # the model (RTK's design is documented privately in nixcfg-work). We do
   # NOT run `rtk init -g` (it clobbers ~/.claude/{settings.json,CLAUDE.md} and
   # assumes ~/.claude, conflicting with CLAUDE_CONFIG_DIR) — the hook is wired
   # declaratively here instead.
@@ -355,6 +355,58 @@ in
           `git add user-plans/...`, `git add -A`, `git add .`, or a path like
           `.session-state-notes.txt` (different terminator) is NOT blocked.
           Honors the uniform `CLAUDE_HOOKS_BYPASS` escape.
+        '';
+      };
+      blockInternalTokens = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Plan 062 T5 — block a `git commit` to the PUBLIC nixcfg repo when the
+          staged content or the commit message carries an internal-token class
+          (corp domains, real internal IPs/FQDNs/emails, client/OEM codenames,
+          internal Jira keys, internal build/board IDs). Forward guard that keeps
+          the already-audited public surface clean; it fires BEFORE anything can
+          reach the public remote (at commit time, which is earlier than push).
+
+          SCOPED TWO WAYS so it is safe host-wide and across accounts:
+          * PATTERNS ARE PRIVATE. `internalTokenPatterns` defaults to [] (empty),
+            so in the public repo this hook is a NO-OP and ships NONE of the
+            sensitive tokens itself (shipping them would re-leak exactly what the
+            audit scrubbed). The real pattern list is the private SSOT supplied by
+            nixcfg-work (plan 058 push-rule mirror), mirroring how RTK's binary is
+            private while its hook is public.
+          * REMOTE-SCOPED. Even with patterns loaded, the scan runs ONLY when the
+            target repo has a remote matching `publicRemotePatterns` (the public
+            nixcfg URL). So legitimate nixcfg-work commits (corp remote), where
+            these identifiers are expected, are never blocked.
+          Honors the uniform `CLAUDE_HOOKS_BYPASS` escape for approved exceptions.
+        '';
+      };
+      internalTokenPatterns = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "acmecorp\\.example" "WIDGET-[0-9]+" "PRODUCT_CODE_[A-Z]+" ];
+        description = ''
+          ERE alternatives (joined with `|`, matched case-insensitively) of the
+          internal-token classes that `blockInternalTokens` refuses to let into a
+          PUBLIC-nixcfg commit. DELIBERATELY EMPTY by default: this is the PRIVATE
+          SSOT and must be set from the private nixcfg-work config (for whichever
+          accounts edit public nixcfg), NEVER hard-coded here — putting the real
+          tokens in this public module would re-expose them. Escape regex
+          metacharacters with doubled backslashes in Nix (e.g. "corpdomain\\.example").
+          Keep KEEP-listed codenames and known false-positives OUT of this list
+          (plan 062 Groups D/E).
+        '';
+      };
+      publicRemotePatterns = mkOption {
+        type = types.listOf types.str;
+        default = [ "github\\.com[:/]timblaktu/nixcfg(\\.git)?" ];
+        description = ''
+          ERE alternatives for the git remote URL(s) that `blockInternalTokens`
+          treats as the PUBLIC surface to protect. The scan enforces only when the
+          target repo has a remote matching one of these. Safe to be public (it is
+          just the public repo's own URL). Not sensitive; override if the public
+          remote differs.
         '';
       };
     };
@@ -619,7 +671,7 @@ in
       };
     };
 
-    # Plan 046 T11 — RTK-Tokensave (PAC AI Rust Token Killer) integration.
+    # Plan 046 T11 — RTK-Tokensave (Rust Token Killer) integration.
     rtk = {
       enable = mkOption {
         type = types.bool;
@@ -647,7 +699,7 @@ in
           (default), `rtk` is resolved from PATH at hook time and the hook is a
           graceful pass-through no-op if it is not found (so a Bash call is
           never blocked). RTK lives in a credential-gated GitLab repo
-          (`git.panasonic.aero/pac/pac-ai-rtk-tokensave`); the work layer
+          (`git.corp.example/ai/rtk-tokensave`); the work layer
           supplies the binary on PATH, hence the default leaves it unpackaged.
         '';
       };
@@ -657,13 +709,13 @@ in
         default = ''
           # RTK-Tokensave
 
-          This session uses PAC AI RTK-Tokensave: a `PreToolUse` Bash hook
+          This session uses RTK-Tokensave: a `PreToolUse` Bash hook
           (`rtk hook claude`) rewrites/filters the output of shell commands
           (git, cargo, pytest, docker, grep, and 100+ others) before it reaches
           the model, reducing token usage substantially. Command behavior is
           unchanged; only the captured output the model sees is condensed.
 
-          See `docs/claude-code-codecompanion-parity-verdict.md` section 2b.
+          (RTK's design and its private packaging live in the internal nixcfg-work repo.)
         '';
         description = ''
           Contents of `RTK.md`, deployed into each enabled account's config dir
@@ -950,6 +1002,42 @@ in
               # .session-state dir as a path token (terminated by / whitespace $).
               if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}add\b[^;&|]*(^|[[:space:]/])\.session-state(/|$|[[:space:]])'; then
                 gr_block "gitSafety.blockAddSessionState" "🚫 gitSafety: refusing to stage '.session-state/'. WHY: it holds per-worktree session runtime state (active-plan, HANDOFF.md) that must never be committed — it is gitignored machine-wide (memory keep-core-trim-ceremony-userplans / plan 057). TO PROCEED NOW: stage only the intended paths (e.g. git add user-plans/<plan>.md); if you truly must track a file here, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: never add .session-state — it is per-worktree, not shared. See docs/claude-code-session-guardrails.md."
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+          # blockInternalTokens (Plan 062 T5) — forward guard: refuse a commit to
+          # the PUBLIC nixcfg repo that carries an internal-token class. Patterns
+          # are the PRIVATE SSOT (empty here; set from nixcfg-work), and the scan
+          # runs only when the target repo's remote is the public nixcfg — so it is
+          # a no-op in public-with-no-patterns and silent in nixcfg-work.
+          ++ (lib.optional cfg.hooks.gitSafety.blockInternalTokens (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(git *)";
+            command = ''
+              ${guardrailPrelude}
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}commit\b' || exit 0
+              # private SSOT pattern list — empty in public nixcfg => no-op.
+              pats='${lib.concatStringsSep "|" cfg.hooks.gitSafety.internalTokenPatterns}'
+              [ -z "$pats" ] && exit 0
+              # resolve the dir the git command targets (git -C DIR > leading cd DIR > cwd).
+              dir="."
+              cdarg="$(printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -oE '\bcd[[:space:]]+[^[:space:]&;|]+' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.gnused}/bin/sed -E 's/^cd[[:space:]]+//')"
+              [ -n "$cdarg" ] && dir="$cdarg"
+              carg="$(printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -oE 'git[[:space:]]+-C[[:space:]]+[^[:space:]&;|]+' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.gnused}/bin/sed -E 's/^git[[:space:]]+-C[[:space:]]+//')"
+              [ -n "$carg" ] && dir="$carg"
+              dir="$(printf '%s' "$dir" | ${pkgs.coreutils}/bin/tr -d "\"'" | ${pkgs.gnused}/bin/sed "s|^~|$HOME|")"
+              # enforce ONLY for the public nixcfg remote (leave nixcfg-work etc. alone).
+              pubre='${lib.concatStringsSep "|" cfg.hooks.gitSafety.publicRemotePatterns}'
+              ${pkgs.git}/bin/git -C "$dir" remote -v 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qE "$pubre" || exit 0
+              # scan staged content + the commit command string (catches -m tokens).
+              hit="$( { ${pkgs.git}/bin/git -C "$dir" diff --cached 2>/dev/null; printf '%s' "$cmd"; } | ${pkgs.gnugrep}/bin/grep -oiE "$pats" | ${pkgs.coreutils}/bin/head -n1 )"
+              if [ -n "$hit" ]; then
+                gr_block "gitSafety.blockInternalTokens" "🚫 gitSafety: refusing this commit to the PUBLIC nixcfg repo — staged content or the message contains an internal-token class (matched '$hit'). WHY: internal identifiers (corp domains, real IPs/FQDNs/emails, client/OEM codenames, internal Jira keys, build/board IDs) must never reach the public remote; they belong only in the private nixcfg-work (plan 062 audit). TO PROCEED NOW: genericize the token to a placeholder (see plan 062 dispositions + the guide) and re-commit; for an approved exception, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: keep internal identifiers out of public files — the private pattern SSOT lives in nixcfg-work (plan 058 push-rule mirror). See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';

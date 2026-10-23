@@ -24,11 +24,12 @@
 #
 # Tunables (env):
 #   LOG=<path>         default $HOME/wsl-vpn-transition.log
-#   CORP_HOST=<host>   default git.panasonic.aero (403 w/o VPN, 200/302 with = discriminator)
+#   CORP_HOST=<host>   default git.corp.example (403 w/o VPN, 200/302 with = discriminator);
+#                      set this to your real corp host (the real value lives in nixcfg-work)
 #   INTERVAL=<secs>    default 5
 
 LOG=${LOG:-$HOME/wsl-vpn-transition.log}
-CORP_HOST=${CORP_HOST:-git.panasonic.aero}
+CORP_HOST=${CORP_HOST:-git.corp.example}
 INTERVAL=${INTERVAL:-5}
 TO="timeout -k 1 3"
 

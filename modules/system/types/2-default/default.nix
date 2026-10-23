@@ -539,8 +539,8 @@
                 };
 
                 # NUC service host — host key changes on reinstall
-                "nuc-apt-repo 10.139.254.97" = {
-                  hostname = "10.139.254.97";
+                "nuc-apt-repo 10.0.0.1" = {
+                  hostname = "10.0.0.1";
                   user = "root";
                   extraOptions = {
                     StrictHostKeyChecking = "no";

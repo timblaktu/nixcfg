@@ -66,7 +66,7 @@ in
           generateKey = true;
         };
         repos = {
-          converix-local = {
+          n3x-local = {
             distribution = "main";
             component = "main";
             comment = "n3x custom packages";
@@ -83,7 +83,7 @@ in
       # Caddy: HTTPS for aptly + plain HTTP for ISAR builds
       services.caddy = {
         enable = true;
-        virtualHosts."apt.nuc-apt-repo.n3x.internal" = {
+        virtualHosts."apt.nuc-apt-repo.example.internal" = {
           extraConfig = ''
             tls internal
 
@@ -117,7 +117,7 @@ in
       networking.firewall.allowedTCPPorts = [ 443 8088 ];
 
       networking.extraHosts = ''
-        127.0.0.1 nuc-apt-repo apt.nuc-apt-repo.n3x.internal
+        127.0.0.1 nuc-apt-repo apt.nuc-apt-repo.example.internal
       '';
 
       # SSH access

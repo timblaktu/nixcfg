@@ -98,7 +98,7 @@ _: {
         Key-Type: RSA
         Key-Length: 4096
         Name-Real: n3x Apt Repository
-        Name-Email: apt@n3x.internal
+        Name-Email: apt@example.internal
         Expire-Date: 0
         %no-protection
         %commit
