@@ -13,6 +13,11 @@
 #   - Git commands integration
 #   - Statusline variants (powerline, minimal, context, box, fast)
 #   - Nix-managed account CLAUDE.md (per-account from shared template)
+#   - Account-agnostic file-based memory (plan 064): memory is keyed by the
+#     git-common-dir, so every account's projects/<key>/memory symlinks to one
+#     canonical shared-memory/<key> store (established lazily by the wrapper's
+#     _cc_share_memory, _hm/memory-share.sh). Transcripts stay per-account; a
+#     multi-non-empty conflict is surfaced, never auto-merged.
 #   - WSL integration with clipboard support
 #
 # Usage in host config:
@@ -1585,6 +1590,7 @@
                     account = name;
                     inherit (account) displayName;
                     configDir = "${runtimePath}/.claude-${name}";
+                    inherit runtimePath;
                     claudeBin = "${pkgs.claude-code}/bin/claude";
                     api = account.api or { };
                     secrets = account.secrets or { };
@@ -1614,6 +1620,7 @@
                   account = cfg.defaultAccount;
                   inherit (defaultAcct) displayName;
                   configDir = "${runtimePath}/.claude-${cfg.defaultAccount}";
+                  inherit runtimePath;
                   claudeBin = "${pkgs.claude-code}/bin/claude";
                   api = defaultAcct.api or { };
                   secrets = defaultAcct.secrets or { };

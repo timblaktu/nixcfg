@@ -115,6 +115,16 @@ previous flock-based approach.
 - Create runtime state in `.claude/` (all ignored except settings.json)
 - Hook runs `.claude/SessionStart` (installs nix in ephemeral web environments)
 
+**Account-agnostic file-based memory (plan 064):** Claude Code's memory store is keyed by
+the git-common-dir (main-worktree) path, so it is *repo* knowledge, not account knowledge.
+Each account's `projects/<key>/memory` is a symlink to one canonical per-repo-key store at
+`claude-runtime/shared-memory/<key>/`, so switching accounts (e.g. Max -> Pro) does NOT drop
+accumulated memory. The account wrapper (`_hm/lib.nix` -> `_cc_share_memory`) establishes this
+lazily on each launch for the repo being opened. Transcripts/todos stay per-account. If MORE
+than one account already holds a non-empty store for a key, the wrapper STOPS and warns rather
+than auto-merging `MEMORY.md` (resolve by hand, then relaunch). `shared-memory/` is gitignored
+runtime state.
+
 ## Filesystem View of Claude Configuration and Runtime State
 
 ```

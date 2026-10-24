@@ -30,6 +30,9 @@ in
     , # Human-readable name for messages
       configDir
     , # Path to account config directory
+      runtimePath ? null
+    , # Path holding .claude-<name>/ and the shared-memory/ store (plan 064).
+      # When null, account-agnostic memory sharing is skipped (no-op).
       claudeBin ? "${pkgs.claude-code}/bin/claude"
     , # Path to claude binary
 
@@ -117,12 +120,20 @@ in
         extraEnvExports
       ]);
 
+      # Plan 064 — account-agnostic memory sharing. Sourced verbatim so the
+      # wrapper and the behavioural test share one source of truth.
+      memoryShareLib = builtins.readFile ./memory-share.sh;
+
     in
     ''
       account="${account}"
       config_dir="${configDir}"
+      cc_runtime_path="${if runtimePath == null then "" else runtimePath}"
       settings_file="$config_dir/settings.json"
       pidfile="/tmp/claude-''${account}.pid"
+
+      # Plan 064 — account-agnostic memory sharing helpers (defines functions only).
+      ${memoryShareLib}
 
       # V2.0 Coalescence: Merge Nix-managed config with runtime state
       coalesce_config() {
@@ -142,6 +153,11 @@ in
       # Setup environment variables
       setup_environment() {
         export CLAUDE_CONFIG_DIR="$config_dir"
+        # Plan 064 — fold this account's memory for the current repo key into the
+        # shared store and symlink all accounts to it. Best-effort, never fatal.
+        if [[ -n "$cc_runtime_path" ]]; then
+          _cc_share_memory "$cc_runtime_path" || true
+        fi
         # Capture terminal width from real TTY before launching Claude Code
         # Claude's subprocesses cannot detect terminal dimensions (no real PTY)
         export CLAUDE_TERMINAL_WIDTH="''${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
