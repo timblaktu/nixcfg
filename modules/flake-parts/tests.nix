@@ -348,6 +348,80 @@ in
             touch $out
           '';
 
+        # === ACCOUNT-AGNOSTIC MEMORY SHARING (Plan 064) ===
+        # Behavioural test for _cc_share_memory_for_key in
+        # modules/programs/claude-code/_hm/memory-share.sh (the SAME file the
+        # account wrapper sources — single source of truth). Exercises the four
+        # cases that make the consolidation data-loss-proof: exactly-1 / zero /
+        # multi-non-empty (STOP, no merge) / idempotent re-run.
+        claude-code-memory-share = pkgs.runCommand "claude-code-memory-share"
+          {
+            meta = {
+              description = "Account-agnostic memory consolidation logic (plan 064)";
+              maintainers = [ ];
+              timeout = 60;
+            };
+            src = ../programs/claude-code/_hm/memory-share.sh;
+          } ''
+          # shellcheck source=/dev/null
+          source "$src"
+          key="-test-repo"
+          fail() { echo "FAIL: $1"; exit 1; }
+
+          # (a) exactly 1 non-empty account store -> moved to shared, all symlinked
+          a=$(mktemp -d)
+          mkdir -p "$a/.claude-max/projects/$key/memory"
+          mkdir -p "$a/.claude-pro/projects/$key/memory"
+          echo "hello" > "$a/.claude-max/projects/$key/memory/MEMORY.md"
+          _cc_share_memory_for_key "$a" "$key"
+          [ -f "$a/shared-memory/$key/MEMORY.md" ] || fail "a: content not moved to shared store"
+          [ -L "$a/.claude-max/projects/$key/memory" ] || fail "a: max not a symlink"
+          [ -L "$a/.claude-pro/projects/$key/memory" ] || fail "a: pro not a symlink"
+          [ "$(readlink -f "$a/.claude-max/projects/$key/memory")" = "$(readlink -f "$a/shared-memory/$key")" ] \
+            || fail "a: max symlink target mismatch"
+          [ "$(readlink -f "$a/.claude-pro/projects/$key/memory")" = "$(readlink -f "$a/shared-memory/$key")" ] \
+            || fail "a: pro symlink target mismatch"
+          [ "$(cat "$a/.claude-pro/projects/$key/memory/MEMORY.md")" = "hello" ] \
+            || fail "a: pro cannot read shared content through symlink"
+          echo "ok: (a) single non-empty consolidated + all accounts symlinked"
+
+          # (b) zero non-empty -> empty shared store created, all symlinked
+          b=$(mktemp -d)
+          mkdir -p "$b/.claude-max/projects/$key/memory"
+          mkdir -p "$b/.claude-pro/projects/$key/memory"
+          _cc_share_memory_for_key "$b" "$key"
+          [ -d "$b/shared-memory/$key" ] || fail "b: empty shared store not created"
+          [ -L "$b/.claude-max/projects/$key/memory" ] || fail "b: max not a symlink"
+          [ -L "$b/.claude-pro/projects/$key/memory" ] || fail "b: pro not a symlink"
+          echo "ok: (b) zero non-empty seeds empty shared store + symlinks"
+
+          # (c) >1 non-empty -> STOP: no move, no symlink flip, warning on stderr
+          c=$(mktemp -d)
+          mkdir -p "$c/.claude-max/projects/$key/memory"
+          mkdir -p "$c/.claude-pro/projects/$key/memory"
+          echo "maxdata" > "$c/.claude-max/projects/$key/memory/MEMORY.md"
+          echo "prodata" > "$c/.claude-pro/projects/$key/memory/MEMORY.md"
+          warn=$(_cc_share_memory_for_key "$c" "$key" 2>&1 >/dev/null)
+          { [ -d "$c/.claude-max/projects/$key/memory" ] && [ ! -L "$c/.claude-max/projects/$key/memory" ]; } \
+            || fail "c: max real dir was altered"
+          { [ -d "$c/.claude-pro/projects/$key/memory" ] && [ ! -L "$c/.claude-pro/projects/$key/memory" ]; } \
+            || fail "c: pro real dir was altered"
+          [ ! -e "$c/shared-memory/$key" ] || fail "c: shared store created despite conflict"
+          printf '%s' "$warn" | grep -q "NOT merging" || fail "c: no conflict warning emitted"
+          echo "ok: (c) multi non-empty stops, preserves both, warns (no merge)"
+
+          # (d) idempotent re-run on (a) -> no change, content intact
+          before=$(readlink -f "$a/.claude-max/projects/$key/memory")
+          _cc_share_memory_for_key "$a" "$key"
+          after=$(readlink -f "$a/.claude-max/projects/$key/memory")
+          [ "$before" = "$after" ] || fail "d: symlink target changed on rerun"
+          [ "$(cat "$a/shared-memory/$key/MEMORY.md")" = "hello" ] || fail "d: content lost/corrupted on rerun"
+          echo "ok: (d) re-run is idempotent"
+
+          echo "✅ all claude-code memory-share cases passed"
+          touch $out
+        '';
+
         # === PACKAGE BUILD TESTS (T0.6) ===
         # Referencing packages in checks forces nix flake check to build them.
         # These verify that all custom packages build successfully.

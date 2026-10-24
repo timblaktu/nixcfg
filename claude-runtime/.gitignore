@@ -8,6 +8,9 @@
 
 # Runtime session data
 **/projects/
+# Account-shared file-based memory store (plan 064): canonical per-repo-key memory
+# that every account's projects/<key>/memory symlinks to. Runtime state, like projects/.
+shared-memory/
 **/todos/
 **/shell-snapshots/
 **/logs/
