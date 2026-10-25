@@ -112,8 +112,8 @@
               keep-outputs = lib.mkDefault false;
 
               # Emergency GC during builds when disk gets low
-              min-free = lib.mkDefault 5368709120; # 5 GiB — trigger GC when free drops below
-              max-free = lib.mkDefault 10737418240; # 10 GiB — stop GC once this much is free
+              min-free = lib.mkDefault 10737418240; # 10 GiB — trigger GC when free drops below
+              max-free = lib.mkDefault 21474836480; # 20 GiB — stop GC once this much is free
 
               # Trust wheel group for binary cache operations
               trusted-users = [ "root" "@wheel" ];
@@ -157,6 +157,38 @@
             serviceConfig.Type = "oneshot";
             script = ''
               ${pkgs.nix}/bin/nix-env --delete-generations +3 -p /nix/var/nix/profiles/system
+            '';
+            before = [ "nix-gc.service" ];
+            wantedBy = [ "nix-gc.service" ];
+          };
+
+          # Remove dangling auto-GC-root symlinks and stale /tmp roots before GC.
+          # Dangling roots: symlinks whose target no longer exists — these silently prevent GC.
+          # /tmp roots: auto-roots pointing into /tmp that are 7+ days old (stale nix-shell
+          # sessions that outlived systemd-tmpfiles' 10-day /tmp sweep — the dominant store-bloat
+          # cause on hosts with on-disk /tmp).
+          systemd.services.nix-gc-stale-roots = {
+            description = "Prune stale Nix auto-GC-root symlinks before garbage collection";
+            serviceConfig.Type = "oneshot";
+            script = ''
+              dangling=0; tmp_old=0
+              now=$(${pkgs.coreutils}/bin/date +%s)
+              age_limit=$((7 * 86400))
+              for root in /nix/var/nix/gcroots/auto/*; do
+                [ -L "$root" ] || continue
+                target=$(${pkgs.coreutils}/bin/readlink "$root" 2>/dev/null) || continue
+                if [ ! -e "$target" ]; then
+                  ${pkgs.coreutils}/bin/rm -f "$root"
+                  dangling=$((dangling+1))
+                elif case "$target" in /tmp/*) true ;; *) false ;; esac; then
+                  mtime=$(${pkgs.coreutils}/bin/stat -c '%Y' "$root" 2>/dev/null) || continue
+                  if [ $((now - mtime)) -gt $age_limit ]; then
+                    ${pkgs.coreutils}/bin/rm -f "$root"
+                    tmp_old=$((tmp_old+1))
+                  fi
+                fi
+              done
+              echo "nix-gc-stale-roots: removed $dangling dangling + $tmp_old stale /tmp GC-root(s)"
             '';
             before = [ "nix-gc.service" ];
             wantedBy = [ "nix-gc.service" ];
