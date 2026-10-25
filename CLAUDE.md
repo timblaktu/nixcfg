@@ -37,19 +37,7 @@ Every task follows this pattern - adapt depth based on complexity:
 - **Only mark COMPLETE after validation passes**
 
 ## End of Session (MANDATORY - NO EXCEPTIONS)
-At the END of every session, you MUST checkpoint the handoff to the **per-worktree file channel** (NOT the clipboard). Many Claude Code sessions run concurrently on one node; the Windows clipboard is a shared, single-slot ring that a concurrent session silently overwrites - a proven cross-worktree contamination hazard (plan 044). `$CLAUDE_PROJECT_DIR/.session-state/` is a distinct directory per worktree, so the handoff travels a channel concurrent sessions cannot clobber.
-
-At session end:
-1. **Keep the plan doc current (PRIMARY tracker)** - update the `user-plans/NNN-*.md` task status and fold what was done / what remains into the task block.
-2. **Point at the active plan** - write the plan file's path (one line) to `$CLAUDE_PROJECT_DIR/.session-state/active-plan`.
-3. **Write distilled nuance to `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md`** - self-contained: which worktree/branch, what was just done (commits, artifacts, what was NOT done), the next concrete step, pending items (pipeline IDs, blockers). Never reference "previous session context".
-4. Print a one-line confirmation (e.g. "Handoff written: .session-state/active-plan -> NNN-name.md, .session-state/HANDOFF.md updated"). Do NOT print the handoff inline in chat.
-
-Both files are gitignored (per-worktree, never committed); a fresh `claude` session auto-rehydrates from them via the SessionStart resume hook with zero paste. This mirrors the global "Session Handoff Protocol" - the file channel is authoritative.
-
-**Last resort only** (single-session machine, no `$CLAUDE_PROJECT_DIR`): fall back to `clip.exe` (short) or a temp `.md` + `xdg-open` (long). NEVER use this fallback on a multi-session node.
-
-NEVER end a session without doing this. If you forget, you have already failed.
+Write `.session-state/active-plan` (plan file path) and `.session-state/HANDOFF.md` (self-contained: what was done, what's next, blockers). Per-worktree file channel - concurrent sessions cannot clobber it. Print "Handoff written: ..." to confirm. NEVER end a session without doing this.
 
 ---
 
@@ -80,28 +68,7 @@ NEVER end a session without doing this. If you forget, you have already failed.
 
 ## Nix Concurrency Guard
 
-Agent wrapper scripts (claudemax, opencodepro, etc.) prepend a `nix` wrapper to PATH
-that runs each nix invocation inside a systemd cgroup scope with memory limits. This
-prevents OOM kills from runaway nix evaluations without the fd-leak problems of the
-previous flock-based approach.
-
-- **Mechanism**: `systemd-run --user --scope` under `nix-eval.slice`
-- **Baseline**: `nix flake check --no-build` peaks at ~16.6G RSS on 27.4G RAM (measured 2026-04-18)
-- **Per-eval limits** (each nix invocation):
-  - MemoryHigh=65% — soft ceiling; kernel throttles (swaps aggressively) above this but doesn't kill
-  - MemoryMax=75% — hard ceiling; kernel OOM-kills the process immediately if reached
-- **Slice ceiling** (aggregate for all concurrent evals):
-  - MemoryHigh=80% — aggregate soft ceiling for all scopes in nix-eval.slice
-  - MemoryMax=90% — aggregate hard ceiling
-- **Adaptive killing**: `ManagedOOMMemoryPressure=kill` on slice registers with systemd-oomd. When memory pressure (PSI) exceeds 80% for 60s, oomd kills a process within the slice
-- **System safety nets**: `systemd-oomd` (pressure-based) + `earlyoom` (5% free threshold) enabled in system-default NixOS layer
-- **Bypass**: `NIX_NO_GUARD=1 nix <command>` skips the guard
-- **Tuning**: `NIX_GUARD_MEM_HIGH=70% NIX_GUARD_MEM_MAX=80%` for per-session overrides
-- **Graceful degradation**: If `systemd-run --user` fails (containers, CI), nix runs unguarded
-- **Source**: `claude-runtime/bin/nix-guarded.sh` (template), `modules/lib/nix-guarded.nix` (Nix package)
-- **Scope**: Only agent sessions — regular user `nix` commands are unaffected
-- **Diagnostics**: `systemctl --user status nix-eval.slice`, `systemd-cgtop`
-- **History**: See `docs/nix-guarded-fd-leak.md` for the flock-era fd-leak analysis and resolution
+Agent wrappers (`claudemax`, `claudepro`, etc.) wrap `nix` in a systemd cgroup scope with memory limits (MemoryHigh=65%/Max=75% per-eval; 80%/90% aggregate slice). Bypass: `NIX_NO_GUARD=1`. Source: `claude-runtime/bin/nix-guarded.sh`, `modules/lib/nix-guarded.nix`. Diagnostics: `systemctl --user status nix-eval.slice`.
 
 # CLAUDE-CODE CONFIGURATION AND STATE MANAGEMENT
 
@@ -165,46 +132,8 @@ home-manager switch --flake ".#${USER}@$(hostname)"
 
 ## Architecture Overview
 
-Repository uses **dendritic module pattern** (since 2026-02-08):
-- Feature modules: `modules/programs/` (22+ modules)
-- Host configs: `modules/hosts/` (7 hosts)
-- System types: `modules/system/types/` (minimal/default/cli/desktop)
-- Flake infrastructure: `modules/flake-parts/` (14 modules)
-- Shared libraries: `modules/lib/`
-- Custom packages: `pkgs/`
+Dendritic module pattern: `modules/programs/` (22+ features), `modules/hosts/` (7 hosts), `modules/system/types/` (minimal/default/cli/desktop), `modules/flake-parts/` (14), `modules/lib/`, `pkgs/`.
+WSL: NixOS-WSL (`settings/wsl/`) = full NixOS distro; HM-on-any-WSL (`settings/wsl-home/`) = portable.
+Image layers: `wsl-enterprise -> wsl-dev-team -> nixos-wsl-dev-team (host) -> personal (host)`.
 
-**Two WSL scenarios**:
-1. **NixOS-WSL** (`modules/system/settings/wsl/`) - Full NixOS distro on WSL
-2. **Home Manager on ANY WSL** (`modules/system/settings/wsl-home/`) - Portable to vanilla distros
-
-**WSL image layers** (distributable team images):
-```
-wsl-enterprise (module) -> wsl-dev-team (module) -> nixos-wsl-dev-team (host) -> personal (host)
-```
-
-## Active Work
-
-### USB/IP + Jetson Orin Nano Development
-**Status**: USB infrastructure merged to main, needs hardware verification
-**Remaining**: NixOS-WSL usbip.nix upstream PR, Jetson flashing workflow
-**Details**: `modules/system/settings/wsl/wsl.nix` (usbip options), `docs/NIXOS-WSL-BARE-MOUNT-CONTRIBUTION-PLAN.md`
-
-## Deferred Work
-
-- **Fork upstream PRs**: nixpkgs (autoWriter), home-manager (autoValidate), NixOS-WSL (VSOCK + bare mount) - on hold pending git-worktree-superproject
-- **Claude Code upstream**: statusline styles, MCP helpers, categorized hooks, multi-account RFC
-- **marker-pdf GPU**: runs on CPU despite CUDA availability
-
-## Active Plans
-
-Plans live in `user-plans/`. Completed plans are in `user-plans/archive/`.
-Check plans for TASK:PENDING to find next work items.
-
-## MANDATORY: Next Session Prompt Template
-After EVERY response, provide this format:
-```
-Continue working on [SPECIFIC TASK]. Current status: [WHAT WAS JUST DONE].
-Next step: [SPECIFIC ACTION].
-Key context: [CRITICAL INFO].
-Check: [FILE/LOCATION TO VERIFY].
-```
+Plans live in `user-plans/` (completed in `user-plans/archive/`). Check for `TASK:PENDING` to find next work.
