@@ -34,11 +34,11 @@
 - Use `echo "${WSL_DISTRO_NAME:-$WSL_DISTRO}"` to determine WSL instance (NixOS WSL sets `WSL_DISTRO`, not `WSL_DISTRO_NAME`); access others at `/mnt/wsl/$WSL_DISTRO/`
 - **Windows executables callable directly from WSL** (e.g., `usbipd.exe list`, `powershell.exe -c "command"`). NEVER tell user to "open PowerShell" - call `.exe` directly. Windows PATH is on `$PATH` via `appendWindowsPath`.
 - **Opening content - Firefox is for MARKDOWN ONLY; EVERYTHING ELSE uses `xdg-open`**: The ONE and ONLY reason we use Firefox is the `xicilion`/docu.md Markdown Viewer (mermaid 11.x). So Firefox is used EXCLUSIVELY to render MARKDOWN the user reviews - local `.md` files AND remote `.md` URLs - and for nothing else. For ALL OTHER content - general web pages, GitLab/GitHub MR/PR pages, pipeline/CI/job URLs, dashboards, issue links, ANY non-`.md` URL - use `xdg-open "<url>"`, which opens **Edge**, the user's Windows DEFAULT browser (kept for OTHER purposes). **NEVER open a non-markdown URL in Firefox** (this was a real mistake: an MR link was sent to Firefox - MR/PR/pipeline pages are web pages, so `xdg-open`). When you DO open markdown in Firefox, call `firefox.exe` directly (NOT `xdg-open`, which would hand it to Edge and not render it). Never assume Firefox is the default. For markdown opened in Firefox there are THREE distinct path forms for the SAME WSL file and they MUST NOT be conflated:
-  - **A remote `.md` URL to be RENDERED by docu.md** passes straight through to Firefox: `"/mnt/c/Program Files/Mozilla Firefox/firefox.exe" "https://.../file.md"` (an already-running instance opens it as a new tab). A non-markdown URL (MR/PR, pipeline, any web page) does NOT go here - use `xdg-open "<url>"` (Edge) instead.
-  - **A WSL-native local file** (`.md`, `.html`, ...) MUST be passed as the Windows UNC path from `wslpath -w`, NOT as a `file://` URL. Passing `file://wsl.localhost/<distro>/...` AS a firefox.exe argument makes Firefox strip the authority and mangle it to `file:///<distro>/...` (a path that exists on neither Windows nor Linux), so nothing opens. Correct recipe: `p=/abs/linux/path/doc.md; "/mnt/c/Program Files/Mozilla Firefox/firefox.exe" "$(wslpath -w "$p")" >/dev/null 2>&1 &`. On current WSL builds `wslpath -w` emits the `\\wsl.localhost\<distro>\...` form that Firefox accepts.
-  - The `file://wsl.localhost/<distro>/...` form (TWO slashes after `file:`) is a TERMINAL-CLICKABLE CHAT LINK ONLY (see the clickable-`file://`-URIs rule under Content Delivery) - it is NEVER a firefox.exe argument. When echoing such a UNC path in a Bash command, use `printf '%s\n'`, never `echo` (the Bash tool runs zsh, whose builtin `echo` interprets backslash escapes and corrupts the path).
-  - **An embedded `[text](href)` link INSIDE a markdown/HTML doc that the user opens in Firefox/docu.md** (i.e. a link Firefox resolves when clicked, not a CLI arg and not a terminal chat link) MUST use the FIVE-slash form `file://///wsl.localhost/<distro>/<abs-path-without-leading-slash>` (that is `file:` + five `/`). The two-slash `file://wsl.localhost/...` href gets its authority stripped by Firefox to `file:///<distro>/...` (a bogus path) and the link dead-ends; the five-slash form preserves `wsl.localhost` as the UNC host so the link resolves. Heading anchors append as `...#lower-case-github-slug`. This is the form for cross-doc links in review artifacts (e.g. an adjudication sheet linking into before/after docs).
-  - If the docu.md extension cannot read a `file://`-opened local file (Firefox file-access restrictions), serve the directory over `http://localhost` and open that URL in Firefox instead.
+  - **Local `.md` file**: `p=<path>; firefox.exe "$(wslpath -w "$p")"` - pass the UNC path directly (NEVER a `file://` string as the exe arg; Firefox mangles it).
+  - **Chat clickable link**: `file://wsl.localhost/<distro>/...` (2-slash form) - terminal-only; NEVER pass this to firefox.exe.
+  - **Embedded href in a doc** (link Firefox resolves when clicked): FIVE-slash `file://///wsl.localhost/<distro>/<path>` - the 2-slash form gets its authority stripped; the 5-slash form preserves `wsl.localhost`.
+  - If docu.md cannot read a `file://`-opened local file, serve over `http://localhost` instead.
+  - See `claude-runtime/.claude-pro/references/wsl-firefox-path-forms.md` for full path-form reference with examples.
 
 ## Nix and Git Safety
 
@@ -67,7 +67,7 @@ The user's dev environment is Terminal + Browser. Proactively open content that 
 
 **Do not open automatically**: Files with small edits, build logs, the same URL twice, more than 3 items in quick succession.
 
-**Reviewing rendered images (PNGs etc., not `.drawio`/SVG-XML source)**: NEVER open images one-by-one (each spawns a separate Windows Photos window and clutters the desktop). Put the whole review set in ONE folder, name files so they sort lexicographically in the intended viewing order (numeric/zero-padded prefixes, grouped by series then sequence, e.g. `1-oracle-module-3-Detect.png`), then open the FOLDER in Explorer: `explorer.exe 'C:\path\to\dir'`. Clean up prior review folders first. Note Explorer caches thumbnails - regenerate into a fresh folder name (or have the user refresh) so updated renders aren't masked by stale thumbnails. (Shell is zsh: arrays are 1-indexed - build label lists with `for e in "1:Foo" "2:Bar"; do p=${e%%:*}; n=${e##*:}; done`, not a bash index-0 placeholder.)
+**Reviewing rendered images (PNGs)**: Put all in ONE folder, zero-padded names for sort order, open the FOLDER in Explorer: `explorer.exe 'C:\path\to\dir'`. Regenerate to a fresh folder name to bust Explorer's thumbnail cache. (zsh: arrays are 1-indexed.)
 
 ## Terminal-Width-Aware Output Formatting
 
@@ -85,28 +85,7 @@ File output may exceed terminal width (editors have horizontal scroll).
 
 ## Annotated Stack/Runtime Tree Diagrams (for complex explanations)
 
-When explaining a non-trivial system - a layered runtime (host -> emulator -> guest ->
-process), a call/data path, a build/derivation pipeline, or any "what talks to what, and
-where does my change live" question - LEAD WITH a small ASCII tree/stack diagram, then
-annotate it. This is a strongly-held user preference: the user finds it VERY helpful as a
-shared visualization of the exact context under discussion.
-
-Format that lands well:
-- A left-hand ASCII tree (`├─`, `└─`, indentation) showing the layers/components nested.
-- Right-hand annotations on each layer saying what it is / what runs there.
-- Arrows (`──►`) to show flow or to point from a layer to its role.
-- Emphasis (CAPS, "THIS layer", inline notes) on the specific layer(s) the current
-  conversation is about - make the relevant level visually pop out of the whole.
-
-```
-HOST
- ├─ driver        ──► what this layer is; **the layer we're discussing**
- └─ emulator      ──► ...
-      └─ GUEST    ──► where the actual change / bug lives
-```
-
-Use it proactively in complex cases (don't wait to be asked); skip it for simple one-layer
-answers. Follow the diagram with prose that walks the annotated layers.
+For layered systems (runtime stacks, call paths, build pipelines), LEAD WITH a small ASCII tree annotating each layer, THEN prose. This is a strongly-held user preference. Format: `├─ layer  ──► role`; CAPS/emphasis on the layer being discussed. Use proactively for complex cases; skip for simple one-layer answers.
 
 ## Content Delivery for Copy-Paste
 
@@ -223,143 +202,31 @@ the user asks, or the remaining frontier is empty/blocked/Interactive.
 
 **Handoff**: Must be self-contained - merge task summary (what was done, commits, artifacts, what was NOT done) directly into the handoff. Write it to the per-worktree `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md` and update `$CLAUDE_PROJECT_DIR/.session-state/active-plan` (see Session Handoff Protocol below). Never reference "previous session context".
 
-## Unattended Burndown Contract (authoring plans for autonomous layer-by-layer execution)
+## Unattended Burndown Contract
 
-An **unattended burndown** is a driver (the `run-tasks-<account>` script) autonomously executing a plan until it is COMPLETE or a stop condition trips. No human is in the loop. This is "Mode B"; the human-attended `/next-task` loop is "Mode A". The driver reuses the same substrate as Mode A: the plan file is the source of truth (`TASK:PENDING/IN_PROGRESS/COMPLETE` cursor), `.session-state/active-plan` points at the plan, `.session-state/HANDOFF.md` records why a run stopped.
-
-**Layer model (Mode A / Mode B parity).** Each driver iteration launches ONE orchestrating `claude -p` over the whole independent FRONTIER (a "layer"): it fans out sub-agents for the mutually-independent actionable tasks, commits each task individually, and edits the plan `TASK:` markers itself. The next iteration re-reads the plan and clears the next, newly-unblocked layer. This is the exact frontier policy `/next-task` uses, so Mode A and Mode B behave identically by construction; the driver is a thin loop around that one intelligent coordinator (which is what keeps concurrent work safe in a single worktree).
-
-**Why this matters when you AUTHOR a plan:** the failure policy is *stop-the-whole-run* - a single blocking failure in a layer halts the entire unattended burndown (the independent tasks the layer already committed stay done). That is only safe if "failure" is well-defined and the plan is authored so that **only a TRULY-BLOCKING condition counts as a failure.** A well-authored plan almost never hits a blocking failure; ordinary "can't proceed right now" situations are expressed as explicit dependencies, non-blocking sentinels, or `Interactive` markers - NOT as crashes. Authoring a plan burndown-safe is the author's job, not the driver's.
-
-### Outcome taxonomy
-
-Every outcome resolves to exactly one of these. The orchestrator decides each per task and the driver maps the layer's aggregate to an action (a layer completes the independent tasks it can, then reports the first blocking outcome). Author tasks so the **BLOCKING-FAILURE** bucket is essentially unreachable for a well-formed plan.
-
-| Outcome | Meaning | Driver action | How you avoid misuse |
-|---|---|---|---|
-| **COMPLETE** | DoD met, changes committed | mark `TASK:COMPLETE` + date, advance to next | give every task a checkable DoD |
-| **BLOCKED-BY-DEP** | a declared dependency is not yet COMPLETE | skip to next actionable task; NOT a failure | express ordering as explicit deps, not assumptions |
-| **ENVIRONMENT_NOT_CAPABLE** | wrong host / missing toolchain | exit run cleanly, leave task PENDING | tag host-specific tasks; never invent a workaround |
-| **USER_INPUT_REQUIRED** | needs a human decision/approval | exit run cleanly, leave task PENDING | mark decision tasks `Interactive` |
-| **BLOCKING-FAILURE** | a task attempted in the layer hit a hard error (build regression, crash, prerequisite that is NOT a declared dep); the orchestrator emits `BLOCKING_FAILURE <taskid>`, leaves that task `IN_PROGRESS`, and starts no further tasks | **STOP the whole run**, leave that task `IN_PROGRESS` (independents already done in the layer stay committed), write HANDOFF, exit non-zero | author so this is unreachable: checkable DoD + deps + no-workaround rule |
-
-### Authoring rules (make blocking failures unreachable)
-
-1. **Checkable DoD per task.** "Done" must be objectively verifiable - a command that exits zero, a file that exists with known content, a test that passes. No prose-only "should work".
-2. **Order via dependencies, not luck.** If task B needs task A's output, declare A as B's dependency so the driver yields BLOCKED-BY-DEP instead of letting B attempt-and-fail.
-3. **No-workaround rule (inherited from `/next-task`).** If prerequisites aren't met, emit the proper non-blocking sentinel (`ENVIRONMENT_NOT_CAPABLE` / `USER_INPUT_REQUIRED` / BLOCKED-BY-DEP); never invent an alternative approach. An unmet prerequisite that *should* have been a declared dependency is an AUTHORING bug - it surfaces as a blocking failure precisely so you fix the plan, not so the driver guesses.
-4. **Mark human-decision tasks `Interactive`.** Anything needing a choice, approval, or judgment call ⇒ `USER_INPUT_REQUIRED`, never an autonomous guess.
-5. **Opt-in + working branch (REQUIRED for the driver to touch the plan).** The plan header MUST carry both of these lines, or the driver refuses to run it:
-   - `Burndown: SAFE` - explicit machine-readable opt-in. Absence means "human-attended only".
-   - `Working branch: <non-main-branch>` - names the branch the run must be on. The driver refuses if the current branch is `main`/`master` or does not match this line.
-6. **Idempotent / resumable tasks.** A task re-run after an interrupted attempt (status still `IN_PROGRESS`) must converge, not double-apply. Write tasks so re-execution is safe (check-before-create, append-if-absent, `mkdir -p`, etc.).
-
-### Header markers
-
-A burndown-eligible plan declares, near the top of the file (the Status/Owner header block):
-
+Plans opt in with these two header lines (driver refuses if absent or if current branch is main/master):
 ```
 Burndown: SAFE
 Working branch: plan-NNN-some-feature
 ```
-
-Both are mandatory for an unattended run. A plan without `Burndown: SAFE` is treated as Mode-A-only (human-attended `/next-task`) and the driver will refuse it.
-
-### Worked example - a blocking-failure-proof task
-
-```
-### T3 — Add the foo widget to the bar module `TASK:PENDING`
-Depends on: T2 (the bar module must exist and export `widgets`).
-Edit `modules/bar.nix` to register a `foo` widget under `widgets`. The edit is idempotent:
-if a `foo` entry already exists, leave it unchanged.
-**DoD:** `nix flake check --no-build` passes AND `nix eval '.#bar.widgets.foo' --raw` prints
-a non-empty string. If T2 is not COMPLETE, this task yields BLOCKED-BY-DEP (it does not attempt
-the edit). If the toolchain is missing `nix`, it yields ENVIRONMENT_NOT_CAPABLE. There is no
-prose-only success criterion and no scenario where the task "tries a workaround".
-```
-
-Why this is safe: the DoD is two exit-zero commands (rule 1); the T2 dependency is declared so a premature run yields BLOCKED-BY-DEP, not a crash (rule 2); the edit is idempotent so a resumed `IN_PROGRESS` attempt converges (rule 6); and the only path to BLOCKING-FAILURE is a genuine hard error (e.g. `nix flake check` regressing), which is exactly when stopping the run is correct.
-
-### Running, inspecting & resuming a burndown
-
-Launch an unattended whole-plan burndown (from the plan's declared `Working branch:`):
-
-```
-run-tasks-<account> <plan.md> --burndown        # = --all --on-failure stop, opt-in asserted
-```
-
-A run leaves four artifacts in the worktree (all gitignored runtime state):
-
-| Artifact | Path | What it holds |
-|---|---|---|
-| Event journal | `.claude-task-logs/events.jsonl` | append-only, one JSONL line per LAYER transition, incl. a `completed` count (tasks the layer finished); per-task commit attribution lives in the orchestrator report + plan `TASK:` edits |
-| Per-layer logs | `.claude-task-logs/<ts>_<anchor>.{log,json,stderr}` | full orchestrator response + stderr per layer (`<anchor>` = the layer's first actionable row) |
-| Run state | `.claude-task-state` | latest-only snapshot (`STATUS=` is the stop bucket) |
-| Handoff | `.session-state/HANDOFF.md` | human/hook rehydration breadcrumb written on every post-gate stop |
-
-Inspect a partial / stopped burndown:
-
-```
-cat .claude-task-state                                   # STATUS= tells you the stop bucket
-jq -c . .claude-task-logs/events.jsonl                   # full per-layer transition history
-jq -r 'select(.head_moved) | "\(.task) +\(.completed) \(.sha_before)->\(.sha_after) \(.status)"' \
-    .claude-task-logs/events.jsonl                       # per layer: anchor, tasks completed, SHA span
-ls -t .claude-task-logs/*.log | head -1 | xargs cat      # the most recent layer's output
-```
-
-**Resume** is just re-running the same command - burndown state lives entirely in the plan file's
-`TASK:` cursor, so the driver re-attempts an `IN_PROGRESS` task (the bucket a blocking failure leaves
-behind) first, then proceeds to `PENDING`. Because authoring rule 6 requires idempotent tasks, the
-re-attempt converges. If the stop was `ENVIRONMENT_NOT_CAPABLE` or `USER_INPUT_REQUIRED`, handle that
-one task interactively with `/next-task` first, then re-launch. A fresh session also rehydrates
-automatically: the SessionStart hook surfaces the active plan's next task (or, for a plan without
-`###`-heading task blocks, `.session-state/HANDOFF.md`, which names the stop reason and the resume command).
+Outcomes: COMPLETE, BLOCKED-BY-DEP, ENVIRONMENT_NOT_CAPABLE, USER_INPUT_REQUIRED, BLOCKING-FAILURE.
+BLOCKING-FAILURE stops the entire run; author plans so it is unreachable (checkable DoD, declared deps, no-workaround rule, idempotent tasks). Non-blocking states: BLOCKED-BY-DEP (dep not COMPLETE), ENVIRONMENT_NOT_CAPABLE (wrong host/toolchain), USER_INPUT_REQUIRED (Interactive tasks).
+Run: `run-tasks-<account> <plan.md> --burndown`. Resume: re-run the same command (plan `TASK:` cursor is the state).
+See `claude-runtime/.claude-pro/references/burndown-contract.md` when authoring a burndown-eligible plan or debugging a run.
 
 ## Session Handoff Protocol (MANDATORY - NEVER SKIP)
 
-**EVERY session that works on a plan MUST end by checkpointing its handoff to per-worktree files.** This is non-negotiable - treat it like committing code. A session that ends without an updated handoff is incomplete work.
+**EVERY session that works on a plan MUST end by writing to per-worktree files** (concurrent sessions share the clipboard - cross-contamination hazard). At session end:
+1. **Update the plan doc.** `user-plans/NNN-*.md` task status + fold what was done/remains into the task block.
+2. **Point at the active plan.** Write the plan file's path to `$CLAUDE_PROJECT_DIR/.session-state/active-plan`.
+3. **Write `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md`** - self-contained: worktree/branch, commits, what was NOT done, next concrete step, blockers. Never reference "previous session context".
+4. Print "Handoff written: .session-state/active-plan -> NNN-name.md, .session-state/HANDOFF.md updated".
 
-**Why files, not the clipboard:** many Claude Code sessions run concurrently on one node. The Windows clipboard (a shared ~15-entry Win+V ring) and `/tmp/continuation.md` (a single shared file) are global single slots that any concurrent session silently overwrites - a proven cross-contamination hazard (resuming the wrong worktree's work). `$CLAUDE_PROJECT_DIR/.session-state/` is a distinct directory per worktree, so the handoff travels a per-worktree channel that concurrent sessions in other worktrees cannot clobber. See plan 044 (paste-free session resumption) under `user-plans/` (or its `archive/`) and the `session-handoff-concurrency-fragility` auto-memory for the incident that motivated this.
-
-At session end:
-1. **Keep the plan doc current (PRIMARY tracker).** Update the `user-plans/NNN-*.md` task status (`TASK:PENDING`/`IN_PROGRESS`/`COMPLETE`) and fold what was done / what remains into the task block. The plan file is the durable source of truth - resumption depends on it first; write nuance to `HANDOFF.md` only for what the plan doc cannot capture.
-2. **Point at the active plan.** Write the plan file's path (one line) to `$CLAUDE_PROJECT_DIR/.session-state/active-plan`. The SessionStart rehydration hook and `/next-task` both read this pointer first.
-3. **Write distilled nuance to `$CLAUDE_PROJECT_DIR/.session-state/HANDOFF.md`** - the self-contained handoff: which worktree/branch, what was just done (commits, artifacts, what was NOT done), the next concrete step, pending items (pipeline IDs, blockers). Include enough that a fresh session starts without questions. Never reference "previous session context".
-4. Print a one-line confirmation, e.g. "Handoff written: .session-state/active-plan -> NNN-name.md, .session-state/HANDOFF.md updated". Do NOT print the handoff inline in chat - it clutters output.
-
-These two files are gitignored (per-worktree, never committed). A fresh `claude` session auto-rehydrates from them with zero paste: the SessionStart rehydration hook surfaces the plan pointer + next task, and `/next-task` acts on it.
-
-**Note:** a `Stop`/`SessionEnd` hook cannot *compose* this semantic summary (only the assistant can distill what mattered), so writing the handoff stays an assistant-discipline step; the rehydration hook only *surfaces* what was written here.
-
-**Last resort only (single-session machine, no `$CLAUDE_PROJECT_DIR`):** if the per-worktree file channel is genuinely unavailable, fall back to `clip.exe` (short) or a temp `.md` opened in Firefox (`firefox.exe "$(wslpath -w ...)"`, long). NEVER use this fallback on a multi-session node - it is the exact mechanism this protocol replaces.
+Last resort only (no `$CLAUDE_PROJECT_DIR`): `clip.exe` (short) or Firefox temp `.md` (long). NEVER on a multi-session node.
 
 ## Memory Index Compaction (MEMORY.md auto-memory)
 
-When the harness flags MEMORY.md as too big ("approaching the read limit / compact to under X KB"),
-compaction is RELEVANCE curation, NOT byte-minimization. NEVER just trim the longest lines to hit the
-byte target: entry length often correlates with how load-bearing an entry is, so "cut the biggest"
-can destroy the most useful memory. Size is a symptom; relevance is the target. (Per the Scope rule
-in Curation below, per-plan status / `NEXT=` / cursor lines do not belong in MEMORY.md at all - if you
-find them here, de-index them; their durable home is the plan file `user-plans/NNN-*.md`.)
-
-Order of operations:
-1. DROP or archive STALE entries first. Stale = no longer informs future action: completed-and-landed
-   work, superseded/reversed decisions, resolved one-offs whose reusable lesson already lives in
-   another entry, dated past events. Signals: `DONE`/`LANDED`/`MERGED`/`RESOLVED`/`FIXED` with no
-   lasting general lesson; a merged MR; a past date with no forward action.
-2. MERGE duplicate or near-duplicate entries into one bullet.
-3. ONLY THEN, for still-long ACTIVE entries, move detail into that entry's topic file and leave a
-   one-line pointer that PRESERVES its identity.
-
-Rules:
-- "One line per entry" is a FORMAT rule (collapse multi-line bullets), not license to truncate active content.
-- PROTECT still-relevant general entries (durable behavioral feedback, reusable reference, live
-  cross-plan project constraints); trim the OLDEST INACTIVE entries instead.
-- If dropping stale + merging still exceeds budget, too many entries are indexed - and per-plan status
-  must not be here at all (it belongs in the plan files). Move any such entries out first, then
-  ARCHIVE completed-work entries or tell the user. Do NOT mutilate active general entries to fit.
-- When unsure whether an entry is stale, KEEP it or ask. Deleting memory is high-cost; over-keeping
-  is low-cost.
+When MEMORY.md is flagged too big: (1) DROP stale entries first (DONE/LANDED/MERGED with no lasting lesson; per-plan status/NEXT=/cursor lines do NOT belong here - move to plan files), (2) MERGE near-duplicates, (3) ONLY THEN move long active entries to topic files. NEVER shave active entries by word-trimming - drop inactive entries instead. 200-line count binds before bytes, so fewer entries is the lever. When unsure if stale, KEEP it.
 
 ## Long-Running Task Strategy
 
@@ -394,33 +261,3 @@ never for "where plan NNN stands right now".
 - **Link liberally with `[[slug]]`; merge near-duplicates; delete entries proven wrong.** Orphaned topic files (no index line and no inbound `[[link]]`) are dead weight - drop or re-link them.
 - **Bulk curation is cohesive + signed-off, never silent.** A single-entry update as you work is routine. But a periodic sweep that drops/merges MANY entries: analyze -> classify (keep/merge/drop) -> get owner sign-off -> then apply. No silent mass-deletes; the auto-memory has no review gate (unlike git-tracked files), so accretion and reactive shaving are the owner's diagnosed cause of signal loss.
 
-## Universal Technical Learnings
-
-### WSL Process Termination and Mount Preservation (CRITICAL)
-- **Signal priority**: SIGTERM (15) > SIGINT (2) > SIGQUIT (3) > SIGHUP (1) > SIGKILL (9)
-- SIGKILL bypasses trap handlers - leaves 9p mounts broken if kas-build has them unmounted
-- **Recovery**: `nix run '.#wsl-remount'` or `wsl --shutdown` from PowerShell
-- When killing stuck processes: `kill -TERM <pid>; sleep 5; kill -INT <pid>` - SIGKILL only as last resort
-
-### WIC Generation Hang Issue (ROOT CAUSE)
-- **Symptom**: Build hangs at 96% during `do_image_wic` in WSL2
-- **Root cause**: `sgdisk` calls global `sync()` which iterates ALL mounted filesystems including WSL2's 9p mounts
-- **Fix**: `kas-build` wrapper unmounts `/mnt/[a-z]` drives before building. Leaves `/usr/lib/wsl/drivers` (read-only, no sync hang).
-
-### Git Worktree Workflow
-- **Reach for a worktree per parallel EFFORT, when isolation actually helps - it is an opt-in convenience, not a rule.** There is NO "one worktree per branch" mandate, and reusing a single worktree across several branches (plain `git checkout -b`, or switching branches in place) is perfectly fine and often the right call. Spin up a *new* worktree (`git worktree add`) specifically when isolation buys you something concrete: the current worktree is dirty and you want a clean base, the new branch's base differs (e.g. a clean feature off `main` while the current tree carries unrelated churn), or the effort needs to run alongside other work at the same time. The payoffs - clean per-branch diffs (tidy MRs, accurate code permalinks) and parallelism across workspaces - are the *reason to opt in*, offered as guidance, never an obligation to spawn a worktree for every branch.
-- **Parent/child workspace pattern**: treat the workspace that holds the plan, docs, and handoff as the coordination "parent"; cut isolated child worktrees off `main` (or the correct base) for the shippable code. Navigate the set with `git worktree list` (it reads as a task map when dirs/branches are named for the task, e.g. `~/src/<repo>-<feature>` on branch `<feature>`).
-- **Self-authorized**: create worktrees and their branches without asking; just name what you created in your report so the human can follow. Moving/removing a worktree later is cheap and reversible.
-- **A worktree's `user-plans/` (and `.session-state/HANDOFF.md`/`active-plan`) must be a REAL in-worktree path, NEVER a symlink escaping the worktree.** Claude Code refuses symlink-escaping writes (`SymlinkWriteRefusedError`), which breaks plan edits and triggers permission prompts. To share plans across worktrees, SEED a real per-worktree dir by copying from the shared plan store (`cp -a store/. user-plans/`), not by symlinking into it. `**/user-plans/` is gitignored machine-wide, so a fresh worktree simply has no plan dir until you create one as a real dir (a repo that opts back into tracking does so with a local `!user-plans/` negation); plan edits are then worktree-local (intended - burndown is commit-based, single-writer-per-plan).
-- **Use case**: Parallel work across Claude accounts without interference
-- **Setup**: `git worktree add ~/src/project-pro feature/foo-pro`
-- **Cleanup**: `git worktree remove`, `git branch -d` (root-owned build dirs may need `sudo rm -rf` first)
-
-### Claude Task Runner Artifacts
-- `.claude-task-logs/` and `.claude-task-state` are local session state - should be gitignored
-
-### Multi-Account Memory Architecture (2026-03-01)
-- `~/.claude` symlink removed - bare `claude` is now a wrapper that sets `CLAUDE_CONFIG_DIR` directly
-- Each account has independent CLAUDE.md (`.claude-max/`, `.claude-pro/`, etc.)
-- Per-account symlinks (`~/.claude-max`, `~/.claude-pro`) remain as convenience
-- Slash commands are on-demand: content loaded only when invoked, costs nothing in context
