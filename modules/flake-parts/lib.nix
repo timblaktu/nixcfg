@@ -451,10 +451,12 @@ in
         item = "github.com";
         field = "PAT-timtam2026";
       };
-      cli.tokenOverrides.pr = {
-        item = "github.com";
-        field = "PAT-pubclassic";
-      };
+      # No cli.tokenOverrides: `gh pr` uses the default fine-grained token above.
+      # The former `pr` override routed to a broad classic PAT so cross-fork PRs to
+      # upstream repos we don't own would work. Dropped in favor of least-privilege
+      # fine-grained tokens (GitHub guidance); a fine-grained PAT can't be scoped to
+      # repos you don't own, so for the rare upstream PR use `gh pr create --web` or
+      # a short-lived narrowly-scoped token minted on demand, not a standing broad one.
       orgs.kyosaku-kai = {
         bitwarden = {
           item = "github.com";
