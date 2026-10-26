@@ -449,7 +449,7 @@ in
       mode = "bitwarden";
       bitwarden = {
         item = "github.com";
-        field = "PAT-timtam2026";
+        field = "github-pat";
       };
       # No cli.tokenOverrides: `gh pr` uses the default fine-grained token above.
       # The former `pr` override routed to a broad classic PAT so cross-fork PRs to
@@ -460,7 +460,7 @@ in
       orgs.kyosaku-kai = {
         bitwarden = {
           item = "github.com";
-          field = "kyosaku-kai-2026";
+          field = "github-org-token";
         };
       };
     };

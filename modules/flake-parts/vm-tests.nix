@@ -555,7 +555,8 @@ in
             machine.succeed("su - ${testUsername} -c 'git --version'")
             # Git config should contain user.name from the dendritic git module
             machine.succeed("su - ${testUsername} -c 'git config user.name' | grep -q 'Tim Black'")
-            machine.succeed("su - ${testUsername} -c 'git config user.email' | grep -q 'timblaktu@gmail.com'")
+            # Public default when no private `privateConfig.gitEmail` is injected (plan 065 T3).
+            machine.succeed("su - ${testUsername} -c 'git config user.email' | grep -q 'nixcfg@users.noreply.github.com'")
 
             # --- Test 3: Git config file generated ---
             # HM puts git config in XDG path

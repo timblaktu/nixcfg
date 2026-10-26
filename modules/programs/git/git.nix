@@ -31,6 +31,17 @@ in
     # === Home Manager Module ===
     # Full git configuration for user environment
     homeManager.git = { config, pkgs, lib, ... }:
+      let
+        # Commit-author email is parameterized out of the public repo (plan 065 T3).
+        # The real value is injected privately by defining `_module.args.privateConfig`
+        # (e.g. in nixcfg-work's host config: `_module.args.privateConfig.gitEmail = "..."`).
+        # Read defensively via `_module.args` with an `or` fallback rather than as a module
+        # formal: the NixOS module system eagerly resolves every formal through `_module.args`,
+        # so a `privateConfig ? {}` formal default is bypassed and errors when absent. When no
+        # private value is provided (public flake eval, vm-tests, any plain consumer) a neutral
+        # GitHub noreply address is used so `nix flake check` stays green without leaking PII.
+        privateConfig = config._module.args.privateConfig or { };
+      in
       {
         programs.git = {
           enable = true;
@@ -39,7 +50,7 @@ in
           settings = {
             user = {
               name = "Tim Black";
-              email = "timblaktu@gmail.com";
+              email = lib.mkDefault (privateConfig.gitEmail or "nixcfg@users.noreply.github.com");
             };
             init.defaultBranch = "main";
             pull.rebase = false;
