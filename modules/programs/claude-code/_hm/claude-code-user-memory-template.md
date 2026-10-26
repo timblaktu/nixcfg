@@ -212,7 +212,7 @@ Working branch: plan-NNN-some-feature
 Outcomes: COMPLETE, BLOCKED-BY-DEP, ENVIRONMENT_NOT_CAPABLE, USER_INPUT_REQUIRED, BLOCKING-FAILURE.
 BLOCKING-FAILURE stops the entire run; author plans so it is unreachable (checkable DoD, declared deps, no-workaround rule, idempotent tasks). Non-blocking states: BLOCKED-BY-DEP (dep not COMPLETE), ENVIRONMENT_NOT_CAPABLE (wrong host/toolchain), USER_INPUT_REQUIRED (Interactive tasks).
 Run: `run-tasks-<account> <plan.md> --burndown`. Resume: re-run the same command (plan `TASK:` cursor is the state).
-See `claude-runtime/.claude-pro/references/burndown-contract.md` when authoring a burndown-eligible plan or debugging a run.
+Invoke `/burndown-contract` skill for the full spec when authoring a burndown-eligible plan or debugging a run.
 
 ## Session Handoff Protocol (MANDATORY - NEVER SKIP)
 
