@@ -423,6 +423,76 @@ in
           remote differs.
         '';
       };
+      blockSecretNames = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Plan 065 T4 — block a `git commit` whose staged content (or the commit
+          command string) carries a PERSONAL SECRET-NAME, a year-suffixed secret
+          label, or a real credential VALUE. Unlike blockInternalTokens (private
+          patterns, remote-scoped to public nixcfg), these classes are UNIVERSALLY
+          unwanted in ANY repo on this host, so the guard fires on every
+          `git commit` regardless of remote, and both its pattern list and its
+          allowlist are SAFE to ship publicly — they name nothing personal, only
+          generic detection classes.
+
+          Blocks `secretNamePatterns` (ERE, matched case-insensitively) minus any
+          hit that also matches `secretNameAllowlist` (the T1 "leave alone" set:
+          doc/example field names, canonical placeholder token values, and the
+          disposable vm-test fixture key). The personal ACCOUNT EMAIL is handled
+          OUT of this module (parameterized out of config by T3, and caught by
+          blockInternalTokens via nixcfg-work's private SSOT) so no personal
+          literal is ever shipped here. Honors `CLAUDE_HOOKS_BYPASS`.
+        '';
+      };
+      secretNamePatterns = mkOption {
+        type = types.listOf types.str;
+        default = [
+          "PAT-[A-Za-z0-9_-]+"
+          "[A-Za-z0-9_]+-20[0-9][0-9]"
+          "ghp_[A-Za-z0-9]{20,}"
+          "github_pat_[A-Za-z0-9_]{20,}"
+          "glpat-[A-Za-z0-9_-]{20,}"
+          "AKIA[0-9A-Z]{16}"
+          "BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY"
+        ];
+        description = ''
+          ERE alternatives (joined with `|`, matched case-insensitively) of the
+          secret-NAME and credential-VALUE classes `blockSecretNames` refuses to
+          let into a commit: personal `PAT-<handle>` field names, `<token>-20YY`
+          year-suffixed labels, and real GitHub/GitLab/AWS token + PEM
+          private-key signatures. SAFE TO SHIP (generic classes, no personal
+          literal). nixcfg-work may append host-private extras. Any match that
+          also hits `secretNameAllowlist` is NOT blocked.
+        '';
+      };
+      secretNameAllowlist = mkOption {
+        type = types.listOf types.str;
+        default = [
+          "PAT-token"
+          "PAT-mytoken"
+          "PAT-classic"
+          "PAT-my-org"
+          "ghp_xxx"
+          "ghp_test"
+          "glpat-test"
+          "AKIAIOSFODNN7EXAMPLE"
+          "AKIAXXXX"
+          "AKIAIOSFODNN7TESTEXAMPLE"
+          "xoxb-xxxx"
+          "Placeholder_ghp_XXXX"
+          "user@example.com"
+          "vm-test@nixos-test"
+        ];
+        description = ''
+          ERE alternatives (matched case-insensitively) that EXEMPT an otherwise-
+          matching hit from `blockSecretNames`: T1's confirmed "leave alone" set —
+          doc/example field names, canonical placeholder token values (incl. AWS's
+          own AKIAIOSFODNN7EXAMPLE), and the disposable `vm-test@nixos-test`
+          fixture key in vm-tests.nix — so the guard does not false-positive on
+          documentation or test scaffolding.
+        '';
+      };
     };
 
     # Plan 056 P4 — Class-A/B bash-safety interlock. Blocks with an instructive
@@ -1087,6 +1157,49 @@ in
               hit="$( { ${pkgs.git}/bin/git -C "$dir" diff --cached 2>/dev/null; printf '%s' "$cmd"; } | ${pkgs.gnugrep}/bin/grep -oiE "$pats" | ${pkgs.coreutils}/bin/head -n1 )"
               if [ -n "$hit" ]; then
                 gr_block "gitSafety.blockInternalTokens" "🚫 gitSafety: refusing this commit to the PUBLIC nixcfg repo — staged content or the message contains an internal-token class (matched '$hit'). WHY: internal identifiers (corp domains, real IPs/FQDNs/emails, client/OEM codenames, internal Jira keys, build/board IDs) must never reach the public remote; they belong only in the private nixcfg-work (plan 062 audit). TO PROCEED NOW: genericize the token to a placeholder (see plan 062 dispositions + the guide) and re-commit; for an approved exception, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: keep internal identifiers out of public files — the private pattern SSOT lives in nixcfg-work (plan 058 push-rule mirror). See docs/claude-code-session-guardrails.md."
+              fi
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          }))
+
+          # blockSecretNames (Plan 065 T4) — forward guard: refuse a commit whose
+          # staged content or command string carries a personal secret-NAME, a
+          # year-suffixed secret label, or a real credential VALUE. Fires on every
+          # `git commit` regardless of remote (these are universally unwanted);
+          # patterns + allowlist are PUBLIC-safe (generic classes, no personal
+          # literal). The personal account email is NOT matched here — it is caught
+          # by blockInternalTokens via nixcfg-work's private SSOT.
+          ++ (lib.optional cfg.hooks.gitSafety.blockSecretNames (mkHook {
+            matcher = "Bash";
+            ifFilter = "Bash(git *)";
+            command = ''
+              ${guardrailPrelude}
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}commit\b' || exit 0
+              pats='${lib.concatStringsSep "|" cfg.hooks.gitSafety.secretNamePatterns}'
+              [ -z "$pats" ] && exit 0
+              allow='${lib.concatStringsSep "|" cfg.hooks.gitSafety.secretNameAllowlist}'
+              # resolve the dir the git command targets (git -C DIR > leading cd DIR > cwd).
+              dir="."
+              cdarg="$(printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -oE '\bcd[[:space:]]+[^[:space:]&;|]+' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.gnused}/bin/sed -E 's/^cd[[:space:]]+//')"
+              [ -n "$cdarg" ] && dir="$cdarg"
+              carg="$(printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -oE 'git[[:space:]]+-C[[:space:]]+[^[:space:]&;|]+' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.gnused}/bin/sed -E 's/^git[[:space:]]+-C[[:space:]]+//')"
+              [ -n "$carg" ] && dir="$carg"
+              dir="$(printf '%s' "$dir" | ${pkgs.coreutils}/bin/tr -d "\"'" | ${pkgs.gnused}/bin/sed "s|^~|$HOME|")"
+              # scan staged content + the commit command string; drop allowlisted hits.
+              blob="$( { ${pkgs.git}/bin/git -C "$dir" diff --cached 2>/dev/null; printf '%s' "$cmd"; } )"
+              hit="$(printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -oiE "$pats" | ${pkgs.gnugrep}/bin/grep -viE "$allow" | ${pkgs.coreutils}/bin/head -n1)"
+              # PEM fixture exemption: a PRIVATE KEY header is allowlisted when a
+              # known disposable-fixture marker co-occurs in the same staged blob
+              # (the vm-test@nixos-test key in vm-tests.nix). Re-scan excluding PEM.
+              if printf '%s' "$hit" | ${pkgs.gnugrep}/bin/grep -qiE 'PRIVATE KEY' && printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -qiE "$allow"; then
+                hit="$(printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -oiE "$pats" | ${pkgs.gnugrep}/bin/grep -viE "$allow" | ${pkgs.gnugrep}/bin/grep -viE 'PRIVATE KEY' | ${pkgs.coreutils}/bin/head -n1)"
+              fi
+              if [ -n "$hit" ]; then
+                gr_block "gitSafety.blockSecretNames" "🚫 gitSafety: refusing this commit — staged content or the message contains a secret-name/credential class (matched '$hit'). WHY: personal secret-NAMES (PAT-<handle>, <label>-20YY) and real credential VALUES (ghp_/github_pat_/glpat-/AKIA/PEM private keys) must never be committed to ANY repo (plan 065). TO PROCEED NOW: rename the field to a generic literal (e.g. github-pat) or remove the real value and re-commit; if this is a documentation placeholder or test fixture, add it to programs.claude-code.hooks.gitSafety.secretNameAllowlist, or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: keep personal secret-names and real tokens out of tracked files — use generic field names and a secret store. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';
