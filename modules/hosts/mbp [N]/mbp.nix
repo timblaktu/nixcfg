@@ -240,7 +240,8 @@ in
     # Secrets management (dendritic module)
     secretsManagement = {
       enable = true;
-      rbw.email = "timblaktu@gmail.com";
+      # rbw.email parameterized out of public repo (plan 065 T3); set it privately
+      # (nixcfg-work) or via rbw-init. Option defaults to null when unset.
     };
 
     # GitHub authentication (shared preset)

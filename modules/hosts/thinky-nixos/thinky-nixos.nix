@@ -11,7 +11,7 @@
 let
   # SSH public keys (shared across configurations)
   sshKeys = {
-    timblaktu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkVsx3oZrqwkfU6FmhqNEeAGN8dj6lPxNcEwVCmJcQh timblaktu@gmail.com";
+    timblaktu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkVsx3oZrqwkfU6FmhqNEeAGN8dj6lPxNcEwVCmJcQh nixcfg@users.noreply.github.com";
     termux = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQD0DXHenlcf0zlOqFqc67Ktbk7kbx60RMn+6kZQtBjW1MnDwOf+5JDxTYvlxsAYpWubBxhWopfAEUds7LgB7QCMqbTr6Nco0OAhJGmaDIAP9cFBd8eqTo2oIDelD8jbakNevxIgSbA/nD0wNtVzW+fYtCF32kIs9SbUaO5fLet7dc76hUpi2G/Vuq8fE5wjHQiSkGfJlXusaeE/M9N5uYMssdG9dGgZqrZrA1A4REifOGZb5Db2OgBhESVyuxwF6AMpeXLFpYFPCazuSOXLDWoDfmgtrvQPvnyLRR5wC4/WmciURvlNHEhQNPrRC+oukxN1PB7+SXtHolFiHccNZc3n/C63kcJQulA5dXPH08+6tCu7CPaG5u02tth1iIYXByiTzaEGpgnMU2OZllAuVq+rGYSDvnyEuFDmQOn/aDfGt/Cky3w6udfRWIlG9h/yjvOItaQtELc81bKrWE5WnAEwbglpwQ0jzNmnzk08F34R+rcBqz0ZH8yh4pcLE2CIGHM= u0_a695@localhost";
   };
 
@@ -142,7 +142,8 @@ in
     # Secrets management (dendritic module)
     secretsManagement = {
       enable = true;
-      rbw.email = "timblaktu@gmail.com";
+      # rbw.email parameterized out of public repo (plan 065 T3); set it privately
+      # (nixcfg-work) or via rbw-init. Option defaults to null when unset.
     };
 
     # GitHub authentication (shared preset)

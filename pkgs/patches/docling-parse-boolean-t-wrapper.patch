@@ -1,5 +1,5 @@
 From a652fd3fa090db52094ab824c78723214826a752 Mon Sep 17 00:00:00 2001
-From: Tim Black <timblaktu@gmail.com>
+From: Tim Black <nixcfg@users.noreply.github.com>
 Date: Sun, 7 Dec 2025 13:10:09 -0800
 Subject: [PATCH] fix: use nlohmann::json::boolean_t wrapper for bool
  conversion

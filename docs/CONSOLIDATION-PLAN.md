@@ -133,7 +133,7 @@ When sharing with colleagues:
 ```nix
 # hosts/thinky-nixos/default.nix:44-46
 authorizedKeys = [
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com"
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu nixcfg@users.noreply.github.com"
 ];
 
 # (second host — now in private repo)
@@ -143,7 +143,7 @@ authorizedKeys = [
 ```nix
 # NEW: hosts/common/ssh-keys.nix
 {
-  timblaktu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu timblaktu@gmail.com";
+  timblaktu = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP58REN5jOx+Lxs6slx2aepF/fuO+0eSbBXrUhijhVZu nixcfg@users.noreply.github.com";
 }
 
 # hosts/thinky-nixos/default.nix
@@ -450,7 +450,7 @@ nix flake check
           homeDirectory = "/home/tim";
           # All other settings come from wsl-base.nix
         };
-        secretsManagement.rbw.email = "timblaktu@gmail.com";
+        secretsManagement.rbw.email = "nixcfg@users.noreply.github.com";
       }
     ];
     extraSpecialArgs = {
