@@ -33,12 +33,17 @@
 
 - Use `echo "${WSL_DISTRO_NAME:-$WSL_DISTRO}"` to determine WSL instance (NixOS WSL sets `WSL_DISTRO`, not `WSL_DISTRO_NAME`); access others at `/mnt/wsl/$WSL_DISTRO/`
 - **Windows executables callable directly from WSL** (e.g., `usbipd.exe list`, `powershell.exe -c "command"`). NEVER tell user to "open PowerShell" - call `.exe` directly. Windows PATH is on `$PATH` via `appendWindowsPath`.
-- **Opening content - Firefox is for MARKDOWN ONLY; EVERYTHING ELSE uses `xdg-open`**: The ONE and ONLY reason we use Firefox is the `xicilion`/docu.md Markdown Viewer (mermaid 11.x). So Firefox is used EXCLUSIVELY to render MARKDOWN the user reviews - local `.md` files AND remote `.md` URLs - and for nothing else. For ALL OTHER content - general web pages, GitLab/GitHub MR/PR pages, pipeline/CI/job URLs, dashboards, issue links, ANY non-`.md` URL - use `xdg-open "<url>"`, which opens **Edge**, the user's Windows DEFAULT browser (kept for OTHER purposes). **NEVER open a non-markdown URL in Firefox** (this was a real mistake: an MR link was sent to Firefox - MR/PR/pipeline pages are web pages, so `xdg-open`). When you DO open markdown in Firefox, call `firefox.exe` directly (NOT `xdg-open`, which would hand it to Edge and not render it). Never assume Firefox is the default. For markdown opened in Firefox there are THREE distinct path forms for the SAME WSL file and they MUST NOT be conflated:
-  - **Local `.md` file**: `p=<path>; firefox.exe "$(wslpath -w "$p")"` - pass the UNC path directly (NEVER a `file://` string as the exe arg; Firefox mangles it).
-  - **Chat clickable link**: `file://wsl.localhost/<distro>/...` (2-slash form) - terminal-only; NEVER pass this to firefox.exe.
-  - **Embedded href in a doc** (link Firefox resolves when clicked): FIVE-slash `file://///wsl.localhost/<distro>/<path>` - the 2-slash form gets its authority stripped; the 5-slash form preserves `wsl.localhost`.
+- **Opening content - Firefox is for MARKDOWN ONLY; EVERYTHING ELSE uses `xdg-open`**: The ONE and ONLY reason we use Firefox is the `xicilion`/docu.md Markdown Viewer (mermaid 11.x). So Firefox is used EXCLUSIVELY to render MARKDOWN the user reviews - local `.md` files AND remote `.md` URLs - and for nothing else. For ALL OTHER content - general web pages, GitLab/GitHub MR/PR pages, pipeline/CI/job URLs, dashboards, issue links, ANY non-`.md` URL - use `xdg-open "<url>"`, which opens **Edge**, the user's Windows DEFAULT browser (kept for OTHER purposes). **NEVER open a non-markdown URL in Firefox** (this was a real mistake: an MR link was sent to Firefox - MR/PR/pipeline pages are web pages, so `xdg-open`). When you DO open markdown in Firefox, call `firefox.exe` directly (NOT `xdg-open`, which would hand it to Edge and not render it). Never assume Firefox is the default.
+  - **CRITICAL (corrected 2026-10-28): `wslpath` is NOT installed in the Claude Bash-tool shell** (`command -v wslpath` => not found). The old recipe `firefox.exe "$(wslpath -w "$p")"` therefore expands to `firefox.exe ""` (EMPTY arg) and opens NOTHING - and since Firefox is already running the call still exits 0, so the failure is SILENT. DO NOT use `wslpath`. There is ONE way to open a WSL `.md` in Firefox - build a FIVE-slash `file://` URI directly and pass it as the firefox.exe argument:
+    ```
+    FF="/mnt/c/Program Files/Mozilla Firefox/firefox.exe"
+    distro="$(printf '%s' "${WSL_DISTRO_NAME:-$WSL_DISTRO}" | tr '[:upper:]' '[:lower:]')"   # nixos
+    p=/home/tim/src/<...>/doc.md          # absolute WSL path (keeps its leading /)
+    timeout 25 "$FF" "file://///wsl.localhost/${distro}${p}" >/dev/null 2>&1   # FIVE slashes after file:
+    ```
+  - **firefox.exe ARGUMENT (to actually OPEN the file): the 5-slash `file://///wsl.localhost/<distro>/<abs-path>` form.** The 2-slash `file://wsl.localhost/...` gets its authority stripped (mangled to `file:///...`) and opens nothing; the 5-slash form preserves `wsl.localhost`. (This 5-slash URL is also a valid clickable/embedded link.)
+  - **Chat clickable link (for the user to click in the terminal)**: `file://wsl.localhost/<distro>/<abs-path-without-leading-slash>` (2-slash form) - this is a DISPLAY link only, never needs opening by us.
   - If docu.md cannot read a `file://`-opened local file, serve over `http://localhost` instead.
-  - See `claude-runtime/.claude-pro/references/wsl-firefox-path-forms.md` for full path-form reference with examples.
 
 ## Nix and Git Safety
 
@@ -60,7 +65,7 @@ nix build '.#checks.x86_64-linux.TEST_NAME'  # Specific test
 ## Proactive Browser Integration
 
 The user's dev environment is Terminal + Browser. Proactively open content that would naturally need viewing, routed by TYPE (see "Opening content" under WSL Interop):
-- **MARKDOWN the user reviews -> Firefox** (call `firefox.exe` directly; docu.md renders it). WSL-native local `.md` files go via the `wslpath -w` UNC recipe (never a `file://` argument); remote `.md` URLs pass straight to `firefox.exe`.
+- **MARKDOWN the user reviews -> Firefox** (call `firefox.exe` directly; docu.md renders it). WSL-native local `.md` files go via the 5-slash `file://///wsl.localhost/<distro><abs-path>` recipe in WSL Interop (`wslpath` is NOT installed - never use it); remote `.md` URLs pass straight to `firefox.exe`.
 - **EVERYTHING ELSE -> `xdg-open "<url>"`** (opens Edge, the user's default): MR/PR links after creation, pipeline/CI/job URLs, diagram images, dashboards, any non-`.md` URL the user needs next. **NEVER send a non-markdown URL to Firefox.**
 
 **Always open automatically**: PR/MR links after creation, pipeline URLs, diagram files after editing, docs after substantial rewriting, URLs user needs to visit next.
@@ -91,17 +96,17 @@ For layered systems (runtime stacks, call paths, build pipelines), LEAD WITH a s
 
 Do NOT put copy-paste content in chat as code-fenced blocks. Instead:
 1. **clip.exe** for short content: `printf '%s' "content" | clip.exe` (use `printf`, not `echo` - see the zsh-echo rule under Critical Rules)
-2. **temp .md file opened in Firefox** for long/formatted content: `firefox.exe "$(wslpath -w "$f")"` (see WSL Interop; NOT `xdg-open`, which opens Edge)
+2. **temp .md file opened in Firefox** for long/formatted content: `firefox.exe "file://///wsl.localhost/${distro}${f}"` (5-slash form, see WSL Interop; `wslpath` is unavailable; NOT `xdg-open`, which opens Edge)
 
 Does NOT apply when content is sent directly via API (e.g., `glab api`).
 
-**ALWAYS print WSL paths as clickable `file://` URIs.** Any time a real filesystem path appears in a response (a temp file, plan, doc, script, artifact, memory file), render it as `file://wsl.localhost/<distro>/<abs-path-without-leading-slash>` so the user can click to open it - literal host `wsl.localhost`, distro LOWERCASE (resolve via `${WSL_DISTRO_NAME:-$WSL_DISTRO}`), forward slashes, NO leading slash, NO `\\`, NO `$`. The three-slash `file:///home/...` form is NOT clickable in MS Terminal - do not use it; the `\\wsl.localhost\...` backslash UNC form (what `wslpath -w` emits) is only for passing to Windows apps (a Windows browser, e.g. firefox.exe), never a chat link. This is not limited to close-out - it applies to every path printed.
+**ALWAYS print WSL paths as clickable `file://` URIs.** Any time a real filesystem path appears in a response (a temp file, plan, doc, script, artifact, memory file), render it as `file://wsl.localhost/<distro>/<abs-path-without-leading-slash>` so the user can click to open it - literal host `wsl.localhost`, distro LOWERCASE (resolve via `${WSL_DISTRO_NAME:-$WSL_DISTRO}`), forward slashes, NO leading slash, NO `\\`, NO `$`. The three-slash `file:///home/...` form is NOT clickable in MS Terminal - do not use it. (To OPEN a file in firefox.exe, use the 5-slash `file://///wsl.localhost/<distro><abs-path>` form - see WSL Interop; `wslpath` is unavailable, and the `\\wsl.localhost\...` backslash UNC form is NOT used by us.) This is not limited to close-out - it applies to every path printed.
 
 ## Presenting Decisions to the User (MANDATORY - single rule, supersedes any earlier decision-format guidance)
 
 When you need the user to DECIDE something, the weight of the decision picks the format. There are exactly two modes; do not invent a third, and do not mix them.
 
-**COMPLEX / CONSEQUENTIAL decisions** (a design gate, an architectural fork, a "which approach?" with real trade-offs, anything where the user must understand a mechanism to choose well): write a STANDALONE, easy-to-read markdown file and OPEN IT IN FIREFOX (call `firefox.exe` directly on the `wslpath -w` UNC path - `"/mnt/c/Program Files/Mozilla Firefox/firefox.exe" "$(wslpath -w <file>.md)"` - NOT `xdg-open`, which opens Edge, the user's system default) - do NOT explain inline in chat, and NEVER bury the explanation inside the `AskUserQuestion` prompt. The document, in this order:
+**COMPLEX / CONSEQUENTIAL decisions** (a design gate, an architectural fork, a "which approach?" with real trade-offs, anything where the user must understand a mechanism to choose well): write a STANDALONE, easy-to-read markdown file and OPEN IT IN FIREFOX (call `firefox.exe` directly with the 5-slash form - `"/mnt/c/Program Files/Mozilla Firefox/firefox.exe" "file://///wsl.localhost/${distro}<abs-path>.md"`, see WSL Interop; `wslpath` is unavailable - NOT `xdg-open`, which opens Edge, the user's system default) - do NOT explain inline in chat, and NEVER bury the explanation inside the `AskUserQuestion` prompt. The document, in this order:
 1. **The problem, in plain language, lead with a concrete picture** - an ASCII sketch, a small table, or a worked example the user can grasp in seconds. Gloss every acronym on first use.
 2. **The proposed fix** - what you want to do, in one or two plain sentences.
 3. **Why THIS over the alternatives** - name the options you considered AND rejected, each with the reason. This is the part that earns trust; never hide the roads not taken.
