@@ -448,7 +448,14 @@ in
       secretNamePatterns = mkOption {
         type = types.listOf types.str;
         default = [
-          "PAT-[A-Za-z0-9_-]+"
+          # \b word-boundary anchors this branch so it only matches a
+          # token-INITIAL "PAT-" (start-of-line or space-preceded handle name).
+          # Without it, the case-insensitive unanchored match false-positived
+          # on the common word "compat": "compat-level", "derive-compat-level.sh"
+          # etc. tripped the guard on 27 legitimate sites (the compatibility-level
+          # term). A preceding "m" is a word char, so \b fails inside "compat-",
+          # while a leading or space-preceded handle still matches. Do not drop \b.
+          "\\bPAT-[A-Za-z0-9_-]+"
           "[A-Za-z0-9_]+-20[0-9][0-9]"
           "ghp_[A-Za-z0-9]{20,}"
           "github_pat_[A-Za-z0-9_]{20,}"
