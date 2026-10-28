@@ -48,6 +48,7 @@
 ## Nix and Git Safety
 
 - **NEVER run nix commands concurrently** - no background nix tasks, no multiple nix Bash calls in same response. Concurrent nix evaluations cause OOM kills. A `nix-guarded` flock wrapper exists as safety net, but always serialize explicitly. Bypass with `NIX_NO_GUARD=1` if needed.
+- **PROTECTED BRANCHES ARE PR/MR-ONLY - in EVERY repo (local or remote, public GitHub or internal GitLab), `main` and `master` receive changes ONLY through a pull/merge request.** NEVER `git push` directly to a protected branch; NEVER `git merge`/fast-forward a feature branch into local `main`/`master`. When a task, handoff, or user says "merge to main", that MEANS "open a PR/MR against main" - it is NOT authorization to push or to ff-merge. The only legal path: do the work on a feature branch, push the BRANCH, open the PR/MR, let review land it. **NEVER present pushing or merging directly to a protected branch as an option** (e.g. in an `AskUserQuestion`) - a forbidden action is not a choice; the PR is the only route, so just take it without asking. The gitSafety hook that blocks commit/push on `main` is the BACKSTOP, not the rule - do not rely on it to catch you.
 - **NEVER run parallel git commands in the same worktree** - `index.lock` is per-worktree; parallel git ops race on it, especially on WSL2 where 9p latency widens the window. Cross-worktree git is safe in parallel.
 - **NEVER resolve merge conflicts automatically** - show conflicted files, let user decide
 - **NEVER use `git add -f`** - respect .gitignore patterns
