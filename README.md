@@ -50,9 +50,11 @@ nixcfg/
 | `nixos-dev-team` | Non-WSL dev team (VM, bare metal) | x86_64 |
 | `nixos-dev-team-ec2` | EC2 AMI variant | x86_64 |
 | `nixos-dev-team-graviton` | EC2 Graviton variant | aarch64 |
+| `nixos-dev-team-vm` | Apple-Silicon Mac-VM image (qcow2 for UTM/QEMU) | aarch64 |
 | `nixos-wsl-minimal` | Minimal WSL template | x86_64 |
 | `potato` | ARM SBC (Private CA) | aarch64 |
-| `mbp` | Intel MacBook Pro | x86_64 |
+| `nuc-apt-repo` | Intel NUC: Debian apt repo (aptly) + apt proxy | x86_64 |
+| `mbp` | Intel MacBook Pro (bare-metal NixOS, not macOS) | x86_64 |
 
 ### Home Manager
 
@@ -69,7 +71,8 @@ nixcfg/
 
 | Host | Purpose |
 |------|---------|
-| `macbook-air` | Apple Silicon macOS |
+| `macbook-air` | Apple Silicon macOS (portable dev) |
+| `powerbook` | Apple Silicon macOS (personal) |
 
 ## Common Commands
 
