@@ -5,10 +5,25 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.18.0
-**Last Updated**: 2026-10-18
+**Version**: 1.19.0
+**Last Updated**: 2026-10-28
 
 ## Changelog
+
+### v1.19.0 (2026-10-28)
+- **Section 29: new principle "Edge labels need a clear channel (never overlap a flanking
+  shape)"** plus a Section 15 Label-Issues row, a Creation-Checklist row, and an
+  Anti-Patterns row. An arrow/edge label sitting in the gap between two shapes must not
+  spill onto them; the PRIMARY fix is to WIDEN THE CHANNEL (reposition/resize the flanking
+  shapes), not merely shorten text. Measure: a 2-word stacked label is ~100-140px wide at
+  fontSize 11-12 and will not fit a 60-80px gap. (Prompted by two arrow labels crowding
+  adjacent phase boxes in a lifecycle diagram.)
+- **Section 29: new principle "Every element must earn its place (cut redundant
+  annotation)"** plus a Creation-Checklist row and an Anti-Patterns row. A scope bar /
+  caption / legend / banner that merely restates what the layout, colour, position, or an
+  existing label already conveys is NOISE, not information - delete it. Leaning a diagram
+  out is as much a craft step as adding to it. (Prompted by a scope bar at the foot of a
+  lifecycle diagram that duplicated a highlight already carried by colour/emphasis.)
 
 ### v1.18.0 (2026-10-18)
 - **Section 2 DECISION RULE reframed around the mermaid ENGINE version, not "GitLab-only".**
@@ -1874,6 +1889,7 @@ After viewing the rendered diagram, systematically check for:
 | Issue | Symptom | Typical Fix |
 |-------|---------|-------------|
 | **Label overlap** | Text overlaps connectors or other labels | Move labels, adjust element positions, or use shorter text |
+| **Edge label overlaps a flanking shape** | An arrow/edge label sitting in the GAP between two boxes spills onto (overlaps/touches) one or both of them because its text is wider than the gap | WIDEN THE CHANNEL: reposition/resize the flanking shapes so the gap fits the label with clearance - do not rely on shortening text alone (Section 29 "Edge labels need a clear channel"). Then, if still tight, shorten/re-wrap the label and offset it |
 | **Stacked labels** | Multiple labels pile on same spot | Offset labels with mxGeometry adjustments |
 | **Truncated text** | Words cut off or "..." shown | Increase element width/height |
 | **Illegible text** | Font too small or poor contrast | Increase fontSize, adjust colors |
@@ -2632,6 +2648,8 @@ Before running drawio-svg-sync on a new diagram, verify:
 | ☐ Fan-in channel has room | Many-side boxes narrow + left-justified; no callout/note sits in the converging-lines channel |
 | ☐ Boxes hug their content | No box is mostly empty; size each to its longest one-line row + padding (flow layout), not a fixed grid width |
 | ☐ No stray/floating decorative edges | No thin edge between tiny invisible anchor points (e.g. a floating "axis" arrow); convey ordering via numbering/title/position instead |
+| ☐ Edge labels have a clear channel | No arrow/edge label sitting in a gap overlaps/touches a flanking shape; the gap is >= label width + ~20-30px clearance each side (widen the gap by repositioning/resizing, Section 29 "Edge labels need a clear channel") |
+| ☐ Every annotation earns its place | No scope bar / caption / legend / note that merely restates what the layout, colour, position, or an existing label already conveys - delete it (Section 29 "Every element must earn its place") |
 | ☐ Annotations at end of XML | Search for ①②③④ or "callout" - should be in last 10 cells |
 | ☐ Edge labels have offset | All `<mxCell ... edge="1" ... value="...">` have `<mxPoint as="offset">` |
 | ☐ No labelBackgroundColor | Edge labels use `labelBackgroundColor=none` (solid `#ffffff` only in a genuinely congested channel, Section 20 exception c) |
@@ -2653,6 +2671,43 @@ Before running drawio-svg-sync on a new diagram, verify:
 | Wide, centered boxes on the many-side of a fan-in | Squeezes the routing channel; labels get struck through, lines cross | Narrow + left-justify the source boxes to open the channel BEFORE placing labels (Section 29 "Fan-in / fan-out channels") |
 | Floating decorative "axis"/arrow between tiny anchors | Renders as a stray line the reader cannot parse | Drop it; convey ordering via numbering + title + top-to-bottom position |
 | Fixed-width boxes leaving short entries mostly empty | ~Half the box is whitespace; left-justify alone does not fix it | Size each box to its content (flow layout), keep only a status column aligned (Section 29 "Size Boxes to Content") |
+| Edge/arrow label overlapping a flanking shape | Label text wider than the gap it sits in spills onto the neighbouring boxes; reads as a defect | Widen the channel first (reposition/resize the flanking shapes to open a gap >= label width + clearance), THEN wrap/shorten/offset the label - not text-shortening alone (Section 29 "Edge labels need a clear channel") |
+| Redundant annotation (scope bar / caption / legend restating the obvious) | Adds visual noise, competes for attention, says nothing the diagram did not already show | Delete it. An annotation that duplicates what the layout/colour/position/an existing label already conveys is noise, not information (Section 29 "Every element must earn its place") |
+
+### Edge labels need a clear channel (never overlap a flanking shape)
+
+An edge/arrow label occupies real width where it sits. When an arrow runs through the GAP
+between two shapes (phase-to-phase, box-to-box) and the label's text is wider than that
+gap, the label spills onto the neighbouring shapes - it overlaps or touches their borders
+and reads as a defect. This is NOT fixed by shortening text alone; the primary fix is to
+**give the label a channel to live in**:
+- **Widen the gap** between the flanking shapes - move them apart (reposition) and/or make
+  them narrower (resize) so the empty channel is at least as wide as the label plus ~20-30px
+  clearance each side. Budget the channel to the label, exactly as you budget a fan-in
+  channel (Section 29 "Fan-in / fan-out channels").
+- **Then** tighten the label: wrap it to 2 short lines, offset it off the line (Section 27),
+  and cut needless words.
+- Measure, don't eyeball: a 2-word stacked label is still ~100-140px wide at fontSize 11-12;
+  a 60-80px gap cannot hold it no matter how you offset it. If you cannot widen the gap,
+  move the label out of the gap (above/below the run) instead of leaving it struck through
+  the neighbours.
+This is a hard self-check item: in the visual pass (Section 15), look specifically at every
+edge label that sits between two shapes and confirm clear space on both sides before
+presenting. A label touching an adjacent box is a defect to fix, not to ship.
+
+### Every element must earn its place (cut redundant annotation)
+
+Each box, label, and annotation must add information the reader cannot already get from
+the layout, colour, position, or another label. If it only restates what is already
+visible, it is noise - and noise actively hurts: it competes for attention, pads the
+frame, and buries the signal. Before adding (or when reviewing) any annotation - a scope
+bar, a caption, a legend, a "this is the important part" banner - ask: *what does the
+reader learn from this that the diagram does not already show?* If the answer is
+"nothing", cut it. Common offenders: a scope/label bar repeating a title or a highlight
+already carried by colour/emphasis; a legend for a one-colour-per-obvious-thing scheme; a
+caption narrating an arrow that is self-evident. Prefer conveying emphasis through the
+composition itself (size, colour, position, a bold title) over a separate box that says
+"look here". Leaning the diagram out is as much a craft step as adding to it.
 
 ### Quick Reference: Recommended Defaults
 
