@@ -545,6 +545,20 @@ in
           `sudo rm`, `find -exec rm` are NOT caught (their head word differs).
         '';
       };
+      blockRgReplace = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Gate a `ripgrep` call that carries a bundled short-flag group containing
+          `-r` (e.g. `-rn`/`-rln`/`-nr`), the grep-"recursive" reflex. In ripgrep
+          `-r` is `--replace`, so such a command SILENTLY rewrites every match to a
+          literal string and corrupts the search output (the "identifiers garbled to
+          n" trap; memory ripgrep-r-replace-trap, upstream anthropics/claude-code
+          #62016). ripgrep is already recursive by default. A lone `-r TEXT` and the
+          explicit `--replace=` long form are legitimate and PASS. Judgment-gate: ASK
+          when interactive, BLOCK headless; honors `CLAUDE_HOOKS_BYPASS`.
+        '';
+      };
     };
 
     # Plan 056 P7 — secret-dump prevention interlocks. Mechanical enforcement of
@@ -1244,40 +1258,63 @@ in
       # whose exit status the parent re-raises (avoids the `cmd | while` subshell
       # gotcha where an inner `exit 2` cannot terminate the parent).
       bashSafetyHooks = lib.optionalAttrs cfg.hooks.bashSafety.enable {
-        PreToolUse = lib.optional cfg.hooks.bashSafety.blockBareRm (mkHook {
+        PreToolUse = lib.optional cfg.hooks.bashSafety.blockBareRm
+          (mkHook {
+            matcher = "Bash";
+            command = ''
+              ${guardrailPrelude}
+              cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
+              [ -z "$cmd" ] && exit 0
+              # Split on ; & | (single chars — this also breaks && and || into
+              # empty-plus-real segments, which is harmless). Examine each segment
+              # independently. The trailing \n is REQUIRED: without it `read` drops
+              # the final (only) segment of a separator-less command like `rm foo`.
+              printf '%s\n' "$cmd" | ${pkgs.coreutils}/bin/tr ';&|' '\n' | {
+                while IFS= read -r seg; do
+                  # first whitespace-delimited word of the segment
+                  # shellcheck disable=SC2086
+                  set -- $seg
+                  head=$1
+                  case "$head" in
+                    rm|cp|mv)
+                      forced=0
+                      for tok in "$@"; do
+                        case "$tok" in
+                          --force|-*f*) forced=1 ;;
+                        esac
+                      done
+                      if [ "$forced" -eq 0 ]; then
+                        gr_block "bashSafety.blockBareRm" "🚫 bashSafety: bare '$head' detected (no -f). WHY: your shell aliases rm/cp/mv to the interactive -i form, which HANGS in a non-interactive tool shell waiting for a prompt that never comes. TO PROCEED NOW: re-run WITH -f (e.g. $head -f ...) — it is NOT auto-rewritten by design (RTK lesson); if this is a false positive, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: always pass -f to rm/cp/mv in tool commands. See docs/claude-code-session-guardrails.md."
+                      fi
+                      ;;
+                  esac
+                done
+                exit 0
+              }
+              status=$?
+              [ "$status" -eq 2 ] && exit 2
+              exit 0
+            '';
+            continueOnError = false;
+            timeout = 5;
+          })
+        ++ lib.optional cfg.hooks.bashSafety.blockRgReplace (mkHook {
           matcher = "Bash";
           command = ''
             ${guardrailPrelude}
             cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
             [ -z "$cmd" ] && exit 0
-            # Split on ; & | (single chars — this also breaks && and || into
-            # empty-plus-real segments, which is harmless). Examine each segment
-            # independently. The trailing \n is REQUIRED: without it `read` drops
-            # the final (only) segment of a separator-less command like `rm foo`.
-            printf '%s\n' "$cmd" | ${pkgs.coreutils}/bin/tr ';&|' '\n' | {
-              while IFS= read -r seg; do
-                # first whitespace-delimited word of the segment
-                # shellcheck disable=SC2086
-                set -- $seg
-                head=$1
-                case "$head" in
-                  rm|cp|mv)
-                    forced=0
-                    for tok in "$@"; do
-                      case "$tok" in
-                        --force|-*f*) forced=1 ;;
-                      esac
-                    done
-                    if [ "$forced" -eq 0 ]; then
-                      gr_block "bashSafety.blockBareRm" "🚫 bashSafety: bare '$head' detected (no -f). WHY: your shell aliases rm/cp/mv to the interactive -i form, which HANGS in a non-interactive tool shell waiting for a prompt that never comes. TO PROCEED NOW: re-run WITH -f (e.g. $head -f ...) — it is NOT auto-rewritten by design (RTK lesson); if this is a false positive, relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: always pass -f to rm/cp/mv in tool commands. See docs/claude-code-session-guardrails.md."
-                    fi
-                    ;;
-                esac
-              done
-              exit 0
-            }
-            status=$?
-            [ "$status" -eq 2 ] && exit 2
+            # ripgrep -r is --replace, NOT grep's recursive. A bundled short group
+            # containing r (-rn/-rln/-nr/...) consumes the trailing chars (or the
+            # next arg) as the replacement and SILENTLY rewrites every match in the
+            # output, giving corrupted search results the model then misattributes
+            # (memory ripgrep-r-replace-trap; upstream anthropics/claude-code #62016).
+            # ripgrep is already recursive by default. Flag only when the command
+            # invokes rg AND carries such a bundled -r group; a lone "-r TEXT" and
+            # the explicit "--replace=" long form are legitimate and PASS.
+            if printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -Eq '(^|[[:space:]]|/)rg([[:space:]]|$)' && printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -Eq '(^|[[:space:]])-([a-zA-Z]*r[a-zA-Z]+|[a-zA-Z]+r[a-zA-Z]*)([[:space:]]|=|$)'; then
+              gr_gate "bashSafety.blockRgReplace" "🚫 bashSafety: rg called with a bundled -r flag (e.g. -rn/-rln/-nr). WHY: in ripgrep -r is --replace (NOT grep's recursive), so it SILENTLY replaces every match with a literal string and corrupts the search output - the exact identifiers-garbled-to-n trap; ripgrep is already recursive by default. TO PROCEED NOW: drop the -r and use 'rg -n PATTERN' or plain 'rg'; if you truly meant to substitute matches, write it explicitly as 'rg --replace=TEXT'. If this is intended or a false positive, approve this prompt or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: never pass -r/-rn to rg for recursion. See docs/claude-code-session-guardrails.md."
+            fi
             exit 0
           '';
           continueOnError = false;
