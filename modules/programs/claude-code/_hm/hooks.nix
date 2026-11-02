@@ -423,63 +423,82 @@ in
           remote differs.
         '';
       };
-      blockSecretNames = mkOption {
+      blockSecretValues = mkOption {
         type = types.bool;
         default = true;
         description = ''
-          Plan 065 T4 — block a `git commit` whose staged content (or the commit
-          command string) carries a PERSONAL SECRET-NAME, a year-suffixed secret
-          label, or a real credential VALUE. Unlike blockInternalTokens (private
-          patterns, remote-scoped to public nixcfg), these classes are UNIVERSALLY
-          unwanted in ANY repo on this host, so the guard fires on every
-          `git commit` regardless of remote, and both its pattern list and its
-          allowlist are SAFE to ship publicly — they name nothing personal, only
-          generic detection classes.
+          Block a `git commit` whose staged content (or the commit command string)
+          carries a real credential VALUE — a token or key whose structural
+          signature identifies it as an actual secret (see `secretValuePatterns`).
+          Unlike blockInternalTokens (private patterns, remote-scoped to the public
+          repo), real credentials are UNIVERSALLY unwanted in ANY repo on this
+          host, so the guard fires on every `git commit` regardless of remote; its
+          pattern list and allowlist are generic, publicly-documented provider
+          token formats and are SAFE to ship publicly.
 
-          Blocks `secretNamePatterns` (ERE, matched case-insensitively) minus any
-          hit that also matches `secretNameAllowlist` (the T1 "leave alone" set:
-          doc/example field names, canonical placeholder token values, and the
-          disposable vm-test fixture key). The personal ACCOUNT EMAIL is handled
-          OUT of this module (parameterized out of config by T3, and caught by
-          blockInternalTokens via nixcfg-work's private SSOT) so no personal
-          literal is ever shipped here. Honors `CLAUDE_HOOKS_BYPASS`.
+          VALUES ONLY. This guard deliberately does NOT match the NAME of a secret
+          (a field label, or a `<word>-<year>` string): a name that merely
+          describes or sits adjacent to a secret is not itself a secret, and
+          name-matching is an unwinnable false-positive generator (it repeatedly
+          blocked ordinary words like "compat" and dated doc anchors). Scanned
+          CASE-SENSITIVELY — real tokens are case-exact. The personal ACCOUNT EMAIL
+          is handled OUT of this module (caught by blockInternalTokens via
+          nixcfg-work's private SSOT). Any hit also matching `secretValueAllowlist`
+          is NOT blocked. Honors `CLAUDE_HOOKS_BYPASS`.
         '';
       };
-      secretNamePatterns = mkOption {
+      secretValuePatterns = mkOption {
         type = types.listOf types.str;
         default = [
-          # \b word-boundary anchors this branch so it only matches a
-          # token-INITIAL "PAT-" (start-of-line or space-preceded handle name).
-          # Without it, the case-insensitive unanchored match false-positived
-          # on the common word "compat": "compat-level", "derive-compat-level.sh"
-          # etc. tripped the guard on 27 legitimate sites (the compatibility-level
-          # term). A preceding "m" is a word char, so \b fails inside "compat-",
-          # while a leading or space-preceded handle still matches. Do not drop \b.
-          "\\bPAT-[A-Za-z0-9_-]+"
-          "[A-Za-z0-9_]+-20[0-9][0-9]"
-          "ghp_[A-Za-z0-9]{20,}"
-          "github_pat_[A-Za-z0-9_]{20,}"
-          "glpat-[A-Za-z0-9_-]{20,}"
-          "AKIA[0-9A-Z]{16}"
-          "BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY"
+          # GitHub (classic + oauth/user/server/refresh prefixes; fine-grained)
+          "gh[oprsu]_[A-Za-z0-9]{36,}"
+          "github_pat_[A-Za-z0-9_]{82,}"
+          # GitLab routable token prefixes (PAT / runner / deploy / pipeline-trigger
+          # / feed / oauth / CI-build / scoped / agent) + URL-embedded CI/push token
+          "gl(pat|rt|dt|ptt|ft|oas|cbt|soat|agent)-[A-Za-z0-9_-]{20,}"
+          "gitlab-ci-token:[A-Za-z0-9_-]{20,}@"
+          # AWS access-key id (long-term AKIA + STS temporary ASIA)
+          "(AKIA|ASIA)[0-9A-Z]{16}"
+          # JFrog Artifactory API key
+          "AKCp[A-Za-z0-9]{50,}"
+          # Package-registry tokens (npm, PyPI)
+          "npm_[A-Za-z0-9]{36}"
+          "pypi-AgEI[A-Za-z0-9_-]{50,}"
+          # age/SOPS PRIVATE key (the public age1 recipient is NOT a secret)
+          "AGE-SECRET-KEY-1[0-9A-Z]{58}"
+          # JWT: three base64url segments, a signed bearer token
+          "eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}"
+          # k3s cluster token
+          "K10[0-9a-f]{64}::"
+          # Cloud / SaaS API keys (Google, Slack, Anthropic, OpenAI)
+          "AIza[0-9A-Za-z_-]{35}"
+          "xox[baprs]-[A-Za-z0-9-]{10,}"
+          "sk-ant-[A-Za-z0-9_-]{20,}"
+          "sk-proj-[A-Za-z0-9_-]{20,}"
+          # PEM private-key headers
+          "BEGIN (RSA |DSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY"
         ];
         description = ''
-          ERE alternatives (joined with `|`, matched case-insensitively) of the
-          secret-NAME and credential-VALUE classes `blockSecretNames` refuses to
-          let into a commit: personal `PAT-<handle>` field names, `<token>-20YY`
-          year-suffixed labels, and real GitHub/GitLab/AWS token + PEM
-          private-key signatures. SAFE TO SHIP (generic classes, no personal
-          literal). nixcfg-work may append host-private extras. Any match that
-          also hits `secretNameAllowlist` is NOT blocked.
+          ERE alternatives (joined with `|`, matched CASE-SENSITIVELY) of real
+          credential-VALUE signatures `blockSecretValues` refuses to let into a
+          commit: generic, publicly-documented provider token formats and PEM
+          private-key headers. Case-SENSITIVE on purpose — real tokens are
+          case-exact, so a case-INSENSITIVE scan matched random base64 runs in
+          editor-payload blobs and blocked benign commits. These name nothing
+          private (they are the same universal credential shapes a public
+          secret-scanner ships) and are SAFE to ship publicly. nixcfg-work may
+          append host-private extras. Any match that also hits `secretValueAllowlist`
+          is NOT blocked.
+
+          Intentionally NOT matched (committed BY DESIGN): the age PUBLIC recipient
+          key (age1...), encrypted-at-rest blobs (`BEGIN AGE ENCRYPTED FILE`, IaC
+          `secure:`/`encryptionsalt:` ciphertext), and SSH/Nix-cache PUBLIC keys.
+          Do NOT add name/label patterns here — a secret's NAME is not a secret.
         '';
       };
-      secretNameAllowlist = mkOption {
+      secretValueAllowlist = mkOption {
         type = types.listOf types.str;
         default = [
-          "PAT-token"
-          "PAT-mytoken"
-          "PAT-classic"
-          "PAT-my-org"
           "ghp_xxx"
           "ghp_test"
           "glpat-test"
@@ -488,16 +507,14 @@ in
           "AKIAIOSFODNN7TESTEXAMPLE"
           "xoxb-xxxx"
           "Placeholder_ghp_XXXX"
-          "user@example.com"
           "vm-test@nixos-test"
         ];
         description = ''
           ERE alternatives (matched case-insensitively) that EXEMPT an otherwise-
-          matching hit from `blockSecretNames`: T1's confirmed "leave alone" set —
-          doc/example field names, canonical placeholder token values (incl. AWS's
-          own AKIAIOSFODNN7EXAMPLE), and the disposable `vm-test@nixos-test`
-          fixture key in vm-tests.nix — so the guard does not false-positive on
-          documentation or test scaffolding.
+          matching hit from `blockSecretValues`: canonical placeholder token values
+          (incl. AWS's own AKIAIOSFODNN7EXAMPLE) and the disposable
+          `vm-test@nixos-test` PEM fixture in vm-tests.nix — so the guard does not
+          false-positive on documentation or test scaffolding.
         '';
       };
     };
@@ -1171,14 +1188,16 @@ in
             timeout = 5;
           }))
 
-          # blockSecretNames (Plan 065 T4) — forward guard: refuse a commit whose
-          # staged content or command string carries a personal secret-NAME, a
-          # year-suffixed secret label, or a real credential VALUE. Fires on every
-          # `git commit` regardless of remote (these are universally unwanted);
-          # patterns + allowlist are PUBLIC-safe (generic classes, no personal
-          # literal). The personal account email is NOT matched here — it is caught
-          # by blockInternalTokens via nixcfg-work's private SSOT.
-          ++ (lib.optional cfg.hooks.gitSafety.blockSecretNames (mkHook {
+          # blockSecretValues — forward guard: refuse a commit whose staged content
+          # or command string carries a real credential VALUE (a token/key whose
+          # structural signature identifies an actual secret). Fires on every
+          # `git commit` regardless of remote (real credentials are universally
+          # unwanted); patterns + allowlist are generic publicly-documented provider
+          # formats. VALUES ONLY — a secret's NAME is not a secret, and name-matching
+          # is an unwinnable false-positive generator (removed). The personal account
+          # email is NOT matched here — it is caught by blockInternalTokens via
+          # nixcfg-work's private SSOT.
+          ++ (lib.optional cfg.hooks.gitSafety.blockSecretValues (mkHook {
             matcher = "Bash";
             ifFilter = "Bash(git *)";
             command = ''
@@ -1186,9 +1205,12 @@ in
               cmd="$(${pkgs.jq}/bin/jq -r '.tool_input.command // empty' 2>/dev/null)"
               [ -z "$cmd" ] && exit 0
               printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -qE 'git[[:space:]]+${gitGlobalOpts}commit\b' || exit 0
-              pats='${lib.concatStringsSep "|" cfg.hooks.gitSafety.secretNamePatterns}'
-              [ -z "$pats" ] && exit 0
-              allow='${lib.concatStringsSep "|" cfg.hooks.gitSafety.secretNameAllowlist}'
+              # Credential VALUE classes, scanned CASE-SENSITIVELY (real tokens are
+              # case-exact; a case-insensitive scan matched random base64 in editor
+              # payload blobs and blocked benign commits — see option docs).
+              vpats='${lib.concatStringsSep "|" cfg.hooks.gitSafety.secretValuePatterns}'
+              [ -z "$vpats" ] && exit 0
+              allow='${lib.concatStringsSep "|" cfg.hooks.gitSafety.secretValueAllowlist}'
               # resolve the dir the git command targets (git -C DIR > leading cd DIR > cwd).
               dir="."
               cdarg="$(printf '%s' "$cmd" | ${pkgs.gnugrep}/bin/grep -oE '\bcd[[:space:]]+[^[:space:]&;|]+' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.gnused}/bin/sed -E 's/^cd[[:space:]]+//')"
@@ -1198,15 +1220,15 @@ in
               dir="$(printf '%s' "$dir" | ${pkgs.coreutils}/bin/tr -d "\"'" | ${pkgs.gnused}/bin/sed "s|^~|$HOME|")"
               # scan staged content + the commit command string; drop allowlisted hits.
               blob="$( { ${pkgs.git}/bin/git -C "$dir" diff --cached 2>/dev/null; printf '%s' "$cmd"; } )"
-              hit="$(printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -oiE "$pats" | ${pkgs.gnugrep}/bin/grep -viE "$allow" | ${pkgs.coreutils}/bin/head -n1)"
+              hit="$(printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -oE "$vpats" | ${pkgs.gnugrep}/bin/grep -viE "$allow" | ${pkgs.coreutils}/bin/head -n1)"
               # PEM fixture exemption: a PRIVATE KEY header is allowlisted when a
               # known disposable-fixture marker co-occurs in the same staged blob
               # (the vm-test@nixos-test key in vm-tests.nix). Re-scan excluding PEM.
               if printf '%s' "$hit" | ${pkgs.gnugrep}/bin/grep -qiE 'PRIVATE KEY' && printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -qiE "$allow"; then
-                hit="$(printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -oiE "$pats" | ${pkgs.gnugrep}/bin/grep -viE "$allow" | ${pkgs.gnugrep}/bin/grep -viE 'PRIVATE KEY' | ${pkgs.coreutils}/bin/head -n1)"
+                hit="$(printf '%s' "$blob" | ${pkgs.gnugrep}/bin/grep -oE "$vpats" | ${pkgs.gnugrep}/bin/grep -viE "$allow" | ${pkgs.gnugrep}/bin/grep -viE 'PRIVATE KEY' | ${pkgs.coreutils}/bin/head -n1)"
               fi
               if [ -n "$hit" ]; then
-                gr_block "gitSafety.blockSecretNames" "🚫 gitSafety: refusing this commit — staged content or the message contains a secret-name/credential class (matched '$hit'). WHY: personal secret-NAMES (PAT-<handle>, <label>-20YY) and real credential VALUES (ghp_/github_pat_/glpat-/AKIA/PEM private keys) must never be committed to ANY repo (plan 065). TO PROCEED NOW: rename the field to a generic literal (e.g. github-pat) or remove the real value and re-commit; if this is a documentation placeholder or test fixture, add it to programs.claude-code.hooks.gitSafety.secretNameAllowlist, or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: keep personal secret-names and real tokens out of tracked files — use generic field names and a secret store. See docs/claude-code-session-guardrails.md."
+                gr_block "gitSafety.blockSecretValues" "🚫 gitSafety: refusing this commit — staged content or the message contains a real credential VALUE (matched '$hit'). WHY: real tokens/keys must never be committed to ANY repo. TO PROCEED NOW: remove the real value and re-commit (keep tokens in a secret store); if this is a canonical placeholder or test fixture, add it to programs.claude-code.hooks.gitSafety.secretValueAllowlist, or relaunch claude with CLAUDE_HOOKS_BYPASS=1. TO AVOID IN FUTURE: never put real credentials in tracked files. See docs/claude-code-session-guardrails.md."
               fi
               exit 0
             '';

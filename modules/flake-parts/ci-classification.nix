@@ -184,6 +184,7 @@ let
       "tmux-picker-syntax"
       "user-configured"
       "wsl-dev-team-setup-username-user"
+      "claude-code-memory-share"
       "opencode-json-syntax"
       "opencode-mcp-structure"
       "skill-injection-awscli"
