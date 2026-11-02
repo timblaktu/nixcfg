@@ -10,7 +10,7 @@ This is a **feature-centric Nix configuration** using the dendritic pattern:
 
 - **~26,000 lines of Nix code** across 98 files
 - **Dendritic architecture** with import-tree auto-discovery
-- **8 NixOS hosts** (2 WSL, 3 non-WSL dev-team variants, 1 template, 1 ARM SBC, 1 Intel laptop) + 1 Darwin host + 1 vanilla WSL
+- **10 NixOS hosts** (3 WSL incl. 1 vanilla/minimal, 4 dev-team image variants: Proxmox/EC2/Graviton/Mac-VM, 1 ARM SBC, 1 Intel laptop, 1 Intel NUC apt repo) + **2 Darwin hosts** (Apple Silicon)
 - **6 home-manager configurations** (standalone approach)
 - **23 feature modules** in `modules/programs/`
 - **57 exported modules** (16 NixOS + 32 HM + 9 Darwin)
@@ -128,8 +128,8 @@ nixcfg/
 |--------|-------|
 | Total Nix files | 98 |
 | Lines of Nix code | ~26,000 |
-| NixOS hosts | 8 active |
-| Darwin hosts | 1 |
+| NixOS hosts | 10 active |
+| Darwin hosts | 2 |
 | Home Manager configs | 6 |
 | Feature modules (programs/) | 23 |
 | Exported modules total | 57 (16 NixOS + 32 HM + 9 Darwin) |

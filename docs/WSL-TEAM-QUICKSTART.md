@@ -85,7 +85,9 @@ wrapper scripts.
 
 **Network tools**: curl, httpie, nmap, tcpdump, iperf3, dig, traceroute.
 
-**GitLab integration**: `glab` CLI with credential helpers.
+**Source-control integration**: both `gh` (GitHub CLI) and `glab` (GitLab CLI) with
+credential helpers. This repo lives on GitHub and ships the `github-auth` module, which
+wires `gh` with automatic token injection; `glab` is included for GitLab remotes.
 
 **Passwordless sudo** for the dev workflow (you are in the `wheel` group).
 
