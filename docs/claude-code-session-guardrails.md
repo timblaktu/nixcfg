@@ -43,6 +43,7 @@ Keeps common git mistakes from reaching a remote.
 ### Bash safety (`bashSafety`)
 
 - **Won't run a bare `rm`, `cp`, or `mv`** (`bashSafety.blockBareRm`). Your interactive shell aliases these to their `-i` ("ask me first") form. In the non-interactive shell the tools use, that prompt never gets answered and the command hangs forever. The fix is to run the command with `-f`; the guardrail tells Claude to do exactly that. It deliberately does not silently rewrite your command (a past auto-rewrite experiment corrupted output, so we never rewrite - we block and explain). Related forms with a different leading word, like `rmdir`, `git rm`, or `sudo rm`, are not affected.
+- **Won't let `ripgrep` run with a grep-style `-rn`** (`bashSafety.blockRgReplace`). In grep, `-rn` means "recursive, with line numbers"; in ripgrep, `-r` means `--replace`, so `rg -rn 'PATTERN'` silently replaces every match with the literal text `n` and hands back corrupted search results that look real. ripgrep already searches recursively by default, so the `-r` is never needed for that. The guardrail asks before (or, in an unattended run, blocks) any `rg` call carrying a bundled `-r` flag (`-rn`/`-rln`/`-nr`...); the fix is to drop the `-r` and use `rg -n 'PATTERN'`. A deliberate replace written the explicit way (`rg --replace=TEXT`, or a lone `-r TEXT`) is allowed.
 
 ### Secret safety (`secretSafety`)
 

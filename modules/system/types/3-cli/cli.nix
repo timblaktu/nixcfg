@@ -385,8 +385,6 @@
                     "WebFetch"
                   ];
                   deny = [
-                    "Search"
-                    "Find"
                     "Bash(rm -rf /*)"
                     "Read(.env)"
                     "Write(/etc/passwd)"
