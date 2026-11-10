@@ -134,6 +134,13 @@ let
         "references/darwin.md" = ./skills/disk-doctor/references/darwin.md;
       };
     };
+    fix-user-plans = {
+      name = "fix-user-plans";
+      description = "Migrate a worktree session-workflow files OUT of `.claude/` so Claude Code stops prompting on every plan edit. Use when editing a plan file repeatedly triggers an uncancellable permission prompt, when a repo keeps plans under `.claude/user-plans/`, when someone hand-patches `.claude/settings.local.json` to allow plan edits, or asks to fix user-plans. Idempotent and safe to re-run.";
+      files = {
+        "SKILL.md" = ./skills/fix-user-plans/SKILL.md;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -484,6 +491,19 @@ in
           snapshots, Xcode DerivedData, and Homebrew on macOS). Analysis is
           read-only; deletions are always proposed and confirmed, never automatic.
           Pulls the analyzer's toolset (dust, duf, ncdu) into the profile.
+        '';
+      };
+      fix-user-plans = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the fix-user-plans skill: migrate a worktree's session-workflow
+          files OUT of `.claude/` onto the plan-056 storage convention (numbered
+          plans in `user-plans/`, per-worktree pointers + handoff in
+          `.session-state/`, both at the repo root). Claude Code hard-gates every
+          write under `.claude/` - no `permissions.allow` rule can silence it - so
+          parking plans there makes every plan-status edit prompt forever; this
+          skill performs the one-time, idempotent migration that removes the gate.
         '';
       };
     };

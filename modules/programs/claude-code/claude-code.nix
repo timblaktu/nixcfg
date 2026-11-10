@@ -137,7 +137,9 @@
                 # session-workflow storage OUTSIDE `.claude/` entirely: numbered
                 # plans live in `user-plans/` and the per-worktree runtime files
                 # (active-plan, HANDOFF.md) in `.session-state/`, both at the repo
-                # root. See the `cc-permission-path-anchor` memory.
+                # root. See the `cc-permission-path-anchor` memory. The
+                # `fix-user-plans` builtin skill (_hm/skills.nix) performs the
+                # one-time, idempotent migration of a worktree onto this convention.
               ];
               description = "List of tools/patterns to allow";
             };
