@@ -675,7 +675,7 @@ flowchart LR
         h4["nixos-wsl-dev-team"]
         h5["nixos-dev-team-vm"]
     end
-    subgraph ARTIFACTS["Build outputs<br/>(nix build .#...)"]
+    subgraph ARTIFACTS["Build outputs (nix build .#...)"]
         a1["image-proxmox-<br/>dev-team<br/>Proxmox VMA<br/>[x86_64]"]
         a2["image-ec2-<br/>dev-team<br/>EC2 AMI<br/>[x86_64]"]
         a3["image-ec2-dev-<br/>team-graviton<br/>EC2 AMI<br/>[aarch64]"]
