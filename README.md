@@ -11,6 +11,7 @@ that can be composed into any Nix configuration via flake input.
 
 | Audience | Start Here |
 |----------|------------|
+| **Nix newcomer** learning how this repo is organized and built | [LEARNING-NIX-HERE.md](docs/LEARNING-NIX-HERE.md) |
 | **Team member** wanting a ready-to-use WSL dev environment | [WSL-TEAM-QUICKSTART.md](docs/WSL-TEAM-QUICKSTART.md) |
 | **IT / Security** reviewing what ships in the image | [DISTRIBUTION.md](docs/DISTRIBUTION.md), [CrowdStrike WSL2 Security Brief](docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) |
 | **Nix user** wanting to consume modules in their own flake | [SHARED-MODULES.md](docs/SHARED-MODULES.md) |
