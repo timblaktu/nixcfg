@@ -2,9 +2,24 @@
 
 ## Purpose
 
-The set of checks this flake defines, and the facts about how each one should run in CI (how often, by what means, on which architectures, needing which builder capabilities), are described once in the flake, next to the checks themselves. Continuous integration is then a function of that description rather than a separately maintained list. Adding or changing a check is a single edit in one place, and a guard makes it impossible to add a check that CI would silently ignore.
+The set of checks this flake defines, and the facts about how each one should run in CI (how often, by what means, on which architectures, needing which builder capabilities), are described once in the flake, next to the checks themselves, in [`modules/flake-parts/ci-classification.nix`](../modules/flake-parts/ci-classification.nix). Continuous integration is then a function of that description rather than a separately maintained list. Adding or changing a check is a single edit in one place, and a guard makes it impossible to add a check that CI would silently ignore.
 
 ## The shape of it
+
+```mermaid
+flowchart LR
+    checks["Flake checks<br/>(eval, lint, build,<br/>nspawn, qemu, tarball)"]
+    class_["Classification map<br/>(tier, backend, systems,<br/>requires per check)"]
+    guard["Drift guard<br/>(fails if a check is<br/>unclassified or missing)"]
+    manifest["Derived manifest<br/>(plain data)"]
+    adapter["Platform adapter<br/>(runners + cache only)"]
+    jobs["Concrete CI jobs"]
+    checks --> class_
+    class_ --> guard
+    class_ --> manifest
+    manifest --> adapter --> jobs
+    checks -.guarded by.-> guard
+```
 
 Three pieces live in the flake:
 
@@ -30,6 +45,14 @@ A downstream flake therefore classifies its own checks, derives its own manifest
 
 Each check carries four facts and one optional flag.
 
+| Fact | Meaning | Values |
+|------|---------|--------|
+| Tier | When it runs | `pr` (every change), `nightly` (on a schedule), `local` (never in CI) |
+| Backend | How it runs, and the capability it implies | `lint`, `eval`, `build`, `nspawn` (container VM test), `qemu` (full VM test, needs hardware virtualization), `tarball` (image build) |
+| Systems | Architectures the check is meaningful on | e.g. `x86_64-linux`, `aarch64-linux` |
+| Requires | Builder capabilities the backend needs | e.g. `kvm`, `uid-range`, or none |
+| Enabled (optional) | Whether CI currently includes it | defaults true; `false` keeps it classified but omits it from the matrix |
+
 Tier is when it runs: on every change, on a schedule only, or locally only (never in CI).
 
 Backend is how it runs and what it needs: a source lint; an evaluation with no build; a plain build of a derivation; a container based virtual machine test; a full virtual machine test that needs hardware virtualization; or an image build. The backend implies the builder capability required, if any.
@@ -50,5 +73,8 @@ The classification carries intent only. Concrete runner and cache choices are co
 
 ## Related documents
 
+- [`modules/flake-parts/ci-classification.nix`](../modules/flake-parts/ci-classification.nix): the classification data and the exported `ci.lib.mkMatrix` / `ci.lib.mkDriftGuard` functions.
 - [TESTING-NSPAWN.md](TESTING-NSPAWN.md): the container based test backend and its builder requirement.
 - [nix-store-model-and-vmtest-backends.md](nix-store-model-and-vmtest-backends.md): the store model behind the container versus full virtual machine split.
+- [RELEASE.md](../RELEASE.md): the release pipeline the `tarball` backend feeds.
+- [ARCHITECTURE.md](ARCHITECTURE.md): the repository-wide structure these checks validate.

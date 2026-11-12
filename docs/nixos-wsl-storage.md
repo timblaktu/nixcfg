@@ -1,12 +1,10 @@
-# NixOS-WSL Multiple Instance Storage Strategy: Revised Analysis
+# NixOS-WSL Multiple-Instance Storage Strategy
 
-## Executive Summary
+## Overview
 
-This document provides a comprehensive analysis of storage strategies for multiple NixOS-WSL instances' `/nix` stores on a dedicated 4TB SSD. After thorough research and fact-checking, the analysis has been revised to address WSL2-specific performance characteristics and correct several technical misconceptions from the original document.
+This document analyzes storage strategies for the `/nix` stores of multiple NixOS-WSL (NixOS running under the Windows Subsystem for Linux) instances on a dedicated 4TB SSD, with a focus on WSL2-specific performance characteristics. It is the design rationale; for the concrete NixOS module and deployment steps that put it into practice, see the [WSL Automount Implementation Guide](WSL-AUTOMOUNT-IMPLEMENTATION.md). For the repository-wide module layout this fits into, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-**Primary Recommendation**: Single ext4 filesystem with subdirectories and bind mounts remains optimal, but with important WSL2-specific considerations regarding cross-OS file access performance and mount persistence.
-
-**Critical Finding**: WSL2's 9P protocol for accessing Windows drives introduces significant performance penalties, making it essential to keep all Nix store data within the WSL2 Linux filesystem rather than on Windows-mounted drives.
+The recommendation is a single ext4 filesystem with per-instance subdirectories exposed to each instance through bind mounts, kept entirely inside the WSL2 Linux filesystem. The decisive constraint is the OS boundary: WSL2's 9P protocol (the network-style file-sharing protocol WSL2 uses to reach Windows drives) is 10-50x slower than native Linux filesystem access, so all Nix store data must live on the Linux side rather than on a Windows-mounted drive.
 
 ## Background & Requirements
 
@@ -20,11 +18,18 @@ This document provides a comprehensive analysis of storage strategies for multip
 
 ### Critical WSL2 Performance Characteristics
 
-WSL2 has fundamentally different performance characteristics when accessing files across OS boundaries versus within the Linux filesystem:
+The single most important factor is which side of the OS boundary a file lives on. Access that stays inside the Linux filesystem is near-native; access that crosses to a Windows drive goes over the 9P protocol and is dramatically slower:
+
+```mermaid
+graph LR
+    App["Nix / build process<br/><i>inside WSL2</i>"]
+    App -->|"native VFS<br/>(near-native speed)"| Linux["Linux ext4<br/><i>/nix, bind mounts</i>"]
+    App -->|"9P protocol<br/>(10-50x slower)"| Win["Windows drive<br/><i>/mnt/c, etc.</i>"]
+```
 
 1. **Cross-OS Performance**: Operations accessing Windows files from WSL2 can be 10x slower than native Linux filesystem operations
 2. **Native Linux Performance**: Operations within WSL2's Linux filesystem achieve near-native performance
-3. **Bind Mount Performance**: On Linux, bind mounts carry no overhead since the underlying VFS is shared directly
+3. **Bind Mount Performance**: On Linux, bind mounts carry no overhead since the underlying VFS (Virtual File System, the kernel's shared filesystem layer) is shared directly
 
 ### Revised Performance Goals
 - **Within WSL2 Linux FS**: 80-95% of native Linux performance achievable
@@ -34,7 +39,9 @@ WSL2 has fundamentally different performance characteristics when accessing file
 
 ## Recommended Solution: Single Filesystem with Subdirectories
 
-### Architecture Overview
+### Storage Layout
+
+Two layouts place the shared ext4 filesystem on the SSD. Both keep every instance's `/nix` on the Linux side; they differ only in whether the filesystem lives inside a virtual disk image or on a disk mounted directly into WSL2.
 
 **Option A: External VHDX (Recommended for WSL2)**
 ```
@@ -120,7 +127,7 @@ wsl --mount --vhd $VhdPath --name nixstorage
 }
 ```
 
-#### Migration Process (Revised)
+#### Migration Process
 
 1. **Pre-Migration Validation**
 ```bash
@@ -168,7 +175,7 @@ nix-store --verify --check-contents
 nix-shell -p hello --run hello
 ```
 
-### Performance Analysis (Revised)
+### Performance Analysis
 
 #### Expected Performance Improvements
 
@@ -185,9 +192,9 @@ nix-shell -p hello --run hello
 2. **Mount Overhead**: Bind mount performance overhead on Linux is near zero
 3. **VHDX Performance**: Virtual disk adds minimal overhead (~2-5%) vs direct mount
 
-## Alternative Approaches Analysis (Updated)
+## Alternative Approaches
 
-### Option 2: Btrfs with Subvolumes (Revised Assessment)
+### Option 2: Btrfs with Subvolumes
 
 #### Current Stability Status
 - Btrfs single, DUP, and raid1 profiles have been reliable since Linux 4.4 (2016)
@@ -202,10 +209,10 @@ nix-shell -p hello --run hello
 #### Actual Drawbacks
 - **RAID5/6 Issues**: Still problematic, avoid these profiles
 - **Performance**: Some workloads show 5-15% overhead vs ext4
-- **Fragmentation**: COW design inherently fragments over time
+- **Fragmentation**: COW (copy-on-write) design inherently fragments over time
 - **WSL2 Compatibility**: Less tested than ext4 in WSL2 environment
 
-### Comparative Analysis (Updated)
+### Comparative Analysis
 
 | Aspect | Single FS + Bind | Dedicated Partitions | Btrfs | ZFS on Linux |
 |--------|-----------------|---------------------|-------|--------------|
@@ -272,7 +279,7 @@ systemd.services.nix-health-check = {
 };
 ```
 
-## Decision Framework (Updated)
+## Decision Framework
 
 **Use Single Filesystem + Bind Mounts when:**
 - Running NixOS on WSL2 (recommended approach)

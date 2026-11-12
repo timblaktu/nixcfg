@@ -2,12 +2,11 @@
 
 ## Overview
 
-This repository uses Nix-native testing integrated directly into the flake configuration. All tests are defined as flake checks and can be run using standard Nix commands.
+This repository uses Nix-native testing integrated directly into the flake configuration. All tests are defined as flake checks and run with standard Nix commands, so the same checks execute identically on a developer laptop and in continuous integration (CI). For the big picture of how the repository itself is structured (the dendritic module pattern, host layers, and where tests fit), see [`ARCHITECTURE.md`](ARCHITECTURE.md). This page is the practical how-to for running those checks; it covers the tier model, prerequisites, the backend split between full virtual machines and lightweight containers, debugging, and how to write new tests.
 
-> **Faster integration tests:** most VM-based integration tests can run on the **systemd-nspawn
-> container backend** (NixOS 26.05) instead of QEMU — ~5-7× faster boot, far less RAM. See
-> [TESTING-NSPAWN.md](TESTING-NSPAWN.md) for when to use it, the host prerequisites, and how to
-> write or migrate a container test (with the real VM-vs-container caveats).
+> **Authoritative current reference.** For the current tier model, the live check inventory, the nspawn-vs-QEMU backend split, and the per-module coverage matrix, see **[`TESTS.md`](../tests/README.md)**. Some of the convenience-app names used in this document (for example the `test-all` / `test-integration` / `snapshot` apps) predate a suite reorganization and no longer exist; the live check set is always `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`. The `nix build '.#checks.x86_64-linux.<name>'` and `nix flake check` workflows below remain accurate.
+
+> **Faster integration tests:** most VM-based integration tests can run on the **systemd-nspawn container backend** (NixOS 26.05) instead of QEMU - roughly 5-7x faster boot, far less RAM. See [TESTING-NSPAWN.md](TESTING-NSPAWN.md) for when to use it, the host prerequisites, and how to write or migrate a container test (with the real VM-vs-container caveats).
 
 ## Benefits Over Script-Based Testing
 
@@ -114,23 +113,25 @@ nix flake check
 ## Test Architecture
 
 ### Test Infrastructure Overview
+
+Checks are registered under `checks.x86_64-linux.*` (mirrored on `aarch64-linux`) by two flake-parts modules, with standalone fixtures and unit-test sources living under `tests/`:
+
 ```
+modules/flake-parts/
+├── tests.nix        - eval gates, lint, build/activation checks (no KVM)
+└── vm-tests.nix     - behavioral machine tests (QEMU + systemd-nspawn helpers)
+
 tests/
-├── Unit Tests (Direct)
-│   ├── sops-simple.nix       - Basic SOPS functionality
-│   ├── ssh-auth.nix          - SSH authentication components  
-│   └── sops-nix.nix          - Advanced SOPS operations
-│
-├── Integration Tests (VM-Based)
-│   └── test-secrets/         - SOPS fixtures (behavioral VM tests: modules/flake-parts/vm-tests.nix)
-│
-└── modules/flake-parts/tests.nix   - Test orchestration & runners
+├── sops-simple.nix  - SOPS encryption/decryption
+├── ssh-auth.nix     - SSH key format validation
+├── sops-nix.nix     - SOPS-nix integration
+├── fixtures/sops/   - checked-in SOPS test fixtures (age key + encrypted YAML)
+└── integration/test-secrets/  - SOPS fixtures consumed by behavioral VM tests
 ```
 
 ### Test Categories
 
-> The suite was redesigned into two tiers in plan 054. The authoritative live
-> list is `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`.
+> The suite is organized into two tiers (see [`TESTS.md`](../tests/README.md)). The authoritative live list is `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`.
 
 #### Tier 0 - Eval-regression gates (fast, no boot)
 - **Purpose**: Force host/HM/module configs to evaluate; catch syntax errors,
@@ -476,13 +477,7 @@ The old script-based testing has been replaced with integrated Nix tests. All fu
 
 ## Feature Coverage Matrix
 
-> **Superseded by plan 054.** The pre-054 coverage matrix that lived here
-> referenced checks and integration files (`ssh-management.nix`,
-> `sops-deployment.nix`, `eval-thinky-nixos`, `build-*-dryrun`, …) that have since
-> been deleted, renamed, or consolidated. For the current, authoritative
-> feature/code-coverage map see **[`VMTEST-AUDIT.md`](VMTEST-AUDIT.md)** (per-module
-> covering tests + depth) and the target design in
-> **[`VMTEST-TARGET-DESIGN.md`](VMTEST-TARGET-DESIGN.md)**. The live check set is:
+> **Superseded.** An earlier coverage matrix that lived here referenced checks and integration files (`ssh-management.nix`, `sops-deployment.nix`, `eval-thinky-nixos`, `build-*-dryrun`, ...) that have since been deleted, renamed, or consolidated. For the current, authoritative feature/code-coverage map see **[`VMTEST-AUDIT.md`](VMTEST-AUDIT.md)** (per-module covering tests + depth) and the target design in **[`VMTEST-TARGET-DESIGN.md`](VMTEST-TARGET-DESIGN.md)**. The live check set is:
 >
 > ```bash
 > nix eval '.#checks.x86_64-linux' --apply builtins.attrNames

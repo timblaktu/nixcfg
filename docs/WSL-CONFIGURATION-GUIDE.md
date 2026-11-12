@@ -1,17 +1,22 @@
 # WSL Image Builder & Admin Guide
 
-Builder/maintainer reference for building, distributing, and customizing NixOS-WSL
-team images. For end-user setup, see [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md).
+Builder/maintainer reference for building, distributing, and customizing NixOS-WSL (Windows Subsystem for Linux) team images. For end-user setup, see [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md).
 
-**Last Updated**: 2026-02-19
+The maintainer workflow is a short pipeline: compose module layers, build a `.wsl` tarball, hand it to teammates, who import it on Windows.
+
+```mermaid
+graph LR
+    A["Module layers<br/><i>enterprise, dev-team, host</i>"] --> B["build-wsl-tarball<br/><i>nixos.wsl (~1.8 GB)</i>"]
+    B --> C["Distribute<br/><i>tarball + import script</i>"]
+    C --> D["Teammate imports<br/><i>Import-NixOSWSL.ps1</i>"]
+    D --> E["NixOS Dev Team tab<br/><i>in Windows Terminal</i>"]
+```
 
 ---
 
 ## Architecture
 
-The distributable WSL image is composed from four module layers. Each layer is a
-convenience bundle of dendritic feature modules — not a gatekeeper. Any host can
-import layers wholesale or cherry-pick individual modules.
+The distributable WSL image is composed from four module layers. Each layer is a convenience bundle of dendritic feature modules, not a gatekeeper. Any host can import layers wholesale or cherry-pick individual modules.
 
 ```mermaid
 graph TD
@@ -50,8 +55,8 @@ For the full dendritic pattern and repository structure, see [ARCHITECTURE.md](A
 |-------|-------------|-----------|------|
 | Enterprise | `wsl-enterprise` | `home-enterprise` | `modules/system/settings/wsl-enterprise/wsl-enterprise.nix` |
 | Dev-team | `wsl-dev-team` | `home-dev-team` | `modules/system/settings/wsl-dev-team/wsl-dev-team.nix` |
-| Host | — | — | `modules/hosts/nixos-wsl-dev-team [N]/nixos-wsl-dev-team.nix` |
-| Personal | — | — | *(in private repo, e.g., nixcfg-work)* |
+| Host | (none) | (none) | `modules/hosts/nixos-wsl-dev-team [N]/nixos-wsl-dev-team.nix` |
+| Personal | (none) | (none) | *(in private repo, e.g., nixcfg-work)* |
 
 ---
 
@@ -111,8 +116,8 @@ WSL_TARBALL_SKIP_CHECKS=1 build-wsl-tarball nixos-wsl-dev-team
 
 Give teammates two files:
 
-1. **`nixos.wsl`** — the tarball (built above)
-2. **`Import-NixOSWSL.ps1`** — the import script (from `docs/tools/`)
+1. **`nixos.wsl`** - the tarball (built above)
+2. **`Import-NixOSWSL.ps1`** - the import script (from [`docs/tools/`](tools/))
 
 Transfer options: shared drive, Teams/Slack file upload, USB stick, `\\wsl$` UNC path
 from the build machine. The end-user import process is documented in
@@ -122,19 +127,14 @@ from the build machine. The end-user import process is documented in
 
 ## Import Script Internals
 
-`docs/tools/Import-NixOSWSL.ps1` automates the import process and works around
-several WSL bugs (microsoft/WSL#13064, #13129, #13339). Key operations:
+`docs/tools/Import-NixOSWSL.ps1` automates the import process and works around several WSL bugs ([microsoft/WSL#13064](https://github.com/microsoft/WSL/issues/13064), [#13129](https://github.com/microsoft/WSL/issues/13129), [#13339](https://github.com/microsoft/WSL/issues/13339)). Key operations:
 
-- **Terminal fragment creation** — WSL's `wsl --import` fails to create Terminal
-  fragment files, so the script creates them manually in `%LOCALAPPDATA%\Microsoft\
-  Windows Terminal\Fragments\`.
-- **Two-tier GUID handling** — Terminal uses its own GUID namespace
-  (`WslDistroGenerator`) separate from WSL's registry GUIDs. The script generates
-  the correct Terminal-tier GUID for fragment files.
-- **Stale artifact cleanup** — removes orphan Terminal profiles and state.json
-  entries left by previous imports.
-- **Existing distro replacement** — detects and offers to unregister an existing
-  distro with the same name before reimporting.
+| Operation | What it does | Why it is needed |
+|-----------|--------------|------------------|
+| Terminal fragment creation | Creates fragment files manually in `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\` | `wsl --import` fails to create them |
+| Two-tier GUID handling | Generates the correct Terminal-tier GUID for fragment files | Terminal's `WslDistroGenerator` namespace is separate from WSL's registry GUIDs |
+| Stale artifact cleanup | Removes orphan Terminal profiles and `state.json` entries | Previous imports leave these behind |
+| Existing distro replacement | Detects a same-named distro and offers to unregister it before reimporting | Avoids import collisions |
 
 For the deep technical reference on the GUID system and Terminal integration, see
 [tools/TERMINAL-PROFILE-ARCHITECTURE.md](tools/TERMINAL-PROFILE-ARCHITECTURE.md).
@@ -170,7 +170,7 @@ To create a layer for a different team (e.g., `wsl-alpha-team`):
 
 1. Copy `modules/system/settings/wsl-dev-team/` to `wsl-alpha-team/`
 2. Rename module registrations (`wsl-alpha-team`, `home-alpha-team`)
-3. Adjust imports — keep `wsl-enterprise` as base, swap in team-specific tools
+3. Adjust imports - keep `wsl-enterprise` as base, swap in team-specific tools
 4. Create a new thin host config in `modules/hosts/` that imports your team layer
 5. Build: `build-wsl-tarball nixos-wsl-alpha-team`
 
@@ -205,7 +205,7 @@ Fix the offending module, or bypass with `WSL_TARBALL_SKIP_CHECKS=1` for testing
 The default dev-team image is ~1.8 GB. If significantly larger:
 - Check if `hardware.graphics.enable` is true (adds ~800 MB of Mesa/LLVM).
   For CLI-only WSL images, this should be false unless CUDA is needed.
-- Review unfree packages — some pull large dependency trees.
+- Review unfree packages - some pull large dependency trees.
 
 ### Import script errors on Windows
 

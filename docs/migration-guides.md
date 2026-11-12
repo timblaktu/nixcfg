@@ -2,7 +2,16 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for migrating from various secret management systems to the NixOS SOPS-NiX based solution. Each migration path includes assessment, planning, execution, and validation phases.
+This guide provides step-by-step instructions for migrating from various secret management systems to the NixOS [SOPS-nix](https://github.com/Mic92/sops-nix) based solution (SOPS = Secrets OPerationS, Mozilla's editor for encrypted files; SOPS-nix integrates it with NixOS). Every migration path walks the same stages - assess, export, transform, encrypt, configure, and validate - shown in the pipeline below; only the source system and its export and transform tooling change.
+
+```mermaid
+flowchart LR
+    A["Assess<br/>inventory existing secrets"] --> B["Export<br/>decrypt/dump from source"]
+    B --> C["Transform<br/>reshape into SOPS YAML"]
+    C --> D["Encrypt<br/>sops -e with age keys"]
+    D --> E["Configure<br/>wire secrets into NixOS"]
+    E --> F["Validate<br/>parity + service checks"]
+```
 
 ## Table of Contents
 
@@ -14,6 +23,18 @@ This guide provides step-by-step instructions for migrating from various secret 
 6. [From AWS Secrets Manager](#from-aws-secrets-manager)
 7. [From Azure Key Vault](#from-azure-key-vault)
 8. [General Migration Best Practices](#general-migration-best-practices)
+
+## Source Systems at a Glance
+
+| Source System | Export Tool | Transform Needed | Compatibility Shim | Relative Effort |
+|---------------|-------------|------------------|--------------------|-----------------|
+| Plain text secrets | `grep` / `find` | Manual | No | Low |
+| Ansible Vault | `ansible-vault decrypt` | Python script | No | Medium |
+| HashiCorp Vault | `vault kv get` | Python script | Yes (`vault-compat` wrapper) | High |
+| Kubernetes Secrets | `kubectl get -o json` | Python script | No | Medium |
+| Environment variables | `.env` / compose / systemd scan | Python script | No | Medium |
+| AWS Secrets Manager | `aws secretsmanager` | `jq` | No | Low |
+| Azure Key Vault | `az keyvault secret` | Shell | No | Low |
 
 ## From Plain Text Secrets
 
@@ -47,7 +68,7 @@ echo "Total potential secrets found: $TOTAL_SECRETS"
 
 ### Migration Strategy
 
-#### Step 1: Set Up SOPS-NiX Infrastructure
+#### Step 1: Set Up SOPS-nix Infrastructure
 
 ```nix
 # flake.nix
@@ -1280,7 +1301,7 @@ def flatten_dict(d, parent_key='', sep='_'):
 
 ## Summary
 
-This migration guide provides comprehensive strategies for moving from various secret management systems to NixOS with SOPS-NiX. Key principles:
+This migration guide provides comprehensive strategies for moving from various secret management systems to NixOS with SOPS-nix. Key principles:
 
 1. **Assessment First**: Understand current state before migrating
 2. **Incremental Migration**: Move services gradually, not all at once
@@ -1288,4 +1309,4 @@ This migration guide provides comprehensive strategies for moving from various s
 4. **Validation Critical**: Test thoroughly before decommissioning old system
 5. **Documentation Essential**: Record process for future reference
 
-The modular nature of NixOS and SOPS-NiX makes it possible to maintain compatibility layers during migration, ensuring zero-downtime transitions for critical services.
+The modular nature of NixOS and SOPS-nix makes it possible to maintain compatibility layers during migration, ensuring zero-downtime transitions for critical services.

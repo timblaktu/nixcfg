@@ -2,9 +2,18 @@
 
 nixcfg uses [Semantic Versioning](https://semver.org/) with automated release pipelines. The [`VERSION`](VERSION) file in the repository root is the single source of truth for the current version and the sole trigger for the release process.
 
+```mermaid
+flowchart LR
+    pr["PR bumps<br/>VERSION on main"] --> at["auto-tag.yml<br/>(validates semver,<br/>creates git tag)"]
+    at --> rel["release.yml<br/>(builds .wsl tarball,<br/>generates notes)"]
+    rel --> ghr["GitHub Release<br/>(.wsl + Import-NixOSWSL.ps1)"]
+```
+
+Editing one tracked file and merging it is the entire manual step; the two workflows above do the rest.
+
 ## Why a VERSION File?
 
-Nix flakes provide a well-defined set of source metadata during evaluation: commit hash (`self.rev`, `self.shortRev`), dirty state (`self.dirtyRev`), commit timestamp (`self.lastModified`), and ancestor count (`self.revCount`). Git tags, however, are not part of this metadata set. There is no `self.tag` or `self.gitDescribe` attribute, and flake evaluation enforces purity — shelling out to `git describe` is not permitted.
+Nix flakes provide a well-defined set of source metadata during evaluation: commit hash (`self.rev`, `self.shortRev`), dirty state (`self.dirtyRev`), commit timestamp (`self.lastModified`), and ancestor count (`self.revCount`). Git tags, however, are not part of this metadata set. There is no `self.tag` or `self.gitDescribe` attribute, and flake evaluation enforces purity - shelling out to `git describe` is not permitted.
 
 This is a deliberate design boundary in Nix's git fetcher, which extracts source content and a minimal set of commit-level metadata without resolving tag references. The sandboxed build environment similarly has no access to the `.git` directory or the network, so derivations cannot query tags either. This is well-documented in [NixOS/nix#7201](https://github.com/NixOS/nix/issues/7201) and has been discussed on [NixOS Discourse](https://discourse.nixos.org/t/git-describe-like-attributes-for-flakes/10805) since 2021.
 
@@ -17,7 +26,7 @@ version =
   else "${baseVersion}-dirty";
 ```
 
-This produces versions like `0.1.0+a1b2c3d` for clean builds and `0.1.0-dirty` for uncommitted working trees — combining the human-meaningful release version with Nix's native commit identity. The [`VERSION`](VERSION) file is also validated at eval time by the [`lint-version`](modules/flake-parts/version.nix) check, which rejects non-semver content via `lib.seq` + `throw` (so `nix flake check --no-build` catches format errors immediately).
+This produces versions like `0.1.0+a1b2c3d` for clean builds and `0.1.0-dirty` for uncommitted working trees - combining the human-meaningful release version with Nix's native commit identity. The [`VERSION`](VERSION) file is also validated at eval time by the [`lint-version`](modules/flake-parts/version.nix) check, which rejects non-semver content via `lib.seq` + `throw` (so `nix flake check --no-build` catches format errors immediately).
 
 The CI pipeline then closes the loop: when [`VERSION`](VERSION) changes on `main`, [`auto-tag.yml`](.github/workflows/auto-tag.yml) creates the corresponding git tag, keeping the file and the tag in permanent agreement.
 
@@ -75,7 +84,7 @@ Each release builds and publishes the dev team WSL distribution image:
 
 ### [`.github/release.yml`](.github/release.yml) (config)
 
-Configures GitHub's auto-generated release notes categories. This is only used if a release is created manually through the GitHub UI — the automated pipeline generates its own notes from git history.
+Configures GitHub's auto-generated release notes categories. This is only used if a release is created manually through the GitHub UI - the automated pipeline generates its own notes from git history.
 
 ## Setup: `RELEASE_PAT` Secret
 

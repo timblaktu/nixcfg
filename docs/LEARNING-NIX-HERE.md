@@ -21,6 +21,17 @@ The rest of this page walks ONE real feature - git - from its file on disk all t
 
 ## An end-to-end tour: the `git` module
 
+Here is the whole chain this tour walks, top to bottom. Each step below expands one link; refer back to this map whenever you lose the thread (section 5 repeats it as a build-time recap):
+
+```mermaid
+flowchart TB
+  A["flake.nix<br/>(import-tree auto-discovery)"] --> B["modules/programs/git/git.nix<br/>(the feature file)"]
+  B --> C["flake.modules.homeManager.git<br/>(dendritic registration)"]
+  C --> D["host imports it<br/>(modules/hosts/.../mbp.nix)"]
+  D --> E["flake.modules.homeManager.&quot;tim@mbp&quot;<br/>(registered as a buildable config)"]
+  E --> F["nix build / home-manager switch<br/>(your ~/.gitconfig, delta, lazygit, ...)"]
+```
+
 ### 1. The entry point: `flake.nix` and automatic discovery
 
 Open `flake.nix`. It is deliberately tiny. The important part is this:

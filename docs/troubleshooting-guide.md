@@ -1,6 +1,23 @@
 # Troubleshooting Guide
 
-This guide helps you diagnose and resolve common issues with the SSH key management and SOPS-NiX secrets system.
+This guide helps you diagnose and resolve common issues with the SSH key management and SOPS-NiX (Secrets OPerationS for Nix - encrypted secrets managed declaratively) secrets system. It is symptom-first: start from what you observe in the triage table below, then jump to the matching section. For the big-picture design of this repository and where secrets management sits within it, see [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md).
+
+## Symptom triage
+
+Start from what you observe, then jump to the section that covers it.
+
+| What you see | Likely area | Go to |
+|---|---|---|
+| `sops metadata not found`, `no valid keys found`, `could not import SSH host key` | Decryption / key setup | [Common Error Messages](#common-error-messages) |
+| `Permission denied` reading a secret, `Read-only file system: /run/secrets.d/` | Ownership / mounts | [Permission Issues](#permission-issues) |
+| Age or SSH private key deleted or corrupted | Recovery from backup | [Key Recovery](#key-recovery) |
+| Rotation errors, timer not firing | Secret rotation | [Secret Rotation Issues](#secret-rotation-issues) |
+| Concurrent edits, mismatched keys between users | Collaboration | [Multi-User Conflicts](#multi-user-conflicts) |
+| Activation script fails silently or in the wrong order | Boot-time scripts | [Debugging Activation Scripts](#debugging-activation-scripts) |
+| `Invalid age key format`, `yaml: did not find expected key` | Key / YAML format | [SOPS Decryption Failures](#sops-decryption-failures) |
+| `Cannot connect to Bitwarden vault`, 2FA blocking automation | Vault access | [Bitwarden Connection Problems](#bitwarden-connection-problems) |
+| `Permission denied (publickey)`, repeated passphrase prompts | SSH auth | [SSH Key Issues](#ssh-key-issues) |
+| Service cannot read a secret, `nixos-rebuild` option error, slow boot | Integration / build | [System Integration Problems](#system-integration-problems) |
 
 ## Table of Contents
 
@@ -16,6 +33,24 @@ This guide helps you diagnose and resolve common issues with the SSH key managem
 10. [System Integration Problems](#system-integration-problems)
 
 ## Common Error Messages
+
+Most decryption errors are a break somewhere in the key chain that turns an SSH host key into the age key that SOPS uses to decrypt a secret file. Knowing where the break is tells you which error you are looking at.
+
+```mermaid
+flowchart LR
+    A["SSH host key<br/>/etc/ssh/ssh_host_ed25519_key"] -->|"ssh-to-age"| B["age private key<br/>~/.config/sops/age/keys.txt"]
+    B --> C["SOPS decrypt"]
+    D[".sops.yaml<br/>(authorized age public keys)"] --> C
+    E["encrypted file<br/>secrets/*.yaml"] --> C
+    C --> F["plaintext secret<br/>/run/secrets.d/"]
+```
+
+| Error message | Broken link in the chain |
+|---|---|
+| `could not import SSH host key` | SSH host key missing or not ed25519 |
+| `no valid keys found` | age private key absent, or `.sops.yaml` lists the wrong public key |
+| `Invalid age key format` | age key file malformed (see [SOPS Decryption Failures](#sops-decryption-failures)) |
+| `sops metadata not found` | the target file was never SOPS-encrypted |
 
 ### Error: "sops metadata not found"
 

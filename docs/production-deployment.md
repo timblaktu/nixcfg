@@ -2,7 +2,20 @@
 
 ## Overview
 
-This guide provides comprehensive best practices for deploying the NixOS SSH key and secrets management system in production environments. It covers pre-deployment validation, security hardening, performance optimization, high availability configurations, and compliance considerations.
+This guide covers deploying the NixOS SSH key and secrets management system in production environments: pre-deployment validation, security hardening, performance optimization, high availability, and compliance considerations. SOPS (Secrets OPerationS) and age (a modern file-encryption tool) are the two building blocks referenced throughout. For the big picture of how these modules fit together, start with the [repository architecture overview](ARCHITECTURE.md); for the module reference, see the [administrator handbook](administrator-handbook.md) and the [developer guide](developer-guide.md).
+
+The guide is organized as the sequence of concerns a deployment moves through, from first validation to steady-state operation:
+
+```mermaid
+flowchart LR
+    A["Pre-deployment<br/>validation"] --> B["Security<br/>hardening"]
+    B --> C["Performance<br/>optimization"]
+    C --> D["High<br/>availability"]
+    D --> E["Compliance<br/>and audit"]
+    E --> F["Deployment<br/>automation"]
+    F --> G["Monitoring<br/>and alerting"]
+    G --> H["Troubleshooting<br/>in production"]
+```
 
 ## Pre-Deployment Validation Checklist
 
@@ -353,8 +366,11 @@ systemd.timers.sops-metrics = {
 ### 1. Multi-Master Setup
 
 #### Redundant Key Storage
+
+The following is an illustrative configuration sketch; the option names below are not literal NixOS or home-manager module options. There is no `programs.bitwarden-cli` module with a `vaults`/`failoverTimeout`/`retryAttempts` schema in nixpkgs (the Bitwarden CLI the repo wraps is driven by the `bw` command and environment, and the repo itself uses `rbw`); the only real Bitwarden NixOS module is `services.bitwarden-directory-connector-cli`, which performs LDAP directory sync rather than multi-vault failover. Treat the block below as a description of the intended failover behavior, implemented in your own wrapper or deployment tooling.
+
 ```nix
-# Configure multiple Bitwarden vaults for redundancy
+# Illustrative: configure multiple Bitwarden vaults for redundancy
 programs.bitwarden-cli = {
   vaults = [
     {
@@ -461,8 +477,11 @@ nixos-rebuild switch --flake '.#hostname'
 ### 3. Load Balancing
 
 #### Distributed Secret Management
+
+The following is an illustrative configuration sketch; the option names below are not literal NixOS module options. There is no `services.sops-distributed` module in nixpkgs or sops-nix - sops-nix decrypts secrets per host and has no built-in sharding, replication-factor, or consistent-hashing feature. Treat the block below as a description of a sharding design you would implement with your own tooling.
+
 ```nix
-# Configure secret sharding across nodes
+# Illustrative: configure secret sharding across nodes
 services.sops-distributed = {
   enable = true;
   
@@ -486,13 +505,17 @@ services.sops-distributed = {
 ### 1. Regulatory Compliance
 
 #### GDPR Compliance
+
+The following is an illustrative configuration sketch: `sopsFile` is a real per-secret sops-nix option, but there is no per-secret `ageKeys` attribute - with sops-nix the age recipients for a file are selected in `.sops.yaml`, not inline in the Nix module, so the recipient line below is pseudo-config standing in for that `.sops.yaml` rule.
+
 ```nix
 # Data protection configuration
 sops.secrets = {
-  # Encrypt PII with separate keys
+  # Encrypt PII in a dedicated file whose recipients are set in .sops.yaml
   "user-data/*" = {
     sopsFile = ./secrets/gdpr/user-data.yaml;
-    ageKeys = [ "gdpr-compliance-key" ];
+    # Recipient selection (illustrative; configured in .sops.yaml, not here):
+    #   age recipients = [ "<gdpr-compliance-age-public-key>" ]
   };
 };
 
@@ -652,8 +675,11 @@ systemd.timers.compliance-report = {
 ### 3. Security Certifications
 
 #### ISO 27001 Requirements
+
+The following is an illustrative configuration sketch; the option names below are not literal NixOS module options. There is no `security.isms` module in nixpkgs - an Information Security Management System is an organizational process, not something a NixOS option configures. Treat the block below as a checklist of ISMS concerns to track outside of NixOS.
+
 ```nix
-# Information Security Management System (ISMS) integration
+# Illustrative: Information Security Management System (ISMS) concerns
 security.isms = {
   enable = true;
   
@@ -674,8 +700,11 @@ security.isms = {
 ```
 
 #### SOC 2 Type II
+
+The following is an illustrative configuration sketch; the option names below are not literal NixOS module options. There is no `services.soc2-monitoring` module in nixpkgs - SOC 2 is an auditing framework whose controls you would satisfy with real monitoring tooling (for example the `services.prometheus` and `services.grafana` configurations shown earlier in this guide). Treat the block below as a description of the controls to demonstrate.
+
 ```nix
-# Service Organization Control compliance
+# Illustrative: Service Organization Control compliance checks
 services.soc2-monitoring = {
   enable = true;
   
@@ -735,6 +764,18 @@ systemd.timers.gitops-secrets-sync = {
 ```
 
 ### CI/CD Pipeline Integration
+
+The pipeline gates every change through a validate stage on merge requests, then deploys from the protected `main` branch. Decryption of the deploy key happens inside the job and the plaintext key is removed immediately after use:
+
+```mermaid
+flowchart LR
+    MR["Merge request"] --> V["Validate stage<br/>flake check, decrypt test, permission check"]
+    V -->|"merged to main"| D["Deploy stage"]
+    D --> K["Decrypt CI deploy key"]
+    K --> R["nixos-rebuild switch over SSH"]
+    R --> C["Remove plaintext key"]
+```
+
 ```yaml
 # .gitlab-ci.yml example
 stages:
@@ -813,7 +854,15 @@ services.prometheus.rules = [''
 
 ## Troubleshooting Production Issues
 
+For symptoms outside the production-specific cases below, consult the general [troubleshooting guide](troubleshooting-guide.md).
+
 ### Common Production Problems
+
+| Symptom | Likely cause | First check |
+|---------|--------------|-------------|
+| Slow secret loading | Decryption bottleneck or cache pressure | `systemctl status sops-nix`; look for `took Ns` in the journal |
+| High memory usage | Service not releasing memory | `systemctl status sops-nix` memory line; restart to clear |
+| Secrets unavailable | Network path to Bitwarden broken | `curl -I https://vault.bitwarden.com`; DNS and firewall rules |
 
 1. **Performance Degradation**
    ```bash

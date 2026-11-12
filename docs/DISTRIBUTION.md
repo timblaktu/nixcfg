@@ -9,11 +9,11 @@ nixcfg is a Nix flake that defines NixOS system configurations, Home Manager use
 environments, and Darwin (macOS) setups. For team distribution, it produces three
 primary output kinds:
 
-1. **Pre-built WSL tarballs** — Ready-to-import `.wsl` images for Windows users
+1. **Pre-built WSL tarballs** - Ready-to-import `.wsl` images for Windows users
    who want a turnkey NixOS development environment.
-2. **Reusable Nix modules** — 57 exported modules (16 NixOS, 32 Home Manager, 9 Darwin)
+2. **Reusable Nix modules** - 57 exported modules (16 NixOS, 32 Home Manager, 9 Darwin)
    that teams can compose into their own configurations via flake input.
-3. **Platform image artifacts** — Proxmox VMA, EC2 AMIs (x86_64 + aarch64 Graviton), and an
+3. **Platform image artifacts** - Proxmox VMA, EC2 AMIs (x86_64 + aarch64 Graviton), and an
    Apple-Silicon Mac-VM `qcow2`, all built from the same `dev-team` NixOS config. See
    [Prebuilt Image Outputs](#prebuilt-image-outputs) for build commands and consumption paths.
 
@@ -22,51 +22,33 @@ primary output kinds:
 Configurations are organized in composable layers. Each layer imports the one
 below it and adds domain-specific concerns:
 
-```
-Layer 4: my-machine (personal, in private repo)
-         ├── Personal modules (esp-idf, awscli, etc.)
-         └── imports ↓
-
-Layer 3: wsl-dev-team (team)
-         ├── binfmt cross-compilation (aarch64)
-         ├── Podman containers
-         ├── Claude Code / OpenCode
-         ├── USB/IP device sharing
-         └── imports ↓
-
-Layer 2: wsl-enterprise (organization)
-         ├── CrowdStrike Falcon sensor (opt-in)
-         ├── Enterprise defaults
-         └── imports ↓
-
-Layer 1: system-cli + wsl-base (foundation)
-         ├── Core dev tools (git, neovim, tmux, direnv, etc.)
-         ├── WSL integration (wsl.conf, SSH, SOPS, CUDA)
-         └── imports ↓
-
-Layer 0: system-default → system-minimal
-         ├── Nix settings, locale, timezone
-         ├── Users, networking, fonts
-         └── Core packages
+```mermaid
+flowchart TB
+  L4["<b>Layer 4: my-machine</b> (personal, in private repo)<br/>Personal modules: esp-idf, awscli, etc."]
+  L3["<b>Layer 3: wsl-dev-team</b> (team)<br/>binfmt cross-compilation (aarch64), Podman<br/>Claude Code / OpenCode, USB/IP device sharing"]
+  L2["<b>Layer 2: wsl-enterprise</b> (organization)<br/>CrowdStrike Falcon sensor (opt-in), enterprise defaults"]
+  L1["<b>Layer 1: system-cli + wsl-base</b> (foundation)<br/>Core dev tools: git, neovim, tmux, direnv, etc.<br/>WSL integration: wsl.conf, SSH, SOPS, CUDA"]
+  L0["<b>Layer 0: system-default to system-minimal</b><br/>Nix settings, locale, timezone<br/>Users, networking, fonts, core packages"]
+  L4 -->|imports| L3 -->|imports| L2 -->|imports| L1 -->|imports| L0
 ```
 
 Layers are convenience bundles, not gatekeepers. Any module can be imported
-independently — the layers just provide curated combinations for common use cases.
+independently - the layers just provide curated combinations for common use cases.
 
 The distributable image is built from the `nixos-wsl-dev-team` host configuration,
-which composes layers 0–3 (everything except personal config). It ships with a
+which composes layers 0-3 (everything except personal config). It ships with a
 generic `dev` user and a `setup-username` script for personalization after import.
 
 ### Non-WSL Variant
 
-The `dev-team` NixOS module provides the same dev stack (layers 0–3) for
+The `dev-team` NixOS module provides the same dev stack (layers 0-3) for
 non-WSL targets: VMs, Proxmox, bare metal, EC2. Image configurations for
 Proxmox VMA and Amazon AMI formats are included.
 
 ### Home Manager Modules
 
 Each layer has a parallel Home Manager bundle (`home-enterprise`, `home-dev-team`)
-that works on **any** platform with Nix + home-manager installed — including
+that works on **any** platform with Nix + home-manager installed - including
 vanilla Ubuntu/Debian WSL distros, NixOS, and macOS. This means teammates who
 can't or won't run NixOS can still get the shell, git, tmux, neovim, and tooling
 configuration by importing Home Manager modules only.
@@ -77,9 +59,9 @@ configuration by importing Home Manager modules only.
 
 Releasing a new version is a three-step process:
 
-1. **Merge changes to `main`** — via PR from a feature branch.
+1. **Merge changes to `main`** - via PR from a feature branch.
 
-2. **Update the `VERSION` file** — bump the semver string (e.g., `0.1.0` → `0.2.0`).
+2. **Update the `VERSION` file** - bump the semver string (e.g., `0.1.0` → `0.2.0`).
    Commit directly to `main` or via a "bump version" PR.
 
 3. **Everything else is automated**:
@@ -91,8 +73,8 @@ Releasing a new version is a three-step process:
      - Executes the builder to produce a `.wsl` tarball
      - Generates release notes from conventional commit messages
      - Creates a GitHub Release with two attached assets:
-       - `nixcfg-wsl-dev-team-<version>.wsl` — the distribution image
-       - `Import-NixOSWSL.ps1` — the PowerShell import/setup script
+       - `nixcfg-wsl-dev-team-<version>.wsl` - the distribution image
+       - `Import-NixOSWSL.ps1` - the PowerShell import/setup script
 
 **Technical note**: `auto-tag.yml` uses a `RELEASE_PAT` (personal access token)
 instead of `GITHUB_TOKEN` because GitHub Actions events created by `GITHUB_TOKEN`
@@ -185,7 +167,7 @@ sudo ./result/bin/nixos-wsl-tarball-builder nixos.wsl
 ### A Note on `system.nix` (No-Flakes NixOS)
 
 NixOS 26.05 added [`system.nix`](https://nixos.org/manual/nixos/stable/release-notes),
-an entry point that lets you configure NixOS **without channels and without flakes** —
+an entry point that lets you configure NixOS **without channels and without flakes** -
 you pin nixpkgs with `builtins.fetchTarball` and `import "${nixpkgs}/nixos" { configuration = ./configuration.nix; }`,
 then build with `nixos-rebuild --file`/`--attr`. This is an **upstream option for your own
 machines**, not a nixcfg consumption path: nixcfg's modules are exported through flake-parts
@@ -239,7 +221,7 @@ nix build '.#image-ec2-dev-team-graviton' # -> result/*.img
 nix build '.#image-vm-dev-team'           # -> result/nixos.qcow2
 ```
 
-Note the single quotes around `.#...` — zsh would otherwise glob-expand the `#`.
+Note the single quotes around `.#...` - zsh would otherwise glob-expand the `#`.
 
 ### Mac-VM (Apple Silicon / UTM) walkthrough
 
@@ -271,15 +253,15 @@ creating Terminal profile fragments correctly.
 
 The script handles:
 
-- **WSL storage detection** — finds where existing distros are stored and places
+- **WSL storage detection** - finds where existing distros are stored and places
   the new one alongside them
-- **Distro replacement** — detects existing distro with same name, offers to
+- **Distro replacement** - detects existing distro with same name, offers to
   replace (unregister + reimport)
-- **Terminal profile creation** — computes the correct two-tier GUID and writes
+- **Terminal profile creation** - computes the correct two-tier GUID and writes
   a Terminal fragment file with custom icon/font/colors
-- **Orphan cleanup** — removes stale profiles and state.json entries left by
+- **Orphan cleanup** - removes stale profiles and state.json entries left by
   previous imports
-- **Terminal restart prompt** — reminds the user to restart Terminal to see the
+- **Terminal restart prompt** - reminds the user to restart Terminal to see the
   new profile
 
 Source: `docs/tools/Import-NixOSWSL.ps1`
@@ -339,17 +321,17 @@ Source: `docs/tools/Test-WslImport.ps1`
 The `.wsl` tarball is a compressed NixOS root filesystem. It includes:
 
 - **Full NixOS system** at the `system-cli` level (no GUI packages)
-- **WSL integration** — wsl.conf, automount, interop, SSH daemon
-- **Dev tooling** — git, neovim, tmux, direnv, fzf, ripgrep, fd, and ~50 other
+- **WSL integration** - wsl.conf, automount, interop, SSH daemon
+- **Dev tooling** - git, neovim, tmux, direnv, fzf, ripgrep, fd, and ~50 other
   CLI tools
-- **AI assistants** — Claude Code and OpenCode with multi-account wrapper scripts
-- **Containers** — Podman with `docker` alias
-- **Cross-compilation** — aarch64 binfmt via QEMU
-- **CrowdStrike Falcon** — module included but disabled by default (opt-in).
+- **AI assistants** - Claude Code and OpenCode with multi-account wrapper scripts
+- **Containers** - Podman with `docker` alias
+- **Cross-compilation** - aarch64 binfmt via QEMU
+- **CrowdStrike Falcon** - module included but disabled by default (opt-in).
   On WSL2, the sensor enters Reduced Functionality Mode (compliance inventory only).
   See [CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md)
-- **Generic `dev` user** — with `setup-username` for personalization
-- **wsl-distribution.conf** — custom Terminal profile metadata (icon, name)
+- **Generic `dev` user** - with `setup-username` for personalization
+- **wsl-distribution.conf** - custom Terminal profile metadata (icon, name)
 
 The tarball does **not** include Home Manager user configuration. Users apply HM
 config after import, either manually or by using this flake's `home-dev-team`
@@ -360,13 +342,9 @@ CLI-only operation; CUDA auto-enables graphics when needed).
 
 ## Related Documentation
 
-- [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md) — End-user import guide
-- [SHARED-MODULES.md](SHARED-MODULES.md) — Module catalog for flake consumers
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Repository structure and design patterns
-- [WSL-CONFIGURATION-GUIDE.md](WSL-CONFIGURATION-GUIDE.md) — WSL-specific config details
-- [CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) — IT-facing analysis and recommendations
-- [CrowdStrike WSL Limitations](../modules/programs/crowdstrike-falcon/docs/WSL-LIMITATIONS.md) — Technical reference for module developers
-
----
-
-**Last Updated**: 2026-11-12
+- [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md) - End-user import guide
+- [SHARED-MODULES.md](SHARED-MODULES.md) - Module catalog for flake consumers
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Repository structure and design patterns
+- [WSL-CONFIGURATION-GUIDE.md](WSL-CONFIGURATION-GUIDE.md) - WSL-specific config details
+- [CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) - IT-facing analysis and recommendations
+- [CrowdStrike WSL Limitations](../modules/programs/crowdstrike-falcon/docs/WSL-LIMITATIONS.md) - Technical reference for module developers

@@ -1,10 +1,25 @@
 # Quick Reference: Old vs New Approach
 
+This repository once kept every flake output in a single large `flake.nix`. It now splits those outputs across focused modules under [`modules/flake-parts/`](../modules/flake-parts), each owning one concern. This reference contrasts the old monolithic style ("Before") with the current [flake-parts](https://flake.parts) style ("After") so a reader coming from a classic `flake.nix` can map familiar tasks onto the new layout. For the full architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Where each output lives now
+
+| Flake output | Module |
+|--------------|--------|
+| Custom packages | [`packages.nix`](../modules/flake-parts/packages.nix) |
+| Development shells and `nix run` apps | [`dev-shells.nix`](../modules/flake-parts/dev-shells.nix) |
+| NixOS systems | [`nixos-configurations.nix`](../modules/flake-parts/nixos-configurations.nix) |
+| macOS (Darwin) systems | [`darwin-configurations.nix`](../modules/flake-parts/darwin-configurations.nix) |
+| Home Manager configs | [`home-configurations.nix`](../modules/flake-parts/home-configurations.nix) |
+| Nixpkgs overlays | [`overlays.nix`](../modules/flake-parts/overlays.nix) |
+| Supported architectures | [`systems.nix`](../modules/flake-parts/systems.nix) |
+| Exported module catalog | [`shared-modules.nix`](../modules/flake-parts/shared-modules.nix) |
+
 ## Adding a New Package
 
 ### ❌ Before (Monolithic)
 ```nix
-# In massive flake.nix (19,923 bytes)
+# In one massive flake.nix
 packages = forAllSystems (system:
   let
     pkgs = nixpkgsFor.${system};
@@ -18,7 +33,7 @@ packages = forAllSystems (system:
 
 ### ✅ After (Flake-Parts)
 ```nix
-# In focused flake-modules/packages.nix
+# In focused modules/flake-parts/packages.nix
 perSystem = { pkgs, ... }: {
   packages = {
     # Clean, focused file just for packages
@@ -42,7 +57,7 @@ devShells = forAllSystems (system:
 
 ### ✅ After (Flake-Parts)
 ```nix
-# In focused flake-modules/dev-shells.nix  
+# In focused modules/flake-parts/dev-shells.nix
 perSystem = { pkgs, ... }: {
   devShells = {
     # Clean, dedicated file for development environments
@@ -68,13 +83,13 @@ nixosConfigurations = {
 
 ### ✅ After (Flake-Parts)
 ```nix
-# In focused flake-modules/nixos-configurations.nix
+# In focused modules/flake-parts/nixos-configurations.nix
 flake.nixosConfigurations = {
   new-host = withSystem "x86_64-linux" ({ pkgs, ... }:
     inputs.nixpkgs.lib.nixosSystem {
       # Clean, flake-parts standard approach
       system = "x86_64-linux";
-      modules = [ ../hosts/new-host /* ... */ ];
+      modules = [ inputs.self.modules.nixos.new-host /* ... */ ];
     }
   );
 };
@@ -84,10 +99,10 @@ flake.nixosConfigurations = {
 
 | Task | Before | After |
 |------|--------|-------|
-| **Find package definitions** | Search through 19,923 line file | Open `flake-modules/packages.nix` |
-| **Add development shell** | Navigate massive file | Edit `flake-modules/dev-shells.nix` |
-| **Modify NixOS config** | Find among mixed concerns | Edit `flake-modules/nixos-configurations.nix` |
-| **Update overlay** | Search through monolith | Edit `flake-modules/overlays.nix` |
+| **Find package definitions** | Search through one huge `flake.nix` | Open `modules/flake-parts/packages.nix` |
+| **Add development shell** | Navigate massive file | Edit `modules/flake-parts/dev-shells.nix` |
+| **Modify NixOS config** | Find among mixed concerns | Edit `modules/flake-parts/nixos-configurations.nix` |
+| **Update overlay** | Search through monolith | Edit `modules/flake-parts/overlays.nix` |
 | **Add new system support** | Modify helper functions | Built-in `perSystem` handles it |
 | **Debug configuration** | Hard to isolate issues | Focused modules, clear errors |
 | **Git diff readability** | Huge diffs in one file | Small, focused diffs |
@@ -99,10 +114,10 @@ All your existing commands work exactly the same:
 
 ```bash
 # NixOS deployments (same as before)
-sudo nixos-rebuild switch --flake .\#tblack-t14-nixos
+sudo nixos-rebuild switch --flake '.#thinky-nixos'
 
-# Home Manager (same as before)  
-nix run home-manager -- switch --flake .\#tim@tblack-t14-nixos
+# Home Manager (same as before)
+nix run home-manager -- switch --flake '.#tim@thinky-nixos'
 
 # Package builds (same as before)
 nix build .\#nixvim-anywhere
@@ -127,18 +142,18 @@ nix develop  # Now shows available commands and usage tips
 ## File Organization Benefits
 
 ### Before: Everything in flake.nix
-- 19,923 bytes in one file
+- One large file holding every output
 - Mixed concerns
 - Hard to navigate
 - Difficult to modify safely
 
 ### After: Logical separation
-- `systems.nix` (125 lines) - System utilities
-- `overlays.nix` (50 lines) - Package overlays  
-- `packages.nix` (150 lines) - Custom packages
-- `dev-shells.nix` (200 lines) - Development environments
-- `nixos-configurations.nix` (400 lines) - NixOS systems
-- `darwin-configurations.nix` (100 lines) - macOS systems
-- `home-configurations.nix` (500 lines) - Home Manager configs
+- `systems.nix` (~120 lines) - Supported architectures
+- `overlays.nix` (~15 lines) - Package overlays
+- `packages.nix` (~60 lines) - Custom packages
+- `dev-shells.nix` (~130 lines) - Development environments and `nix run` apps
+- `nixos-configurations.nix` (~160 lines) - NixOS systems
+- `darwin-configurations.nix` (~90 lines) - macOS systems
+- `home-configurations.nix` (~150 lines) - Home Manager configs
 
-**Total: Much more maintainable and extensible!**
+Each module owns one concern, so a change touches one small file instead of a monolith. [`flake.nix`](../flake.nix) itself shrinks to roughly fifty lines that just hand the `modules/` tree to [import-tree](https://github.com/vic/import-tree).

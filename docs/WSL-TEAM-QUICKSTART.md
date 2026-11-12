@@ -1,7 +1,15 @@
 # NixOS-WSL Dev Team Quickstart
 
-This guide covers importing and setting up the pre-built NixOS-WSL image on your
-Windows 11 laptop.
+This guide covers importing and setting up the pre-built NixOS-WSL (NixOS running under the Windows Subsystem for Linux) image on your Windows 11 laptop.
+
+Setup is four short steps: check prerequisites, download the image, import it, then log in and set your identity.
+
+```mermaid
+graph LR
+    A["Prerequisites<br/><i>WSL + Windows Terminal</i>"] --> B["Download<br/><i>.wsl + import script</i>"]
+    B --> C["Import<br/><i>Import-NixOSWSL.ps1</i>"]
+    C --> D["First login<br/><i>git identity + SSH key</i>"]
+```
 
 ## Prerequisites
 
@@ -16,8 +24,8 @@ Windows 11 laptop.
 
 1. Go to the [latest release](https://github.com/timblaktu/nixcfg/releases/latest).
 2. Download both files:
-   - `nixcfg-wsl-dev-team-<version>.wsl` — the NixOS-WSL tarball
-   - `Import-NixOSWSL.ps1` — the import script
+   - `nixcfg-wsl-dev-team-<version>.wsl` - the NixOS-WSL tarball
+   - `Import-NixOSWSL.ps1` - the import script
 
 ## Import the Image
 
@@ -61,7 +69,7 @@ Windows 11 laptop.
    ```
 
 > **Optional**: To rename the `dev` user, run `setup-username <yourname>`, then
-> `wsl --shutdown` and reopen. This is cosmetic — all tooling works as `dev`.
+> `wsl --shutdown` and reopen. This is cosmetic - all tooling works as `dev`.
 
 3. Generate an SSH key for connecting to remote git hosts:
    ```bash
@@ -71,30 +79,19 @@ Windows 11 laptop.
 
 ## What's Included
 
-**Development tools**: git, neovim, tmux, direnv, shellcheck, jq, fzf, and modern
-CLI replacements (eza, bat, delta, dust, zoxide).
+| Category | What you get |
+|----------|--------------|
+| Development tools | git, neovim, tmux, direnv, shellcheck, jq, fzf, and modern CLI replacements (eza, bat, delta, dust, zoxide) |
+| AI coding assistants | Claude Code and OpenCode, pre-configured with multi-account wrapper scripts |
+| Containers | Podman with a `docker` alias - run containers without Docker Desktop |
+| Cross-compilation | aarch64 (ARM64) builds via QEMU binfmt, for embedded targets |
+| Hardware development | USB debug probes (ST-LINK, CMSIS-DAP, J-Link) and programmers (Dediprog) auto-attach from Windows via usbipd-win with non-root access ([details](#hardware-development-usb-device-passthrough)) |
+| Network tools | curl, httpie, nmap, tcpdump, iperf3, dig, traceroute |
+| Source-control integration | `gh` (GitHub CLI) and `glab` (GitLab CLI) with credential helpers (see note below) |
+| Passwordless sudo | For the dev workflow (you are in the `wheel` group) |
+| CrowdStrike Falcon | Included but disabled by default ([security brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md)) |
 
-**AI coding assistants**: Claude Code and OpenCode, pre-configured with multi-account
-wrapper scripts.
-
-**Containers**: Podman with `docker` alias — run containers without Docker Desktop.
-
-**Cross-compilation**: aarch64 (ARM64) builds via QEMU binfmt, for embedded targets.
-
-**Hardware development**: USB debug probes (ST-LINK, CMSIS-DAP, J-Link) and programmers (Dediprog) auto-attach from Windows via usbipd-win with non-root access. See [Hardware Development](#hardware-development-usb-device-passthrough) below.
-
-**Network tools**: curl, httpie, nmap, tcpdump, iperf3, dig, traceroute.
-
-**Source-control integration**: both `gh` (GitHub CLI) and `glab` (GitLab CLI) with
-credential helpers. This repo lives on GitHub and ships the `github-auth` module, which
-wires `gh` with automatic token injection; `glab` is included for GitLab remotes.
-
-**Passwordless sudo** for the dev workflow (you are in the `wheel` group).
-
-**CrowdStrike Falcon**: Module is included but disabled by default. If your
-organization requires it, see the
-[CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) for
-enablement and WSL2 behavior details.
+**Source-control note**: this repo lives on GitHub and ships the `github-auth` module, which wires `gh` with automatic token injection; `glab` is included for GitLab remotes. If your organization requires CrowdStrike Falcon, see the [CrowdStrike WSL2 Security Brief](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) for enablement and WSL2 behavior details.
 
 For the full contents inventory, layer architecture, and alternative
 consumption options, see [DISTRIBUTION.md](DISTRIBUTION.md).
@@ -115,7 +112,7 @@ The dev-team image includes udev rules and auto-attach configuration for common 
 
 ### Windows prerequisites
 
-1. Install usbipd-win (v4.x or later):
+1. Install usbipd-win (v5.x or later):
    ```powershell
    winget install -e --id dorssel.usbipd-win
    ```
@@ -176,7 +173,7 @@ When a new release is published:
 
 1. Download the new `.wsl` and `Import-NixOSWSL.ps1` files from the
    [releases page](https://github.com/timblaktu/nixcfg/releases/latest).
-2. Run the same import command — the script will offer to replace the existing install:
+2. Run the same import command - the script will offer to replace the existing install:
    ```powershell
    .\Import-NixOSWSL.ps1 -TarballPath .\nixcfg-wsl-dev-team-*.wsl
    ```

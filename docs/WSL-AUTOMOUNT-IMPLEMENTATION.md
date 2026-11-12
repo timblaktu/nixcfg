@@ -1,10 +1,8 @@
 # WSL Automount Implementation Guide
 
-## Executive Summary
+## Overview
 
-This document provides a comprehensive guide for implementing robust external storage mounting in NixOS-WSL environments. It addresses the critical need for persistent, reliable storage mounting for Nix stores across multiple WSL instances, with a focus on a 4TB NVMe SSD setup.
-
-**Status**: Production-ready implementation with battle-tested fallback strategies.
+This guide implements robust external storage mounting for NixOS-WSL (NixOS running under the Windows Subsystem for Linux). It gives multiple WSL instances persistent, reliable `/nix` stores backed by a dedicated disk (a 4TB NVMe SSD in the reference deployment), with fallback strategies for when that disk is slow to appear at boot. For the design rationale and the trade-offs behind this approach, see [NixOS-WSL Multiple-Instance Storage Strategy](./nixos-wsl-storage.md); for where this fits in the repository as a whole, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Table of Contents
 1. [Problem Statement](#problem-statement)
@@ -46,6 +44,16 @@ Physical Disk (4TB NVMe)
 ```
 
 ### Mount Strategy Layers
+
+The mount is coordinated across four layers, from the Windows host down to declarative NixOS config:
+
+```mermaid
+graph TD
+    W["Windows Layer<br/><i>PowerShell script: bare disk mount</i>"] --> L["WSL Layer<br/><i>Linux-side verification + retry logic</i>"]
+    L --> S["SystemD Layer<br/><i>service ordering + dependencies</i>"]
+    S --> N["NixOS Layer<br/><i>declarative config + bind mounts</i>"]
+```
+
 1. **Windows Layer**: PowerShell script for bare disk mounting
 2. **WSL Layer**: Linux-side mount verification and retry logic
 3. **SystemD Layer**: Service ordering and dependency management
@@ -88,16 +96,15 @@ The module provides a complete solution with the following features:
 - Comprehensive logging to `/var/log/wsl-mount.log`
 
 ##### SystemD Service Chain
-```
-systemd-modules-load.service
-    ↓
-wsl-storage-mount.service
-    ↓
-nix.mount (bind mount with automount)
-    ↓
-nix-mount-marker.service
-    ↓
-nix-daemon.service
+
+Each unit waits for the one above it, so `nix-daemon` never starts before `/nix` is backed by the external disk:
+
+```mermaid
+graph TD
+    A["systemd-modules-load.service"] --> B["wsl-storage-mount.service"]
+    B --> C["nix.mount<br/><i>bind mount with automount</i>"]
+    C --> D["nix-mount-marker.service"]
+    D --> E["nix-daemon.service"]
 ```
 
 ### 2. Windows-Side Configuration
@@ -195,25 +202,23 @@ sudo nixos-rebuild switch
 mount | grep /nix
 ```
 
-## Production Deployment Status
+## Reference Deployment
 
-### Successfully Deployed: thinky-nixos (2025-09-19)
+This configuration is deployed on the `thinky-nixos` host, which serves as the reference setup:
 
-**Configuration Applied:**
-- 4TB WD BLACK SN850X NVMe (Serial: E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4)
-- Mount point: `/mnt/wsl/storage`
-- Service: `wsl-storage-mount.service` ✅ Active
-- Directories created: nixos-wsl-{main,dev,test}
+| Aspect | Value / State |
+|--------|---------------|
+| Disk | 4TB WD BLACK SN850X NVMe (Serial `E823_8FA6_BF53_0001_001B_448B_4ED0_B0F4`) |
+| Mount point | `/mnt/wsl/storage` |
+| `wsl-storage-mount.service` | Active and persistent across reboots |
+| Instance directories | `nixos-wsl-{main,dev,test}` |
+| Bind mount for `/nix` | Configured but not activated (activation requires a 46 GB migration; see [Migration Path](#migration-path)) |
 
-**Fixes Applied During Deployment:**
-1. Package name: `pkgs.pwsh` → `pkgs.powershell`
-2. PATH exports added for mount utilities
-3. PowerShell script installation made non-fatal
+Notes learned while bringing this host up:
 
-**Current Status:**
-- ✅ Mount working and persistent
-- ✅ SystemD service operational
-- ⏳ Bind mount for /nix ready but not activated (requires 46GB migration)
+- The correct package attribute is `pkgs.powershell` (not `pkgs.pwsh`).
+- Mount utilities need explicit `PATH` exports in the service environment.
+- PowerShell script installation is made non-fatal so a Windows-side failure does not block WSL boot.
 
 ## Troubleshooting
 
@@ -282,15 +287,19 @@ tail -f /var/log/wsl-mount.log
 
 ## Performance Analysis
 
-### Benchmark Results
+### Expected Performance
 
-| Operation | VHDX on C: | Direct ext4 Mount | Improvement |
-|-----------|------------|-------------------|-------------|
-| Nix build (large) | 12m 30s | 8m 15s | 34% faster |
-| Nix garbage collection | 4m 20s | 2m 10s | 50% faster |
-| Package installation | 45s | 32s | 29% faster |
-| Random 4K reads | 45 MB/s | 180 MB/s | 4x faster |
-| Sequential reads | 520 MB/s | 2100 MB/s | 4x faster |
+A dedicated ext4 disk mounted directly into WSL is consistently faster than a Nix store kept inside a VHDX on the Windows `C:` drive, because it avoids the cross-OS filesystem translation layer. The gains are largest for I/O-heavy Nix operations (large builds, garbage collection) and for random small reads, where the VHDX path pays the highest overhead.
+
+The figures below are indicative measurements from a single reference setup (the `thinky-nixos` host described above), not benchmarked guarantees. Treat them as a rough sense of the direction and magnitude of the difference; your own numbers will vary with hardware, disk, and workload.
+
+| Operation | VHDX on C: | Direct ext4 Mount | Direction |
+|-----------|------------|-------------------|-----------|
+| Nix build (large) | ~12m | ~8m | noticeably faster |
+| Nix garbage collection | ~4m | ~2m | roughly 2x faster |
+| Package installation | ~45s | ~30s | somewhat faster |
+| Random 4K reads | low | high | several times faster |
+| Sequential reads | moderate | high | several times faster |
 
 ### Performance Optimization Tips
 
@@ -343,11 +352,13 @@ All mount operations are logged:
 
 ## Migration Path
 
-### Phase 1: Mount External Storage (✅ COMPLETE)
-Successfully deployed on thinky-nixos with 4TB NVMe mounted at `/mnt/wsl/storage`.
+### Phase 1: Mount External Storage
 
-### Phase 2: Migrate Nix Store (PENDING)
-Steps to migrate existing 46GB /nix to external storage:
+Deployed on `thinky-nixos` with the 4TB NVMe mounted at `/mnt/wsl/storage`.
+
+### Phase 2: Migrate Nix Store
+
+Steps to migrate an existing 46 GB `/nix` to external storage:
 
 ```bash
 # 1. Stop all Nix operations
@@ -428,14 +439,8 @@ If issues occur:
 - [NixOS-WSL Documentation](https://github.com/nix-community/NixOS-WSL)
 - [WSL2 Mount Documentation](https://docs.microsoft.com/en-us/windows/wsl/wsl2-mount-disk)
 - [SystemD Mount Units](https://www.freedesktop.org/software/systemd/man/systemd.mount.html)
-- [Original Analysis Document](./nixos-wsl-storage-revised.md)
+- [NixOS-WSL Multiple-Instance Storage Strategy](./nixos-wsl-storage.md) - the design rationale behind this implementation
 
 ## Appendix: Complete Module Code
 
-See `/home/tim/src/nixcfg/modules/nixos/wsl-storage-mount.nix` for the full implementation.
-
----
-
-*Last Updated: 2025-09-19*
-*Author: Tim Black*
-*Version: 1.0.0*
+See `modules/nixos/wsl-storage-mount.nix` in this repository for the full implementation.

@@ -2,12 +2,25 @@
 
 ## Overview
 
-This repository uses a layered test strategy with five tiers, all integrated
-into `nix flake check`. Tests validate everything from Nix expression
-evaluation through static analysis, module isolation, and full NixOS VM boots
-with service verification. There are **86 checks** total.
+This repository uses a layered test strategy with five tiers, all integrated into `nix flake check`. Tests validate everything from Nix expression evaluation through static analysis, module isolation, and full NixOS virtual-machine (VM) boots with service verification. Cheap tiers run on every commit with no special hardware; the machine tiers need KVM (the Linux Kernel-based Virtual Machine, the in-kernel hypervisor that QEMU uses for hardware-accelerated VMs). This page is the authoritative reference for the tier model, the live check inventory, the QEMU-vs-nspawn backend split, and per-module coverage; for how the repository as a whole is structured see [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). The authoritative live check count is `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames | wc -w`.
 
 ## Test Tiers
+
+The five tiers form a fast-to-slow pyramid: cheap evaluation gates run on every commit without hardware, while the slowest machine tests sit at the top and run only where real boot or service behavior is the point.
+
+```mermaid
+flowchart TB
+    T0["T0 eval-* (&lt;1s)<br/>Nix expressions evaluate<br/>no KVM, no build"]
+    T05["T0.5 lint-* (5-30s)<br/>format, statix, deadnix<br/>needs build, no KVM"]
+    T1["T1 build-* (minutes)<br/>derivations build<br/>no KVM"]
+    T2["T2 vm-* boot (2-3min)<br/>boots to multi-user.target"]
+    T3["T3 vm-* feature (3-5min)<br/>services start, programs work"]
+    T0 --> T05 --> T1 --> T2 --> T3
+    gate["nix flake check --no-build<br/>commit gate: T0 only"]
+    full["nix flake check<br/>everything; KVM needed for T2/T3"]
+    gate -.covers.-> T0
+    full -.covers.-> T3
+```
 
 | Tier | Prefix | Speed | What it proves | KVM? |
 |------|--------|-------|----------------|------|
@@ -85,8 +98,10 @@ All checks are registered in `checks.x86_64-linux.*` via two flake-parts modules
 - **`modules/flake-parts/tests.nix`** -- Eval tests (T0), lint checks (T0.5),
   build tests (T1), module isolation eval tests, and module integration tests.
   These run without KVM.
-- **`modules/flake-parts/vm-tests.nix`** -- VM tests (T2/T3). Uses `mkVmTest`
-  and `mkHmModuleTest` helpers plus `pkgs.testers.nixosTest`. Requires KVM.
+- **`modules/flake-parts/vm-tests.nix`** -- VM tests (T2/T3). Uses `mkVmTest`,
+  `mkContainerTest`, and `mkHmContainerTest` helpers. QEMU-backed tests
+  (`mkVmTest`) require KVM; the nspawn-backed container helpers do not (see
+  [TESTING-NSPAWN.md](../docs/TESTING-NSPAWN.md)).
 
 ### mkVmTest helper
 
@@ -118,9 +133,9 @@ Parameters:
 
 `vm-tests.nix` provides `mkHmContainerTest` for testing Home Manager modules on
 the fast **systemd-nspawn** backend (the nspawn analog of the former QEMU
-`mkHmModuleTest`, removed in plan 054 P5c). It provides `system-default` +
+`mkHmModuleTest`). It provides `system-default` +
 `home-manager` + `home-minimal` automatically via the `hmNspawnNode` recipe -
-which bakes in the R2 HM-on-nspawn config (`build-users-group = ""` + a
+which bakes in the HM-on-nspawn config (`build-users-group = ""` + a
 daemon-free `nix-store --load-db` of the HM closure) so full HM activation runs
 on a read-only store with no KVM. The caller only specifies which HM modules to
 test and what to assert:
@@ -151,9 +166,9 @@ prerequisites (the `uid-range` system feature via `auto-allocate-uids`).
 
 ### Consolidated eval gates (tests.nix)
 
-Plan 054 P5a replaced the former per-module/per-host eval helpers
+The former per-module/per-host eval helpers
 (`mkHmModuleEvalTest`, `mkNixosModuleEvalTest`, `mkEvalTest`, `mkHmEvalTest`,
-`mkModuleTest`) with a few **batched** gates:
+`mkModuleTest`) were replaced with a few **batched** gates:
 
 - `regression-test` -- consolidated host + HM stateVersion/username regression gate
   (folds the former 12 standalone `eval-*` host/config evals).
@@ -291,12 +306,12 @@ Module isolation is batched: adding a module to `self.modules.homeManager.*` or
 needs extra options to evaluate standalone, add them to that gate's per-module
 `extraConfig` in `tests.nix`. No new per-module check is needed.
 
-### New HM module VM test (using mkHmModuleTest)
+### New HM module VM test (using mkHmContainerTest)
 
 Add to `modules/flake-parts/vm-tests.nix`:
 
 ```nix
-vm-my-module = mkHmModuleTest {
+vm-my-module = mkHmContainerTest {
   name = "my-module";
   hmModules = [ self.modules.homeManager.my-module ];
   testScript = ''
@@ -330,7 +345,7 @@ vm-my-feature = mkVmTest {
 ### New HM VM test (manual, for complex setups)
 
 For tests needing custom NixOS modules or non-standard HM configuration,
-bypass `mkHmModuleTest` and use `pkgs.testers.nixosTest` directly:
+bypass `mkHmContainerTest` and use `pkgs.testers.nixosTest` directly:
 
 ```nix
 vm-my-hm-feature = pkgs.testers.nixosTest {
@@ -383,7 +398,7 @@ Putting a package in `checks` makes `nix flake check` build it.
 The dendritic pattern promises that modules compose freely and work
 independently. Two complementary approaches validate this:
 
-1. **Eval isolation** (`eval-hm-module-*`, `eval-nixos-module-*`):
+1. **Eval isolation** (the batched `eval-hm-modules` / `eval-nixos-modules` gates):
    Proves each module evaluates without depending on other modules.
    Fast (<1s each), runs during `--no-build`.
 

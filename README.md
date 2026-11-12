@@ -25,13 +25,13 @@ nixcfg/
 ├── flake.nix                    # Entry point (~50 lines, uses import-tree)
 ├── VERSION                      # Semver source of truth for releases
 ├── modules/
-│   ├── flake-parts/             # Flake infrastructure (16 modules)
+│   ├── flake-parts/             # Flake infrastructure (17 modules)
 │   ├── meta/                    # ReadOnly options (username, etc.)
 │   ├── lib/                     # Shared utility libraries
 │   ├── system/
 │   │   ├── types/               # 4-layer hierarchy (minimal → default → cli → desktop)
 │   │   └── settings/            # Platform settings (wsl, wsl-enterprise, wsl-dev-team, ...)
-│   ├── programs/                # 23 Home Manager feature modules
+│   ├── programs/                # 25 Home Manager feature modules
 │   └── hosts/                   # 11 host configurations
 ├── pkgs/                        # Custom packages
 ├── overlays/                    # Nixpkgs overlays
@@ -65,6 +65,7 @@ nixcfg/
 | `tim@thinky-ubuntu` | Ubuntu WSL (HM only) |
 | `tim@mbp` | NixOS bare metal |
 | `tim@potato` | NixOS ARM |
+| `tim@nuc-apt-repo` | NixOS (Intel NUC) |
 | `tim@macbook-air` | macOS (Darwin) |
 | `tim@nixvim-minimal` | Portable neovim |
 
@@ -129,6 +130,8 @@ set of checks is enumerated by CI rather than fixed in prose:
 
 Adding or retiering a check is a one-line edit in the classification manifest; a
 drift guard (`ci-matrix-sync`) fails the build if any check is left unclassified.
+See [CI-MODEL.md](docs/CI-MODEL.md) for how the classification drives CI and what a
+downstream flake reuses.
 
 Releases are triggered by updating the `VERSION` file on `main`. See
 [RELEASE.md](RELEASE.md) for the process.
@@ -138,6 +141,7 @@ Releases are triggered by updating the `VERSION` file on `main`. See
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Codebase structure, design patterns, module system |
+| [CI-MODEL.md](docs/CI-MODEL.md) | How the CI classification manifest drives the pipeline |
 | [DISTRIBUTION.md](docs/DISTRIBUTION.md) | How images are built, released, and consumed |
 | [WSL-TEAM-QUICKSTART.md](docs/WSL-TEAM-QUICKSTART.md) | End-user import guide (no Nix knowledge needed) |
 | [SHARED-MODULES.md](docs/SHARED-MODULES.md) | Exported module catalog with usage examples |
