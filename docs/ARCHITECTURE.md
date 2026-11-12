@@ -662,6 +662,40 @@ See [DISTRIBUTION.md](DISTRIBUTION.md) for the layer architecture, release
 lifecycle, and consumption options. See [../RELEASE.md](../RELEASE.md) for
 the VERSION file design rationale and release mechanics.
 
+### Image Artifact Topology
+
+Each distributable dev-team image is built from one dedicated NixOS host configuration into a platform-specific build output, which is then consumed on its target platform. The five artifacts, their source hosts, and their consumers:
+
+```mermaid
+flowchart LR
+    subgraph HOSTS["Host configs"]
+        h1["nixos-dev-team<br/>(Proxmox base)"]
+        h2["nixos-dev-team-ec2"]
+        h3["nixos-dev-team-<br/>graviton"]
+        h4["nixos-wsl-dev-team"]
+        h5["nixos-dev-team-vm"]
+    end
+    subgraph ARTIFACTS["Build outputs<br/>(nix build .#...)"]
+        a1["image-proxmox-<br/>dev-team<br/>Proxmox VMA<br/>[x86_64]"]
+        a2["image-ec2-<br/>dev-team<br/>EC2 AMI<br/>[x86_64]"]
+        a3["image-ec2-dev-<br/>team-graviton<br/>EC2 AMI<br/>[aarch64]"]
+        a4["image-wsl-<br/>dev-team<br/>.wsl tarball<br/>[x86_64]"]
+        a5["image-vm-<br/>dev-team<br/>qcow2<br/>[aarch64]"]
+    end
+    subgraph CONSUMERS["Consumers"]
+        c1["Proxmox VE<br/>import VMA"]
+        c2["AWS EC2<br/>register AMI"]
+        c3["AWS EC2 Graviton<br/>register AMI"]
+        c4["Windows<br/>wsl --import"]
+        c5["Apple-silicon Mac<br/>UTM / QEMU"]
+    end
+    h1 --> a1 --> c1
+    h2 --> a2 --> c2
+    h3 --> a3 --> c3
+    h4 --> a4 --> c4
+    h5 --> a5 --> c5
+```
+
 The CI pipeline (`ci.yml`) runs on every push to `main` and every PR:
 flake evaluation, linting, 26 module isolation evaluations, 14 configuration
 evaluations, 23 integration tests, and 3 full tarball builds.
