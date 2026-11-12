@@ -1,6 +1,30 @@
 # Service Integration Examples
 
-This guide provides real-world examples of integrating SOPS-NiX secrets and SSH key management with common services in NixOS.
+This guide is a cookbook: eight worked, real-world examples of wiring encrypted secrets into common NixOS services, from WiFi passwords to VPN keys. Every example uses SOPS-NiX (Secrets OPerationS for NixOS, an encrypted-secrets manager that stores ciphertext in git and decrypts it at activation). For how secrets fit into the wider configuration, see [ARCHITECTURE.md](./ARCHITECTURE.md); for day-to-day secret operations, see the [Administrator Handbook](./administrator-handbook.md).
+
+Every example below is a variation on one recurring pattern: an encrypted secret is decrypted by sops-nix into a runtime file, that file is referenced by a NixOS option or a oneshot systemd unit, and the consuming service reads it. Grasp this flow once and each section becomes a small specialization of it.
+
+```mermaid
+flowchart LR
+    yaml["Encrypted YAML<br/>secrets/common/*.yaml"] --> sops["sops-nix<br/>activation"]
+    sops --> runtime["Decrypted file<br/>/run/secrets.d/..."]
+    runtime --> consume["NixOS option<br/>or systemd oneshot"]
+    consume --> svc["Service<br/>(NetworkManager, nginx, restic, ...)"]
+    svc -. "restartUnits on change" .-> sops
+```
+
+The table below maps each example to the kind of secret it protects and how that secret reaches the service, so you can jump straight to the pattern closest to your need.
+
+| Example | Secret type | Delivery mechanism |
+|---------|-------------|--------------------|
+| [NetworkManager WiFi passwords](#networkmanager-wifi-passwords) | Pre-shared keys | `ensureProfiles` + secret path reference |
+| [PostgreSQL database credentials](#postgresql-database-credentials) | Connection components | systemd oneshot builds a connection string file |
+| [Nginx SSL certificates](#nginx-ssl-certificates) | Certificate + private key | `sslCertificate` / `sslCertificateKey` option paths |
+| [Docker registry authentication](#docker-registry-authentication) | Registry logins | systemd oneshot writes per-user `config.json` |
+| [API keys for services](#api-keys-for-services) | API tokens | systemd oneshot writes an environment file |
+| [Backup encryption keys](#backup-encryption-keys) | Repo password + S3 keys | `services.restic` `passwordFile` / `environmentFile` |
+| [VPN configurations](#vpn-configurations) | WireGuard keys | `privateKeyFile` / `presharedKeyFile` option paths |
+| [Mail server credentials](#mail-server-credentials) | SMTP passwords | `passwordeval` and `environment.etc` files |
 
 ## Table of Contents
 
@@ -109,7 +133,7 @@ in
 {
   imports = [ ../../modules/nixos/wifi-secrets.nix ];
 
-  sopsNix.defaultSopsFile = ../../secrets/common/wifi.yaml;
+  sops.defaultSopsFile = ../../secrets/common/wifi.yaml;
   
   services.wifiSecrets = {
     enable = true;
@@ -925,7 +949,7 @@ systemd.timers.rotate-secrets = {
 ```nix
 # Use different secrets for dev/staging/prod
 {
-  sopsNix.defaultSopsFile = 
+  sops.defaultSopsFile =
     if config.networking.hostName == "prod-server" then
       ../../secrets/production/secrets.yaml
     else if config.networking.hostName == "staging-server" then

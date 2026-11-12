@@ -1,6 +1,20 @@
 # Administrator Handbook
 
-Complete operational guide for managing SSH keys and secrets in production NixOS environments.
+Complete operational guide for managing SSH keys and secrets in production NixOS environments. If you are new here, the companion [Developer Guide](developer-guide.md) explains the module internals, [Production Deployment](production-deployment.md) covers hardening and high availability, and the [Troubleshooting Guide](troubleshooting-guide.md) is the place to go when something breaks. For the big picture of how this configuration is organized as a whole, see the repository-wide [Architecture](ARCHITECTURE.md) reference.
+
+The system rests on three building blocks that this handbook keeps returning to: SOPS (Secrets OPerationS, the editor/format that stores encrypted secrets in Git), age (a modern file-encryption tool whose keys do the actual encrypt/decrypt), and sops-nix (the NixOS module that decrypts SOPS files at activation time and drops the plaintext under `/run/secrets.d/`). An administrator edits an encrypted YAML file with `sops`, commits it to the configuration repository, and a `nixos-rebuild switch` makes the decrypted secret appear on the running host.
+
+```mermaid
+flowchart LR
+  admin["Administrator<br/>sops edit"] --> repo["Config repo<br/>secrets/*.yaml (encrypted)"]
+  repo --> rebuild["nixos-rebuild switch"]
+  subgraph host["Target host"]
+    agekey["age key<br/>(derived from SSH host key)"] --> decrypt["sops-nix<br/>decrypt at activation"]
+    decrypt --> runtime["/run/secrets.d/<br/>(plaintext, tmpfs)"]
+    runtime --> svc["Services<br/>(owner / mode enforced)"]
+  end
+  rebuild --> decrypt
+```
 
 ## Table of Contents
 
@@ -16,6 +30,16 @@ Complete operational guide for managing SSH keys and secrets in production NixOS
 10. [Operational Checklists](#operational-checklists)
 
 ## Day-1 Setup
+
+Day-1 brings a fresh host from an empty configuration to a running system that can decrypt its own secrets. The five steps below run in order: each one depends on the artifact the previous step produced.
+
+```mermaid
+flowchart TD
+  s1["1. Repository setup<br/>clone repo, write .sops.yaml"] --> s2["2. Generate keys<br/>age key + SSH host key"]
+  s2 --> s3["3. Create first secrets<br/>sops secrets/common/initial.yaml"]
+  s3 --> s4["4. Configure NixOS<br/>import sops-nix, point at secrets"]
+  s4 --> s5["5. Initial deployment<br/>nixos-rebuild switch + verify"]
+```
 
 ### Initial System Deployment
 
@@ -289,6 +313,16 @@ echo "Rotation complete"
 
 ### Annual Key Rotation
 
+Rotating the age key safely means never having a window where the secrets cannot be decrypted. The key idea is overlap: add the new key alongside the old one, re-encrypt every secret so both keys work, verify the new key decrypts, and only then retire the old key. Do not delete the old key before step 6 is confirmed, or you risk locking yourself out of your own secrets.
+
+```mermaid
+flowchart LR
+  gen["Generate new<br/>age key"] --> both["Add new key<br/>alongside old<br/>in .sops.yaml"]
+  both --> rekey["updatekeys<br/>(both keys decrypt)"]
+  rekey --> verify["Verify new key<br/>decrypts + deploy"]
+  verify --> retire["Remove old key,<br/>updatekeys again"]
+```
+
 ```bash
 # Annual comprehensive rotation
 
@@ -486,6 +520,25 @@ dd if=/dev/urandom of=/dev/sda bs=1M
 ```
 
 ## Incident Response
+
+The three runbooks below escalate in blast radius. Match the symptom to a scenario first, then follow that runbook; do not skip to the heaviest response unless the evidence warrants it.
+
+| Scenario | Trigger | Blast radius | Core action |
+|----------|---------|--------------|-------------|
+| Compromised key | An encryption or signing key is known or suspected to be in the wrong hands | All secrets protected by that key | Re-key everything, redeploy every host |
+| Secret leak | A single secret value is exposed (in a log, a commit, a screenshot) | One secret and the service that uses it | Rotate that one value, redeploy affected host |
+| System breach | A host itself is compromised (attacker has shell or root) | The whole host and anything it could reach | Isolate, preserve evidence, rebuild from clean source, rotate all credentials |
+
+```mermaid
+flowchart TD
+  start["Security event detected"] --> q1{"Is a whole host<br/>compromised?"}
+  q1 -->|Yes| breach["System Breach Protocol"]
+  q1 -->|No| q2{"Is a private key<br/>exposed?"}
+  q2 -->|Yes| key["Compromised Key Response"]
+  q2 -->|No| q3{"Is a single secret<br/>value exposed?"}
+  q3 -->|Yes| leak["Secret Leak Response"]
+  q3 -->|No| triage["Triage further<br/>before acting"]
+```
 
 ### Compromised Key Response
 
@@ -881,7 +934,7 @@ systemctl status sops-nix
 - [ ] Comprehensive security audit
 - [ ] Key rotation (90-day keys)
 - [ ] Review and update access policies
-- [ ] DR drill with full recovery
+- [ ] Disaster recovery (DR) drill with full recovery
 - [ ] Infrastructure review and planning
 - [ ] Team training on new features
 - [ ] Compliance reporting

@@ -1,16 +1,16 @@
 # Cross-Platform Support Strategy
 
-**Created**: 2025-12-15
-**Status**: Planning phase
-**Related**: ARCHITECTURE.md, CONSOLIDATION-PLAN.md
+Related reading: [ARCHITECTURE.md](ARCHITECTURE.md), [CONSOLIDATION-PLAN.md](CONSOLIDATION-PLAN.md), [SHARED-MODULES.md](SHARED-MODULES.md).
 
 ## Overview
 
-This document outlines the comprehensive cross-platform support strategy for nixcfg, ensuring it serves as a robust foundation for:
-1. Personal system configurations (Tim's machines)
+This document describes how nixcfg supports many platforms at once, so one configuration base can serve personal machines, shareable components for colleagues, several deployment modes, and continuous integration. For the repository-wide picture (module layout, host types, and the dendritic module pattern), start with [ARCHITECTURE.md](ARCHITECTURE.md); this document narrows that picture to the cross-platform question of which operating systems and CPU architectures are supported and how work is packaged for each.
+
+The strategy rests on four goals:
+1. Personal system configurations (the maintainer's machines)
 2. Shareable components for work colleagues
-3. Multiple deployment modes (native dev shells vs NixOS VMs)
-4. CI/CD integration across platforms
+3. Multiple deployment modes (native dev shells versus full NixOS virtual machines)
+4. Continuous integration across platforms
 
 ## Platform Support Matrix
 
@@ -40,7 +40,7 @@ This document outlines the comprehensive cross-platform support strategy for nix
   - `nixosModules.wsl-base` - For NixOS-WSL distro
   - `homeManagerModules.wsl-home-base` - For ANY WSL distro with home-manager
 - **Templates**: `wsl-nixos`, `wsl-home`
-- **Status**: ✅ Consolidated (Dec 2025-12-13)
+- **Status**: Consolidated
 
 #### macOS Darwin (M3-4 Apple Silicon)
 - **Strengths**: Native aarch64, good performance
@@ -54,6 +54,21 @@ This document outlines the comprehensive cross-platform support strategy for nix
 - **VM Fallback**: Critical for workaround when nix-darwin breaks
 
 ## Deployment Mode Decision Tree
+
+Two deployment modes exist: lightweight `nix develop` shells (tooling layered onto the host) and full NixOS virtual machines (VMs). The flowchart picks between them; the prose below lists the detailed fit of each.
+
+```mermaid
+flowchart TD
+    A["Need a reproducible environment"] --> B{"Need full OS isolation<br/>or OS-level config testing?"}
+    B -->|No| C{"Is this CI/CD<br/>or fast iteration?"}
+    B -->|Yes| D{"Is nix-darwin broken<br/>on this host?"}
+    C -->|Yes| E["Use nix develop shell"]
+    C -->|No| F{"Need GUI apps or<br/>reproducible OS builds?"}
+    F -->|No| E
+    F -->|Yes| G["Use NixOS VM"]
+    D -->|Yes| G
+    D -->|No| G
+```
 
 ### When to use `nix develop` shells
 
@@ -87,6 +102,19 @@ This document outlines the comprehensive cross-platform support strategy for nix
 - Resource-constrained environments
 
 ## Architecture Layers
+
+The configuration composes in four layers. Lower layers are generic and shareable; higher layers are private and import from the layers beneath them, so personal and colleague configurations never duplicate the shared base.
+
+```mermaid
+flowchart TD
+    L1["Layer 1: Platform-Agnostic Components<br/>(dev shells, generic VM bases, common modules)<br/>Shareable"]
+    L2["Layer 2: Platform-Specific Adapters<br/>(WSL, Darwin, bare-metal tweaks)<br/>Shareable"]
+    L3["Layer 3: Personal Configurations<br/>(Tim's machines, secrets, preferences)<br/>Private - nixcfg"]
+    L4["Layer 4: Colleague Configurations<br/>(their machines, secrets, preferences)<br/>Private - colleague repos"]
+    L1 --> L2
+    L2 --> L3
+    L2 --> L4
+```
 
 ### Layer 1: Platform-Agnostic Components (Shareable)
 **Location**: Future shared flake repository
@@ -184,7 +212,7 @@ This document outlines the comprehensive cross-platform support strategy for nix
 
 **Onboarding Pattern**:
 ```bash
-# Option 1: Bootstrap with pre-built image (RECOMMENDED for WSL)
+# Option 1: Bootstrap with pre-built image (recommended for WSL)
 wsl --import CompanyNixOS C:\WSL\CompanyNixOS company-nixos-wsl-2024.12.tar.gz
 wsl -d CompanyNixOS
 
@@ -201,17 +229,26 @@ nix flake init -t github:timblaktu/shared-config#darwin
 **Strategy**: Provide BOTH pre-built images for bootstrapping AND flake definitions for iteration
 
 **Rationale**: Two distinct use cases require different approaches:
-1. **Bootstrapping** (new colleague onboarding) → Pre-built images
-2. **Iteration** (ongoing development) → Live building from flake
+1. **Bootstrapping** (new colleague onboarding) -> Pre-built images
+2. **Iteration** (ongoing development) -> Live building from flake
+
+| Dimension | Use Case A: Bootstrapping | Use Case B: Iteration |
+|-----------|---------------------------|-----------------------|
+| **Artifact** | Pre-built image (tarball, qcow2, ISO, Docker) | Built live from flake definitions |
+| **When** | New machine, new colleague, no Nix yet | Nix already installed, ongoing dev |
+| **Freshness** | Can go stale (updated via `nixos-rebuild`) | Always current |
+| **Speed** | Fast download, no build | Slower first build (10-30 min), then cached |
+| **Prerequisite** | None (solves the chicken-and-egg problem) | Nix must already be installed |
+| **Distribution** | GitHub Releases or company artifact storage | None needed |
 
 ### Use Case A: Bootstrapping (Pre-built Images)
 
 **When**: New colleague joining team, fresh machine setup
 
-**Critical for WSL**: The `wsl --import` command REQUIRES a pre-built rootfs tarball - there's no way to bootstrap NixOS-WSL without an image.
+**Critical for WSL**: The `wsl --import` command requires a pre-built root filesystem tarball - there is no way to bootstrap NixOS-WSL without an image.
 
 **Image Formats to Provide**:
-- **WSL tarball** (`.tar.gz`) - HIGHEST PRIORITY for Windows colleague onboarding
+- **WSL tarball** (`.tar.gz`) - highest priority for Windows colleague onboarding
 - QEMU image (`.qcow2`) - For VM testing/development
 - ISO installer (`.iso`) - For bare-metal installation
 - VirtualBox image (`.vdi`) - If team uses VirtualBox
@@ -292,7 +329,7 @@ nix run github:nix-community/nixos-generators -- \
 
 **Goal**: Build the SAME configuration in MULTIPLE image formats from ONE definition
 
-**Implementation**: Use `nixos-generators` or custom builders integrated into flake
+**Implementation**: Use [`nixos-generators`](https://github.com/nix-community/nixos-generators) or custom builders integrated into flake
 
 **Flake Structure**:
 ```nix
@@ -473,7 +510,7 @@ jobs:
 
 ## Extraction Planning
 
-### Phase 1: Identify Shareable Components (NEXT)
+### Phase 1: Identify Shareable Components
 
 **Candidates for extraction**:
 - ✅ `flake-modules/dev-shells.nix` - Generic dev shells
@@ -490,7 +527,7 @@ jobs:
 - ❌ Personal scripts with hardcoded paths
 - ❌ Tim-specific preferences
 
-### Phase 2: Design Shared Flake Structure (TODO)
+### Phase 2: Design Shared Flake Structure
 
 ```
 shared-config/
@@ -524,7 +561,7 @@ shared-config/
     └── USAGE.md
 ```
 
-### Phase 3: Migration Strategy (TODO)
+### Phase 3: Migration Strategy
 
 1. **Create shared-config repo** (empty, public)
 2. **Extract one component at a time** (start with dev-shells)
@@ -533,39 +570,21 @@ shared-config/
 5. **Iterate until all shareable components extracted**
 6. **Document usage for colleagues**
 
-## Next Steps
+## Roadmap
 
-### Immediate (Phase 2: Documentation)
-1. ✅ Create this document (CROSS-PLATFORM-STRATEGY.md)
-2. 🔜 Update ARCHITECTURE.md with platform matrix section
-3. 🔜 Fix naming inconsistencies in existing docs (`wsl-base` → `wsl-home-base`)
-4. 🔜 Fix darwin template architecture hardcoding bug
-5. 🔜 Merge `refactor/consolidate-wsl-config` to main
+The work divides into four stages, each building on the one before it.
 
-### Short-term (Phase 3: VM Configurations)
-1. Design generic NixOS VM configurations (headless variants first)
-2. Test VM building on Linux (x86_64)
-3. Test VM building on WSL2
-4. Document VM usage patterns
-5. Add VM configurations to flake outputs
-
-### Medium-term (Phase 4: Extraction Planning)
-1. Audit modules for personal vs shareable separation
-2. Design shared flake structure
-3. Plan migration path (keep nixcfg working)
-4. Set up shared-config repository
-
-### Long-term (Phase 5: Colleague Onboarding)
-1. Extract shareable components to shared-config
-2. Update templates to reference shared-config
-3. Write colleague onboarding documentation
-4. Real-world testing with colleagues
-5. Iteration based on feedback
+| Stage | Focus | Representative work |
+|-------|-------|---------------------|
+| Documentation | Describe the strategy and correct existing docs | Platform matrix in [ARCHITECTURE.md](ARCHITECTURE.md); consistent module names; correct the Darwin template architecture handling |
+| VM configurations | Add generic NixOS virtual machines | Headless variants first; build and test on Linux and WSL2; expose as flake outputs; document usage |
+| Extraction planning | Separate shareable from personal | Audit modules for personal versus shareable content; design the shared flake structure; plan a migration path that keeps nixcfg working |
+| Colleague onboarding | Hand the shared base to others | Extract shareable components; point templates at the shared flake; write onboarding documentation; test and iterate with colleagues |
 
 ## Related Documents
 
-- `ARCHITECTURE.md` - Overall architecture analysis
-- `CONSOLIDATION-PLAN.md` - WSL consolidation (completed)
-- `CONSOLIDATION-VALIDATION-REPORT.md` - WSL consolidation review
-- `SHARED-MODULES.md` - Shared module patterns
-- `TESTING.md` - Testing strategies
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Overall architecture analysis
+- [CONSOLIDATION-PLAN.md](CONSOLIDATION-PLAN.md) - WSL consolidation
+- [CONSOLIDATION-VALIDATION-REPORT.md](CONSOLIDATION-VALIDATION-REPORT.md) - WSL consolidation review
+- [SHARED-MODULES.md](SHARED-MODULES.md) - Shared module patterns
+- [TESTING.md](TESTING.md) - Testing strategies

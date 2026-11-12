@@ -1,18 +1,24 @@
 # Developer Documentation
 
+This guide presents the design, module API surface, testing approach, and debugging workflow for a declarative SSH-key and secrets management system built on Nix. The option names, module paths, and provider interfaces shown throughout are illustrative reference shapes used to communicate the intended design; they are not a line-by-line mirror of any one module in this repository. For the concrete, in-tree implementation see the [secrets-management module](../modules/programs/secrets-management/secrets-management.nix) (option namespace `secretsManagement`) and the operational [secrets management reference](../secrets/SECRETS-MANAGEMENT.md). Companion documents: the [Administrator Handbook](administrator-handbook.md) for operations and the [Troubleshooting Guide](troubleshooting-guide.md) for diagnosis.
+
+Acronyms used below: SOPS (Secrets OPerationS, the SOPS-NiX encrypted-secrets integration), age (a modern file-encryption tool and key format), CI (Continuous Integration), PR (Pull Request).
+
 ## Architecture Overview
 
 ### System Design Philosophy
 
-The NixOS SSH key and secrets management system follows these core principles:
+This repository rests on a few principles that hold across every module and host, not only the subsystem detailed in this guide:
 
-1. **Declarative Configuration**: All secrets and keys defined in Nix expressions
-2. **Security by Default**: Encrypted at rest, minimal permissions, audit trails
-3. **Composability**: Modular design allowing mix-and-match components
-4. **Reproducibility**: Deterministic builds and deployments
-5. **Extensibility**: Clear extension points for custom functionality
+1. **Declarative configuration**: hosts, modules, and secrets are expressed in Nix, never imperative setup scripts.
+2. **Composability**: a dendritic module layout lets features be mixed and matched per host.
+3. **Reproducibility**: deterministic builds and deployments from pinned inputs.
+4. **Extensibility**: clear extension points for adding modules, hosts, and providers.
+5. **Security by default**: where a module handles secrets, they are encrypted at rest with least-privilege access.
 
-### Component Architecture
+For the repository-wide architecture (the dendritic module pattern, the flake-parts structure, and host and bundle composition) see the [Architecture reference](ARCHITECTURE.md). The rest of this guide applies these principles to one concrete subsystem, declarative SSH-key and secrets management, as a worked example of a module's API surface, testing approach, and debugging workflow.
+
+### Secrets-management components
 
 ```mermaid
 graph TB
@@ -55,7 +61,7 @@ graph TB
     BOOT --> VLT
 ```
 
-### Data Flow
+### Secret decryption flow
 
 ```mermaid
 sequenceDiagram
@@ -79,6 +85,8 @@ sequenceDiagram
 ## Module API Reference
 
 ### Core Modules
+
+The three modules below are the Module Layer from the [components diagram](#secrets-management-components): the SSH-key registry, the SOPS-NiX integration, and the Bitwarden sync. Each entry lists its purpose and its option surface.
 
 #### 1. SSH Public Keys Registry (`ssh-keys-registry.nix`)
 
@@ -300,6 +308,14 @@ secretModule = {
 ```
 
 ### Extension Points
+
+The subsystem is extended at three seams, each a different way to feed secrets or keys into the activation pipeline. Pick the one that matches where your new source sits.
+
+| Extension point | What it adds | Reach for it when |
+| --- | --- | --- |
+| Custom secret backend | A new secret provider that fetches from an external store | Secrets live in a vault the built-in backends do not cover |
+| Custom key provider | A new source of decryption keys (for example, hardware tokens) | Age keys come from somewhere other than a file on disk |
+| Custom activation hooks | Pre- and post-activation validation scripts | You need to check or transform secrets around activation |
 
 #### 1. Custom Secret Backends
 
@@ -747,6 +763,18 @@ in
 
 ### Pull Request Process
 
+A change moves from a personal fork to the main branch through four stages:
+
+```mermaid
+flowchart LR
+    A["1. Fork and branch"] --> B["2. Develop and test locally"]
+    B --> C["3. Commit (conventional commits)"]
+    C --> D["4. Open pull request"]
+    D --> E{"Review and CI"}
+    E -->|"changes requested"| B
+    E -->|"approved"| F["Merge to main"]
+```
+
 #### 1. Fork and Branch
 
 ```bash
@@ -776,25 +804,18 @@ nix build .#checks.x86_64-linux.integration
 
 #### 3. Commit Guidelines
 
-Follow conventional commits:
+Follow conventional commits, formatted as `<type>(<scope>): <subject>`:
+
+| Type | Use for | Example |
+| --- | --- | --- |
+| `feat` | A new feature | `feat(ssh-keys): add YubiKey support` |
+| `fix` | A bug fix | `fix(sops): correct permission handling` |
+| `docs` | Documentation only | `docs(api): update module reference` |
+| `perf` | A performance improvement | `perf(secrets): optimize decryption caching` |
+| `test` | Adding or correcting tests | `test(bitwarden): add multi-host scenarios` |
 
 ```bash
-# Format: <type>(<scope>): <subject>
-
-# Feature
 git commit -m "feat(ssh-keys): add YubiKey support"
-
-# Bug fix
-git commit -m "fix(sops): correct permission handling"
-
-# Documentation
-git commit -m "docs(api): update module reference"
-
-# Performance
-git commit -m "perf(secrets): optimize decryption caching"
-
-# Tests
-git commit -m "test(bitwarden): add multi-host scenarios"
 ```
 
 #### 4. Submit PR
@@ -1014,33 +1035,39 @@ perf report
 }
 ```
 
-## Architecture Deep Dive
+## Secrets Subsystem Design Notes
+
+The sections below go one level deeper into the declarative SSH-key and secrets subsystem used as this guide's worked example: its trust boundaries, its decryption cost profile, and how it behaves as the number of secrets and hosts grows. For the repository-wide architecture see the [Architecture reference](ARCHITECTURE.md).
 
 ### Security Model
 
-The system implements defense-in-depth with multiple security layers:
+The subsystem implements defense-in-depth: an attacker must defeat several independent layers rather than one. Each layer below is enforced separately, so a weakness in one does not collapse the others.
 
-1. **Encryption at Rest**: All secrets encrypted with age
-2. **Access Control**: Fine-grained Unix permissions
-3. **Process Isolation**: Systemd sandboxing
-4. **Audit Trail**: Comprehensive logging
-5. **Key Separation**: Different keys for different trust levels
+| Layer | Mechanism | What it protects against |
+| --- | --- | --- |
+| Encryption at Rest | All secrets encrypted with age | Disclosure of secret files on disk or in the Nix store |
+| Access Control | Fine-grained Unix ownership and permissions | A local process reading a secret it was not granted |
+| Process Isolation | Systemd sandboxing | A compromised service reaching beyond its own secrets |
+| Audit Trail | Comprehensive logging | Undetected access, enabling after-the-fact forensics |
+| Key Separation | Different keys for different trust levels | One leaked key exposing every secret |
 
 ### Performance Considerations
 
-1. **Lazy Loading**: Secrets only decrypted when needed
-2. **Caching**: Decrypted secrets cached in tmpfs
-3. **Parallel Processing**: Multiple secrets decrypted concurrently
-4. **Resource Limits**: Memory and CPU constraints
+| Technique | Effect |
+| --- | --- |
+| Lazy Loading | Secrets only decrypted when needed |
+| Caching | Decrypted secrets cached in tmpfs |
+| Parallel Processing | Multiple secrets decrypted concurrently |
+| Resource Limits | Memory and CPU constraints bound worst-case cost |
 
 ### Scalability Design
 
-The system scales through:
-
-1. **Horizontal scaling**: Multiple hosts share vault
-2. **Vertical scaling**: Handles thousands of secrets per host
-3. **Sharding**: Secrets distributed across multiple files
-4. **Caching**: Reduces repeated decryption overhead
+| Dimension | How the system scales |
+| --- | --- |
+| Horizontal scaling | Multiple hosts share one vault |
+| Vertical scaling | Handles thousands of secrets per host |
+| Sharding | Secrets distributed across multiple files |
+| Caching | Reduces repeated decryption overhead |
 
 ## FAQ
 
@@ -1061,12 +1088,6 @@ A: Use `systemd.timers` to periodically run rotation scripts that update SOPS fi
 
 ## Summary
 
-This developer documentation provides comprehensive technical guidance for:
+This guide walked through one subsystem end to end: its module API surface (the SSH-key registry, SOPS-NiX integration, and Bitwarden sync), its three extension points (custom secret backends, key providers, and activation hooks), the unit, integration, and performance tests that cover it, the contribution workflow, and the debugging commands that surface most failures. The same module structure, testing approach, and contribution process apply to any other feature in this repository.
 
-- Understanding the system architecture
-- Using and extending the module APIs
-- Testing changes thoroughly
-- Contributing improvements
-- Debugging issues effectively
-
-The modular design and clear extension points enable developers to adapt the system to their specific needs while maintaining security and reliability.
+Next steps: the [Administrator Handbook](administrator-handbook.md) covers day-to-day operation, the [Troubleshooting Guide](troubleshooting-guide.md) covers diagnosis, the [Architecture reference](ARCHITECTURE.md) covers the repository-wide module pattern, and the [secrets-management module](../modules/programs/secrets-management/secrets-management.nix) is the concrete in-tree implementation.

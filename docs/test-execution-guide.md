@@ -1,5 +1,12 @@
 # Test Execution Guide
 
+> **Read this first.** The specific check and app names in this guide (for example `sops-simple-test`, `ssh-integration-test`, and the `test-all` / `test-integration` / `regression-test` / `snapshot` apps) predate a suite reorganization and **no longer exist**. The generic Nix workflow, debugging techniques, and troubleshooting patterns below are still accurate and useful, but for the **current, authoritative** test list, tiers, and backends use these instead:
+>
+> - **[`TESTS.md`](../tests/README.md)** - the current tier model, check inventory, backend split, and module coverage matrix.
+> - **[`TESTING.md`](TESTING.md)** - general suite overview and QEMU/KVM integration-test setup.
+> - **[`TESTING-NSPAWN.md`](TESTING-NSPAWN.md)** - the fast systemd-nspawn container backend.
+> - The live check set is always `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`.
+
 ## Quick Start
 
 ### Run All Tests

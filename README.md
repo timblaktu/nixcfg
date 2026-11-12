@@ -11,6 +11,7 @@ that can be composed into any Nix configuration via flake input.
 
 | Audience | Start Here |
 |----------|------------|
+| **Nix newcomer** learning how this repo is organized and built | [LEARNING-NIX-HERE.md](docs/LEARNING-NIX-HERE.md) |
 | **Team member** wanting a ready-to-use WSL dev environment | [WSL-TEAM-QUICKSTART.md](docs/WSL-TEAM-QUICKSTART.md) |
 | **IT / Security** reviewing what ships in the image | [DISTRIBUTION.md](docs/DISTRIBUTION.md), [CrowdStrike WSL2 Security Brief](docs/CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) |
 | **Nix user** wanting to consume modules in their own flake | [SHARED-MODULES.md](docs/SHARED-MODULES.md) |
@@ -24,13 +25,13 @@ nixcfg/
 ├── flake.nix                    # Entry point (~50 lines, uses import-tree)
 ├── VERSION                      # Semver source of truth for releases
 ├── modules/
-│   ├── flake-parts/             # Flake infrastructure (16 modules)
+│   ├── flake-parts/             # Flake infrastructure (17 modules)
 │   ├── meta/                    # ReadOnly options (username, etc.)
 │   ├── lib/                     # Shared utility libraries
 │   ├── system/
 │   │   ├── types/               # 4-layer hierarchy (minimal → default → cli → desktop)
 │   │   └── settings/            # Platform settings (wsl, wsl-enterprise, wsl-dev-team, ...)
-│   ├── programs/                # 23 Home Manager feature modules
+│   ├── programs/                # 25 Home Manager feature modules
 │   └── hosts/                   # 11 host configurations
 ├── pkgs/                        # Custom packages
 ├── overlays/                    # Nixpkgs overlays
@@ -64,6 +65,7 @@ nixcfg/
 | `tim@thinky-ubuntu` | Ubuntu WSL (HM only) |
 | `tim@mbp` | NixOS bare metal |
 | `tim@potato` | NixOS ARM |
+| `tim@nuc-apt-repo` | NixOS (Intel NUC) |
 | `tim@macbook-air` | macOS (Darwin) |
 | `tim@nixvim-minimal` | Portable neovim |
 
@@ -110,15 +112,26 @@ contents.
 
 ## CI/CD
 
-Every push to `main` and every PR runs the full validation pipeline:
+Every push to `main` and every PR runs the full validation pipeline. The job
+matrices are generated from the flake's CI classification manifest
+(`modules/flake-parts/ci-classification.nix`), not hand-maintained, so the exact
+set of checks is enumerated by CI rather than fixed in prose:
 
 - Flake evaluation and metadata checks
 - Linting (nixpkgs-fmt, statix, deadnix, PS1 encoding, version format)
-- 20 Home Manager module isolation evaluations
-- 6 NixOS module isolation evaluations
-- 14 full configuration evaluations
-- 23 integration tests (tarball dry-runs, image outputs, service checks)
-- 3 full tarball builds (retained as artifacts for 5 days)
+- Module isolation evaluations: one batched gate proves every Home Manager module
+  evaluates standalone, another proves every NixOS layer module does
+- Configuration evaluation: a batched regression gate forces every NixOS and Home
+  Manager configuration to evaluate
+- Integration and image checks (tarball dry-runs, image-output wiring, service and
+  skill-injection tests)
+- Behavioral VM tests on the systemd-nspawn and QEMU backends
+- Full tarball builds (nightly and on dispatch), retained as artifacts for 5 days
+
+Adding or retiering a check is a one-line edit in the classification manifest; a
+drift guard (`ci-matrix-sync`) fails the build if any check is left unclassified.
+See [CI-MODEL.md](docs/CI-MODEL.md) for how the classification drives CI and what a
+downstream flake reuses.
 
 Releases are triggered by updating the `VERSION` file on `main`. See
 [RELEASE.md](RELEASE.md) for the process.
@@ -128,6 +141,7 @@ Releases are triggered by updating the `VERSION` file on `main`. See
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Codebase structure, design patterns, module system |
+| [CI-MODEL.md](docs/CI-MODEL.md) | How the CI classification manifest drives the pipeline |
 | [DISTRIBUTION.md](docs/DISTRIBUTION.md) | How images are built, released, and consumed |
 | [WSL-TEAM-QUICKSTART.md](docs/WSL-TEAM-QUICKSTART.md) | End-user import guide (no Nix knowledge needed) |
 | [SHARED-MODULES.md](docs/SHARED-MODULES.md) | Exported module catalog with usage examples |

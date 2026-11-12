@@ -1,8 +1,6 @@
 # NixOS Configuration Architecture
 
-**Date**: 2026-03-19
-**Pattern**: Dendritic (flake-parts + import-tree)
-**Migration**: Completed from host-centric to feature-centric organization
+**Pattern**: Dendritic (flake-parts + import-tree), feature-centric organization
 
 ## Executive Summary
 
@@ -11,8 +9,8 @@ This is a **feature-centric Nix configuration** using the dendritic pattern:
 - **~26,000 lines of Nix code** across 98 files
 - **Dendritic architecture** with import-tree auto-discovery
 - **10 NixOS hosts** (3 WSL incl. 1 vanilla/minimal, 4 dev-team image variants: Proxmox/EC2/Graviton/Mac-VM, 1 ARM SBC, 1 Intel laptop, 1 Intel NUC apt repo) + **2 Darwin hosts** (Apple Silicon)
-- **6 home-manager configurations** (standalone approach)
-- **23 feature modules** in `modules/programs/`
+- **7 home-manager configurations** (standalone approach)
+- **25 feature modules** in `modules/programs/`
 - **57 exported modules** (16 NixOS + 32 HM + 9 Darwin)
 - **4-layer system type hierarchy** for composition
 - **Pre-built WSL tarballs** via CI/CD for team distribution
@@ -34,7 +32,7 @@ nixcfg/
 ├── flake.nix                    # ~50 lines, uses import-tree
 ├── VERSION                      # Semver source of truth for releases
 ├── modules/
-│   ├── flake-parts/             # Infrastructure (16 modules)
+│   ├── flake-parts/             # Infrastructure (17 modules)
 │   │   ├── lib.nix              # mkNixos, mkDarwin, mkHomeManager helpers
 │   │   ├── modules.nix          # Enable flake.modules.* infrastructure
 │   │   ├── systems.nix          # Supported architectures
@@ -45,6 +43,7 @@ nixcfg/
 │   │   ├── tests.nix            # Integration and eval tests
 │   │   ├── vm-tests.nix         # NixOS VM tests
 │   │   ├── version.nix          # VERSION file reader + lint check
+│   │   ├── ci-classification.nix # CI classification map + drift guard
 │   │   ├── nixos-configurations.nix
 │   │   ├── darwin-configurations.nix
 │   │   ├── home-configurations.nix
@@ -75,7 +74,7 @@ nixcfg/
 │   │       ├── proxmox/         # Proxmox VE image settings
 │   │       └── amazon/          # Amazon EC2 AMI settings
 │   │
-│   ├── programs/                # Home Manager feature modules (23)
+│   ├── programs/                # Home Manager feature modules (25)
 │   │   ├── shell/               # zsh, fish, starship
 │   │   ├── git/                 # git, gh, delta
 │   │   ├── tmux/                # tmux + plugins
@@ -130,11 +129,11 @@ nixcfg/
 | Lines of Nix code | ~26,000 |
 | NixOS hosts | 10 active |
 | Darwin hosts | 2 |
-| Home Manager configs | 6 |
-| Feature modules (programs/) | 23 |
+| Home Manager configs | 7 |
+| Feature modules (programs/) | 25 |
 | Exported modules total | 57 (16 NixOS + 32 HM + 9 Darwin) |
 | System type layers | 4 |
-| Flake-parts modules | 16 |
+| Flake-parts modules | 17 |
 
 ---
 
@@ -225,8 +224,8 @@ Directory names indicate platform support:
 | `[D]` | Darwin only | `macbook-air [D]/` |
 | No brackets | Universal | `git/`, `shell/` |
 
-> **Note**: `[nd]` and `[NDnd]` directory suffixes were removed in Plan 026 Task 4.
-> Platform scope is now documented in module header comments only.
+> **Note**: Combined `[nd]` and `[NDnd]` directory suffixes are no longer used.
+> Platform scope for universal modules is documented in module header comments only.
 
 ### 4. import-tree Auto-Discovery
 
@@ -360,14 +359,15 @@ darwinModules = {
 ```nix
 {
   nixosConfigurations = {
-    thinky-nixos, mbp, potato,
+    thinky-nixos, mbp, potato, nuc-apt-repo,
     nixos-wsl-minimal, nixos-wsl-dev-team,
-    nixos-dev-team, nixos-dev-team-ec2, nixos-dev-team-graviton,
+    nixos-dev-team, nixos-dev-team-ec2,
+    nixos-dev-team-graviton, nixos-dev-team-vm,
   };
-  darwinConfigurations = { macbook-air };
+  darwinConfigurations = { macbook-air, powerbook };
   homeConfigurations = {
-    "tim@thinky-nixos", "tim@thinky-ubuntu",
-    "tim@mbp", "tim@potato", "tim@macbook-air", "tim@nixvim-minimal",
+    "tim@thinky-nixos", "tim@thinky-ubuntu", "tim@mbp", "tim@potato",
+    "tim@nuc-apt-repo", "tim@macbook-air", "tim@nixvim-minimal",
   };
 
   nixosModules = { ... };           # 16 shared NixOS modules
@@ -519,6 +519,8 @@ thinky-ubuntu (HM only, no NixOS)
 |-------|----------|----------|
 | home-minimal | HM basics, genericLinux target | Minimal user environment |
 | home-default | + fonts, parallel, base packages | Standard user environment |
+| home-cli | + git, tmux, neovim, CLI tooling | Development user environment |
+| home-desktop | + GUI application packages | Workstation user environment |
 
 ---
 
@@ -642,16 +644,9 @@ flake.nixosConfigurations.my-host = mkNixos "x86_64-linux" "my-host";
 
 ---
 
-## Migration History
+## Lineage
 
-- **2025-12**: Initial flake-parts migration from monolithic flake.nix
-- **2026-02-07**: Started Plan 019 dendritic migration
-- **2026-02-08**: Completed migration to feature-centric organization
-  - Removed `hosts/`, `flake-modules/`, `home/modules/`, `home/common/`
-  - All content moved to `modules/` hierarchy
-  - 22 feature modules in `modules/programs/`
-  - 4 system type layers in `modules/system/types/`
-  - 7 host configurations in `modules/hosts/`
+The repository began as a single monolithic `flake.nix` and was migrated to the dendritic, feature-centric layout described here. The migration moved every output out of the monolith into the `modules/` hierarchy: feature modules under `modules/programs/`, the system type layers under `modules/system/types/`, and one directory per host under `modules/hosts/`. The older top-level `hosts/`, `flake-modules/`, `home/modules/`, and `home/common/` directories no longer exist.
 
 ---
 
@@ -662,9 +657,46 @@ See [DISTRIBUTION.md](DISTRIBUTION.md) for the layer architecture, release
 lifecycle, and consumption options. See [../RELEASE.md](../RELEASE.md) for
 the VERSION file design rationale and release mechanics.
 
-The CI pipeline (`ci.yml`) runs on every push to `main` and every PR:
-flake evaluation, linting, 26 module isolation evaluations, 14 configuration
-evaluations, 23 integration tests, and 3 full tarball builds.
+### Image Artifact Topology
+
+Each distributable dev-team image is built from one dedicated NixOS host configuration into a platform-specific build output, which is then consumed on its target platform. The five artifacts, their source hosts, and their consumers:
+
+```mermaid
+flowchart LR
+    subgraph HOSTS["Host configs"]
+        h1["nixos-dev-team<br/>(Proxmox base)"]
+        h2["nixos-dev-team-ec2"]
+        h3["nixos-dev-team-<br/>graviton"]
+        h4["nixos-wsl-dev-team"]
+        h5["nixos-dev-team-vm"]
+    end
+    subgraph ARTIFACTS["Build outputs (nix build .#...)"]
+        a1["image-proxmox-<br/>dev-team<br/>Proxmox VMA<br/>[x86_64]"]
+        a2["image-ec2-<br/>dev-team<br/>EC2 AMI<br/>[x86_64]"]
+        a3["image-ec2-dev-<br/>team-graviton<br/>EC2 AMI<br/>[aarch64]"]
+        a4["image-wsl-<br/>dev-team<br/>.wsl tarball<br/>[x86_64]"]
+        a5["image-vm-<br/>dev-team<br/>qcow2<br/>[aarch64]"]
+    end
+    subgraph CONSUMERS["Consumers"]
+        c1["Proxmox VE<br/>import VMA"]
+        c2["AWS EC2<br/>register AMI"]
+        c3["AWS EC2 Graviton<br/>register AMI"]
+        c4["Windows<br/>wsl --import"]
+        c5["Apple-silicon Mac<br/>UTM / QEMU"]
+    end
+    h1 --> a1 --> c1
+    h2 --> a2 --> c2
+    h3 --> a3 --> c3
+    h4 --> a4 --> c4
+    h5 --> a5 --> c5
+```
+
+The CI pipeline (`ci.yml`) runs on every push to `main` and every PR. Its
+stages are generated from the classification manifest (`modules/flake-parts/ci-classification.nix`),
+so the exact set is enumerated by CI rather than fixed here: flake evaluation,
+linting, batched module-isolation and configuration-regression evaluations,
+integration and image-output checks, and nightly tarball builds. See
+[CI-MODEL.md](CI-MODEL.md) for how the classification is structured and consumed.
 
 The release pipeline (`release.yml`) triggers when the `VERSION` file changes
 on `main`, building and publishing the `nixos-wsl-dev-team` tarball as a
@@ -674,17 +706,11 @@ GitHub Release asset alongside `Import-NixOSWSL.ps1`.
 
 - **Dendritic Pattern**: [vic/import-tree](https://github.com/vic/import-tree)
 - **flake-parts**: [hercules-ci/flake-parts](https://github.com/hercules-ci/flake-parts)
+- **Flake-parts Quick Reference**: [FLAKE-PARTS-QUICK-REFERENCE.md](FLAKE-PARTS-QUICK-REFERENCE.md) - mapping classic monolithic `flake.nix` tasks onto this layout
 - **NixOS-WSL**: [nix-community/NixOS-WSL](https://github.com/nix-community/NixOS-WSL)
-- **Distribution**: [DISTRIBUTION.md](DISTRIBUTION.md) — layer architecture, release, consumption
-- **Module Catalog**: [SHARED-MODULES.md](SHARED-MODULES.md) — 57 exported modules with usage examples
-- **Team Quickstart**: [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md) — end-user import guide
-- **Release Process**: [../RELEASE.md](../RELEASE.md) — versioning and pipeline details
-- **CrowdStrike**: [CROWDSTRIKE-WSL2-SECURITY-BRIEF.md](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) — IT security analysis
-
----
-
-**Document Version**: 3.0
-**Last Updated**: 2026-03-19
-**Changes in 3.0**: Updated for distributable images (Plan 023), CI/CD pipeline,
-enterprise/dev-team layers, new hosts, expanded module catalog (57 modules),
-CrowdStrike integration, and cross-references to distribution documentation.
+- **CI Model**: [CI-MODEL.md](CI-MODEL.md) - the CI classification manifest and the reusable matrix/drift-guard library
+- **Distribution**: [DISTRIBUTION.md](DISTRIBUTION.md) - layer architecture, release, consumption
+- **Module Catalog**: [SHARED-MODULES.md](SHARED-MODULES.md) - 57 exported modules with usage examples
+- **Team Quickstart**: [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md) - end-user import guide
+- **Release Process**: [../RELEASE.md](../RELEASE.md) - versioning and pipeline details
+- **CrowdStrike**: [CROWDSTRIKE-WSL2-SECURITY-BRIEF.md](CROWDSTRIKE-WSL2-SECURITY-BRIEF.md) - IT security analysis

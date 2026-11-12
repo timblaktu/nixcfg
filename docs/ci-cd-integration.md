@@ -2,7 +2,21 @@
 
 ## Overview
 
-This guide provides templates and strategies for integrating the NixOS test suite into continuous integration and deployment pipelines. Due to the VM-based nature of integration tests requiring KVM, we recommend a hybrid approach with unit tests in CI and integration tests run locally.
+This guide provides copy-paste templates for running the NixOS test suite in continuous integration and continuous delivery (CI/CD) pipelines across the major platforms: GitHub Actions, GitLab CI, Jenkins, and local git hooks. It is a practical companion to two repo-wide references: [ARCHITECTURE.md](./ARCHITECTURE.md) for how the configuration is built, and [CI-MODEL.md](./CI-MODEL.md) for how this repository derives its check matrix from a single flake-output classification (the source of truth every pipeline here builds against).
+
+The one structural choice that shapes every template below is a split by hardware: fast unit and evaluation tests run anywhere, including hosted cloud CI, while the heavier VM integration tests boot real virtual machines (VMs) and therefore need KVM (Kernel-based Virtual Machine, the Linux hardware-virtualization layer). The recommended arrangement is hybrid - cheap tests on hosted CI, VM tests on a KVM-capable self-hosted runner or locally.
+
+```mermaid
+flowchart LR
+    dev["Developer push<br/>or pull request"] --> cloud["Hosted cloud CI<br/>(GitHub Actions, GitLab, CircleCI)"]
+    dev --> local["Local / self-hosted<br/>(KVM available)"]
+    cloud --> unit["Unit + eval tests<br/>flake check, nix build checks"]
+    local --> integ["VM integration tests<br/>nix run apps.test-integration"]
+    unit --> gate["Merge / deploy gate"]
+    integ --> gate
+```
+
+The guiding principle: everything is reproducible everywhere, so CI is only orchestration. A test that passes locally passes in CI and vice versa; the only split is which hardware (KVM or not) a given tier of tests needs.
 
 ## CI Platform Support
 
@@ -175,6 +189,15 @@ jobs:
 ```
 
 ## GitLab CI
+
+The GitLab pipeline runs four sequential stages, gating each on the one before it. The KVM-dependent integration stage runs only on `main` and tags, where a KVM-tagged runner is available.
+
+```mermaid
+flowchart LR
+    validate["validate<br/>flake check --no-build"] --> test["test<br/>unit tests"]
+    test --> integration["integration<br/>VM tests (KVM runner)"]
+    integration --> deploy["deploy"]
+```
 
 ### .gitlab-ci.yml
 
@@ -556,4 +579,4 @@ The CI/CD integration focuses on running unit tests in cloud CI platforms while 
 4. Set up monitoring and notifications
 5. Follow security best practices
 
-For questions about specific CI platforms or advanced configurations, consult the platform's documentation and the Nix community resources.
+For questions about specific CI platforms or advanced configurations, consult the platform documentation ([GitHub Actions](https://docs.github.com/en/actions), [GitLab CI/CD](https://docs.gitlab.com/ee/ci/), [Jenkins Pipeline](https://www.jenkins.io/doc/book/pipeline/)) and the Nix community resources ([install-nix-action](https://github.com/cachix/install-nix-action), [cachix-action](https://github.com/cachix/cachix-action)).

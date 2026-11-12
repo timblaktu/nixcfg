@@ -1,4 +1,6 @@
-# Overview of Tests in nixcfg Repository
+# Historical Analysis of the nixcfg Test Organization
+
+> **This is a historical analysis, not the current reference.** The notes below capture a point-in-time investigation of how the test suite was organized (including problems since addressed, such as orphaned `passthru.tests` and an oversized `flake-modules/tests.nix`). File paths here are also dated: test orchestration now lives in **`modules/flake-parts/tests.nix`** and **`modules/flake-parts/vm-tests.nix`** (not `flake-modules/`). For the current tier model, live check inventory, backends, and coverage matrix, use **[`tests/README.md`](tests/README.md)**; for execution and debugging see **[`docs/TESTING.md`](docs/TESTING.md)** and **[`docs/TESTING-NSPAWN.md`](docs/TESTING-NSPAWN.md)**. The live check set is always `nix eval '.#checks.x86_64-linux' --apply builtins.attrNames`.
 
   Why tests-flake.nix Was Necessary
 

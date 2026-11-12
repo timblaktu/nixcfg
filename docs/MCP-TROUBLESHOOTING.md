@@ -1,7 +1,17 @@
 # MCP Server Troubleshooting Guide
 
 ## Overview
-This guide documents common issues and solutions for MCP (Model Context Protocol) servers in the Nix-managed Claude Code configuration.
+
+MCP (Model Context Protocol - the open protocol Claude Code uses to talk to external tool servers) servers in this repository are declared in Nix and written into Claude Code's config on every `home-manager switch`. Most problems trace back to one fact: Claude Code owns and periodically rewrites its `.claude.json` at runtime, so Nix-managed state (including the `mcpServers` list) can be silently dropped between switches. This guide is symptom-first - start at the triage table, jump to the matching issue, and apply the fix. For how the Claude Code module fits into the wider configuration, see [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) and the module source at [`modules/programs/claude-code/claude-code.nix`](../modules/programs/claude-code/claude-code.nix).
+
+## Symptom triage
+
+| What you see | Likely cause | Go to |
+|---|---|---|
+| `/mcp` lists no servers | Claude Code overwrote `.claude.json` and dropped `mcpServers` | [Issue 1](#issue-1-mcp-servers-not-showing-in-mcp-command) |
+| `sequential-thinking-mcp: command not found` | Wrapper script not installed | [Issue 2](#issue-2-sequential-thinking-server-not-found) |
+| Context7 errors or never appears | `npx` / Node.js unavailable | [Issue 3](#issue-3-context7-fails-to-start) |
+| CLI server cannot access a directory | `ALLOWED_DIR` too narrow | [Issue 4](#issue-4-cli-mcp-server-permission-errors) |
 
 ## Quick Diagnostics
 
@@ -42,11 +52,10 @@ ls -la /nix/store/*cli-mcp-server*/bin/
 
 **Root Cause**: Claude Code periodically overwrites `.claude.json`, removing `mcpServers`
 
-**Permanent Fix (Implemented 2025-01-27)**:
-The activation script now automatically replaces MCP servers and all Nix-managed settings on every `home-manager switch`.
-Simply run:
+**Permanent Fix**:
+The home-manager activation script automatically replaces MCP servers and all Nix-managed settings on every `home-manager switch`. Simply run:
 ```bash
-home-manager switch --flake '.#tim@tblack-t14-nixos'
+home-manager switch --flake '.#tim@thinky-nixos'
 ```
 
 This enforces:
@@ -142,13 +151,16 @@ cat ~/.claude-pro/settings.json | jq '.mcpServers."cli-mcp-server".env.ALLOWED_D
 
 ## Configuration Hierarchy
 
-Claude Code checks configuration in this order:
-1. `.claude.json` - Runtime state + configuration (highest priority)
-2. `settings.json` - User settings
-3. `mcp.json` - Legacy MCP configuration (deprecated)
-4. Project overrides - `.claude/settings.json` in project root
+Claude Code reads configuration from several files; higher-priority sources win when they define the same key.
 
-**Important**: `.claude.json` is volatile and gets overwritten by Claude Code!
+| Priority | File | Role | Notes |
+|---|---|---|---|
+| 1 (highest) | `.claude.json` | Runtime state and configuration | Volatile - Claude Code overwrites it (see [Issue 1](#issue-1-mcp-servers-not-showing-in-mcp-command)) |
+| 2 | `settings.json` | User settings | Nix-managed; safe to edit for runtime tweaks |
+| 3 | `mcp.json` | Legacy MCP configuration | Deprecated |
+| 4 | `.claude/settings.json` | Project overrides | Lives in the project root |
+
+**Important**: `.claude.json` is volatile and gets overwritten by Claude Code, which is why the activation script re-applies Nix-managed settings on every switch.
 
 ## Testing MCP Servers
 
@@ -204,10 +216,16 @@ home-manager switch
 ## Architecture Notes
 
 ### Why MCP servers disappear
-1. Claude Code maintains runtime state in `.claude.json`
-2. Periodically rewrites this file with current state
-3. Does NOT preserve `mcpServers` section during rewrite
-4. Our activation script preserves the file to not lose oauth/projects
+
+Claude Code and the Nix activation script both write `.claude.json`. Claude Code's rewrites drop the `mcpServers` section; the activation script puts it back on the next switch, while preserving the runtime data (OAuth, projects) that only Claude Code knows.
+
+```mermaid
+flowchart LR
+    A["home-manager switch"] -->|"inject mcpServers + Nix-managed settings"| B[".claude.json<br/>(complete)"]
+    B --> C["Claude Code runs"]
+    C -->|"periodic rewrite drops mcpServers"| D[".claude.json<br/>(mcpServers lost)"]
+    D -->|"/mcp shows nothing"| A
+```
 
 ### Design Decisions
 - **Wrapper scripts**: Avoid Python package conflicts
@@ -217,10 +235,11 @@ home-manager switch
 
 ## Future Improvements
 
-1. **✅ COMPLETED**: Activation script replaces all Nix-managed settings while preserving runtime data (2025-01-27)
-2. **Optional**: Systemd timer for additional robustness (not needed with current solution)
-3. **Optional**: Hook system integration (unnecessary complexity)
-4. **Upstream**: Request Claude Code to preserve mcpServers in .claude.json writes
+The activation script already replaces all Nix-managed settings while preserving runtime data, which resolves the disappearing-server problem. Remaining ideas, none currently required:
+
+- **Optional**: A systemd timer for additional robustness (not needed with the current solution)
+- **Optional**: Hook system integration (unnecessary complexity today)
+- **Upstream**: Request that Claude Code preserve `mcpServers` across its own `.claude.json` writes
 
 ## Implementation Notes
 
@@ -239,6 +258,7 @@ This handles parentheses, wildcards, and other special characters in permissions
 
 ## Related Documentation
 
-- `CLAUDE.md` - Main configuration status and roadmap
-- `home/modules/claude-code.nix` - Nix module implementation
-- `claude-runtime/.claude-*/CLAUDE.md` - Account-specific memory
+- [`CLAUDE.md`](../CLAUDE.md) - Main project configuration and session workflow
+- [`modules/programs/claude-code/claude-code.nix`](../modules/programs/claude-code/claude-code.nix) - Nix module implementation
+- `claude-runtime/.claude-{pro,max}/CLAUDE.md` - Account-specific memory (Nix build output)
+- [Model Context Protocol documentation](https://modelcontextprotocol.io/) - Upstream MCP specification

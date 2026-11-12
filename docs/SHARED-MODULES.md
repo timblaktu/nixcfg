@@ -28,7 +28,7 @@ This repository exports reusable modules for team consumption via flake input.
 }
 ```
 
-All options use `lib.mkDefault` — override freely in your config.
+All options use `lib.mkDefault` - override freely in your config.
 
 ---
 
@@ -36,7 +36,7 @@ All options use `lib.mkDefault` — override freely in your config.
 
 ### System Type Layers
 
-Hierarchical layers — each imports the one above it.
+Hierarchical layers - each imports the one above it.
 
 | Export Name | Description |
 |-------------|-------------|
@@ -288,19 +288,27 @@ Use the pre-built NixOS-WSL bundles for a complete setup:
 ## Bundle Composition
 
 Bundles compose feature modules for convenience. You can use a bundle and override
-any option, or skip bundles and cherry-pick features directly.
+any option, or skip bundles and cherry-pick features directly. Each bundle imports the
+layer to its right and adds the features listed beneath it:
 
-```
-NixOS bundles:
-  wsl-dev-team  ->  wsl-enterprise  ->  system-cli  ->  system-default  ->  system-minimal
-                                    +   wsl-base
-                +   binfmt, podman, claude-code, usbip
-
-  dev-team      ->  system-cli + binfmt + podman + claude-code + usbutils/kmod
-
-HM bundles:
-  home-dev-team ->  home-enterprise  ->  home-cli  ->  home-default  ->  home-minimal
-                +   claude-code, opencode, gitlab-auth, podman
+```mermaid
+flowchart LR
+  subgraph NixOS["NixOS bundles"]
+    direction LR
+    wdt["wsl-dev-team<br/>(+ binfmt, podman,<br/>claude-code, usbip)"] --> went["wsl-enterprise"]
+    went --> scli["system-cli"]
+    scli --> sdef["system-default"]
+    sdef --> smin["system-minimal"]
+    wbase["wsl-base"] -.-> went
+    dt["dev-team<br/>(+ binfmt, podman,<br/>claude-code, usbutils/kmod)"] --> scli
+  end
+  subgraph HM["Home Manager bundles"]
+    direction LR
+    hdt["home-dev-team<br/>(+ claude-code, opencode,<br/>gitlab-auth, podman)"] --> hent["home-enterprise"]
+    hent --> hcli["home-cli"]
+    hcli --> hdef["home-default"]
+    hdef --> hmin["home-minimal"]
+  end
 ```
 
 ---
@@ -312,6 +320,4 @@ See [WSL-TEAM-QUICKSTART.md](WSL-TEAM-QUICKSTART.md) for import instructions.
 
 **Flake input**: `inputs.nixcfg.url = "github:timblaktu/nixcfg";`
 
----
-
-**Last Updated**: 2026-03-18
+For the repository-wide structure and design patterns behind these modules, see [ARCHITECTURE.md](ARCHITECTURE.md). For how images are produced and released, see [DISTRIBUTION.md](DISTRIBUTION.md).
