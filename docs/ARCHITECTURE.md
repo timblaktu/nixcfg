@@ -696,9 +696,11 @@ flowchart LR
     h5 --> a5 --> c5
 ```
 
-The CI pipeline (`ci.yml`) runs on every push to `main` and every PR:
-flake evaluation, linting, 26 module isolation evaluations, 14 configuration
-evaluations, 23 integration tests, and 3 full tarball builds.
+The CI pipeline (`ci.yml`) runs on every push to `main` and every PR. Its
+stages are generated from the classification manifest (`modules/flake-parts/ci-classification.nix`),
+so the exact set is enumerated by CI rather than fixed here: flake evaluation,
+linting, batched module-isolation and configuration-regression evaluations,
+integration and image-output checks, and nightly tarball builds.
 
 The release pipeline (`release.yml`) triggers when the `VERSION` file changes
 on `main`, building and publishing the `nixos-wsl-dev-team` tarball as a
