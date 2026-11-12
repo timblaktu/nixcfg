@@ -111,15 +111,24 @@ contents.
 
 ## CI/CD
 
-Every push to `main` and every PR runs the full validation pipeline:
+Every push to `main` and every PR runs the full validation pipeline. The job
+matrices are generated from the flake's CI classification manifest
+(`modules/flake-parts/ci-classification.nix`), not hand-maintained, so the exact
+set of checks is enumerated by CI rather than fixed in prose:
 
 - Flake evaluation and metadata checks
 - Linting (nixpkgs-fmt, statix, deadnix, PS1 encoding, version format)
-- 20 Home Manager module isolation evaluations
-- 6 NixOS module isolation evaluations
-- 14 full configuration evaluations
-- 23 integration tests (tarball dry-runs, image outputs, service checks)
-- 3 full tarball builds (retained as artifacts for 5 days)
+- Module isolation evaluations: one batched gate proves every Home Manager module
+  evaluates standalone, another proves every NixOS layer module does
+- Configuration evaluation: a batched regression gate forces every NixOS and Home
+  Manager configuration to evaluate
+- Integration and image checks (tarball dry-runs, image-output wiring, service and
+  skill-injection tests)
+- Behavioral VM tests on the systemd-nspawn and QEMU backends
+- Full tarball builds (nightly and on dispatch), retained as artifacts for 5 days
+
+Adding or retiering a check is a one-line edit in the classification manifest; a
+drift guard (`ci-matrix-sync`) fails the build if any check is left unclassified.
 
 Releases are triggered by updating the `VERSION` file on `main`. See
 [RELEASE.md](RELEASE.md) for the process.

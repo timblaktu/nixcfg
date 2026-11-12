@@ -115,16 +115,22 @@ Or trigger `release.yml` via workflow dispatch in the GitHub Actions UI.
 ## CI/CD Pipeline
 
 Every push to `main` and every pull request runs the full validation pipeline
-(`ci.yml`):
+(`ci.yml`). The per-job check lists are not hand-maintained: a prep job evaluates
+`.#ci.matrix` (derived from the single-source-of-truth classification manifest in
+`modules/flake-parts/ci-classification.nix`) and emits one check-name list per
+stage, which the downstream jobs consume. Adding or retiering a check is a one-line
+edit in that manifest, and the `ci-matrix-sync` drift guard fails the build if any
+live check is left unclassified. The exact count per stage is therefore enumerated
+by CI rather than fixed here.
 
 | Stage | What It Checks | Timeout |
 |-------|----------------|---------|
-| Flake evaluation | `nix flake metadata` + check name enumeration | 15 min |
-| Linting (5 parallel) | nixpkgs-fmt, statix, deadnix, PS1 encoding, version | 15 min each |
-| Module evaluations (26) | Each HM (20) and NixOS (6) module in isolation | 30 min each |
-| Config evaluations (14) | All nixos-\*, hm-\*, vm-test configs | 30 min each |
-| Integration tests (23) | Tarball dry-runs, image outputs, service tests | 30 min each |
-| Tarball builds (3) | Full `.wsl` builds, uploaded as artifacts | 120 min |
+| Flake evaluation | `nix flake metadata` + check-name enumeration (both arches) | 15 min |
+| Linting | nixpkgs-fmt, statix, deadnix, PS1 encoding, version format (one gate each) | 15 min each |
+| Module/config evaluations | Batched eval gates: every HM module and every NixOS layer module standalone, plus a regression gate forcing every NixOS and HM configuration to evaluate | 30 min each |
+| Integration and image checks | Tarball/toplevel eval forcers, image-output wiring, service and skill-injection tests, the drift guard | 30 min each |
+| VM tests | Behavioral tests on the systemd-nspawn and QEMU backends | 30-45 min each |
+| Tarball builds (nightly) | Full `.wsl` builds per classified image config, uploaded as artifacts | 120 min |
 
 The tarball build artifacts from CI are retained for 5 days, allowing testing
 before an official release.
@@ -206,6 +212,19 @@ config and targets a specific platform:
 Source of truth: `modules/flake-parts/packages.nix` (aliases) building the
 `nixos-dev-team{,-ec2,-graviton,-vm}` and `nixos-wsl-dev-team` host configs in
 `modules/flake-parts/nixos-configurations.nix`.
+
+### Consumption matrix
+
+Every artifact shape has one build command and one real deploy/consume path. All
+five share the single `dev-team` NixOS config, delivered per platform:
+
+| Artifact shape | Build command | Source host config | Target platform | Deploy / consume path |
+|----------------|---------------|--------------------|-----------------|-----------------------|
+| Proxmox VMA | `nix build '.#image-proxmox-dev-team'` | `nixos-dev-team` | Proxmox VE (x86_64) | Copy `result/vzdump-qemu-*.vma.zst` to a Proxmox node and restore it as a VM backup (`qmrestore <file>.vma.zst <vmid>`, or Datacenter -> Storage -> Backups -> Restore in the web UI) |
+| EC2 AMI (x86_64) | `nix build '.#image-ec2-dev-team'` | `nixos-dev-team-ec2` | AWS EC2 (x86_64) | Upload the raw `result/*.img` to S3 and register it as an AMI with `coldsnap` (`coldsnap upload` -> snapshot, then `aws ec2 register-image`), then launch an x86_64 instance from the AMI |
+| EC2 AMI (aarch64 Graviton) | `nix build '.#image-ec2-dev-team-graviton'` | `nixos-dev-team-graviton` | AWS EC2 Graviton (aarch64) | Same `coldsnap` -> snapshot -> `register-image` flow as the x86_64 AMI (built on an aarch64 builder), then launch a Graviton (`*g`) instance from the AMI |
+| WSL tarball | `nix build '.#image-wsl-dev-team'` | `nixos-wsl-dev-team` | Windows WSL2 (x86_64) | Run `sudo ./result/bin/nixos-wsl-tarball-builder nixos.wsl` to produce the `.wsl` tarball, then `wsl --import <name> <dir> nixos.wsl` on Windows (or use `Import-NixOSWSL.ps1`) |
+| Mac-VM qcow2 | `nix build '.#image-vm-dev-team'` | `nixos-dev-team-vm` | Apple-Silicon Mac (aarch64) | Copy the dereferenced `result/nixos.qcow2` to the Mac and import it as the boot disk of a UTM (or `qemu-system-aarch64`) VM; it boots as a native aarch64 guest and auto-resizes on first boot (see walkthrough below) |
 
 ```bash
 # x86_64-linux artifacts (build on an x86_64 Linux host):
@@ -350,4 +369,4 @@ CLI-only operation; CUDA auto-enables graphics when needed).
 
 ---
 
-**Last Updated**: 2026-03-18
+**Last Updated**: 2026-11-12
