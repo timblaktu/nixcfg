@@ -9,6 +9,16 @@
 { inputs, self, config, ... }:
 let
   inherit (config.meta) username;
+
+  # === SSOT module counts (Plan 069 T1) ===
+  # The authoritative module counts are the lengths of the exported module
+  # attrsets. Deriving them here at EVAL time (not hardcoding literals) is the
+  # whole point: the doc-module-counts check below greps the docs for these
+  # exact numbers, so any drift between an attrset and the docs fails the build.
+  nixosCount = builtins.length (builtins.attrNames self.nixosModules);
+  hmCount = builtins.length (builtins.attrNames self.homeManagerModules);
+  darwinCount = builtins.length (builtins.attrNames self.darwinModules);
+  totalCount = nixosCount + hmCount + darwinCount;
 in
 {
   perSystem = { config, self', inputs', pkgs, system, lib, ... }:
@@ -118,6 +128,132 @@ in
       checks = {
         # Run all tests with: nix flake check
         # Run a specific test: nix build .#checks.x86_64-linux.regression-test
+
+        # === DOC MODULE-COUNT SSOT GUARD (Plan 069 T1) ===
+        # The exported-module counts are asserted in several prose docs. Those
+        # numbers drift silently when a module is added/removed and a doc isn't
+        # updated. This check derives the AUTHORITATIVE counts from the actual
+        # exported attrsets at eval time (nixosCount/hmCount/darwinCount/
+        # totalCount in the outer `let`) and fails the build if any doc states a
+        # DIFFERENT number.
+        #
+        # Precision: it matches each assertion IN CONTEXT (the category word or
+        # the canonical "N reusable/exported modules (A NixOS, B Home Manager,
+        # C Darwin)" phrasing), extracts the number actually written, and
+        # compares it to the eval-derived truth. It does NOT match bare numbers,
+        # so README's "23 Home Manager feature modules" (a programs/-directory
+        # count) and "flake-parts/ (16 modules)" are never mistaken for the
+        # 32-HM / totals assertions. A doc that states no totals is fine — the
+        # check only fails on a PRESENT-but-WRONG number.
+        doc-module-counts = pkgs.runCommand "doc-module-counts"
+          {
+            meta = {
+              description = "Guard: doc-asserted exported-module counts match the real attrsets (SSOT)";
+              maintainers = [ ];
+              timeout = 30;
+            };
+            nativeBuildInputs = [ pkgs.gnugrep pkgs.gnused ];
+            src = self;
+            # Eval-derived SSOT counts (NOT hardcoded literals).
+            nixosCount = toString nixosCount;
+            hmCount = toString hmCount;
+            darwinCount = toString darwinCount;
+            totalCount = toString totalCount;
+          } ''
+          cd "$src"
+          rc=0
+
+          # Fail helper: name the offending file, the expected vs found number,
+          # and the line that carries the wrong assertion.
+          mismatch() { # file expected found context
+            echo "FAIL: $1 asserts $4"
+            echo "      expected $2, found $3 (counts come from the exported module attrsets)"
+            rc=1
+          }
+
+          # extract_num <file> <sed-regex-with-one-capture-group>
+          # Prints the captured number for every matching line (one per line).
+          extract_num() { sed -n -E "s/$2/\1/p" "$1"; }
+
+          check_assert() { # file label expected sed-regex
+            local file="$1" label="$2" expected="$3" re="$4" found
+            # Only assert on lines that actually match the phrasing skeleton.
+            while IFS= read -r found; do
+              [ -z "$found" ] && continue
+              if [ "$found" != "$expected" ]; then
+                mismatch "$file" "$expected" "$found" "$label (got $found)"
+              fi
+            done < <(extract_num "$file" "$re")
+          }
+
+          # --- README.md: canonical combined assertion (line ~7) ---
+          # "**57 reusable modules** (16 NixOS, 32 Home Manager, 9 Darwin)"
+          check_assert README.md "total in 'N reusable modules'" "$totalCount" \
+            '.*\*\*([0-9]+) reusable modules\*\*.*'
+          check_assert README.md "NixOS count in reusable-modules parenthetical" "$nixosCount" \
+            '.*reusable modules\*\* \(([0-9]+) NixOS,.*'
+          check_assert README.md "Home Manager count in reusable-modules parenthetical" "$hmCount" \
+            '.*reusable modules\*\* \([0-9]+ NixOS, ([0-9]+) Home Manager,.*'
+          check_assert README.md "Darwin count in reusable-modules parenthetical" "$darwinCount" \
+            '.*reusable modules\*\* \([0-9]+ NixOS, [0-9]+ Home Manager, ([0-9]+) Darwin\).*'
+
+          # --- docs/DISTRIBUTION.md: "57 exported modules (16 NixOS, 32 Home Manager, 9 Darwin)" ---
+          check_assert docs/DISTRIBUTION.md "total in 'N exported modules'" "$totalCount" \
+            '.*[^0-9]([0-9]+) exported modules \([0-9]+ NixOS,.*'
+          check_assert docs/DISTRIBUTION.md "NixOS count in exported-modules parenthetical" "$nixosCount" \
+            '.*exported modules \(([0-9]+) NixOS,.*'
+          check_assert docs/DISTRIBUTION.md "Home Manager count in exported-modules parenthetical" "$hmCount" \
+            '.*exported modules \([0-9]+ NixOS, ([0-9]+) Home Manager,.*'
+          check_assert docs/DISTRIBUTION.md "Darwin count in exported-modules parenthetical" "$darwinCount" \
+            '.*exported modules \([0-9]+ NixOS, [0-9]+ Home Manager, ([0-9]+) Darwin\).*'
+
+          # --- docs/ARCHITECTURE.md: combined "(A NixOS + B HM + C Darwin)" lines + category headers ---
+          # Combined parenthetical uses '+' and 'HM' (two lines: ~16 and ~135).
+          check_assert docs/ARCHITECTURE.md "total in '(A NixOS + B HM + C Darwin)'" "$totalCount" \
+            '.*[^0-9]([0-9]+) (exported|total).*\([0-9]+ NixOS \+ [0-9]+ HM \+ [0-9]+ Darwin\).*'
+          check_assert docs/ARCHITECTURE.md "NixOS count in '+ HM +' parenthetical" "$nixosCount" \
+            '.*\(([0-9]+) NixOS \+ [0-9]+ HM \+ [0-9]+ Darwin\).*'
+          check_assert docs/ARCHITECTURE.md "HM count in '+ HM +' parenthetical" "$hmCount" \
+            '.*\([0-9]+ NixOS \+ ([0-9]+) HM \+ [0-9]+ Darwin\).*'
+          check_assert docs/ARCHITECTURE.md "Darwin count in '+ HM +' parenthetical" "$darwinCount" \
+            '.*\([0-9]+ NixOS \+ [0-9]+ HM \+ ([0-9]+) Darwin\).*'
+          # Category comment headers: "# NixOS modules (16)" etc.
+          check_assert docs/ARCHITECTURE.md "'# NixOS modules (N)' header" "$nixosCount" \
+            '.*# NixOS modules \(([0-9]+)\).*'
+          check_assert docs/ARCHITECTURE.md "'# Home Manager modules (N)' header" "$hmCount" \
+            '.*# Home Manager modules \(([0-9]+)\).*'
+          check_assert docs/ARCHITECTURE.md "'# Darwin modules (N)' header" "$darwinCount" \
+            '.*# Darwin modules \(([0-9]+)\).*'
+          # Inline code comments: "# 16 shared NixOS modules", "# 9 shared Darwin modules"
+          check_assert docs/ARCHITECTURE.md "'# N shared NixOS modules' comment" "$nixosCount" \
+            '.*# ([0-9]+) shared NixOS modules.*'
+          check_assert docs/ARCHITECTURE.md "'# N shared Darwin modules' comment" "$darwinCount" \
+            '.*# ([0-9]+) shared Darwin modules.*'
+          # "### Exported Modules (57 total)"
+          check_assert docs/ARCHITECTURE.md "'Exported Modules (N total)' header" "$totalCount" \
+            '.*Exported Modules \(([0-9]+) total\).*'
+
+          # --- docs/SHARED-MODULES.md: category section headers "## NixOS Modules (16)" etc. ---
+          check_assert docs/SHARED-MODULES.md "'## NixOS Modules (N)' header" "$nixosCount" \
+            '.*## NixOS Modules \(([0-9]+)\).*'
+          check_assert docs/SHARED-MODULES.md "'## Home Manager Modules (N)' header" "$hmCount" \
+            '.*## Home Manager Modules \(([0-9]+)\).*'
+          check_assert docs/SHARED-MODULES.md "'## Darwin Modules (N)' header" "$darwinCount" \
+            '.*## Darwin Modules \(([0-9]+)\).*'
+
+          if [ "$rc" -ne 0 ]; then
+            echo ""
+            echo "A doc states a module count that disagrees with the exported attrsets."
+            echo "Authoritative counts (from self.{nixos,homeManager,darwin}Modules):"
+            echo "  NixOS=$nixosCount  Home Manager=$hmCount  Darwin=$darwinCount  total=$totalCount"
+            echo "Fix the doc(s) above (or, if a module was intentionally added/removed,"
+            echo "update every doc that states the totals)."
+            exit 1
+          fi
+          echo "All doc-asserted module counts match the exported attrsets:"
+          echo "  NixOS=$nixosCount  Home Manager=$hmCount  Darwin=$darwinCount  total=$totalCount"
+          touch $out
+        '';
 
         # === MODULE INTEGRATION TESTS ===
         # Rewritten (Plan 054 P5a): asserts systemDefault.userGroups (contains

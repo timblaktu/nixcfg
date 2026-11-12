@@ -164,6 +164,7 @@ let
       "lint-deadnix"
       "lint-ps1-encoding"
       "lint-version"
+      "doc-module-counts"
     ])
     (grp evalPr [
       "regression-test"
