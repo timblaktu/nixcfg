@@ -5,10 +5,24 @@ description: Create, edit, and convert diagrams. Auto-selects format - Mermaid f
 
 # Diagram Creation and Editing Skill
 
-**Version**: 1.19.0
-**Last Updated**: 2026-10-28
+**Version**: 1.20.0
+**Last Updated**: 2026-11-10
 
 ## Changelog
+
+### v1.20.0 (2026-11-10)
+- **Section 15 self-check loop reframed from "at most 2 rounds, then present" to
+  "iterate until the checklist PASSES; never hand a flawed diagram to the user".**
+  The old step 4/5 wording made the render -> inspect -> fix loop terminate after two
+  rounds and present whatever remained, which contradicted the section's own "Never
+  offload this visual QA to the user" rule and led to presenting half-polished
+  diagrams and asking the user to spot overlaps. New rule: keep looping until no
+  overlaps / no struck-through or clipped labels / wide labels wrapped / clear
+  routing channels; the old "2 rounds" number is now a trigger to change the LAYOUT
+  (structural fix), not a stop condition. Present ONCE, and surface to the user only
+  content/wording/placeholder/design-fork decisions - never the visual QA. (Prompted
+  by the plan-006 authz diagram, where the user had to point out label overlaps and
+  clutter across three rounds instead of getting one finished diagram.)
 
 ### v1.19.0 (2026-10-28)
 - **Section 29: new principle "Edge labels need a clear channel (never overlap a flanking
@@ -1839,11 +1853,24 @@ a visual pass you perform yourself by reading the rendered raster.
    arg parser. If Windows draw.io is installed, the `draw.io.exe` path in
    Section 33 is an alternative. Then read `/tmp/diagram-check.png` and scan for
    the issues in the checklist below.
-4. **Auto-fix, at most 2 rounds:** apply concrete XML fixes for what you find,
-   re-render, re-read. After 2 rounds, stop and present what you have with a note
-   on any residual issue - do not loop indefinitely.
-5. **Present** to the user; for diagrams they will iterate on, also offer the
-   fixes you deliberately did not auto-apply.
+4. **Auto-fix, iterate until the checklist PASSES - never hand a flawed diagram
+   to the user.** Apply concrete XML fixes for what you find, re-render, re-read,
+   and REPEAT this render -> inspect -> fix loop until the Section 15 checklist
+   genuinely passes (no overlaps, no struck-through or clipped labels, wide labels
+   wrapped, clear routing channels). Keep going as many rounds as that takes. The
+   "2 rounds" figure that used to live here is NOT a licence to present a still-
+   cluttered diagram - if the SAME class of defect survives ~2 rounds of nudging,
+   that is the signal to step back and change the LAYOUT (widen a channel, move a
+   column, re-route a bundle - a structural fix), not to stop. The only reasons to
+   stop before the checklist passes are (a) a genuine tooling failure (cannot
+   render), or (b) a defect that cannot be resolved without a design decision only
+   the user can make - and then you say exactly which.
+5. **Present ONCE, when it meets the bar.** Surface to the user ONLY what
+   genuinely needs THEM - content/wording, placeholder values, design-intent forks.
+   NEVER present a half-polished diagram and ask "is this good, or want more
+   tweaks?" - the visual QA (overlaps, clutter, label placement, routing) is YOURS
+   via the loop above, not the user's (see "Never offload this visual QA to the
+   user" below). If the user is the one who spots an overlap, the self-check failed.
 
 Skip the visual pass only for trivial diagrams (<5 elements) or when the user
 said "quick draft" - the structural pass always runs. If you cannot rasterize
