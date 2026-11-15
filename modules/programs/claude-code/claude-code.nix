@@ -104,6 +104,25 @@
             description = "Core AI guidance principles";
           };
 
+          extraUserMemory = mkOption {
+            type = types.lines;
+            default = "";
+            example = ''
+              ## Deployment-scoped section
+
+              A block this deployment wants in every account's CLAUDE.md.
+            '';
+            description = ''
+              Extra instruction text appended verbatim to each account's generated
+              user-global CLAUDE.md, after the shared template and before the
+              trailing `@RTK.md` import. Empty by default so the public template
+              ships nothing extra; a downstream overlay (e.g. a private corporate
+              repo) sets it to add deployment-scoped blocks without forking the
+              template — mirroring the empty-in-public / filled-downstream shape of
+              `hooks.gitSafety.internalTokenPatterns`.
+            '';
+          };
+
           enableProjectOverrides = mkOption {
             type = types.bool;
             default = true;
@@ -1320,17 +1339,27 @@
             userGlobalMemoryTemplate = builtins.readFile ./_hm/claude-code-user-memory-template.md;
 
             # Per-account CLAUDE.md: substitute {{ACCOUNT}} with the account name.
+            # `extraUserMemory` is appended verbatim after the shared template so a
+            # downstream (e.g. private nixcfg-work) overlay can add deployment-scoped
+            # instruction blocks WITHOUT forking the public template — the same
+            # empty-in-public / filled-downstream SSOT shape as
+            # `hooks.gitSafety.internalTokenPatterns`. Default "" ⇒ public nixcfg
+            # ships nothing extra.
             # Plan 046 T11 — when RTK is enabled, append an `@RTK.md` reference so
             # Claude Code auto-loads the co-deployed RTK.md context file (mirrors
-            # what `rtk init -g` adds to ~/.claude/CLAUDE.md).
+            # what `rtk init -g` adds to ~/.claude/CLAUDE.md). The `@RTK.md` import
+            # stays LAST so it reads as a trailing import directive.
             mkClaudeMdTemplate = name:
               let
                 accountLabel = lib.toUpper name;
                 base = builtins.replaceStrings [ "{{ACCOUNT}}" ] [ accountLabel ] userGlobalMemoryTemplate;
+                extraMemory = lib.optionalString
+                  (cfg.extraUserMemory != "")
+                  ("\n\n" + cfg.extraUserMemory + "\n");
                 rtkRef = lib.optionalString
                   (cfg.hooks.rtk.enable && cfg.hooks.rtk.contextFile != null)
                   "\n\n@RTK.md\n";
-                content = base + rtkRef;
+                content = base + extraMemory + rtkRef;
               in
               pkgs.writeText "claude-memory-${name}.md" content;
 
