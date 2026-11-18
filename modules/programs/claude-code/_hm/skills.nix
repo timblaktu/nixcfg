@@ -141,6 +141,15 @@ let
         "SKILL.md" = ./skills/fix-user-plans/SKILL.md;
       };
     };
+    # The d2 CLI toolchain for this skill rides in home.packages below
+    # (gated on the same switch), matching the screencast/disk-doctor pattern.
+    d2-animator = {
+      name = "d2-animator";
+      description = "Generates, refactors, and compiles progressive, multi-step technical architecture diagrams and animations using the D2 declarative diagramming language. Use whenever the user asks to create, animate, step through, or visualize a system workflow, architecture diagram, or `.d2` file.";
+      files = {
+        "SKILL.md" = ./skills/d2-animator/SKILL.md;
+      };
+    };
   };
 
   # Custom skill submodule
@@ -506,6 +515,18 @@ in
           skill performs the one-time, idempotent migration that removes the gate.
         '';
       };
+      d2-animator = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the d2-animator skill: build progressive, finale-first technical
+          architecture animations with the D2 declarative diagramming language.
+          Declares all nodes at the root so layout coordinates lock, then reveals
+          them step-by-step via D2's native `steps` (opacity 0 -> 1, animated
+          active edges), with a `d2 fmt` + compile/self-heal loop. Pulls the `d2`
+          CLI (bundling the dagre + elk layout engines) into the profile.
+        '';
+      };
     };
 
     custom = mkOption {
@@ -551,6 +572,11 @@ in
       pkgs.dust # du, but more intuitive (largest-dirs scan)
       pkgs.duf # df replacement (filesystem usage overview)
       pkgs.ncdu # interactive disk usage (manual deep-dives)
+    ]
+    # The d2 CLI for the d2-animator skill (bundles the dagre + elk layout
+    # engines; the proprietary tala layout is intentionally not included).
+    ++ lib.optionals skillsCfg.builtins.d2-animator [
+      pkgs.d2 # text -> diagrams; progressive `steps` animation (d2lang.com)
     ];
 
     # Extend the activation script to deploy skills
