@@ -782,3 +782,18 @@ vim.api.nvim_set_hl(0, 'NotifyINFOTitle', { fg = '#9ece6a' })
 vim.api.nvim_set_hl(0, 'NotifyERRORTitle', { fg = '#f7768e' })
 vim.api.nvim_set_hl(0, 'NotifyWARNTitle', { fg = '#e0af68' })
 --]]
+
+-- D2 live-preview loop. d2watch.lua is placed on the runtimepath via nixvim
+-- extraFiles (see neovim.nix). Per .d2 buffer: start `d2 --watch` in WSL on an auto-picked
+-- free port, then open the diagram in a Windows browser (Edge default) via WSL interop.
+-- d2_args mirror the d2-animator skill's standardized render flags.
+pcall(function()
+  require("d2watch").setup({
+    host = "127.0.0.1",
+    port = 8787,
+    browser = "edge",          -- or "firefox"
+    edge_app_window = true,
+    autostart = true,
+    d2_args = { "--theme", "200", "--dark-theme", "200", "--layout", "elk", "--pad", "40" },
+  })
+end)

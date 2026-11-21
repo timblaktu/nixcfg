@@ -128,6 +128,11 @@
           # (appended below). Gated on the source being enabled - zero-cost when off.
           extraFiles = lib.mkIf ncfg.enable {
             "lua/overseer/component/tmux_cmd_state.lua".text = nvimComponentLua;
+            # D2 live-preview loop. Places d2watch.lua on the runtimepath;
+            # require("d2watch").setup{} is called from extraConfigLua.lua. Starts
+            # `d2 --watch` per .d2 buffer and opens the diagram in a Windows browser via
+            # WSL interop. The d2 CLI is on nvim's PATH via extraPackages (below).
+            "lua/d2watch.lua".source = ./d2watch.lua;
           };
 
           # Explicitly acknowledge that nixvim's nixpkgs follows our nixpkgs-unstable
@@ -525,6 +530,7 @@
                       { "<leader>dgr", desc = "Get from REMOTE (their changes)" },
                       { "<leader>du", desc = "Update diff highlighting" },
                       { "<leader>di", desc = "Show diff context info" },
+                      { "<leader>D", group = "D2 diagram" },
                       { "<leader>t", group = "Tasks/Overseer" },
                       { "<leader>s", group = "Snippets" },
                       { "<leader>fs", desc = "Search snippets (current ft)" },
@@ -1388,6 +1394,7 @@
             ripgrep
             fd
             tree-sitter
+            d2 # live-preview watch server for the d2watch.lua module; self-contained on nvim's PATH, independent of claude-code
             gcc # For treesitter compilation
             clang-tools # Provides clangd LSP server
 
